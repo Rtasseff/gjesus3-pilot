@@ -1,0 +1,171 @@
+# 08 — Metadata
+
+**Parent:** [Documentation Index](00_INDEX.md)  
+**Status:** 🔶 Draft  
+**Last Updated:** 2026-02-02
+
+---
+
+## Purpose
+
+This document specifies the metadata requirements for raw acquisitions, including the README template and extended (REMBI-based) metadata.
+
+---
+
+## 1. Metadata Tiers
+
+| Tier | Location | Purpose | Requirement |
+|------|----------|---------|-------------|
+| **Core** | Registry | Quick lookup, indexing | ✅ Required |
+| **Extended** | Acquisition folder | Detailed interpretation | 🔶 Recommended |
+
+---
+
+## 2. README Template
+
+**File:** `README.txt` in each acquisition folder
+
+```
+================================================================================
+ACQUISITION NOTES — [ACQ-ID]
+================================================================================
+Date:               [YYYY-MM-DD]
+Operator:           [Name]
+Instrument:         [Instrument name/code]
+
+SAMPLE
+------
+Sample ID:          [Internal identifier]
+Sample Type:        [e.g., mouse lung tissue section]
+Species:            [e.g., Mus musculus]
+Preparation:        [e.g., FFPE, 5µm section]
+Staining:           [e.g., H&E]
+
+ACQUISITION
+-----------
+Objective:          [e.g., 20x / 0.8 NA]
+Scan Area:          [e.g., full slide]
+Channels:           [e.g., brightfield]
+
+CONTEXT
+-------
+Project:            [Associated project ID]
+Purpose:            [Why this acquisition]
+
+NOTES
+-----
+[Quality issues, deviations, other notes]
+================================================================================
+```
+
+**Minimum required:** ACQ-ID, Date, Operator, Instrument, Sample ID, Sample Type, Purpose
+
+---
+
+## 3. REMBI-Based Extended Metadata
+
+### 3.1 Background
+
+REMBI (Recommended Metadata for Biological Images) is the community standard for biological imaging metadata. We adopt a subset appropriate to our use cases.
+
+### 3.2 Field Review Status
+
+> **⚠️ GAP:** User review of REMBI fields is incomplete.
+
+A spreadsheet was circulated for users to vote on each field. Limited responses received.
+
+**Approach:** Start with minimal set; expand based on actual needs.
+
+### 3.3 Proposed Minimal Set
+
+| Category | Field | Required | Notes |
+|----------|-------|----------|-------|
+| **Biosample** | Sample ID | ✅ Yes | Internal identifier |
+| | Biological entity | ✅ Yes | What is being imaged |
+| | Organism/Species | ✅ Yes | Species |
+| **Specimen** | Preparation method | ✅ Yes | How sample was prepared |
+| | Staining/labeling | ✅ Yes | Contrast mechanism |
+| **Acquisition** | Instrument | ✅ Yes | Which microscope |
+| | Imaging method | ✅ Yes | e.g., brightfield, fluorescence |
+| | Objective | 🔶 Recommended | Magnification, NA |
+| | Pixel size | 🔶 Recommended | Physical resolution |
+
+### 3.4 Machine-Readable Format
+
+**File:** `metadata.json` (optional but encouraged)
+
+```json
+{
+  "acq_id": "ACQ-20260215-ZWSI-001",
+  "schema_version": "1.0",
+  "biosample": {
+    "sample_id": "MOUSE-2024-042",
+    "biological_entity": "lung tissue section",
+    "organism": "Mus musculus"
+  },
+  "specimen": {
+    "preparation": "FFPE, 5µm section",
+    "staining": "H&E"
+  },
+  "acquisition": {
+    "instrument": "Zeiss Axiocam 7",
+    "imaging_method": "brightfield",
+    "objective": "20x / 0.8 NA",
+    "pixel_size_um": 0.5
+  }
+}
+```
+
+---
+
+## 4. Embedded Metadata
+
+### 4.1 Instrument Audit Needed
+
+> **⚠️ GAP:** We need to determine what each instrument embeds in its output files.
+
+| Instrument | Embedded? | What's Embedded | What's NOT Embedded |
+|------------|-----------|-----------------|---------------------|
+| Zeiss WSI (.czi) | Yes | Acquisition parameters, dimensions | Sample info, experimental context |
+| Histology (.tif) | Partial | Varies by source | Usually minimal |
+| DICOM | Yes | Extensive metadata | Study context varies |
+
+### 4.2 Extraction Possibility
+
+For instruments with embedded metadata:
+- Extraction scripts could populate `metadata.json` automatically
+- README would focus on what's NOT embedded (sample info, context)
+
+> **📋 Planned:** Metadata extraction for common formats
+
+---
+
+## 5. Nanomaterial Imaging Considerations
+
+For SEM/TEM imaging of nanomaterials (if included):
+
+> **❓ EVALUATING:** ISA-TAB-Nano may be relevant for material characterization metadata.
+
+| Standard | Relevance |
+|----------|-----------|
+| REMBI | Imaging parameters — still applicable |
+| ISA-TAB-Nano | Material description — extends ISA for nanomaterials |
+
+---
+
+## 6. Related Documents
+
+- [03_RAW_STORAGE](03_RAW_STORAGE.md) — Where metadata lives
+- [06_REGISTRIES](06_REGISTRIES.md) — Core metadata fields
+- [09_MODALITIES](09_MODALITIES.md) — Instrument-specific metadata
+
+---
+
+## Open Questions
+
+| ID | Question | Owner | Status |
+|----|----------|-------|--------|
+| META-01 | Complete REMBI field review with users | Data Mgmt Lead | ⚠️ Blocked on user input |
+| META-02 | Audit embedded metadata per instrument | Data Mgmt Lead | ⚠️ Open |
+| META-03 | Develop metadata extraction scripts | Data Mgmt Lead | 📋 Future |
+| META-04 | ISA-TAB-Nano for nanomaterials? | Data Mgmt Lead | ❓ If SEM/TEM included |

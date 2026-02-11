@@ -1,0 +1,13 @@
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Office temp files
+~$*
+*.tmp
+
+# Editor backups
+*.swp
+*.swo
+*~
