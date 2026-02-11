@@ -41,19 +41,37 @@ This document specifies the structure, conventions, and workflows for the Raw st
     │               ├── checksums.json      # Integrity manifest
     │               └── README.txt          # Acquisition notes
     │
-    ├── histology/                          # Instrument category: conventional microscopes
+    ├── cell-observer/                      # Zeiss Axio Observer (Cell Observer)
     │   └── 2026/
     │       └── 2026-02/
-    │           └── ACQ-20260215-HIST-001/
-    │               ├── tissue_section.tif
+    │           └── ACQ-20260215-CELL-001/  # Code TBD
+    │               ├── timelapse.czi
     │               ├── checksums.json
     │               └── README.txt
     │
-    └── dicom-recon/                        # Reconstructed biomedical imaging
+    ├── lsm900/                            # Zeiss LSM 900 (confocal)
+    │   └── 2026/
+    │       └── 2026-02/
+    │           └── ACQ-20260215-LSM9-001/  # Code TBD
+    │               ├── confocal_stack.czi
+    │               ├── checksums.json
+    │               └── README.txt
+    │
+    ├── pet/                               # PET reconstructed imaging
+    │   └── 2026/
+    │       └── 2026-02/
+    │           └── ACQ-20260215-PET-001/
+    │               ├── series/            # DICOM series folder
+    │               │   ├── *.dcm
+    │               │   └── ...
+    │               ├── checksums.json
+    │               └── README.txt
+    │
+    └── mri/                               # MRI reconstructed imaging
         └── 2026/
             └── 2026-02/
-                └── ACQ-20260215-PET-001/
-                    ├── series/             # DICOM series folder
+                └── ACQ-20260215-MRI-001/
+                    ├── series/            # DICOM series folder
                     │   ├── *.dcm
                     │   └── ...
                     ├── checksums.json
@@ -111,14 +129,17 @@ ACQ-<YYYYMMDD>-<INST>-<SEQ>
 
 > **🔶 DRAFT:** Likely to organize by instrument rather than abstract modality (more concrete for users), but this still needs team discussion.
 
-| Code | Instrument/Category | Formats |
-|------|---------------------|---------|
-| `ZWSI` | Zeiss Axiocam 7 (whole-slide imaging) | .czi |
-| `HIST` | Histology microscopes (various) | .tif, .czi, .jpg |
-| `PET` | PET reconstructed DICOM | .dcm |
-| `SPECT` | SPECT reconstructed DICOM | .dcm |
-| `CT` | CT reconstructed DICOM | .dcm |
-| `MRI` | MRI reconstructed DICOM | .dcm |
+| Code | Instrument/Category | Formats | Data Source |
+|------|---------------------|---------|-------------|
+| `ZWSI` | Zeiss Axiocam 7 (whole-slide imaging) | .czi | Microscope (direct) |
+| TBD | Zeiss Axio Observer (Cell Observer) | .czi | Microscope (direct) |
+| TBD | Zeiss LSM 900 (confocal) | .czi | Microscope (direct) |
+| `PET` | PET reconstructed (Molecubes beta-CUBE / MILabs VECTor) | .dcm, possibly .nii (TBC) | Nuclear Imaging platform (reconstructed) |
+| `SPECT` | SPECT reconstructed (Molecubes gamma-CUBE / MILabs VECTor) | .dcm, possibly .nii (TBC) | Nuclear Imaging platform (reconstructed) |
+| `CT` | CT reconstructed (Molecubes X-CUBE / MILabs VECTor) | .dcm, possibly .nii (TBC) | Nuclear Imaging platform (reconstructed) |
+| `MRI` | MRI reconstructed (Bruker BioSpec 11.7T and 7T) | .dcm (TBC) | MRI platform (reconstructed) |
+
+> **🔶 DRAFT:** Codes for Cell Observer and LSM 900 need to be assigned.
 
 > **❓ EVALUATING:** Additional codes pending:
 > - `SEM` — Scanning electron microscopy (if included)

@@ -22,12 +22,17 @@ The documentation uses explicit status markers. Respect them:
 - `EVALUATING` — Under active consideration; present options rather than making choices
 - `INPUT NEEDED` — Waiting on stakeholder feedback; don't fill in assumptions
 
+### Equipment reference
+- `equipment/INDEX.md` is the starting point for information about in-scope imaging instruments.
+- When looking up instrument details (formats, software, capabilities), check the equipment folder first.
+- There are two categories: **microscopes** (raw = direct instrument output) and **platform instruments** (raw = reconstructed images provided by the platform). This distinction matters throughout the design docs.
+
 ### Cross-reference consistency
 When updating one document, check for impacts on others. Common cross-cutting concerns:
 - `00_INDEX.md` — Key Decisions table and Key Gaps section
 - Registry schemas in `06_REGISTRIES.md` must match field references elsewhere
 - Provenance format in `07_PROVENANCE.md` is referenced by `04_PUBLICATIONS.md` and `05_PROJECTS.md`
-- Instrument codes in `03_RAW_STORAGE.md` must match `09_MODALITIES.md`
+- Instrument codes in `03_RAW_STORAGE.md` must match `09_MODALITIES.md` and `equipment/INDEX.md`
 
 ## Git Usage
 

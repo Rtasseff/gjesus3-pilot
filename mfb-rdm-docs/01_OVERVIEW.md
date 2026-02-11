@@ -61,10 +61,13 @@ The group has access to a dedicated 100 TB NAS (gjesus3) that can serve as a str
 
 | Category | Details |
 |----------|---------|
-| **Data types** | Optical microscopy (histology), whole-slide imaging, reconstructed biomedical imaging (PET/SPECT/CT/MRI as DICOM) |
+| **Microscopes** (direct raw) | Zeiss Axiocam 7 (WSI), Zeiss Axio Observer (Cell Observer), Zeiss LSM 900 (confocal) — instrument output (.czi) deposited directly |
+| **Platform imaging** (reconstructed) | MRI (Bruker BioSpec 11.7T and 7T), Nuclear Imaging (Molecubes PET/SPECT/CT, MILabs VECTor PET/SPECT/CT/OI) — reconstructed images (DICOM, possibly NIfTI; TBC) from platforms; platforms archive true raw data |
 | **Storage areas** | Raw archive, Publication archive, Staging (temporary) |
 | **Users** | MFB group members with approved access |
 | **Timeline** | Indefinite long-term retention for raw and publication data |
+
+> For detailed equipment specs, see [equipment/INDEX.md](../equipment/INDEX.md).
 
 ### 3.2 Under Evaluation
 

@@ -33,6 +33,9 @@ gjesus3-pilot/
 │       ├── projectOutline.md
 │       ├── RDM-system-specs_v0.1.md
 │       └── RDM-system-specs_v0.2.md
+├── equipment/                 # Reference docs for in-scope imaging equipment
+│   ├── INDEX.md               # Equipment index — start here for equipment info
+│   └── ...                    # Instrument specs, platform descriptions
 ├── shared/                    # Documents shared with stakeholders
 ├── tasks/                     # Task tracking
 └── contacts.xlsx              # Stakeholder contact information
@@ -42,6 +45,7 @@ gjesus3-pilot/
 
 - **Start here:** [mfb-rdm-docs/00_INDEX.md](mfb-rdm-docs/00_INDEX.md) — full index with status of each module
 - **Quick background:** [mfb-rdm-docs/01_OVERVIEW.md](mfb-rdm-docs/01_OVERVIEW.md) — why this system exists and what it does
+- **Equipment:** [equipment/INDEX.md](equipment/INDEX.md) — all in-scope instruments and what "raw" means for each
 - **Historical context:** [mfb-rdm-docs/depricated/](mfb-rdm-docs/depricated/) — earlier monolithic drafts showing design evolution
 
 ## People

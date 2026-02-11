@@ -46,13 +46,24 @@ An **archival storage system** for original imaging data that:
 
 ## Current Scope
 
-### Confirmed Modalities (Initial Pilot)
+### Confirmed Equipment (Initial Pilot)
 
-| Modality | Instrument/Source | Primary Format | Status |
-|----------|-------------------|----------------|--------|
-| Optical microscopy (histology) | Various light microscopes | .tif, .czi | ✅ Confirmed |
-| Whole-slide imaging | Zeiss Axiocam 7 | .czi | ✅ Confirmed |
-| Reconstructed biomedical imaging | PET, SPECT, CT, MRI (DICOM exports) | .dcm, DICOM dirs | ✅ Confirmed |
+**Microscopes** (direct instrument output to gjesus3):
+
+| Instrument | Type | Primary Format | Status |
+|------------|------|----------------|--------|
+| Zeiss Axiocam 7 (WSI) | Whole-slide imager | .czi | ✅ Confirmed |
+| Zeiss Axio Observer (Cell Observer) | Inverted epifluorescence microscope | .czi | ✅ Confirmed |
+| Zeiss LSM 900 | Confocal microscope | .czi | ✅ Confirmed |
+
+**Institutional platforms** (reconstructed images to gjesus3; platforms archive true raw data):
+
+| Platform | Instruments | Our "Raw" Data | Format | Status |
+|----------|-------------|----------------|--------|--------|
+| MRI Platform | Bruker BioSpec 11.7T and 7T | Reconstructed images | DICOM (TBC) | ✅ Confirmed |
+| Nuclear Imaging Platform | Molecubes PET/SPECT/CT + MILabs VECTor PET/SPECT/CT/OI | Reconstructed images | DICOM, possibly NIfTI (TBC) | ✅ Confirmed |
+
+> For detailed equipment specs, see [equipment/INDEX.md](../equipment/INDEX.md).
 
 ### Under Evaluation
 
@@ -65,7 +76,7 @@ An **archival storage system** for original imaging data that:
 | Item | Reason |
 |------|--------|
 | Active project workspaces | Uncertain value given access constraints; may revisit |
-| Platform-originated raw data | Maintained by platforms; we store reconstructed/exported files only |
+| Platform-originated true raw data | Maintained by platforms (listmode, k-space, etc.); we store reconstructed/exported files only |
 | Non-imaging data | Current focus is imaging; may expand later |
 
 ---
