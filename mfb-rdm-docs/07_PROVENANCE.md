@@ -8,7 +8,7 @@
 
 ## Purpose
 
-This document specifies how provenance (origin and transformation history) is tracked for derived files in the Publications and Projects areas.
+This document specifies how provenance (origin and transformation history) is tracked for derived files in the Publications, Projects, and Curated Datasets areas.
 
 ---
 
@@ -59,10 +59,11 @@ We use a simple **input → process → output** model:
 
 ### 3.1 Location
 
-Provenance logs are **local to each publication or project folder**:
+Provenance logs are **local to each publication, project, or curated dataset folder**:
 
 - `/gjesus3/publications/<short-name>/provenance.csv`
 - `/gjesus3/projects/<short-name>/provenance.csv`
+- `/gjesus3/curated_datasets/<type>/<ecosystem>/<dataset-id>/provenance.csv`
 
 ### 3.2 Why Local (Not Centralized)?
 
@@ -141,8 +142,8 @@ fig1_panel_b.tiff (FILE-0002)
     ↓ input_refs
 ACQ-20260115-ZWSI-001, ACQ-20260116-ZWSI-002
     ↓ registered in
-/raw/zeiss-wsi/2026/2026-01/ACQ-20260115-ZWSI-001/
-/raw/zeiss-wsi/2026/2026-01/ACQ-20260116-ZWSI-002/
+/raw/MICROSCOPY/2026/2026-01/ACQ-20260115-ZWSI-001/
+/raw/MICROSCOPY/2026/2026-01/ACQ-20260116-ZWSI-002/
 ```
 
 ---
@@ -190,6 +191,7 @@ For complex processes, use additional fields:
 |------|-------------|---------------|
 | **Publications** | ✅ Required | All files in `figures/` and any file appearing in manuscript |
 | **Projects** | 🔶 Recommended | Files intended for publication, sharing, or reuse |
+| **Curated Datasets** | ✅ Required | All label/output files; every item must trace to RAW |
 
 ### 6.2 What Can Be Skipped
 
@@ -261,6 +263,7 @@ FILE-0012,figures/panel_c.tiff,...,ACQ-001,Split multi-channel image into panels
 
 - [04_PUBLICATIONS](04_PUBLICATIONS.md) — Where provenance is required
 - [05_PROJECTS](05_PROJECTS.md) — Where provenance is recommended
+- [12_CURATED_DATASETS](12_CURATED_DATASETS.md) — Where provenance is required (for labels)
 - [10_TOOLS](10_TOOLS.md) — Provenance logging helper
 
 ---

@@ -39,7 +39,7 @@ The group has access to a dedicated 100 TB NAS (gjesus3) that can serve as a str
 
 ### 2.1 What the System Does
 
-1. **Preserves raw acquisitions** in an organized, immutable structure organized by modality and date
+1. **Preserves raw acquisitions** in an organized, immutable structure organized by data ecosystem and date
 2. **Archives publication data packages** with complete provenance documentation
 3. **Enables traceability** from published outputs back to source data
 4. **Maintains registries** documenting what data exists and where it came from

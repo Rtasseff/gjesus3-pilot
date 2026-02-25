@@ -150,7 +150,7 @@ Similar to `create_publication` but for project folders.
 
 **Usage:**
 ```bash
-verify_checksums --scope /raw/zeiss-wsi/2026/  # Check specific path
+verify_checksums --scope /raw/MICROSCOPY/2026/  # Check specific path
 verify_checksums --sample 10  # Random 10% sample
 ```
 

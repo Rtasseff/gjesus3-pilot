@@ -269,7 +269,7 @@ For each confirmed data type, we need a short walkthrough covering:
 ## 7. Related Documents
 
 - [equipment/INDEX.md](../equipment/INDEX.md) — Detailed equipment specifications and reference documents
-- [03_RAW_STORAGE](03_RAW_STORAGE.md) — Storage structure by instrument
+- [03_RAW_STORAGE](03_RAW_STORAGE.md) — Storage structure by data ecosystem
 - [08_METADATA](08_METADATA.md) — Extended metadata specification
 - [10_TOOLS](10_TOOLS.md) — Format-specific processing scripts
 

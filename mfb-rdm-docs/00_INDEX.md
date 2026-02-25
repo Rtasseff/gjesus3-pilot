@@ -1,9 +1,9 @@
 # MFB gjesus3 Research Data Management — Documentation Index
 
-**System Purpose:** Long-term archival storage for MFB group microscopy and biomedical imaging data  
-**Infrastructure:** QNAP TS-864eU NAS (RAID 5, ~100 TB usable)  
-**Status:** Pilot development  
-**Last Updated:** 2026-02-02
+**System Purpose:** Long-term archival storage for MFB group microscopy and biomedical imaging data
+**Infrastructure:** QNAP TS-864eU NAS (RAID 5, ~100 TB usable)
+**Status:** Pilot development
+**Last Updated:** 2026-02-25
 
 ---
 
@@ -22,6 +22,7 @@
 | [09_MODALITIES](09_MODALITIES.md) | Supported data types and instruments | ⚠️ Needs input |
 | [10_TOOLS](10_TOOLS.md) | Scripts and automation | 📋 Planned |
 | [11_OPERATIONS](11_OPERATIONS.md) | Workflows, permissions, onboarding | 📋 Planned |
+| [12_CURATED_DATASETS](12_CURATED_DATASETS.md) | Curated derived datasets (segmentation, etc.) | ❓ Under evaluation |
 
 **Legend:** ✅ Current | 🔶 Draft | ⚠️ Gaps identified | ❓ Under evaluation | 📋 Planned
 
@@ -70,6 +71,7 @@ An **archival storage system** for original imaging data that:
 | Modality | Instrument/Source | Notes |
 |----------|-------------------|-------|
 | Electron microscopy (SEM/TEM) | EM platform | Mainly nanomaterial characterization; need confirmation of use case fit |
+| Curated datasets area | N/A | Permanent storage for derived assets (segmentation ground truth, training corpora); see [12_CURATED_DATASETS](12_CURATED_DATASETS.md) |
 
 ### Deferred / Out of Scope
 
@@ -85,9 +87,11 @@ An **archival storage system** for original imaging data that:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Storage areas | Raw + Publications (+ staging) | Projects area deferred |
+| Storage areas | Raw + Publications (+ staging) | Projects area deferred; curated datasets under evaluation |
 | Registry location | Top-level centralized | Simpler management; single source of truth |
-| Raw structure | Instrument → Year → Month → Acquisition (likely, under discussion) | Concrete for users; supports multiple modalities |
+| Raw structure | **Ecosystem → Year → Month → Acquisition** | Organized by data ecosystem (MICROSCOPY, DICOM, EM) — stable, maps to tooling, avoids folder proliferation from new instruments or hybrids |
+| Instrument identity | In ACQ-ID and registry, not folder path | Keeps folder structure stable; instrument detail in metadata |
+| Hybrid instruments | Keep together as one acquisition | PET/CT etc. stored as single DICOM Study; modalities recorded in registry |
 | One primary file rule | Yes (with documented exceptions) | Simplifies registry; exceptions handled case-by-case |
 | Provenance location | Per-publication/project folder | Local to context; enables independent archiving |
 | Extended metadata | REMBI-based subset | Community standard; pruned to essential fields |
@@ -103,10 +107,16 @@ An **archival storage system** for original imaging data that:
 - [ ] Filesystem type confirmation needed — affects linking method options (symlinks, hard links)
 
 ### Raw Storage (see [03_RAW_STORAGE](03_RAW_STORAGE.md))
-- [ ] Organization by instrument vs. abstract modality — likely instrument-based but needs discussion
+- [x] ~~Organization by instrument vs. abstract modality~~ — **Resolved:** ecosystem-based (MICROSCOPY, DICOM, EM)
+- [ ] Generic instrument codes for collaborator / external data — not yet defined
 
 ### Publications (see [04_PUBLICATIONS](04_PUBLICATIONS.md))
 - [ ] Raw data linking method undecided — symlinks, hard links, or text reference list? Depends on filesystem and OS
+
+### Curated Datasets (see [12_CURATED_DATASETS](12_CURATED_DATASETS.md))
+- [ ] Inclusion in pilot vs. defer to Phase 2
+- [ ] Label format standardization per ecosystem
+- [ ] Curator role assignments
 
 ### Modalities (see [09_MODALITIES](09_MODALITIES.md))
 - [ ] SEM/TEM inclusion decision pending
@@ -172,6 +182,7 @@ Explicit calls for input are marked:
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-02-25 | R. Tasseff | Raw structure → ecosystem-based (MICROSCOPY/DICOM/EM); resolved RAW-05; added 12_CURATED_DATASETS spec; updated registries |
 | 2026-02-02 | R. Tasseff | Restructured from monolithic spec to modular documents; refocused on archival scope |
 | 2025-01-22 | R. Tasseff | v0.2 — Added discussion flags for stakeholder meeting |
 | 2025-01-22 | R. Tasseff | v0.1 — Initial comprehensive draft |
