@@ -103,7 +103,7 @@ An **archival storage system** for original imaging data that:
 ### Infrastructure (see [02_INFRASTRUCTURE](02_INFRASTRUCTURE.md))
 - [ ] Backup strategy undefined — RAID 5 only, no snapshots confirmed, no offsite
 - [ ] Access limited to specific hardwired on-site machines (instruments + some workstations); laptops excluded — workable but inconvenient
-- [ ] Snapshot/restore capabilities — need IT confirmation
+- [x] ~~Snapshot capability~~ — confirmed active (daily snapshots running); retention policy and restore procedure still needed
 - [ ] Filesystem type confirmation needed — affects linking method options (symlinks, hard links)
 
 ### Raw Storage (see [03_RAW_STORAGE](03_RAW_STORAGE.md))

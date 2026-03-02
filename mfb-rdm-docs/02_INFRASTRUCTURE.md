@@ -1,8 +1,8 @@
 # 02 — Infrastructure
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** ⚠️ Gaps identified  
-**Last Updated:** 2026-02-02
+**Status:** ⚠️ Gaps identified
+**Last Updated:** 2026-02-26
 
 ---
 
@@ -53,9 +53,10 @@ This document describes the hardware infrastructure, access model, and risk asse
 
 ### 2.1 Network Configuration
 
-| Attribute | Status |
-|-----------|--------|
-| **Internal access** | Available via `\\gjesus3\` or mount point from authorized machines |
+| Attribute | Value |
+|-----------|-------|
+| **Share path** | `\\GJESUS3\gjesus3` (SMB) |
+| **Drive mapping** | Can be mapped to a drive letter, e.g., `net use J: \\GJESUS3\gjesus3` |
 | **Authorized machines** | Specific hardwired on-site machines only (includes instruments and some researcher workstations) |
 | **Laptops** | ❌ Not authorized — most researcher laptops cannot connect |
 | **External/remote access** | Not available |
@@ -91,7 +92,7 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 |----------|------------|------------|
 | Multiple simultaneous drive failures | ❌ No | Consider RAID 6 for critical data (trades 1 drive of capacity) |
 | Failure during rebuild | ❌ No | Rebuild stresses remaining drives; URE risk on large drives |
-| Accidental deletion | ❌ No | Snapshots (if available); read-only permissions |
+| Accidental deletion | 🔶 Partial | Daily snapshots are active; read-only permissions after deposit |
 | Ransomware/malware | ❌ No | Snapshots; offsite backup; access controls |
 | Controller/enclosure failure | ❌ No | Offsite backup |
 | Site disaster (fire, flood) | ❌ No | Offsite backup |
@@ -103,7 +104,7 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 |------|------------|--------|-------------------|
 | Single drive failure | Medium | Low (recoverable) | ✅ RAID 5 handles |
 | Multi-drive failure | Low | Critical | ⚠️ No mitigation |
-| Accidental deletion | Medium | High | ⚠️ Permissions only |
+| Accidental deletion | Medium | High | 🔶 Snapshots active + permissions planned |
 | Ransomware | Low | Critical | ⚠️ No mitigation |
 | Site disaster | Very Low | Critical | ⚠️ No mitigation |
 
@@ -152,7 +153,7 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 
 | Mitigation | Implementation | Status |
 |------------|----------------|--------|
-| **Enable snapshots** | If supported, enable daily snapshots with 30-day retention | ⚠️ Awaiting IT |
+| **Enable snapshots** | Daily snapshots confirmed running (visible via `@Recently-Snapshot`; retention policy TBD) | ✅ Active (retention details needed) |
 | **Scrubbing schedule** | If not configured, request monthly scrub | ⚠️ Awaiting IT |
 | **Monitoring alerts** | Ensure drive failure alerts go to responsible person | ⚠️ Awaiting IT |
 
@@ -223,7 +224,7 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 |----|----------|-------|--------|
 | INFRA-01 | Confirm drive configuration and usable capacity | IT | ⚠️ Open |
 | INFRA-02 | Confirm filesystem (ext4/ZFS) | IT | ⚠️ Open |
-| INFRA-03 | Confirm snapshot capability and current config | IT | ⚠️ Open |
+| INFRA-03 | ~~Confirm snapshot capability~~ Snapshots confirmed active (daily). Still need: retention policy details, restore procedure | IT | 🔶 Partially resolved |
 | INFRA-04 | Clarify remote/VPN access options | IT | ⚠️ Open |
 | INFRA-05 | Decide backup scope (all raw / pubs only / critical) | PI | ⚠️ Open |
 | INFRA-06 | Decide backup method | PI + IT | ⚠️ Open |

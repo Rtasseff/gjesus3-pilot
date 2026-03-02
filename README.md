@@ -8,7 +8,37 @@ This repository contains the design documentation and planning materials for a l
 
 ## Status
 
-Pilot development — system design is in progress, not yet deployed.
+**Pilot development — initial directory structure deployed on NAS, design documents in progress.**
+
+- NAS directory structure created (2026-02-26): `staging/`, `raw/`, `publications/`, `curated_datasets/`
+- Raw storage organized by data ecosystem: `MICROSCOPY/`, `DICOM/`, `EM/`
+- DICOM data in staging awaiting first formal ingestion
+- Specifications ~70% drafted; several gaps remain (see [00_INDEX.md](mfb-rdm-docs/00_INDEX.md))
+
+## NAS Access
+
+| Attribute | Value |
+|-----------|-------|
+| **Share** | `\\GJESUS3\gjesus3` |
+| **Protocol** | SMB (Windows file sharing) |
+| **Access** | Hardwired on-site machines only (instruments + some workstations; laptops excluded) |
+| **Drive mapping** | Can be mapped to a drive letter (e.g., `net use J: \\GJESUS3\gjesus3`) |
+
+### Current NAS directory layout
+
+```
+\\GJESUS3\gjesus3\
+├── staging/                   # Temporary deposit area (no structure imposed)
+├── raw/                       # Archival raw data (immutable after deposit)
+│   ├── MICROSCOPY/            # Bio-Formats / OMERO ecosystem (.czi, .ome.tif, etc.)
+│   ├── DICOM/                 # DICOM ecosystem (MRI, PET, SPECT, CT)
+│   └── EM/                    # Electron microscopy (if included)
+├── publications/              # Publication data packages with provenance
+├── curated_datasets/          # Curated derived datasets — segmentation, etc. (under evaluation)
+└── tmp/                       # Temporary / scratch
+```
+
+See [02_INFRASTRUCTURE.md](mfb-rdm-docs/02_INFRASTRUCTURE.md) for hardware details and [03_RAW_STORAGE.md](mfb-rdm-docs/03_RAW_STORAGE.md) for the raw area specification.
 
 ## Repository Structure
 
@@ -29,6 +59,7 @@ gjesus3-pilot/
 │   ├── 09_MODALITIES.md       # Supported data types and instruments
 │   ├── 10_TOOLS.md            # Scripts and automation plans
 │   ├── 11_OPERATIONS.md       # Workflows, permissions, onboarding
+│   ├── 12_CURATED_DATASETS.md # Curated derived datasets (under evaluation)
 │   └── depricated/            # Historical drafts (preserved for context, not maintained)
 │       ├── projectOutline.md
 │       ├── RDM-system-specs_v0.1.md

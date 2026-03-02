@@ -49,7 +49,40 @@ This project uses a local git repository. When asked to commit:
 - **Infrastructure:** QNAP NAS "gjesus3" (~100 TB, RAID 5)
 - **Access:** Hardwired on-site machines only (no laptops); includes instruments and some workstations
 - **Scope:** Archival storage for microscopy and biomedical imaging data
-- **Status:** Pilot design phase — system not yet deployed
+- **NAS share:** `\\GJESUS3\gjesus3` (SMB); can be mapped as drive letter (e.g., `J:`)
+- **Status:** Pilot — directory structure deployed on NAS, first data in staging awaiting ingestion
+
+## Development Environment
+
+- **Scripting/development:** Use WSL (Ubuntu) for building scripts, extraction, checksums, etc.
+- **NAS mount in WSL:** Mount via fstab as drvfs (through the Windows-mapped drive letter). The user handles `sudo` commands for WSL setup.
+- **User-facing tools:** Write in Python (cross-platform) so Windows users can run them without WSL.
+- **The NAS itself** stays as a Windows SMB share — nothing changes for end users.
+
+## Current Work (pick up here)
+
+### NAS directory structure — deployed
+The following has been created on `\\GJESUS3\gjesus3`:
+- `staging/` — has two datasets awaiting ingestion
+- `raw/MICROSCOPY/`, `raw/DICOM/`, `raw/EM/`
+- `publications/`
+- `curated_datasets/`
+- `README.txt` at root
+
+### Staging data — next up
+Two collaborator DICOM datasets in `staging/` need extraction and eventual ingestion into `raw/DICOM/`:
+- `staging/HPIC_33cases/` — 33 files, mix of .rar and .zip (~15 GB compressed)
+- `staging/LIONS_42cases/` — 42 .zip files (~36 GB compressed)
+
+**Next steps:**
+1. Set up WSL mount for the NAS (fstab entry, install unzip/unrar/p7zip-full)
+2. Back up compressed originals to `staging/_originals_backup/`
+3. Extract all archives in place in staging
+4. Inspect extracted DICOM contents (verify structure, count files, check headers)
+5. Design and test the ingestion workflow (ACQ-ID assignment, checksums, registry entry, move to `raw/DICOM/`)
+
+### Curated datasets — deferred
+`12_CURATED_DATASETS.md` is written (EVALUATING status). Circle back after RAW ingestion is working.
 
 ## Style and Conventions
 
