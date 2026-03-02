@@ -48,7 +48,7 @@ This document covers operational aspects: roles, permissions, workflows, onboard
 | `/raw/` (pre-deposit) | Read/Write | Create/Write | None |
 | `/raw/` (post-deposit) | Read | Read | Read (if granted) |
 | `/publications/` | Read/Write | Read/Write (own) | Read (if granted) |
-| `/projects/` (if used) | Read/Write | Read/Write (own) | None |
+| `/projects/` | Read/Write | Read/Write (own) | None |
 | Registries | Read/Write | Read | None |
 
 ### 2.2 Intake Roles
@@ -83,6 +83,7 @@ This document covers operational aspects: roles, permissions, workflows, onboard
    - 01_OVERVIEW
    - 03_RAW_STORAGE (if depositing raw data)
    - 04_PUBLICATIONS (if working on publications)
+   - 05_PROJECTS (if working on projects)
    - 07_PROVENANCE
 4. **Attend orientation** (30-60 min with Data Mgmt Lead)
    - System walkthrough

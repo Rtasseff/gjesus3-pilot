@@ -10,10 +10,12 @@ This repository contains the design documentation and planning materials for a l
 
 **Pilot development — NAS structure deployed, ingestion tooling implemented, first data ingestion next.**
 
-- NAS directory structure created: `staging/`, `raw/`, `registries/`, `publications/`, `curated_datasets/`
+- NAS directory structure created: `staging/`, `raw/`, `registries/`, `publications/`, `projects/`, `curated_datasets/`
 - Raw storage organized by data ecosystem: `MICROSCOPY/`, `DICOM/`, `EM/`
-- Centralized `registries/` directory holds all CSV registries (raw, publications, etc.)
+- Centralized `registries/` directory holds all CSV registries (raw, publications, projects, etc.)
 - `ingest_raw.py` script implemented in `tools/` (batch, single-case, dry-run modes)
+- `create_project.py` script implemented in `tools/` (CLI + interactive modes)
+- Projects area live — temporary documented workspaces for organized research
 - Two collaborator DICOM datasets (~53 GB) in staging, backed up, awaiting extraction and ingestion
 - Specifications largely drafted; remaining gaps tracked in [00_INDEX.md](mfb-rdm-docs/00_INDEX.md)
 
@@ -37,6 +39,7 @@ This repository contains the design documentation and planning materials for a l
 │   └── EM/                    # Electron microscopy (if included)
 ├── registries/                # All CSV registries (centralized)
 ├── publications/              # Publication data packages with provenance
+├── projects/                  # Project workspaces (temporary, documented)
 ├── curated_datasets/          # Curated derived datasets — segmentation, etc. (under evaluation)
 └── tmp/                       # Temporary / scratch
 ```
@@ -55,7 +58,7 @@ gjesus3-pilot/
 │   ├── 02_INFRASTRUCTURE.md   # Hardware, access, risk assessment
 │   ├── 03_RAW_STORAGE.md      # Raw data area specification
 │   ├── 04_PUBLICATIONS.md     # Publication archive specification
-│   ├── 05_PROJECTS.md         # Project workspace specification (under evaluation)
+│   ├── 05_PROJECTS.md         # Project workspace specification
 │   ├── 06_REGISTRIES.md       # Registry schemas and workflows
 │   ├── 07_PROVENANCE.md       # Provenance logging specification
 │   ├── 08_METADATA.md         # Extended metadata (REMBI-based)
@@ -69,8 +72,9 @@ gjesus3-pilot/
 │       └── RDM-system-specs_v0.2.md
 ├── tools/                     # Scripts and automation
 │   ├── ingest_raw.py          # CLI for ingesting raw data from staging
+│   ├── create_project.py      # CLI for creating project workspaces
 │   ├── ingest/                # Supporting modules
-│   ├── templates/             # README templates
+│   ├── templates/             # README and YAML templates
 │   └── requirements.txt       # Python dependencies
 ├── equipment/                 # Reference docs for in-scope imaging equipment
 │   ├── INDEX.md               # Equipment index — start here for equipment info

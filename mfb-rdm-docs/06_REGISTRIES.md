@@ -26,7 +26,7 @@ Registries are **CSV files** that serve as indexes (manifests) for each storage 
 |----------|----------|---------|
 | Raw Registry | `/gjesus3/registries/registry_raw.csv` | Indexes all raw acquisitions |
 | Publications Registry | `/gjesus3/registries/registry_publications.csv` | Indexes all publication folders |
-| Projects Registry | `/gjesus3/registries/registry_projects.csv` | Indexes all project folders (if used) |
+| Projects Registry | `/gjesus3/registries/registry_projects.csv` | Indexes all project folders |
 | Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets (if used) |
 
 ### 1.3 Why CSV?
@@ -149,8 +149,6 @@ PUB-0002,pet-mri-fusion-2025,Multimodal PET-MRI fusion for tumor characterizatio
 ## 4. Projects Registry
 
 **File:** `/gjesus3/registries/registry_projects.csv`
-
-> **❓ EVALUATING:** Projects area may be deferred. This section applies if included.
 
 ### 4.1 Purpose
 

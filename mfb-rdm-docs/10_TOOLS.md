@@ -19,7 +19,7 @@ This document specifies the scripts and tools needed to support the data managem
 | **P1** | `ingest_raw` | Batch deposit from staging to raw | ✅ Implemented (`tools/ingest_raw.py`) |
 | **P1** | `create_publication` | Create publication folder with templates | 📋 Requirements defined |
 | **P2** | `log_activity` | Helper for provenance logging | 📋 Requirements defined |
-| **P2** | `create_project` | Create project folder (if Projects included) | ❓ Depends on scope |
+| **P2** | `create_project` | Create project folder with templates | ✅ Implemented (`tools/create_project.py`) |
 | **P3** | Metadata extractors | Extract embedded metadata to JSON | 📋 Future |
 | **P3** | Validation scripts | Verify registry integrity | 📋 Future |
 
@@ -169,9 +169,37 @@ log_activity \
 
 ## 3. Utility Scripts
 
-### 3.1 `create_project` (if Projects included)
+### 3.1 `create_project` — Project Workspace Setup
 
-Similar to `create_publication` but for project folders.
+**Purpose:** Create a new project folder with required structure and registry entry.
+
+**Location:** `tools/create_project.py`
+
+**Inputs:**
+- Short name (folder name)
+- Description
+- Owner (initials)
+
+**Actions:**
+1. Validate short name is unique (scan `registry_projects.csv`)
+2. Generate PROJ-ID (`PROJ-NNNN`, next available)
+3. Create folder: `/projects/proj-<short_name>/`
+4. Write `_project.yaml` from template
+5. Create empty `provenance.csv` with headers
+6. Create `raw_linked/` directory
+7. Append entry to `registries/registry_projects.csv`
+8. Print summary
+
+**Usage:**
+```bash
+python tools/create_project.py \
+  --name "ipf-biomarkers" \
+  --description "IPF biomarker quantification study" \
+  --owner MBC
+
+python tools/create_project.py --interactive
+python tools/create_project.py --name test --description "test" --owner RT --dry-run
+```
 
 ### 3.2 `validate_registries`
 
@@ -273,7 +301,7 @@ For less technical users, consider:
 
 | Phase | Tools | Timeline |
 |-------|-------|----------|
-| **Pilot** | `ingest_raw`, `create_publication` | Before pilot start |
+| **Pilot** | `ingest_raw`, `create_publication`, `create_project` | Before pilot start |
 | **Pilot+** | `log_activity`, `validate_registries` | During pilot |
 | **Post-pilot** | Metadata extractors, GUI wrappers | Based on demand |
 
@@ -283,6 +311,7 @@ For less technical users, consider:
 
 - [03_RAW_STORAGE](03_RAW_STORAGE.md) — Ingest workflow
 - [04_PUBLICATIONS](04_PUBLICATIONS.md) — Publication creation
+- [05_PROJECTS](05_PROJECTS.md) — Project creation
 - [07_PROVENANCE](07_PROVENANCE.md) — Provenance logging
 - [11_OPERATIONS](11_OPERATIONS.md) — Who uses which tools
 

@@ -1,58 +1,37 @@
 # 05 — Projects Area
 
-**Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** ❓ Under Evaluation  
-**Last Updated:** 2026-02-02
+**Parent:** [Documentation Index](00_INDEX.md)
+**Status:** 🔶 Draft
+**Last Updated:** 2026-03-02
 
 ---
 
 ## Purpose
 
-This document describes the *potential* Projects storage area — a temporary workspace for organized research work that doesn't yet belong to a specific publication.
-
-> **❓ EVALUATING:** Given infrastructure constraints (firewall, RAID 5 performance), the value of a Projects area on gjesus3 is uncertain. This may be deferred or dropped from the pilot.
+This document specifies the Projects storage area — a temporary, documented workspace for organized research work that doesn't yet belong to a specific publication.
 
 ---
 
-## 1. The Question
+## 1. Scope and Constraints
 
-### 1.1 Original Intent
+The Projects area provides semi-structured workspaces on gjesus3 for ongoing research. It bridges the gap between raw data deposits and formal publication packages.
 
-The Projects area was envisioned as:
-- A semi-structured workspace for ongoing research
-- A place to work on data before it becomes publication-ready
-- A way to organize work that spans multiple potential publications
-- A location with provenance tracking but less rigidity than Publications
+**What Projects are for:**
+- Organizing work that spans multiple potential publications
+- Working on data before it becomes publication-ready
+- Tracking provenance for work-in-progress
+- Shared workspace within the group
 
-### 1.2 The Concern
+**Known limitations:**
+- gjesus3 is accessible only from specific hardwired on-site machines (not laptops)
+- RAID 5 write performance is not optimized for heavy interactive analysis
+- This is archival-grade storage, not a primary working drive
 
-Given that gjesus3 is:
-- Accessible only from specific hardwired on-site machines (not laptops)
-- RAID 5 with write penalties
-- Positioned as archival, not working storage
-
-**Is a Projects area on gjesus3 actually useful?**
-
-If researchers work locally or on other drives for daily analysis, a Projects area here may be:
-- Rarely used
-- A compliance burden with no benefit
-- Confusing about what goes where
-
-### 1.3 Alternatives
-
-| Alternative | Description | Trade-offs |
-|-------------|-------------|------------|
-| **Skip Projects area entirely** | Only Raw and Publications on gjesus3 | Simpler; researchers manage working storage separately |
-| **Projects as staging for Publications** | Temporary area that graduates to Publication when ready | Similar to Publications but looser |
-| **External project management** | Projects exist on local/network drives; only finished work comes to gjesus3 | Provenance happens elsewhere; archives are clean |
+Researchers who do most of their analysis on local machines or other drives can still benefit from Projects as a place to organize and document results that will eventually feed into Publications.
 
 ---
 
-## 2. If We Include Projects
-
-*This section describes the specification IF the Projects area is included.*
-
-### 2.1 Design Principles
+## 2. Design Principles
 
 | Principle | Implementation |
 |-----------|----------------|
@@ -60,7 +39,9 @@ If researchers work locally or on other drives for daily analysis, a Projects ar
 | **Documented but flexible** | Provenance logged; internal structure is researcher-discretion |
 | **Leads somewhere** | Projects should culminate in Publications, exports, or explicit closure |
 
-### 2.2 Directory Structure
+---
+
+## 3. Directory Structure
 
 ```
 /gjesus3/
@@ -76,7 +57,9 @@ If researchers work locally or on other drives for daily analysis, a Projects ar
         └── ... (researcher-organized content)
 ```
 
-### 2.3 Project Lifecycle
+---
+
+## 4. Project Lifecycle
 
 ```
 Created ──▶ Active ──▶ Paused ──▶ Closed
@@ -89,20 +72,59 @@ Created ──▶ Active ──▶ Paused ──▶ Closed
 - **Exported:** Data copied out to external storage; project deleted
 - **Abandoned:** No further work; project deleted after retention period
 
-### 2.4 Retention
+---
 
-> **🔶 DRAFT:** Projects are temporary. Suggested:
+## 5. Retention
+
+> **✅ DECIDED:** Projects are temporary.
 > - Active: No limit
-> - Paused: 6 months maximum
+> - Paused: 6-month maximum
 > - After 6 months paused: Require decision (promote, export, or delete)
 
-### 2.5 Provenance
+---
+
+## 6. Provenance
+
+> **✅ DECIDED:** Provenance is recommended but not required.
 
 Same format as Publications (see [07_PROVENANCE](07_PROVENANCE.md)), but:
 - Less strict enforcement during active work
 - Required for any file intended for publication or external sharing
 
-### 2.6 Registry Fields
+An empty `provenance.csv` with headers is created at project setup.
+
+---
+
+## 7. Project Metadata File
+
+**File:** `_project.yaml`
+
+```yaml
+project_id: PROJ-0001
+short_name: ipf-biomarkers
+description: "IPF biomarker quantification study"
+status: active  # active | paused | closed
+owner: MBC
+
+# Timeline
+start_date: 2026-03-01
+last_activity: 2026-03-01
+closed_date: null
+
+# Outcome (filled at closure)
+outcome: null  # promoted | exported | abandoned
+promoted_to: null  # e.g., PUB-0003
+
+# Notes
+notes: |
+  Initial exploratory analysis of IPF biomarker data.
+```
+
+---
+
+## 8. Registry Fields
+
+See [06_REGISTRIES](06_REGISTRIES.md) Section 4 for full schema. Key fields:
 
 | Field | Type | Required |
 |-------|------|----------|
@@ -113,72 +135,74 @@ Same format as Publications (see [07_PROVENANCE](07_PROVENANCE.md)), but:
 | `start_date` | Date | Yes |
 | `status` | Enum | Yes |
 | `last_activity` | Date | Auto |
+| `folder_location` | String | Yes |
+| `notes` | String | Optional |
 
 ---
 
-## 3. Decision Framework
+## 9. Naming Conventions
 
-### 3.1 Questions to Answer
+### 9.1 Project ID
 
-Before deciding on Projects area inclusion:
+**Pattern:**
+```
+PROJ-<NNNN>
+```
 
-1. **Where do researchers currently work?**
-   - Local machines?
-   - Other network drives?
-   - Cloud storage?
+| Component | Description | Example |
+|-----------|-------------|---------|
+| `PROJ` | Fixed prefix | `PROJ` |
+| `<NNNN>` | Sequential number (4 digits) | `0001`, `0042` |
 
-2. **Would they use gjesus3 for active work?**
-   - Given access constraints?
-   - Given that it's positioned as archival?
+**Example:** `PROJ-0001`
 
-3. **What problem does Projects solve?**
-   - Organization before publication?
-   - Provenance for work-in-progress?
-   - Shared workspace within group?
+The PROJ-ID is used in the registry. The folder uses a **short name** for human readability.
 
-4. **Is the overhead justified?**
-   - Additional registry to maintain
-   - Provenance logging burden
-   - Lifecycle management
+### 9.2 Folder Short Name
 
-### 3.2 Recommendation
+**Requirements:**
+- Unique across all project folders
+- Human-readable (describes the project)
+- Filesystem-safe: lowercase, hyphens, no spaces
+- Prefixed with `proj-` in the folder name
 
-> **🔶 RECOMMENDATION:** Defer Projects area to Phase 2.
-> 
-> For the pilot, focus on:
-> - Raw: Where acquisitions go
-> - Publications: Where finished work goes
-> 
-> Let researchers work where they work. When work is publication-ready, it comes to gjesus3.
-> 
-> Revisit Projects after pilot if there's clear demand.
+**Pattern:**
+```
+proj-<short_name>
+```
 
----
-
-## 4. If We Skip Projects
-
-### 4.1 What Happens to Work-in-Progress?
-
-| Scenario | Approach |
-|----------|----------|
-| Working on analysis | Work locally or on preferred storage; not on gjesus3 |
-| Need to share with group | Use existing collaboration tools (network drives, cloud) |
-| Ready to archive | Create a Publication folder when work reaches publication stage |
-| Need raw data | Read from Raw area; work on copies elsewhere |
-
-### 4.2 Provenance Before Publication
-
-If provenance is important for work-in-progress:
-- Researchers maintain their own notes/logs during work
-- Formalize into `provenance.csv` when creating Publication folder
+**Examples:**
+- `proj-ipf-biomarkers`
+- `proj-tumor-segmentation-eval`
+- `proj-pet-mri-fusion`
 
 ---
 
-## 5. Related Documents
+## 10. Tooling
+
+**Script:** `tools/create_project.py`
+
+Creates a new project folder with required structure and registry entry. See [10_TOOLS](10_TOOLS.md) for full specification.
+
+**Usage:**
+```bash
+python tools/create_project.py \
+  --name "ipf-biomarkers" \
+  --description "IPF biomarker quantification study" \
+  --owner MBC
+
+python tools/create_project.py --interactive
+```
+
+---
+
+## 11. Related Documents
 
 - [01_OVERVIEW](01_OVERVIEW.md) — System scope decisions
 - [04_PUBLICATIONS](04_PUBLICATIONS.md) — Where finished work goes
-- [07_PROVENANCE](07_PROVENANCE.md) — Provenance format (if used)
+- [06_REGISTRIES](06_REGISTRIES.md) — Projects registry schema
+- [07_PROVENANCE](07_PROVENANCE.md) — Provenance format
+- [10_TOOLS](10_TOOLS.md) — Project creation script
 
 ---
 
@@ -186,7 +210,7 @@ If provenance is important for work-in-progress:
 
 | ID | Question | Owner | Status |
 |----|----------|-------|--------|
-| PROJ-01 | Include Projects area in pilot? | PI + Data Mgmt Lead | ❓ Evaluating |
-| PROJ-02 | If yes: What retention policy? | PI | ❓ Depends on PROJ-01 |
-| PROJ-03 | If yes: How strict on provenance? | Data Mgmt Lead | ❓ Depends on PROJ-01 |
+| PROJ-01 | Include Projects area in pilot? | PI + Data Mgmt Lead | ✅ Resolved — included |
+| PROJ-02 | What retention policy? | PI | ✅ Resolved — 6-month paused review |
+| PROJ-03 | How strict on provenance? | Data Mgmt Lead | ✅ Resolved — recommended, not required |
 | PROJ-04 | Where do researchers actually work now? | Users | 📣 Need input |

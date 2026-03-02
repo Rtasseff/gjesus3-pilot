@@ -67,6 +67,7 @@ The following has been created on `\\GJESUS3\gjesus3`:
 - `raw/MICROSCOPY/`, `raw/DICOM/`, `raw/EM/`
 - `registries/` — centralized registry directory (all registries live here, not inside storage areas)
 - `publications/`
+- `projects/` — project workspaces (live feature)
 - `curated_datasets/`
 - `README.txt` at root
 
@@ -76,6 +77,9 @@ The following has been created on `\\GJESUS3\gjesus3`:
 - `ingest_raw.py` script implemented in `tools/` — supports single-case, batch, interactive, and dry-run modes
 - Design decisions resolved: `original_name` registry field, X-prefix collaborator codes (XMRI, etc.), centralized `registries/` directory
 - Instrument codes finalized: `CELL` (Cell Observer), `LSM9` (LSM 900)
+- Projects area promoted to live feature — `05_PROJECTS.md` now Draft status
+- `create_project.py` script implemented in `tools/` — CLI + interactive modes, dry-run support
+- `projects/` directory created on NAS
 
 ### Staging data — next up
 Two collaborator DICOM datasets in `staging/` need extraction and ingestion into `raw/DICOM/`:

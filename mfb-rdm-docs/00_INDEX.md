@@ -15,7 +15,7 @@
 | [02_INFRASTRUCTURE](02_INFRASTRUCTURE.md) | Hardware, access, risk assessment | ⚠️ Gaps identified |
 | [03_RAW_STORAGE](03_RAW_STORAGE.md) | Raw data area specification | 🔶 Draft |
 | [04_PUBLICATIONS](04_PUBLICATIONS.md) | Publication archive specification | 🔶 Draft |
-| [05_PROJECTS](05_PROJECTS.md) | Project workspace specification | ❓ Under evaluation |
+| [05_PROJECTS](05_PROJECTS.md) | Project workspace specification | 🔶 Draft |
 | [06_REGISTRIES](06_REGISTRIES.md) | Registry schemas and workflows | 🔶 Draft |
 | [07_PROVENANCE](07_PROVENANCE.md) | Provenance logging specification | 🔶 Draft |
 | [08_METADATA](08_METADATA.md) | Extended metadata (REMBI-based) | 🔶 Draft |
@@ -77,7 +77,6 @@ An **archival storage system** for original imaging data that:
 
 | Item | Reason |
 |------|--------|
-| Active project workspaces | Uncertain value given access constraints; may revisit |
 | Platform-originated true raw data | Maintained by platforms (listmode, k-space, etc.); we store reconstructed/exported files only |
 | Non-imaging data | Current focus is imaging; may expand later |
 
@@ -87,7 +86,7 @@ An **archival storage system** for original imaging data that:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Storage areas | Raw + Publications (+ staging) | Projects area deferred; curated datasets under evaluation |
+| Storage areas | Raw + Publications + Projects (+ staging) | Curated datasets under evaluation |
 | Registry location | Top-level centralized | Simpler management; single source of truth |
 | Raw structure | **Ecosystem → Year → Month → Acquisition** | Organized by data ecosystem (MICROSCOPY, DICOM, EM) — stable, maps to tooling, avoids folder proliferation from new instruments or hybrids |
 | Instrument identity | In ACQ-ID and registry, not folder path | Keeps folder structure stable; instrument detail in metadata |
@@ -182,6 +181,7 @@ Explicit calls for input are marked:
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-03-02 | R. Tasseff | Promoted Projects area to live feature (Draft); updated key decisions, removed from deferred |
 | 2026-02-25 | R. Tasseff | Raw structure → ecosystem-based (MICROSCOPY/DICOM/EM); resolved RAW-05; added 12_CURATED_DATASETS spec; updated registries |
 | 2026-02-02 | R. Tasseff | Restructured from monolithic spec to modular documents; refocused on archival scope |
 | 2025-01-22 | R. Tasseff | v0.2 — Added discussion flags for stakeholder meeting |

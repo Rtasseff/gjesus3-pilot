@@ -63,7 +63,7 @@ The group has access to a dedicated 100 TB NAS (gjesus3) that can serve as a str
 |----------|---------|
 | **Microscopes** (direct raw) | Zeiss Axiocam 7 (WSI), Zeiss Axio Observer (Cell Observer), Zeiss LSM 900 (confocal) — instrument output (.czi) deposited directly |
 | **Platform imaging** (reconstructed) | MRI (Bruker BioSpec 11.7T and 7T), Nuclear Imaging (Molecubes PET/SPECT/CT, MILabs VECTor PET/SPECT/CT/OI) — reconstructed images (DICOM, possibly NIfTI; TBC) from platforms; platforms archive true raw data |
-| **Storage areas** | Raw archive, Publication archive, Staging (temporary) |
+| **Storage areas** | Raw archive, Publication archive, Project workspaces, Staging (temporary) |
 | **Users** | MFB group members with approved access |
 | **Timeline** | Indefinite long-term retention for raw and publication data |
 
@@ -74,7 +74,6 @@ The group has access to a dedicated 100 TB NAS (gjesus3) that can serve as a str
 | Category | Details | Status |
 |----------|---------|--------|
 | Electron microscopy (SEM/TEM) | Need to confirm use case fit for nanomaterial characterization | ❓ Awaiting input |
-| Project workspaces | Uncertain value given access constraints | ❓ May defer |
 
 ### 3.3 Out of Scope
 

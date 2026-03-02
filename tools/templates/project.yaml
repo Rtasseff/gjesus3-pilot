@@ -1,0 +1,18 @@
+project_id: {project_id}
+short_name: {short_name}
+description: "{description}"
+status: active  # active | paused | closed
+owner: {owner}
+
+# Timeline
+start_date: {start_date}
+last_activity: {start_date}
+closed_date: null
+
+# Outcome (filled at closure)
+outcome: null  # promoted | exported | abandoned
+promoted_to: null  # e.g., PUB-0003
+
+# Notes
+notes: |
+  Created by create_project.py

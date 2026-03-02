@@ -331,7 +331,7 @@ def main():
     )
     parser.add_argument(
         "--project",
-        help="Project ID to link acquisitions to (future use)",
+        help="Project ID (e.g. PROJ-0001) — recorded as project_hint in the raw registry",
     )
 
     args = parser.parse_args()
