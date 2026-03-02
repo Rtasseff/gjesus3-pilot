@@ -3,7 +3,7 @@
 **System Purpose:** Long-term archival storage for MFB group microscopy and biomedical imaging data
 **Infrastructure:** QNAP TS-864eU NAS (RAID 5, ~100 TB usable)
 **Status:** Pilot development
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -20,7 +20,7 @@
 | [07_PROVENANCE](07_PROVENANCE.md) | Provenance logging specification | 🔶 Draft |
 | [08_METADATA](08_METADATA.md) | Extended metadata (REMBI-based) | 🔶 Draft |
 | [09_MODALITIES](09_MODALITIES.md) | Supported data types and instruments | ⚠️ Needs input |
-| [10_TOOLS](10_TOOLS.md) | Scripts and automation | 📋 Planned |
+| [10_TOOLS](10_TOOLS.md) | Scripts and automation | 🔶 Draft |
 | [11_OPERATIONS](11_OPERATIONS.md) | Workflows, permissions, onboarding | 📋 Planned |
 | [12_CURATED_DATASETS](12_CURATED_DATASETS.md) | Curated derived datasets (segmentation, etc.) | ❓ Under evaluation |
 
@@ -108,7 +108,7 @@ An **archival storage system** for original imaging data that:
 
 ### Raw Storage (see [03_RAW_STORAGE](03_RAW_STORAGE.md))
 - [x] ~~Organization by instrument vs. abstract modality~~ — **Resolved:** ecosystem-based (MICROSCOPY, DICOM, EM)
-- [ ] Generic instrument codes for collaborator / external data — not yet defined
+- [x] ~~Generic instrument codes for collaborator / external data~~ — **Resolved:** X-prefix codes (XMRI, XCT, XPET, XSPECT)
 
 ### Publications (see [04_PUBLICATIONS](04_PUBLICATIONS.md))
 - [ ] Raw data linking method undecided — symlinks, hard links, or text reference list? Depends on filesystem and OS
@@ -128,7 +128,7 @@ An **archival storage system** for original imaging data that:
 - [ ] ISA-TAB-Nano applicability for nanomaterial imaging unclear
 
 ### Tools (see [10_TOOLS](10_TOOLS.md))
-- [ ] Ingest script requirements defined but not implemented
+- [x] ~~Ingest script requirements defined but not implemented~~ — **Resolved:** `ingest_raw.py` implemented in `tools/`
 - [ ] Where scripts will run (designated workstation vs. user machines) undecided
 - [ ] Script versioning/distribution approach undefined
 

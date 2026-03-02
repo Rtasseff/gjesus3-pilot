@@ -27,9 +27,10 @@ This document specifies the structure, conventions, and workflows for the Public
 
 ```
 /gjesus3/
+├── registries/
+│   └── registry_publications.csv       # Publication registry (see 06_REGISTRIES)
+│
 └── publications/
-    ├── registry_publications.csv           # Publication registry
-    │
     ├── lung-fibrosis-markers-2026/         # Publication folder (short name)
     │   ├── _publication.yaml               # Publication metadata
     │   ├── provenance.csv                  # Local provenance log

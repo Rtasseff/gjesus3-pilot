@@ -64,9 +64,10 @@ If researchers work locally or on other drives for daily analysis, a Projects ar
 
 ```
 /gjesus3/
+├── registries/
+│   └── registry_projects.csv           # Projects registry (see 06_REGISTRIES)
+│
 └── projects/
-    ├── registry_projects.csv
-    │
     └── proj-ipf-biomarkers/
         ├── _project.yaml
         ├── provenance.csv

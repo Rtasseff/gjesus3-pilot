@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -53,9 +53,10 @@ Organizing by data ecosystem rather than by instrument solves several problems:
 
 ```
 /gjesus3/
+├── registries/
+│   └── registry_raw.csv                # Master registry (see 06_REGISTRIES)
+│
 └── raw/
-    ├── registry_raw.csv                    # Master registry (see 06_REGISTRIES)
-    │
     ├── MICROSCOPY/                         # Bio-Formats / OMERO ecosystem
     │   └── 2026/
     │       └── 2026-02/
@@ -170,6 +171,19 @@ Instrument codes identify the source instrument in the ACQ-ID and registry. They
 | `CT` | CT reconstructed (Molecubes X-CUBE / MILabs VECTor) | DICOM | .dcm, possibly .nii (TBC) | Nuclear Imaging platform (reconstructed) |
 | `MRI` | MRI reconstructed (Bruker BioSpec 11.7T and 7T) | DICOM | .dcm (TBC) | MRI platform (reconstructed) |
 
+#### Collaborator / External Data Codes
+
+> **✅ DECIDED:** External collaborator data uses an `X` prefix on the modality code.
+
+| Code | Description | Ecosystem | Formats |
+|------|-------------|-----------|---------|
+| `XMRI` | External MRI (collaborator-provided DICOM) | DICOM | .dcm |
+| `XCT` | External CT (collaborator-provided DICOM) | DICOM | .dcm |
+| `XPET` | External PET (collaborator-provided DICOM) | DICOM | .dcm |
+| `XSPECT` | External SPECT (collaborator-provided DICOM) | DICOM | .dcm |
+
+The exact code is determined by DICOM header inspection during ingestion (Modality tag 0008,0060). The `data_source` registry field records the collaborator origin (e.g., `collaborator:HPIC`).
+
 > **❓ EVALUATING:** Additional codes pending:
 > - `SEM` — Scanning electron microscopy (if included)
 > - `TEM` — Transmission electron microscopy (if included)
@@ -189,10 +203,8 @@ For instruments that produce multiple modalities in a single session (e.g., PET/
 Data from external collaborators follows the same rules:
 
 1. Classify by data ecosystem (MICROSCOPY, DICOM, or EM)
-2. Assign an instrument code — use the actual instrument code if known, or a generic code (e.g., `XMRI` for external MRI)
-3. Record collaborator as operator in registry; note external origin in README
-
-> **🔶 DRAFT:** Generic codes for external/unknown instruments not yet defined.
+2. Assign an instrument code — use the actual instrument code if known, or the `X`-prefix generic code (e.g., `XMRI` for external MRI); see Section 3.2 for the full table
+3. Record `data_source` as `collaborator:<name>` in registry; note external origin in README
 
 ---
 
@@ -298,7 +310,7 @@ This keeps the registry semantics clean (one row per acquisition) without fighti
    - Optionally: linking to project folder
 4. **Verify and lock:** Review output; admin sets read-only
 
-> **⚠️ GAP:** Ingest script not yet implemented. See [10_TOOLS](10_TOOLS.md).
+> **✅ Implemented:** See `tools/ingest_raw.py` and [10_TOOLS](10_TOOLS.md) for details.
 
 ### 5.4 Timeline
 
@@ -368,4 +380,4 @@ This ensures metadata is captured while fresh and prevents accumulation of unreg
 | RAW-03 | SEM/TEM inclusion decision | PI | ❓ Evaluating |
 | RAW-04 | Verification automation approach | Data Mgmt Lead | 📋 Future |
 | ~~RAW-05~~ | ~~Organize by instrument or by abstract modality?~~ | — | ✅ Resolved: ecosystem-based (see Section 2) |
-| RAW-06 | Generic instrument codes for collaborator / external data | Data Mgmt Lead | 🔶 Draft |
+| ~~RAW-06~~ | ~~Generic instrument codes for collaborator / external data~~ | — | ✅ Resolved: X-prefix codes (e.g., `XMRI`, `XCT`); see Section 3.2 |

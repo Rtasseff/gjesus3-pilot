@@ -63,23 +63,34 @@ This project uses a local git repository. When asked to commit:
 
 ### NAS directory structure — deployed
 The following has been created on `\\GJESUS3\gjesus3`:
-- `staging/` — has two datasets awaiting ingestion
+- `staging/` — has two datasets (archives backed up, extraction pending)
 - `raw/MICROSCOPY/`, `raw/DICOM/`, `raw/EM/`
+- `registries/` — centralized registry directory (all registries live here, not inside storage areas)
 - `publications/`
 - `curated_datasets/`
 - `README.txt` at root
 
+### Completed
+- WSL mount configured (`/mnt/gjesus3` via fstab drvfs)
+- Staging backup completed: `staging/_originals_backup/` has copies of all compressed originals
+- `ingest_raw.py` script implemented in `tools/` — supports single-case, batch, interactive, and dry-run modes
+- Design decisions resolved: `original_name` registry field, X-prefix collaborator codes (XMRI, etc.), centralized `registries/` directory
+- Instrument codes finalized: `CELL` (Cell Observer), `LSM9` (LSM 900)
+
 ### Staging data — next up
-Two collaborator DICOM datasets in `staging/` need extraction and eventual ingestion into `raw/DICOM/`:
+Two collaborator DICOM datasets in `staging/` need extraction and ingestion into `raw/DICOM/`:
 - `staging/HPIC_33cases/` — 33 files, mix of .rar and .zip (~15 GB compressed)
 - `staging/LIONS_42cases/` — 42 .zip files (~36 GB compressed)
 
 **Next steps:**
-1. Set up WSL mount for the NAS (fstab entry, install unzip/unrar/p7zip-full)
-2. Back up compressed originals to `staging/_originals_backup/`
-3. Extract all archives in place in staging
-4. Inspect extracted DICOM contents (verify structure, count files, check headers)
-5. Design and test the ingestion workflow (ACQ-ID assignment, checksums, registry entry, move to `raw/DICOM/`)
+1. Extract all archives in place in staging (unrar/unzip)
+2. Inspect extracted DICOM contents (verify structure, count files, check headers with pydicom)
+3. Test ingestion: dry-run on one HPIC case, then real run, verify outputs
+4. Batch ingest all 33 HPIC cases, then all 42 LIONS cases
+5. Post-ingestion verification (registry completeness, checksum spot-check, Windows SMB access)
+
+### Linking method — deferred
+Test `.lnk` and symlink on NAS from Windows before committing to a link method. Script has `linker.py` stub ready. Always generates a text manifest as the audit trail.
 
 ### Curated datasets — deferred
 `12_CURATED_DATASETS.md` is written (EVALUATING status). Circle back after RAW ingestion is working.

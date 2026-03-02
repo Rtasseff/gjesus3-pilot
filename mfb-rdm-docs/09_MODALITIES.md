@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified  
-**Last Updated:** 2026-02-02
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -52,7 +52,7 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 |-----------|-------|
 | **Instrument** | Cell Observer (Axio Observer, Zeiss) |
 | **Category** | Microscope (direct raw) |
-| **Code** | TBD (e.g., `CELL` or `AXOB`) |
+| **Code** | `CELL` |
 | **Location** | Room 2.66 |
 | **Software** | ZEN Blue v2.3 |
 | **Cameras** | Axiocam MRR3 (B&W), Axiocam 305 (color) |
@@ -72,7 +72,7 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 |-----------|-------|
 | **Instrument** | Confocal Microscope 900 (Zeiss LSM 900) |
 | **Category** | Microscope (direct raw) |
-| **Code** | TBD (e.g., `LSM9` or `CONF`) |
+| **Code** | `LSM9` |
 | **Location** | Room 2.66 |
 | **Platform** | Optical Spectroscopy and Microscopy Platform (Irantzu Llarena) |
 | **Software** | ZEN Blue (full license: LSMPlus, Tile & Position, linear unmixing, colocalization, 3D Viewer) |
@@ -284,5 +284,5 @@ For each confirmed data type, we need a short walkthrough covering:
 | MOD-03 | Conduct show-and-tell for each type | Data Mgmt Lead + Users | 📋 Planned |
 | MOD-04 | Complete metadata audit per format | Data Mgmt Lead | ⚠️ Incomplete |
 | MOD-05 | Confirm DICOM as output format from MRI and Nuclear Imaging platforms | Data Mgmt Lead + Platforms | ⚠️ Needs confirmation |
-| MOD-06 | Assign instrument codes for Cell Observer and LSM 900 | Data Mgmt Lead | 🔶 Draft |
+| ~~MOD-06~~ | ~~Assign instrument codes for Cell Observer and LSM 900~~ | — | ✅ Resolved: `CELL` and `LSM9` |
 | MOD-07 | Confirm Cell Observer and LSM 900 .czi metadata is similar to WSI .czi | Data Mgmt Lead | 📋 Planned |

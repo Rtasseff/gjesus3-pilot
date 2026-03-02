@@ -1,8 +1,8 @@
 # 10 — Tools and Automation
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** 📋 Planned  
-**Last Updated:** 2026-02-02
+**Status:** 🔶 Draft
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -16,7 +16,7 @@ This document specifies the scripts and tools needed to support the data managem
 
 | Priority | Tool | Purpose | Status |
 |----------|------|---------|--------|
-| **P1** | `ingest_raw` | Batch deposit from staging to raw | 📋 Requirements defined |
+| **P1** | `ingest_raw` | Batch deposit from staging to raw | ✅ Implemented (`tools/ingest_raw.py`) |
 | **P1** | `create_publication` | Create publication folder with templates | 📋 Requirements defined |
 | **P2** | `log_activity` | Helper for provenance logging | 📋 Requirements defined |
 | **P2** | `create_project` | Create project folder (if Projects included) | ❓ Depends on scope |
@@ -29,24 +29,42 @@ This document specifies the scripts and tools needed to support the data managem
 
 ### 2.1 `ingest_raw` — Raw Data Ingest
 
-**Purpose:** Move data from staging (or local source) to the structured raw area with proper naming, checksums, and registry update.
+**Purpose:** Copy data from staging (or local source) to the structured raw area with proper naming, checksums, verification, and registry update.
 
-**Inputs:**
-- Source path (staging folder or local files)
-- Configuration file or interactive prompts for metadata
+**Location:** `tools/ingest_raw.py` (with supporting modules in `tools/ingest/`)
 
-**Actions:**
-1. Validate required metadata is provided
-2. Generate ACQ-ID (date + instrument + sequence)
-3. Create acquisition folder in correct location
-4. Copy/move files to destination
-5. Rename primary file (if configured)
-6. Generate checksums.json
-7. Create README.txt from template with provided metadata
-8. Append entry to registry_raw.csv
-9. Report success/failure
+**Architecture:**
+```
+tools/
+├── ingest_raw.py          # CLI entry point
+├── ingest/
+│   ├── __init__.py
+│   ├── config.py          # YAML config loading + validation
+│   ├── acq_id.py          # ACQ-ID generation (date + inst + seq)
+│   ├── checksum.py        # SHA-256 checksums → checksums.json
+│   ├── registry.py        # Read/append registry_raw.csv
+│   ├── readme.py          # Generate README.txt from template
+│   ├── dicom_utils.py     # DICOM header extraction (pydicom)
+│   └── linker.py          # Create .lnk / symlink / manifest
+├── templates/
+│   └── README_raw.txt     # README template
+└── requirements.txt       # pydicom, pyyaml, pylnk3, tqdm
+```
 
-**Configuration file (example):**
+**Workflow (per acquisition):**
+1. Load + validate config (YAML or interactive)
+2. Analyze source data (DICOM headers: modality, StudyDate, file count, size)
+3. Generate ACQ-ID (read registry for next sequence number)
+4. Create folder: `raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/series/`
+5. Copy files from staging to destination (with progress bar)
+6. Generate `checksums.json` (SHA-256, all files)
+7. Verify copy — recompute checksums on source, compare with destination
+8. Generate `README.txt`
+9. Append row to `registry_raw.csv` (including `original_name`)
+10. Create link in project folder (if `--project` specified)
+11. Report summary
+
+**Single-case configuration (example):**
 ```yaml
 # ingest_config.yaml
 source_path: /staging/user_dump/
@@ -55,17 +73,39 @@ acquisition_date: 2026-02-15
 operator: MBC
 sample_id: MOUSE-2024-042
 sample_type: mouse lung section
-staining: H&E
-purpose: Pilot test acquisition
+data_source: internal
 notes: First test of ingest workflow
+```
+
+**Batch configuration (example):**
+```yaml
+defaults:
+  data_ecosystem: DICOM
+  instrument: XMRI       # or 'auto' to detect from DICOM headers
+  operator: RT
+  data_source: "collaborator:HPIC"
+  acquisition_date: auto  # extract StudyDate from DICOM
+
+auto_discover:
+  staging_dir: /mnt/gjesus3/staging/HPIC_33cases/
+  pattern: "HPIC*/"
+  sample_id_from: folder_name
 ```
 
 **Usage:**
 ```bash
-ingest_raw --config ingest_config.yaml
-# OR
-ingest_raw --interactive
+python tools/ingest_raw.py --config batch_hpic.yaml --dry-run   # preview
+python tools/ingest_raw.py --config batch_hpic.yaml              # execute
+python tools/ingest_raw.py --interactive                          # single case
 ```
+
+**Key features:**
+- DICOM header auto-detection (modality, StudyDate via pydicom)
+- Collaborator instrument codes: X-prefix (e.g., `XMRI` for external MRI)
+- Copy verification: checksums computed on both source and destination, then compared
+- `original_name` field in registry tracks pre-ingestion source name
+- `--dry-run` mode for previewing without changes
+- Batch auto-discovery for processing many cases at once
 
 ### 2.2 `create_publication` — Publication Package Setup
 

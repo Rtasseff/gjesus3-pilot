@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -20,14 +20,14 @@ Registries are **CSV files** that serve as indexes (manifests) for each storage 
 
 ### 1.2 Registry Locations
 
-> **✅ DECIDED:** Registries are centralized at the top level, not distributed within each folder.
+> **✅ DECIDED:** All registries live in a single top-level `registries/` directory — centralized, not distributed within each storage area.
 
 | Registry | Location | Purpose |
 |----------|----------|---------|
-| Raw Registry | `/gjesus3/raw/registry_raw.csv` | Indexes all raw acquisitions |
-| Publications Registry | `/gjesus3/publications/registry_publications.csv` | Indexes all publication folders |
-| Projects Registry | `/gjesus3/projects/registry_projects.csv` | Indexes all project folders (if used) |
-| Curated Datasets Registry | `/gjesus3/curated_datasets/registry_datasets.csv` | Indexes all curated datasets (if used) |
+| Raw Registry | `/gjesus3/registries/registry_raw.csv` | Indexes all raw acquisitions |
+| Publications Registry | `/gjesus3/registries/registry_publications.csv` | Indexes all publication folders |
+| Projects Registry | `/gjesus3/registries/registry_projects.csv` | Indexes all project folders (if used) |
+| Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets (if used) |
 
 ### 1.3 Why CSV?
 
@@ -45,7 +45,7 @@ Registries are **CSV files** that serve as indexes (manifests) for each storage 
 
 ## 2. Raw Registry
 
-**File:** `/gjesus3/raw/registry_raw.csv`
+**File:** `/gjesus3/registries/registry_raw.csv`
 
 ### 2.1 Purpose
 
@@ -67,22 +67,23 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `sample_id` | String | 🔶 Recommended | Sample or animal identifier |
 | `sample_type` | String | 🔶 Recommended | Brief sample description |
 | `primary_file_name` | String | ✅ Yes | Name of the primary data file (or primary bundle folder) |
+| `original_name` | String | 🔶 Recommended | Original source name before ingestion (e.g., archive filename); required when data is renamed during ingest |
 | `file_format` | String | ✅ Yes | File extension/format (e.g., `.czi`, `.dcm`) |
 | `file_size_mb` | Number | ✅ Yes | Size of primary file in MB |
 | `file_count` | Number | ✅ Yes | Total files in acquisition folder |
 | `canonical_path` | String | ✅ Yes | Full path to acquisition folder |
-| `checksum_present` | Boolean | ✅ Yes | `Y` or `N` — is checksums.json present? |
-| `extended_metadata_present` | Boolean | ✅ Yes | `Y` or `N` — is extended metadata file present? |
+| `checksum_present` | String (Y/N) | ✅ Yes | `Y` or `N` — is checksums.json present? |
+| `extended_metadata_present` | String (Y/N) | ✅ Yes | `Y` or `N` — is extended metadata file present? |
 | `project_hint` | String | Optional | Associated project ID if known at deposit |
 | `notes` | String | Optional | Free-text notes |
 
 ### 2.3 Example
 
 ```csv
-acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,primary_file_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,notes
-ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axiocam 7,,MBC,internal,MOUSE-2024-042,mouse lung section,sample_slide.czi,.czi,2450,4,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,First pilot deposit
-ACQ-20260215-MRI-001,2026-02-15T17:00:00Z,2026-02-15T10:30:00Z,DICOM,MRI,Bruker BioSpec 11.7T,,IFF,internal,MOUSE-2024-042,mouse brain,series/,.dcm,1800,312,/raw/DICOM/2026/2026-02/ACQ-20260215-MRI-001/,Y,N,,MRI follow-up
-ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,mouse tumor,series/,.dcm,2100,486,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,N,,PET/CT hybrid session
+acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,notes
+ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axiocam 7,,MBC,internal,MOUSE-2024-042,mouse lung section,sample_slide.czi,,.czi,2450,4,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,First pilot deposit
+ACQ-20260215-MRI-001,2026-02-15T17:00:00Z,2026-02-15T10:30:00Z,DICOM,MRI,Bruker BioSpec 11.7T,,IFF,internal,MOUSE-2024-042,mouse brain,series/,,.dcm,1800,312,/raw/DICOM/2026/2026-02/ACQ-20260215-MRI-001/,Y,N,,MRI follow-up
+ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,mouse tumor,series/,,.dcm,2100,486,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,N,,PET/CT hybrid session
 ```
 
 ### 2.4 Update Rules
@@ -98,7 +99,7 @@ ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecub
 
 ## 3. Publications Registry
 
-**File:** `/gjesus3/publications/registry_publications.csv`
+**File:** `/gjesus3/registries/registry_publications.csv`
 
 ### 3.1 Purpose
 
@@ -147,7 +148,7 @@ PUB-0002,pet-mri-fusion-2025,Multimodal PET-MRI fusion for tumor characterizatio
 
 ## 4. Projects Registry
 
-**File:** `/gjesus3/projects/registry_projects.csv`
+**File:** `/gjesus3/registries/registry_projects.csv`
 
 > **❓ EVALUATING:** Projects area may be deferred. This section applies if included.
 
@@ -180,7 +181,7 @@ PROJ-0001,ipf-biomarkers,IPF biomarker quantification study,MBC,2026-01-15,activ
 
 ## 5. Curated Datasets Registry
 
-**File:** `/gjesus3/curated_datasets/registry_datasets.csv`
+**File:** `/gjesus3/registries/registry_datasets.csv`
 
 > **❓ EVALUATING:** Curated datasets area is under evaluation. See [12_CURATED_DATASETS](12_CURATED_DATASETS.md) for full specification.
 

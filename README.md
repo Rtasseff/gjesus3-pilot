@@ -4,16 +4,18 @@
 
 This repository contains the design documentation and planning materials for a lab-specific research data management (RDM) system for the MFB group at CIC biomaGUNE. The system provides long-term archival storage for microscopy and biomedical imaging data on a dedicated QNAP NAS (gjesus3, ~100 TB usable, RAID 5).
 
-**This is a design project, not a software project.** The primary deliverables are specifications, conventions, and operational procedures — not code (though supporting scripts are planned).
+**This is a design project, not a software project.** The primary deliverables are specifications, conventions, and operational procedures. Supporting scripts live in `tools/`.
 
 ## Status
 
-**Pilot development — initial directory structure deployed on NAS, design documents in progress.**
+**Pilot development — NAS structure deployed, ingestion tooling implemented, first data ingestion next.**
 
-- NAS directory structure created (2026-02-26): `staging/`, `raw/`, `publications/`, `curated_datasets/`
+- NAS directory structure created: `staging/`, `raw/`, `registries/`, `publications/`, `curated_datasets/`
 - Raw storage organized by data ecosystem: `MICROSCOPY/`, `DICOM/`, `EM/`
-- DICOM data in staging awaiting first formal ingestion
-- Specifications ~70% drafted; several gaps remain (see [00_INDEX.md](mfb-rdm-docs/00_INDEX.md))
+- Centralized `registries/` directory holds all CSV registries (raw, publications, etc.)
+- `ingest_raw.py` script implemented in `tools/` (batch, single-case, dry-run modes)
+- Two collaborator DICOM datasets (~53 GB) in staging, backed up, awaiting extraction and ingestion
+- Specifications largely drafted; remaining gaps tracked in [00_INDEX.md](mfb-rdm-docs/00_INDEX.md)
 
 ## NAS Access
 
@@ -33,6 +35,7 @@ This repository contains the design documentation and planning materials for a l
 │   ├── MICROSCOPY/            # Bio-Formats / OMERO ecosystem (.czi, .ome.tif, etc.)
 │   ├── DICOM/                 # DICOM ecosystem (MRI, PET, SPECT, CT)
 │   └── EM/                    # Electron microscopy (if included)
+├── registries/                # All CSV registries (centralized)
 ├── publications/              # Publication data packages with provenance
 ├── curated_datasets/          # Curated derived datasets — segmentation, etc. (under evaluation)
 └── tmp/                       # Temporary / scratch
@@ -57,13 +60,18 @@ gjesus3-pilot/
 │   ├── 07_PROVENANCE.md       # Provenance logging specification
 │   ├── 08_METADATA.md         # Extended metadata (REMBI-based)
 │   ├── 09_MODALITIES.md       # Supported data types and instruments
-│   ├── 10_TOOLS.md            # Scripts and automation plans
+│   ├── 10_TOOLS.md            # Scripts and automation (ingest_raw implemented)
 │   ├── 11_OPERATIONS.md       # Workflows, permissions, onboarding
 │   ├── 12_CURATED_DATASETS.md # Curated derived datasets (under evaluation)
 │   └── depricated/            # Historical drafts (preserved for context, not maintained)
 │       ├── projectOutline.md
 │       ├── RDM-system-specs_v0.1.md
 │       └── RDM-system-specs_v0.2.md
+├── tools/                     # Scripts and automation
+│   ├── ingest_raw.py          # CLI for ingesting raw data from staging
+│   ├── ingest/                # Supporting modules
+│   ├── templates/             # README templates
+│   └── requirements.txt       # Python dependencies
 ├── equipment/                 # Reference docs for in-scope imaging equipment
 │   ├── INDEX.md               # Equipment index — start here for equipment info
 │   └── ...                    # Instrument specs, platform descriptions

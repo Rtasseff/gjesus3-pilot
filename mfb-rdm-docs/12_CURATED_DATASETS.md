@@ -84,8 +84,10 @@ This requires labels to be:
 
 ```
 /gjesus3/
+├── registries/
+│   └── registry_datasets.csv               # Dataset registry (see 06_REGISTRIES)
+│
 └── curated_datasets/
-    ├── registry_datasets.csv                 # Dataset registry (see 06_REGISTRIES)
     ├── README_START_HERE.txt                 # Rules and quick reference
     │
     └── segmentation/                         # Dataset type
