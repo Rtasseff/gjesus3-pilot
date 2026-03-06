@@ -8,16 +8,27 @@ This repository contains the design documentation and planning materials for a l
 
 ## Status
 
-**Pilot development — NAS structure deployed, ingestion tooling implemented, first data ingestion next.**
+**Pilot development — NAS deployed, design specs drafted, per-modality ingestion testing next.**
 
-- NAS directory structure created: `staging/`, `raw/`, `registries/`, `publications/`, `projects/`, `curated_datasets/`
+### What's done
+- NAS directory structure deployed: `staging/`, `raw/`, `registries/`, `publications/`, `projects/`, `curated_datasets/`
 - Raw storage organized by data ecosystem: `MICROSCOPY/`, `DICOM/`, `EM/`
-- Centralized `registries/` directory holds all CSV registries (raw, publications, projects, etc.)
-- `ingest_raw.py` script implemented in `tools/` (batch, single-case, dry-run modes)
-- `create_project.py` script implemented in `tools/` (CLI + interactive modes)
-- Projects area live — temporary documented workspaces for organized research
-- Two collaborator DICOM datasets (~53 GB) in staging, backed up, awaiting extraction and ingestion
-- Specifications largely drafted; remaining gaps tracked in [00_INDEX.md](mfb-rdm-docs/00_INDEX.md)
+- Centralized `registries/` directory holds all CSV registries
+- `ingest_raw.py` script implemented in `tools/` (batch, single-case, interactive, dry-run)
+- `create_project.py` script implemented in `tools/` (CLI + interactive, dry-run)
+- Design specifications largely drafted across 12 modules
+
+### Key recent decisions (2026-03-06)
+- **DICOM stored as compressed archives** (.zip/.tar.gz) — millions of small .dcm files unworkable on SMB
+- **Primary staging off-NAS** — extraction and compression happen on fast local storage; NAS `staging/` retained as secondary dump
+- **Two ingest modes** — full (default: extracts metadata, compresses DICOM) and lightweight (copies as-is, minimal registry)
+- **Metadata extraction integrated into ingest** — not a standalone tool; happens before DICOM compression
+
+### What's next
+- Per-modality ingestion testing: collaborator DICOM first, then microscopy .czi, platform DICOM, NIfTI
+- Test linking method and raw immutability enforcement on NAS
+- Finalize scripts after all modality passes
+- See [tasks/tasks.md](tasks/tasks.md) for the full task list
 
 ## NAS Access
 
@@ -32,16 +43,15 @@ This repository contains the design documentation and planning materials for a l
 
 ```
 \\GJESUS3\gjesus3\
-├── staging/                   # Temporary deposit area (no structure imposed)
+├── staging/                   # Secondary deposit area (convenience dump; primary staging is off-NAS)
 ├── raw/                       # Archival raw data (immutable after deposit)
-│   ├── MICROSCOPY/            # Bio-Formats / OMERO ecosystem (.czi, .ome.tif, etc.)
-│   ├── DICOM/                 # DICOM ecosystem (MRI, PET, SPECT, CT)
+│   ├── MICROSCOPY/            # Bio-Formats ecosystem (.czi, .ome.tif, etc.)
+│   ├── DICOM/                 # DICOM ecosystem — stored as compressed archives (.zip/.tar.gz)
 │   └── EM/                    # Electron microscopy (if included)
 ├── registries/                # All CSV registries (centralized)
 ├── publications/              # Publication data packages with provenance
 ├── projects/                  # Project workspaces (temporary, documented)
-├── curated_datasets/          # Curated derived datasets — segmentation, etc. (under evaluation)
-└── tmp/                       # Temporary / scratch
+└── curated_datasets/          # Curated derived datasets (under evaluation)
 ```
 
 See [02_INFRASTRUCTURE.md](mfb-rdm-docs/02_INFRASTRUCTURE.md) for hardware details and [03_RAW_STORAGE.md](mfb-rdm-docs/03_RAW_STORAGE.md) for the raw area specification.
@@ -80,15 +90,17 @@ gjesus3-pilot/
 │   ├── INDEX.md               # Equipment index — start here for equipment info
 │   └── ...                    # Instrument specs, platform descriptions
 ├── shared/                    # Documents shared with stakeholders
-├── tasks/                     # Task tracking
+├── tasks/
+│   └── tasks.md               # Consolidated task list with status tracking
 └── contacts.xlsx              # Stakeholder contact information
 ```
 
 ## Key Entry Points
 
-- **Start here:** [mfb-rdm-docs/00_INDEX.md](mfb-rdm-docs/00_INDEX.md) — full index with status of each module
-- **Quick background:** [mfb-rdm-docs/01_OVERVIEW.md](mfb-rdm-docs/01_OVERVIEW.md) — why this system exists and what it does
-- **Equipment:** [equipment/INDEX.md](equipment/INDEX.md) — all in-scope instruments and what "raw" means for each
+- **Design docs:** [mfb-rdm-docs/00_INDEX.md](mfb-rdm-docs/00_INDEX.md) — full index with status of each module
+- **Background:** [mfb-rdm-docs/01_OVERVIEW.md](mfb-rdm-docs/01_OVERVIEW.md) — why this system exists and what it does
+- **Equipment:** [equipment/INDEX.md](equipment/INDEX.md) — in-scope instruments and what "raw" means for each
+- **Task list:** [tasks/tasks.md](tasks/tasks.md) — what's done, what's next
 - **Historical context:** [mfb-rdm-docs/depricated/](mfb-rdm-docs/depricated/) — earlier monolithic drafts showing design evolution
 
 ## People

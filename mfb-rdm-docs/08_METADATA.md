@@ -162,6 +162,7 @@ For SEM/TEM imaging of nanomaterials (if included):
 - [03_RAW_STORAGE](03_RAW_STORAGE.md) — Where metadata lives
 - [06_REGISTRIES](06_REGISTRIES.md) — Core metadata fields
 - [09_MODALITIES](09_MODALITIES.md) — Instrument-specific metadata
+- [10_TOOLS](10_TOOLS.md) — Metadata extraction integrated into ingest workflow
 
 ---
 

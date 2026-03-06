@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ Current  
-**Last Updated:** 2026-02-02
+**Last Updated:** 2026-03-06
 
 ---
 
@@ -92,11 +92,11 @@ The group has access to a dedicated 100 TB NAS (gjesus3) that can serve as a str
 | Constraint | Impact | Mitigation |
 |------------|--------|------------|
 | **RAID 5 only** | Single-drive failure protection; no protection against multi-drive failure, ransomware, accidental deletion | Checksums for corruption detection; consider offsite backup for critical data |
-| **No confirmed snapshots** | Cannot easily recover from accidental changes | Enforce read-only on raw after deposit; minimize write access |
+| **Daily snapshots active, no offsite backup** | Snapshots help with accidental changes; still no protection against site disaster or multi-drive failure | Enforce read-only on raw after deposit; define retention policy; consider offsite backup for critical data |
 | **Access restrictions** | Only specific hardwired on-site machines can connect (includes instruments and some researcher workstations, but excludes laptops); inconvenient but not unusable | Position as archival, not working storage; batch deposits from accessible machines |
 | **2.5 GbE networking** | Adequate for archival; not optimized for real-time analysis | Acceptable for intended use case |
 
-> **⚠️ GAP:** Need IT consultation to confirm snapshot capabilities and discuss backup options.
+> **🔶 DRAFT:** Snapshots are confirmed active (daily). Retention policy and offsite backup strategy still TBD — see [02_INFRASTRUCTURE](02_INFRASTRUCTURE.md).
 
 ### 4.2 Organizational Constraints
 
@@ -175,6 +175,7 @@ The pilot is successful if:
 - [02_INFRASTRUCTURE](02_INFRASTRUCTURE.md) — Hardware details, risk assessment
 - [03_RAW_STORAGE](03_RAW_STORAGE.md) — Raw data area specification
 - [04_PUBLICATIONS](04_PUBLICATIONS.md) — Publication archive specification
+- [05_PROJECTS](05_PROJECTS.md) — Project workspace specification
 - [06_REGISTRIES](06_REGISTRIES.md) — Registry schemas
 - [09_MODALITIES](09_MODALITIES.md) — Supported data types
 

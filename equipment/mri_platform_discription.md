@@ -14,7 +14,7 @@ The system includes a wide range of coils suitable for different specimen sizes 
 This MRI system enables high spatial and temporal resolution imaging, ideal for neuroimaging, physiology, pharmacology, and molecular biology research.
 
 ### MRI 11.7T Bruker BioSpec
-he 11.7 tesla Bruker BioSpec MRI system is equipped with a high-performance 9 cm gradient delivering up to 750 mT/m, enabling ultra-high spatial and temporal resolution in preclinical imaging studies.
+The 11.7 tesla Bruker BioSpec MRI system is equipped with a high-performance 9 cm gradient delivering up to 750 mT/m, enabling ultra-high spatial and temporal resolution in preclinical imaging studies.
 
 It features four broadband transmit channels and parallel reception with up to eight channels, enhancing sensitivity and reducing acquisition time.
 The system supports a wide range of radiofrequency coils suited for various animal models and applications, and enables multinuclear detection of ¹³C, ¹⁹F, and ³¹P, making it ideal for advanced metabolic, molecular, and functional imaging.

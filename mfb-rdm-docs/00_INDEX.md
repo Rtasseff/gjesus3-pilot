@@ -104,7 +104,7 @@ An **archival storage system** for original imaging data that:
 ## Key Gaps / Open Questions
 
 ### Infrastructure (see [02_INFRASTRUCTURE](02_INFRASTRUCTURE.md))
-- [ ] Backup strategy undefined — RAID 5 only, no snapshots confirmed, no offsite
+- [ ] Backup strategy undefined — RAID 5 + daily snapshots, but no offsite backup
 - [ ] Access limited to specific hardwired on-site machines (instruments + some workstations); laptops excluded — workable but inconvenient
 - [x] ~~Snapshot capability~~ — confirmed active (daily snapshots running); retention policy and restore procedure still needed
 - [ ] Filesystem type confirmation needed — affects linking method options (symlinks, hard links)

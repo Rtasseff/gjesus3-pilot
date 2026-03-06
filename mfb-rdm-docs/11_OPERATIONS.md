@@ -148,7 +148,7 @@ This document covers operational aspects: roles, permissions, workflows, onboard
 | Parameter | Value |
 |-----------|-------|
 | **Duration** | 4-6 weeks initial |
-| **Scope** | Zeiss WSI + histology + DICOM (confirmed modalities) |
+| **Scope** | Microscopy (Axiocam 7 WSI, Cell Observer, LSM 900) + DICOM (MRI, Nuclear Imaging) |
 | **Participants** | Initial user cohort (see Section 1.2) |
 | **Success criteria** | See [01_OVERVIEW](01_OVERVIEW.md) Section 6 |
 

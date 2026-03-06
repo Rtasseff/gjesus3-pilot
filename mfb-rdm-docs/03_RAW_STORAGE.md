@@ -238,17 +238,17 @@ The **primary data file** is:
 
 This keeps the rule and registry semantics uniformly clean: one row per acquisition, one primary file per folder.
 
-### 4.4 Known Exceptions
+### 4.4 Edge Cases Under Investigation
 
-> **🔶 DRAFT:** Exceptions to be handled case-by-case. Document the pattern when encountered.
+> **🔶 DRAFT:** The one-primary-file rule has no exceptions. The patterns below may require guidance on how to split acquisitions or handle multi-file instrument outputs within the rule.
 
-| Exception Pattern | Example | Handling |
-|-------------------|---------|----------|
-| Multi-channel as separate files | Some microscopes export each channel as separate .tif | TBD — may need multi-primary convention |
-| Multiple biosamples in one session | Batch scan of multiple slides | Separate acquisition per slide, OR document all in README |
-| Multi-series DICOM | Multiple reconstruction methods | Single acquisition folder; document in README |
+| Pattern | Example | Proposed Handling |
+|---------|---------|-------------------|
+| Multi-channel as separate files | Some microscopes export each channel as separate .tif | Combine into one acquisition; treat the set as the primary file (or re-export as single .czi/.ome.tif) |
+| Multiple biosamples in one session | Batch scan of multiple slides | Separate acquisition per slide |
+| Multi-series DICOM | Multiple reconstruction methods | Single acquisition folder; all series in one archive; document in README |
 
-> **📣 INPUT NEEDED:** What multi-file patterns do current instruments produce? We need examples from each modality.
+> **📣 INPUT NEEDED:** What multi-file patterns do current instruments produce? Will be investigated during per-modality ingestion testing.
 
 ---
 
@@ -307,37 +307,11 @@ This keeps the rule and registry semantics uniformly clean: one row per acquisit
 
 > **✅ DECIDED:** Two ingest modes — full (default) and lightweight. Both are script-assisted via `ingest_raw.py`.
 
-#### Full Mode (default — recommended)
+**Full Mode** (default): Source on fast local storage. Analyzes data, extracts embedded metadata to `metadata.json`, compresses DICOM to archive, copies result to NAS, populates all registry fields.
 
-Source: fast local or network storage. Best for DICOM and any data where metadata extraction is valuable.
+**Lightweight Mode** (`--lightweight`): Source on NAS staging or any path. Copies archive as-is, populates minimum registry fields, sets `extended_metadata_present` = `N`. Can be upgraded later using `backfill_metadata`.
 
-1. **Load + validate config** (YAML or interactive)
-2. **Analyze source data** (DICOM headers: modality, StudyDate, file count, size)
-3. **Extract embedded metadata** → `metadata.json` sidecar
-4. **Compress DICOM** (if applicable) → `.zip` or `.tar.gz` archive
-5. **Generate ACQ-ID** (read registry for next sequence number)
-6. **Create acquisition folder** on NAS: `raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/`
-7. **Copy files** to NAS (archive + metadata.json + README.txt)
-8. **Generate `checksums.json`** (SHA-256, all files in acquisition folder)
-9. **Verify copy** — recompute checksums on destination, compare
-10. **Append row to `registry_raw.csv`** (all fields populated)
-11. **Create link** in project folder (if `--project` specified)
-12. **Report summary**
-
-#### Lightweight Mode (`--lightweight`)
-
-Source: NAS `staging/` or any path. For constrained environments where extraction/compression is not feasible.
-
-1. **Load + validate config** (YAML or interactive — fewer required fields)
-2. **Generate ACQ-ID**
-3. **Create acquisition folder** on NAS
-4. **Copy archive as-is** (user must provide pre-compressed archive or files)
-5. **Generate `checksums.json`**
-6. **Generate `README.txt`**
-7. **Append row to `registry_raw.csv`** (auto fields filled where possible; `extended_metadata_present` = `N`)
-8. **Report summary**
-
-> **Note:** Lightweight ingests can be upgraded later using `backfill_metadata` (see [10_TOOLS](10_TOOLS.md)).
+> See [10_TOOLS](10_TOOLS.md) Section 2.1 for the detailed step-by-step workflow for each mode.
 
 > **✅ Implemented:** See `tools/ingest_raw.py` and [10_TOOLS](10_TOOLS.md) for details.
 

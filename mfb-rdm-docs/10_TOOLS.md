@@ -19,8 +19,8 @@ This document specifies the scripts and tools needed to support the data managem
 | **P1** | `ingest_raw` | Batch deposit from staging to raw | ✅ Implemented (`tools/ingest_raw.py`) |
 | **P1** | `create_publication` | Create publication folder with templates | 📋 Requirements defined |
 | **P2** | `log_activity` | Helper for provenance logging | 📋 Requirements defined |
-| **P2** | `create_project` | Create project folder with templates | ✅ Implemented (`tools/create_project.py`) |
-| **P1** | Metadata extractors | Auto-extract embedded metadata to JSON at ingest | 🔴 Top priority |
+| **P1** | `create_project` | Create project folder with templates | ✅ Implemented (`tools/create_project.py`) |
+| **P1** | Metadata extraction | Auto-extract embedded metadata (integrated into full-mode ingest) | 🔶 Design decided; implementation pending |
 | **P3** | Validation scripts | Verify registry integrity | 📋 Future |
 
 ---

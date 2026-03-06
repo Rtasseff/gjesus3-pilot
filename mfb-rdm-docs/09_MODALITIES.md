@@ -23,7 +23,7 @@ The instruments in scope fall into two categories, and the meaning of "raw" data
 | Category | What goes to gjesus3 | Example |
 |----------|----------------------|---------|
 | **Microscopes** (lab-operated) | Actual instrument output — the native image files | .czi files from Zeiss microscopes |
-| **Platform instruments** (MRI, Nuclear Imaging) | Reconstructed images provided to researchers by the platform | DICOM series (format TBC) |
+| **Platform instruments** (MRI, Nuclear Imaging) | Reconstructed images provided to researchers by the platform | DICOM (stored as compressed archives on gjesus3), possibly NIfTI |
 
 The platforms manage and archive their own true raw acquisition data (e.g., PET listmode files, raw k-space MRI data). That data is usually not useful to researchers. Our "raw" for platform data is the reconstructed images.
 
@@ -96,8 +96,8 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 | **Category** | Platform instrument (reconstructed data) |
 | **Code** | `MRI` |
 | **Capabilities** | High-resolution anatomical (2D/3D), ultrafast (EPI, spiral), parallel imaging (GRAPPA, mSENSE), multinuclear spectroscopy (1H, 13C, 19F, 31P) |
-| **Primary format** | DICOM (.dcm, DICOM directories) — **format to be confirmed** |
-| **Storage on gjesus3** | Compressed archive (.zip or .tar.gz) — DICOM directories are archived before deposit; source format from platform remains expanded directories |
+| **Source format** | DICOM (.dcm directories) — provided by MRI platform as expanded directories |
+| **Storage on gjesus3** | Compressed archive (.zip or .tar.gz) — DICOM directories are archived before deposit |
 | **Typical size** | 100 MB - 10 GB per series |
 | **Embedded metadata** | Extensive (DICOM standard) |
 | **Not embedded** | Study context beyond DICOM headers |
@@ -217,7 +217,7 @@ For each confirmed data type, we need a short walkthrough covering:
 | Carl Zeiss Image | .czi | Zeiss microscopes | Rich | Native format; preserves all metadata |
 | TIFF | .tif, .tiff | Various | Variable | Common export; metadata depends on source |
 | OME-TIFF | .ome.tif | Various/export | Rich | Open standard; embedded OME-XML |
-| DICOM | .dcm, (folder) | Medical imaging | Rich | Standard for medical images |
+| DICOM | .dcm (stored as .zip/.tar.gz on gjesus3) | Medical imaging | Rich | Standard for medical images |
 | NIfTI | .nii, .nii.gz | Medical imaging / analysis | Limited (header) | Common neuroimaging format; may come from Nuclear Imaging platform |
 | JPEG | .jpg, .jpeg | Various | Minimal | Lossy; avoid for quantitative work |
 | PNG | .png | Various | Minimal | Lossless; limited metadata |

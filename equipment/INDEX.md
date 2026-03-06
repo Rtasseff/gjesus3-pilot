@@ -10,21 +10,23 @@ There are two categories of equipment, and the meaning of "raw" data on gjesus3 
 
 **Microscopes (lab-operated):** The actual instrument output (native image files) is deposited directly to gjesus3. This is the true raw acquisition data.
 
-**Institutional imaging platforms (MRI, Nuclear Imaging):** The platforms operate the instruments and manage their own long-term storage of true acquisition data (e.g., PET listmode files, raw k-space MRI data). This truly raw data is usually not useful to end-user researchers. What the platforms provide to researchers are **reconstructed images**, likely in DICOM format (format to be confirmed). On gjesus3, these reconstructed images are treated as our "raw" data — the authoritative starting point for the MFB group's analysis and archiving.
+**Institutional imaging platforms (MRI, Nuclear Imaging):** The platforms operate the instruments and manage their own long-term storage of true acquisition data (e.g., PET listmode files, raw k-space MRI data). This truly raw data is usually not useful to end-user researchers. What the platforms provide to researchers are **reconstructed images**, primarily in DICOM format (possibly also NIfTI from Nuclear Imaging). On gjesus3, DICOM data is stored as **compressed archives** (.zip or .tar.gz); these reconstructed images are treated as our "raw" data — the authoritative starting point for the MFB group's analysis and archiving.
 
 ---
 
 ## Equipment Summary
 
-| # | Equipment | Type | Category | Our "Raw" Data | Primary Format | Source Document |
-|---|-----------|------|----------|----------------|----------------|-----------------|
-| 1 | Zeiss Axiocam 7 (WSI) | Whole-slide imager | Microscope | Instrument output | .czi | [Technical Review (docx)](Whole%20Slide%20Imaging%20with%20Zeiss%20Axiocam%207_%20Technical%20Review.docx) |
-| 2 | Zeiss Axio Observer (Cell Observer) | Inverted epifluorescence microscope | Microscope | Instrument output | .czi, .tif | [Description (pdf)](cell_observer_description_2.pdf) |
-| 3 | Zeiss LSM 900 (Confocal) | Confocal microscope | Microscope | Instrument output | .czi | [Description (pdf)](confocal_microscopelsm900description.pdf) |
-| 4a | Bruker BioSpec 11.7T MRI | Preclinical MRI scanner | Platform instrument | Reconstructed images (from platform) | DICOM (TBC) | [Platform description (md)](mri_platform_discription.md) |
-| 4b | Bruker BioSpec 7T MRI | Preclinical MRI scanner | Platform instrument | Reconstructed images (from platform) | DICOM (TBC) | [Platform description (md)](mri_platform_discription.md) |
-| 5a | Molecubes PET/SPECT/CT | Modular trimodal nuclear imaging | Platform instrument | Reconstructed images (from platform) | DICOM (TBC) | [Platform description (md)](nuclearImaging_platform_description.md) |
-| 5b | MILabs VECTor PET/SPECT/CT/OI | Integrated multimodal nuclear imaging | Platform instrument | Reconstructed images (from platform) | DICOM, NIfTI | [Platform description (md)](nuclearImaging_platform_description.md) |
+> For instrument codes used in the ACQ-ID and registry (e.g., `ZWSI`, `CELL`, `LSM9`, `MRI`, `PET`), see [09_MODALITIES](../mfb-rdm-docs/09_MODALITIES.md) and [03_RAW_STORAGE](../mfb-rdm-docs/03_RAW_STORAGE.md) Section 3.2.
+
+| # | Equipment | Code | Type | Category | Our "Raw" Data | Primary Format | Source Document |
+|---|-----------|------|------|----------|----------------|----------------|-----------------|
+| 1 | Zeiss Axiocam 7 (WSI) | `ZWSI` | Whole-slide imager | Microscope | Instrument output | .czi | [Technical Review (docx)](Whole%20Slide%20Imaging%20with%20Zeiss%20Axiocam%207_%20Technical%20Review.docx) |
+| 2 | Zeiss Axio Observer (Cell Observer) | `CELL` | Inverted epifluorescence microscope | Microscope | Instrument output | .czi, .tif | [Description (pdf)](cell_observer_description_2.pdf) |
+| 3 | Zeiss LSM 900 (Confocal) | `LSM9` | Confocal microscope | Microscope | Instrument output | .czi | [Description (pdf)](confocal_microscopelsm900description.pdf) |
+| 4a | Bruker BioSpec 11.7T MRI | `MRI` | Preclinical MRI scanner | Platform instrument | Reconstructed images | DICOM | [Platform description (md)](mri_platform_discription.md) |
+| 4b | Bruker BioSpec 7T MRI | `MRI` | Preclinical MRI scanner | Platform instrument | Reconstructed images | DICOM | [Platform description (md)](mri_platform_discription.md) |
+| 5a | Molecubes PET/SPECT/CT | `PET`/`SPECT`/`CT` | Modular trimodal nuclear imaging | Platform instrument | Reconstructed images | DICOM (TBC) | [Platform description (md)](nuclearImaging_platform_description.md) |
+| 5b | MILabs VECTor PET/SPECT/CT/OI | `PET`/`SPECT`/`CT` | Integrated multimodal nuclear imaging | Platform instrument | Reconstructed images | DICOM, NIfTI | [Platform description (md)](nuclearImaging_platform_description.md) |
 
 ---
 

@@ -186,7 +186,7 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 | `/raw/` (after deposit) | RO | RO | RO |
 | `/publications/` | RW | RW (own) | RO |
 | `/projects/` | RW | RW (own) | RO |
-| `/registry/` | RW | RO | RO |
+| `/registries/` | RW | RO | RO |
 
 > **🔶 DRAFT:** Exact implementation depends on NAS permissions model capabilities.
 
