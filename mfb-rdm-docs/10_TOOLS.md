@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-03-06
 
 ---
 
@@ -20,7 +20,7 @@ This document specifies the scripts and tools needed to support the data managem
 | **P1** | `create_publication` | Create publication folder with templates | 📋 Requirements defined |
 | **P2** | `log_activity` | Helper for provenance logging | 📋 Requirements defined |
 | **P2** | `create_project` | Create project folder with templates | ✅ Implemented (`tools/create_project.py`) |
-| **P3** | Metadata extractors | Extract embedded metadata to JSON | 📋 Future |
+| **P1** | Metadata extractors | Auto-extract embedded metadata to JSON at ingest | 🔴 Top priority |
 | **P3** | Validation scripts | Verify registry integrity | 📋 Future |
 
 ---
@@ -51,23 +51,39 @@ tools/
 └── requirements.txt       # pydicom, pyyaml, pylnk3, tqdm
 ```
 
-**Workflow (per acquisition):**
+**Two Ingest Modes:**
+
+> **✅ DECIDED:** Full mode (default) extracts metadata and compresses DICOM before archiving. Lightweight mode copies as-is for constrained environments.
+
+**Full Mode (default) — per acquisition:**
 1. Load + validate config (YAML or interactive)
 2. Analyze source data (DICOM headers: modality, StudyDate, file count, size)
-3. Generate ACQ-ID (read registry for next sequence number)
-4. Create folder: `raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/series/`
-5. Copy files from staging to destination (with progress bar)
-6. Generate `checksums.json` (SHA-256, all files)
-7. Verify copy — recompute checksums on source, compare with destination
-8. Generate `README.txt`
-9. Append row to `registry_raw.csv` (including `original_name`)
-10. Create link in project folder (if `--project` specified)
-11. Report summary
+3. Extract embedded metadata → `metadata.json` sidecar
+4. Compress DICOM (if applicable) → `.zip` or `.tar.gz` archive
+5. Generate ACQ-ID (read registry for next sequence number)
+6. Create folder: `raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/`
+7. Copy files to destination (archive + metadata.json + README.txt, with progress bar)
+8. Generate `checksums.json` (SHA-256, all files in acquisition folder)
+9. Verify copy — recompute checksums on destination, compare
+10. Generate `README.txt`
+11. Append row to `registry_raw.csv` (all fields populated, including `original_name`)
+12. Create link in project folder (if `--project` specified)
+13. Report summary
+
+**Lightweight Mode (`--lightweight`) — per acquisition:**
+1. Load + validate config (fewer required fields)
+2. Generate ACQ-ID
+3. Create folder: `raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/`
+4. Copy archive as-is to destination (user provides pre-compressed archive or files)
+5. Generate `checksums.json`
+6. Generate `README.txt`
+7. Append row to `registry_raw.csv` (auto fields only; `extended_metadata_present` = `N`)
+8. Report summary
 
 **Single-case configuration (example):**
 ```yaml
 # ingest_config.yaml
-source_path: /staging/user_dump/
+source_path: /data/local_staging/user_dump/   # local path (recommended for full mode)
 instrument: ZWSI
 acquisition_date: 2026-02-15
 operator: MBC
@@ -85,22 +101,28 @@ defaults:
   operator: RT
   data_source: "collaborator:HPIC"
   acquisition_date: auto  # extract StudyDate from DICOM
+  archive_format: zip     # zip (default) or tar.gz
 
 auto_discover:
-  staging_dir: /mnt/gjesus3/staging/HPIC_33cases/
+  source_dir: /data/local_staging/HPIC_33cases/   # local path for full mode
   pattern: "HPIC*/"
   sample_id_from: folder_name
 ```
 
 **Usage:**
 ```bash
-python tools/ingest_raw.py --config batch_hpic.yaml --dry-run   # preview
-python tools/ingest_raw.py --config batch_hpic.yaml              # execute
-python tools/ingest_raw.py --interactive                          # single case
+python tools/ingest_raw.py --config batch_hpic.yaml --dry-run    # preview (full mode)
+python tools/ingest_raw.py --config batch_hpic.yaml               # execute (full mode)
+python tools/ingest_raw.py --interactive                           # single case (full mode)
+python tools/ingest_raw.py --config quick.yaml --lightweight       # lightweight mode
+python tools/ingest_raw.py --interactive --lightweight             # lightweight interactive
 ```
 
 **Key features:**
-- DICOM header auto-detection (modality, StudyDate via pydicom)
+- Two ingest modes: full (default) and lightweight (`--lightweight`)
+- DICOM header auto-detection (modality, StudyDate via pydicom) — full mode
+- DICOM archive creation (compress to .zip or .tar.gz) — full mode
+- Metadata sidecar generation (`metadata.json`) — full mode
 - Collaborator instrument codes: X-prefix (e.g., `XMRI` for external MRI)
 - Copy verification: checksums computed on both source and destination, then compared
 - `original_name` field in registry tracks pre-ingestion source name
@@ -222,11 +244,29 @@ verify_checksums --scope /raw/MICROSCOPY/2026/  # Check specific path
 verify_checksums --sample 10  # Random 10% sample
 ```
 
-### 3.4 `extract_metadata`
+### 3.4 Metadata Extraction and Backfill
 
-**Purpose:** Extract embedded metadata from data files to JSON sidecar.
+> **✅ DECIDED:** Auto-extraction of embedded metadata is integrated into full-mode ingest — not a separate standalone tool. The DICOM archive format decision is resolved (compressed archives); extraction happens before compression during full-mode ingest.
 
-**Supported formats:** .czi, DICOM, others TBD
+**Metadata extraction (integrated into `ingest_raw` full mode):**
+- Reads embedded metadata from raw files (DICOM headers via pydicom, .czi metadata, etc.)
+- Writes `metadata.json` sidecar in the acquisition folder
+- Sets `extended_metadata_present` = `Y` in registry
+
+**`backfill_metadata` — upgrade lightweight ingests:**
+
+**Purpose:** Retroactively extract metadata from acquisitions that were ingested in lightweight mode. Decompresses the archive to a temp directory, extracts metadata, writes `metadata.json`, updates registry.
+
+**Usage:**
+```bash
+python tools/backfill_metadata.py --acq-id ACQ-20260301-XMRI-001   # single
+python tools/backfill_metadata.py --scope /raw/DICOM/2026/          # batch
+python tools/backfill_metadata.py --dry-run --scope /raw/DICOM/     # preview
+```
+
+**Supported formats:** DICOM (.dcm via pydicom), .czi (via aicspylibczi or czifile), others TBD
+
+> **Note:** User-supplied metadata (sample context, experimental notes via CSVs/Excel) remains deferred.
 
 ---
 
@@ -301,9 +341,11 @@ For less technical users, consider:
 
 | Phase | Tools | Timeline |
 |-------|-------|----------|
-| **Pilot** | `ingest_raw`, `create_publication`, `create_project` | Before pilot start |
+| **Pilot** | `ingest_raw` (full + lightweight modes), `create_publication`, `create_project` | Before pilot start |
+| **Pilot** | Metadata extractors (integrated into full-mode ingest) | Before first batch ingest |
+| **Pilot+** | `backfill_metadata` (upgrade lightweight ingests) | During pilot |
 | **Pilot+** | `log_activity`, `validate_registries` | During pilot |
-| **Post-pilot** | Metadata extractors, GUI wrappers | Based on demand |
+| **Post-pilot** | GUI wrappers, user-supplied metadata workflows | Based on demand |
 
 ---
 

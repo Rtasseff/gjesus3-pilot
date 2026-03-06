@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-03-06
 
 ---
 
@@ -53,37 +53,45 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 ### 2.2 Schema
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `acq_id` | String | ✅ Yes | Unique acquisition ID (e.g., `ACQ-20260215-ZWSI-001`) |
-| `registration_datetime` | ISO DateTime | ✅ Yes | When this entry was added (auto) |
-| `acquisition_datetime` | ISO DateTime | 🔶 Recommended | When the data was actually acquired |
-| `data_ecosystem` | String | ✅ Yes | Top-level folder: `MICROSCOPY`, `DICOM`, or `EM` |
-| `instrument` | String | ✅ Yes | Instrument code (e.g., `ZWSI`, `LSM9`, `PET`) |
-| `instrument_model` | String | 🔶 Recommended | Full instrument name (e.g., `Bruker BioSpec 11.7T`) |
-| `modalities_in_study` | String | Optional | For multi-modal acquisitions: semicolon-separated DICOM modality codes (e.g., `PT;CT`) |
-| `operator` | String | ✅ Yes | Person who collected the data (name or initials) |
-| `data_source` | String | 🔶 Recommended | `internal` or `collaborator:<name>` |
-| `sample_id` | String | 🔶 Recommended | Sample or animal identifier |
-| `sample_type` | String | 🔶 Recommended | Brief sample description |
-| `primary_file_name` | String | ✅ Yes | Name of the primary data file (or primary bundle folder) |
-| `original_name` | String | 🔶 Recommended | Original source name before ingestion (e.g., archive filename); required when data is renamed during ingest |
-| `file_format` | String | ✅ Yes | File extension/format (e.g., `.czi`, `.dcm`) |
-| `file_size_mb` | Number | ✅ Yes | Size of primary file in MB |
-| `file_count` | Number | ✅ Yes | Total files in acquisition folder |
-| `canonical_path` | String | ✅ Yes | Full path to acquisition folder |
-| `checksum_present` | String (Y/N) | ✅ Yes | `Y` or `N` — is checksums.json present? |
-| `extended_metadata_present` | String (Y/N) | ✅ Yes | `Y` or `N` — is extended metadata file present? |
-| `project_hint` | String | Optional | Associated project ID if known at deposit |
-| `notes` | String | Optional | Free-text notes |
+> **✅ DECIDED:** Fields are classified by **Population** method — how they get filled during ingest. This enables lightweight mode to produce sparse-but-valid registry entries.
+
+| Field | Type | Required | Population | Description |
+|-------|------|----------|------------|-------------|
+| `acq_id` | String | ✅ Yes | Auto | Unique acquisition ID (e.g., `ACQ-20260215-ZWSI-001`) |
+| `registration_datetime` | ISO DateTime | ✅ Yes | Auto | When this entry was added |
+| `acquisition_datetime` | ISO DateTime | 🔶 Recommended | Auto (full) | When the data was actually acquired; extracted from DICOM headers in full mode |
+| `data_ecosystem` | String | ✅ Yes | Auto | Top-level folder: `MICROSCOPY`, `DICOM`, or `EM` |
+| `instrument` | String | ✅ Yes | Auto | Instrument code (e.g., `ZWSI`, `LSM9`, `PET`); auto-detected from DICOM headers in full mode |
+| `instrument_model` | String | 🔶 Recommended | Auto (full) | Full instrument name (e.g., `Bruker BioSpec 11.7T`) |
+| `modalities_in_study` | String | Optional | Auto (full) | For multi-modal acquisitions: semicolon-separated DICOM modality codes (e.g., `PT;CT`) |
+| `operator` | String | ✅ Yes | User | Person who collected the data (name or initials) |
+| `data_source` | String | 🔶 Recommended | User | `internal` or `collaborator:<name>` |
+| `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier |
+| `sample_type` | String | 🔶 Recommended | User | Brief sample description |
+| `primary_file_name` | String | ✅ Yes | Auto | Name of the primary data file (for DICOM: archive filename, e.g., `ACQ-20260215-MRI-001.zip`) |
+| `original_name` | String | 🔶 Recommended | Auto | Original source name before ingestion (e.g., archive filename); required when data is renamed during ingest |
+| `file_format` | String | ✅ Yes | Auto | File extension/format (e.g., `.czi`, `.zip`, `.tar.gz`) |
+| `file_size_mb` | Number | ✅ Yes | Auto | Size of primary file in MB |
+| `file_count` | Number | ✅ Yes | Auto | Total files in acquisition folder (for DICOM: files in the folder, typically 3-5, not .dcm instance count) |
+| `canonical_path` | String | ✅ Yes | Auto | Full path to acquisition folder |
+| `checksum_present` | String (Y/N) | ✅ Yes | Auto | `Y` or `N` — is checksums.json present? |
+| `extended_metadata_present` | String (Y/N) | ✅ Yes | Auto | `Y` (full mode) or `N` (lightweight mode) — is metadata.json present? |
+| `project_hint` | String | Optional | User | Associated project ID if known at deposit |
+| `notes` | String | Optional | User | Free-text notes |
+
+**Population key:**
+- **Auto** — populated automatically in all ingest modes
+- **Auto (full)** — populated automatically in full mode only; empty in lightweight mode
+- **User** — user-supplied (via config or interactive prompt)
 
 ### 2.3 Example
 
 ```csv
 acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,notes
 ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axiocam 7,,MBC,internal,MOUSE-2024-042,mouse lung section,sample_slide.czi,,.czi,2450,4,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,First pilot deposit
-ACQ-20260215-MRI-001,2026-02-15T17:00:00Z,2026-02-15T10:30:00Z,DICOM,MRI,Bruker BioSpec 11.7T,,IFF,internal,MOUSE-2024-042,mouse brain,series/,,.dcm,1800,312,/raw/DICOM/2026/2026-02/ACQ-20260215-MRI-001/,Y,N,,MRI follow-up
-ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,mouse tumor,series/,,.dcm,2100,486,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,N,,PET/CT hybrid session
+ACQ-20260215-MRI-001,2026-02-15T17:00:00Z,2026-02-15T10:30:00Z,DICOM,MRI,Bruker BioSpec 11.7T,,IFF,internal,MOUSE-2024-042,mouse brain,ACQ-20260215-MRI-001.zip,,.zip,1800,4,/raw/DICOM/2026/2026-02/ACQ-20260215-MRI-001/,Y,Y,,MRI follow-up (full-mode ingest)
+ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,mouse tumor,ACQ-20260220-PET-001.zip,,.zip,2100,4,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,Y,,PET/CT hybrid session (full-mode ingest)
+ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HPIC-case-01,,ACQ-20260301-XMRI-001.zip,case_01.zip,.zip,450,3,/raw/DICOM/2026/2026-03/ACQ-20260301-XMRI-001/,Y,N,,Lightweight ingest from NAS staging
 ```
 
 ### 2.4 Update Rules
@@ -310,3 +318,4 @@ Generation: Next available number within each type.
 | REG-03 | Git versioning for registries? | Data Mgmt Lead | 📋 Future consideration |
 | REG-04 | Validation script requirements | Data Mgmt Lead | 📋 Planned |
 | REG-05 | Curated datasets registry: finalize schema after pilot experience | Data Mgmt Lead | ❓ Evaluating |
+| REG-06 | Track DICOM instance count (.dcm files) in registry or only in extended metadata? | Data Mgmt Lead | 🔶 Draft |

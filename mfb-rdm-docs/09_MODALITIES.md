@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified  
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-03-06
 
 ---
 
@@ -97,6 +97,7 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 | **Code** | `MRI` |
 | **Capabilities** | High-resolution anatomical (2D/3D), ultrafast (EPI, spiral), parallel imaging (GRAPPA, mSENSE), multinuclear spectroscopy (1H, 13C, 19F, 31P) |
 | **Primary format** | DICOM (.dcm, DICOM directories) — **format to be confirmed** |
+| **Storage on gjesus3** | Compressed archive (.zip or .tar.gz) — DICOM directories are archived before deposit; source format from platform remains expanded directories |
 | **Typical size** | 100 MB - 10 GB per series |
 | **Embedded metadata** | Extensive (DICOM standard) |
 | **Not embedded** | Study context beyond DICOM headers |
@@ -117,6 +118,7 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 | **Codes** | `PET`, `SPECT`, `CT` (individual codes per modality) |
 | **Workstations** | 3 dedicated workstations with PMOD and Imalytics |
 | **Primary format** | DICOM and NIfTI (MILabs confirms both exports; Molecubes **format TBC**) |
+| **Storage on gjesus3** | DICOM stored as compressed archive (.zip or .tar.gz); NIfTI files stored as-is (single files, no archive needed) |
 | **Typical size** | 100 MB - 10 GB per series |
 | **Embedded metadata** | Extensive (DICOM standard); NIfTI has limited header metadata |
 | **Not embedded** | Study context beyond headers |
@@ -228,7 +230,7 @@ For each confirmed data type, we need a short walkthrough covering:
 | .czi | Deposit as-is | No |
 | .tif (native) | Deposit as-is | No |
 | .ome.tif | Deposit as-is | No |
-| DICOM | Deposit folder as single unit | No |
+| DICOM | Compress to archive (.zip/.tar.gz) before deposit | No (compressed, not converted) |
 | .jpg (primary) | ⚠️ Discourage | Convert to TIFF if possible |
 | Proprietary | Deposit native + OME-TIFF export | Recommended |
 

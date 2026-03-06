@@ -3,7 +3,7 @@
 **System Purpose:** Long-term archival storage for MFB group microscopy and biomedical imaging data
 **Infrastructure:** QNAP TS-864eU NAS (RAID 5, ~100 TB usable)
 **Status:** Pilot development
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-03-06
 
 ---
 
@@ -91,7 +91,11 @@ An **archival storage system** for original imaging data that:
 | Raw structure | **Ecosystem → Year → Month → Acquisition** | Organized by data ecosystem (MICROSCOPY, DICOM, EM) — stable, maps to tooling, avoids folder proliferation from new instruments or hybrids |
 | Instrument identity | In ACQ-ID and registry, not folder path | Keeps folder structure stable; instrument detail in metadata |
 | Hybrid instruments | Keep together as one acquisition | PET/CT etc. stored as single DICOM Study; modalities recorded in registry |
-| One primary file rule | Yes (with documented exceptions) | Simplifies registry; exceptions handled case-by-case |
+| One primary file rule | Yes (no exceptions — DICOM stored as archive) | Simplifies registry; archive format eliminates the bundle exception |
+| DICOM archive format | Compressed archives (.zip/.tar.gz) | Millions of small .dcm files unworkable on SMB; archive is the single primary file |
+| Primary staging location | Fast local/network storage (off-NAS) | NAS SMB too slow for extraction/compression; NAS staging/ retained as secondary dump |
+| Two ingest modes | Full (default) + Lightweight | Full mode extracts metadata before archiving; lightweight for constrained environments |
+| Metadata extraction at ingest | Integrated into full-mode ingest | Not a separate post-hoc tool; extraction happens before DICOM compression |
 | Provenance location | Per-publication/project folder | Local to context; enables independent archiving |
 | Extended metadata | REMBI-based subset | Community standard; pruned to essential fields |
 
@@ -123,6 +127,7 @@ An **archival storage system** for original imaging data that:
 - [ ] Embedded metadata audit incomplete — which instruments embed what?
 
 ### Metadata (see [08_METADATA](08_METADATA.md))
+- [x] ~~Auto-extraction of embedded metadata at ingest~~ — **Resolved:** integrated into full-mode ingest; DICOM format decision resolved (compressed archives). Implementation pending.
 - [ ] REMBI field selection not finalized — user voting incomplete
 - [ ] ISA-TAB-Nano applicability for nanomaterial imaging unclear
 
@@ -181,6 +186,7 @@ Explicit calls for input are marked:
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-03-06 | R. Tasseff | DICOM stored as compressed archives; primary staging off-NAS; two ingest modes (full + lightweight); metadata extraction integrated into full-mode ingest; one-primary-file rule simplified (no DICOM exception) |
 | 2026-03-02 | R. Tasseff | Promoted Projects area to live feature (Draft); updated key decisions, removed from deferred |
 | 2026-02-25 | R. Tasseff | Raw structure → ecosystem-based (MICROSCOPY/DICOM/EM); resolved RAW-05; added 12_CURATED_DATASETS spec; updated registries |
 | 2026-02-02 | R. Tasseff | Restructured from monolithic spec to modular documents; refocused on archival scope |

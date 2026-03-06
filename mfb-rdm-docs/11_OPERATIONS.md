@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 📋 Planned  
-**Last Updated:** 2026-02-02
+**Last Updated:** 2026-03-06
 
 ---
 
@@ -44,12 +44,14 @@ This document covers operational aspects: roles, permissions, workflows, onboard
 
 | Area | Data Mgmt Lead | Operators | Others |
 |------|----------------|-----------|--------|
-| `/staging/` | Read/Write | Read/Write | None |
+| `/staging/` ¹ | Read/Write | Read/Write | None |
 | `/raw/` (pre-deposit) | Read/Write | Create/Write | None |
 | `/raw/` (post-deposit) | Read | Read | Read (if granted) |
 | `/publications/` | Read/Write | Read/Write (own) | Read (if granted) |
 | `/projects/` | Read/Write | Read/Write (own) | None |
 | Registries | Read/Write | Read | None |
+
+> ¹ NAS `staging/` is a **secondary convenience dump**. The recommended ingest path uses fast local or network storage as the primary source (see [03_RAW_STORAGE](03_RAW_STORAGE.md) Section 5.2).
 
 ### 2.2 Intake Roles
 
