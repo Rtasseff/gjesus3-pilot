@@ -59,7 +59,9 @@ This project uses a local git repository. When asked to commit:
 - **User-facing tools:** Write in Python (cross-platform) so Windows users can run them without WSL.
 - **The NAS itself** stays as a Windows SMB share — nothing changes for end users.
 
-## Current Work (pick up here)
+## Current Work
+
+See [`tasks/tasks.md`](tasks/tasks.md) for the full task list with status tracking.
 
 ### NAS directory structure — deployed
 The following has been created on `\\GJESUS3\gjesus3`:
@@ -70,34 +72,6 @@ The following has been created on `\\GJESUS3\gjesus3`:
 - `projects/` — project workspaces (live feature)
 - `curated_datasets/`
 - `README.txt` at root
-
-### Completed
-- WSL mount configured (`/mnt/gjesus3` via fstab drvfs)
-- Staging backup completed: `staging/_originals_backup/` has copies of all compressed originals
-- `ingest_raw.py` script implemented in `tools/` — supports single-case, batch, interactive, and dry-run modes
-- Design decisions resolved: `original_name` registry field, X-prefix collaborator codes (XMRI, etc.), centralized `registries/` directory
-- Instrument codes finalized: `CELL` (Cell Observer), `LSM9` (LSM 900)
-- Projects area promoted to live feature — `05_PROJECTS.md` now Draft status
-- `create_project.py` script implemented in `tools/` — CLI + interactive modes, dry-run support
-- `projects/` directory created on NAS
-
-### Staging data — next up
-Two collaborator DICOM datasets in `staging/` need extraction and ingestion into `raw/DICOM/`:
-- `staging/HPIC_33cases/` — 33 files, mix of .rar and .zip (~15 GB compressed)
-- `staging/LIONS_42cases/` — 42 .zip files (~36 GB compressed)
-
-**Next steps:**
-1. Extract all archives in place in staging (unrar/unzip)
-2. Inspect extracted DICOM contents (verify structure, count files, check headers with pydicom)
-3. Test ingestion: dry-run on one HPIC case, then real run, verify outputs
-4. Batch ingest all 33 HPIC cases, then all 42 LIONS cases
-5. Post-ingestion verification (registry completeness, checksum spot-check, Windows SMB access)
-
-### Linking method — deferred
-Test `.lnk` and symlink on NAS from Windows before committing to a link method. Script has `linker.py` stub ready. Always generates a text manifest as the audit trail.
-
-### Curated datasets — deferred
-`12_CURATED_DATASETS.md` is written (EVALUATING status). Circle back after RAW ingestion is working.
 
 ## Style and Conventions
 

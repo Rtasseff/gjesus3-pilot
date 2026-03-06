@@ -1,196 +1,138 @@
-## A. Confirm storage “zones” and their intent (decisions → operational definitions)
+# MFB gjesus3 RDM Pilot — Task List
 
-1. **Define the four zones (1–2 sentences each)**
+**Last Updated:** 2026-03-06
 
-   * Staging / intake (temporary, messy, controlled promotion)
-   * Raw archive (structured, long-term, immutable-by-policy, modality/instrument substructure)
-   * Publication archive (structured, long-term, flexible per paper)
-   * Projects workspace (temporary, active work; still needs provenance rules)
-
-2. **Decide what “long-term” and “temporary” mean**
-
-   * Raw: retention expectation (years) and cold-storage migration trigger
-   * Publications: retention expectation and what qualifies as “publication package”
-   * Projects: how long project workspaces live; when/how they are “closed” or migrated/archived
-
-3. **Decide where registries live (single top-level `REGISTRY/` vs embedded)**
-
-   * You can keep it open for now, but you need an initial default to implement.
-
-Deliverable: a short “zone definitions” note (internal) that you can paste into future spec updates.
+This file consolidates all open and completed tasks. Completed items are kept for context but marked with ~~strikethrough~~.
 
 ---
 
-## B. Registry design (three registries + minimal viable schemas)
+## 1. Design and Documentation
 
-4. **Raw registry: decide the minimum metadata fields**
+### 1.1 Storage Zones and Structure
+- [x] ~~Define the four zones (staging, raw, publications, projects)~~ — done (01_OVERVIEW, 03–05)
+- [x] ~~Decide registry location (centralized vs embedded)~~ — done: centralized `registries/` (DECIDED)
+- [x] ~~Choose generic term for raw unit~~ — done: "acquisition" (`ACQ`)
+- [x] ~~Raw sub-structure: instrument-first vs ecosystem-first~~ — done: ecosystem-based (DECIDED)
+- [x] ~~One primary file per acquisition rule~~ — done (DECIDED, no exceptions — DICOM as archive)
+- [x] ~~Create NAS directory skeleton~~ — done: staging/, raw/, publications/, projects/, registries/, curated_datasets/
+- [ ] Retention policy — define "long-term" and "temporary" concretely (years, migration triggers)
 
-   * Unit of registration: “scan session / acquisition bundle” (recommended)
-   * Required fields (propose now): ScanID, acquisition datetime, instrument/modality, operator, project pointer, sample/animal pointers, file format, canonical path, file count, checksum manifest present (Y/N)
+### 1.2 Registries
+- [x] ~~Raw registry schema~~ — done (06_REGISTRIES)
+- [x] ~~Publication registry schema~~ — done (06_REGISTRIES)
+- [x] ~~Project registry schema~~ — done (06_REGISTRIES)
+- [x] ~~Curated datasets registry schema~~ — done (06_REGISTRIES, EVALUATING)
+- [x] ~~ID schemes (ACQ, PUB, PROJ, DS)~~ — done (06_REGISTRIES Section 7)
+- [x] ~~Registry update rules~~ — done (06_REGISTRIES Sections 2.4, 3.4, 4.3)
 
-5. **Publication registry: decide what it registers**
+### 1.3 Provenance
+- [x] ~~Provenance format and template~~ — done (07_PROVENANCE)
+- [x] ~~Minimum provenance rules for projects and publications~~ — done (07_PROVENANCE)
 
-   * Unit: “publication package” (PaperID + package version)
-   * Required fields: PaperID (internal), citation/DOI (when available), corresponding author/PI, related ProjectIDs, related ScanIDs (or query-based linkage), package path, package version/date, README present (Y/N)
-
-6. **Project registry (provenance): decide the minimum provenance rules**
-
-   * Unit: “activity record” (inputs → process → outputs)
-   * Required fields: ActivityID, date, operator, tool/software+version, input references (ScanIDs/FileIDs), output paths, parameters reference (file path or short JSON)
-
-7. **Choose the “ID strategy” that ties registries together**
-
-   * ScanID format (simple counter is easiest)
-   * Optional FileID (SHA256) for raw and publication-critical outputs
-   * ActivityID for provenance steps
-
-Deliverable: three draft schemas (even as CSV column headers + one example row each).
-
----
-
-## C. Data types inventory + “volunteer deep dive” process
-
-8. **Create a data-types sign-up sheet**
-
-   * Columns: Data type label, instrument/source, typical file formats, typical size/unit, typical users, typical downstream tool (QuPath, ZEN, etc.), “volunteer owner”
-   * Ask each initial user to list what they generate (not just WSI)
-
-9. **Assign a “volunteer owner” per data type**
-
-   * For each data type, require a 15–20 min walkthrough:
-
-     * where the files come from (instrument/export path)
-     * example file(s)
-     * what software people use to open/analyze
-     * what metadata is embedded vs external
-
-10. **Collect one representative example dataset per type**
-
-* Small enough to share internally (or a pointer to a real dataset)
-* This becomes test input for scripts and registry fields
-
-Deliverable: completed sheet + one “example dataset” pointer per type.
+### 1.4 DICOM Storage and Ingest Architecture
+- [x] ~~DICOM storage format (expanded vs archive)~~ — done: compressed archives (DECIDED)
+- [x] ~~Primary staging location~~ — done: off-NAS fast local storage (DECIDED)
+- [x] ~~Two ingest modes (full + lightweight)~~ — done: documented in 03, 10 (DECIDED)
+- [x] ~~Metadata extraction integrated into full-mode ingest~~ — done: documented in 08, 10 (DECIDED)
+- [ ] Archive format preference: .zip vs .tar.gz — EVALUATING (RAW-09)
 
 ---
 
-## D. Extended metadata selection (REMBI-based, but pared down)
+## 2. Data Types and Metadata
 
-11. **Decide “core vs extended” metadata approach**
+### 2.1 Data Types Inventory
+- [x] ~~Data types sign-up sheet created~~ — done (09_MODALITIES Section 3)
+- [ ] Complete data type sign-up sheet — need volunteer owners per type (MOD-02)
+- [ ] Conduct show-and-tell walkthrough for each confirmed data type (MOD-03)
+- [ ] Collect one representative example dataset per type for script testing
 
-* Core = must be in the registry (fast to fill, enforceable)
-* Extended = captured elsewhere (machine metadata export, ELN link, forms/spreadsheet)
+### 2.2 Instrument Metadata Audit
+- [ ] Examine sample .czi files from Axiocam 7 (WSI) for embedded metadata fields
+- [ ] Examine sample .czi files from Cell Observer for embedded metadata fields
+- [ ] Examine sample .czi files from LSM 900 for embedded metadata fields
+- [ ] Confirm Cell Observer and LSM 900 .czi metadata is similar to WSI .czi (MOD-07)
+- [ ] Examine sample DICOM from MRI platform for relevant fields
+- [ ] Examine sample DICOM from Nuclear Imaging platform for relevant fields
+- [ ] Confirm DICOM as the output format from both platforms (MOD-05)
 
-12. **Build the REMBI field review mechanism**
+### 2.3 Extended Metadata (REMBI)
+- [ ] Complete REMBI field review with users — limited responses so far (META-01)
+- [ ] Determine ISA-TAB-Nano applicability for nanomaterial imaging (META-04, if SEM/TEM included)
 
-* Option A: Microsoft Forms (vote Yes/No + comment per field)
-* Option B: shared spreadsheet (recommended for easier bulk review)
-* Seed it with REMBI fields grouped by category (Sample, Specimen prep, Acquisition, Data)
-
-13. **Run a short review cycle**
-
-* Each pilot user votes/comment
-* You curate into:
-
-  * “Core registry fields”
-  * “Extended but required”
-  * “Nice-to-have”
-
-Deliverable: “REMBI-to-MFB minimal set” decision list.
-
----
-
-## E. Scripts and automation (batch ingest, naming, registry, metadata extraction)
-
-14. **Define the minimum script set for pilot (don’t overbuild)**
-
-* `ingest_raw_batch`:
-
-  * takes a folder of newly acquired files
-  * assigns ScanIDs
-  * moves into raw zone structure
-  * generates checksum manifest
-  * appends raw registry entry
-* `create_publication_package`:
-
-  * creates publication folder structure + README stub
-  * pulls referenced ScanIDs/derived outputs into an export bundle (copy or link strategy)
-  * writes/updates publication registry entry
-* `log_activity` (provenance helper):
-
-  * simple CLI to append an activity record for derived outputs
-
-15. **Decide what metadata can be parsed from filenames**
-
-* Identify current naming patterns in legacy data
-* Define a minimal “supported filename pattern” (even if optional)
-* Build parser rules incrementally (start with a few reliable tokens)
-
-16. **Decide what metadata can be extracted from files**
-
-* For CZI and common formats: identify extractable fields (pixel size, channels, objective, acquisition date)
-* Decide: store extracted fields in (a) raw registry, (b) sidecar JSON per scan, or (c) both
-
-17. **Choose where scripts run**
-
-* On a designated workstation? On the acquisition PC? On a shared “operator” machine?
-* Decide how credentials/access will work (especially if enforcing immutability)
-
-Deliverable: a one-page “automation plan” listing scripts, inputs/outputs, and what they write.
+### 2.4 Modality Decisions
+- [ ] SEM/TEM inclusion decision (MOD-01) — awaiting PI confirmation
+- [ ] MRI: do the two systems (7T, 11.7T) need separate instrument codes? (09_MODALITIES)
+- [ ] NIfTI: confirm whether Nuclear Imaging platform provides NIfTI, and if so, accepted format on gjesus3
 
 ---
 
-## F. Operational rules for “projects are temporary but still traceable”
+## 3. Scripts and Tooling
 
-18. **Define project lifecycle rules**
+### 3.1 Ingest Pipeline
+- [x] ~~`ingest_raw.py` implemented~~ — single-case, batch, interactive, dry-run modes
+- [ ] Implement full-mode ingest additions: DICOM metadata extraction, DICOM compression, metadata.json sidecar generation
+- [ ] Implement `--lightweight` flag in `ingest_raw.py`
+- [ ] Implement `backfill_metadata` utility for upgrading lightweight ingests
 
-* What creates a project workspace?
-* When is a project considered “closed”?
-* What must be migrated into publication archive vs left behind?
+### 3.2 Other Scripts
+- [x] ~~`create_project.py` implemented~~ — CLI + interactive, dry-run
+- [ ] `create_publication` — requirements defined, not yet implemented
+- [ ] `log_activity` (provenance helper) — requirements defined, not yet implemented
+- [ ] `validate_registries` — planned (REG-04)
+- [ ] `verify_checksums` — planned
 
-19. **Define minimum provenance compliance for projects**
-
-* Rule proposal (pilot-friendly): provenance required for:
-
-  * any conversion (e.g., CZI→OME-TIFF)
-  * any analysis that produces publication-bound outputs
-  * any dataset shared outside MFB
-
-20. **Define what happens to derived artifacts when projects close**
-
-* Archive into publication folder (if relevant)
-* Or archive project as a snapshot (if storage allows)
-* Or delete with explicit approval (if truly temporary)
-
-Deliverable: a short “project lifecycle + provenance minimums” note.
+### 3.3 Infrastructure Decisions
+- [ ] Where scripts will run — designated workstation vs user machines (TOOL-01)
+- [ ] Git repo location and access for scripts (TOOL-02)
+- [ ] Script distribution approach — git repo, shared folder, or pip package
+- [ ] User training on CLI tools (TOOL-03)
+- [ ] GUI wrapper priority — gather user feedback (TOOL-04)
 
 ---
 
-## G. Practical coordination / ownership
+## 4. Staging Data — Ingestion
 
-21. **Confirm stakeholder responsibilities**
+### 4.1 HPIC Dataset (33 cases, ~15 GB compressed)
+- [x] ~~Backup originals to `staging/_originals_backup/`~~
+- [ ] Extract all archives in place in staging (unrar/unzip)
+- [ ] Inspect extracted DICOM contents (verify structure, count files, check headers with pydicom)
+- [ ] Test ingestion: dry-run on one HPIC case, then real run, verify outputs
+- [ ] Batch ingest all 33 HPIC cases
+- [ ] Post-ingestion verification (registry completeness, checksum spot-check, Windows SMB access)
 
-* Who can promote from staging → raw?
-* Who can create publication packages?
-* Who can change conventions (change control)?
-
-22. **Set the near-term cadence**
-
-* 1x kickoff meeting to confirm schemas + first data types
-* 1x review meeting after first real ingest (what broke / what’s annoying)
-* 1x decision meeting for REMBI-minimal set
-
-Deliverable: a simple owner matrix (task → owner → due).
+### 4.2 LIONS Dataset (42 cases, ~36 GB compressed)
+- [x] ~~Backup originals to `staging/_originals_backup/`~~
+- [ ] Extract all archives in place in staging
+- [ ] Inspect extracted DICOM contents
+- [ ] Batch ingest all 42 LIONS cases
+- [ ] Post-ingestion verification
 
 ---
 
-## Suggested execution order (so you’re not blocked)
+## 5. Operations
 
-1. Data types sign-up + volunteers (C)
-2. Registry schemas (B)
-3. Zone definitions + directory skeleton (A)
-4. REMBI vote sheet (D)
-5. Minimum ingest script + checksum + raw registry append (E14)
-6. Project provenance minimum + helper logging (F)
-7. Publication package automation (E + publication registry)
+- [ ] Define intake roles: who can promote staging to raw (OPS-01)
+- [ ] Configure NAS user/group permissions (OPS-02)
+- [ ] Write Quick Start guide for pilot users (OPS-03)
+- [ ] Schedule pilot start date (OPS-04)
+- [ ] Set pilot review cadence (weekly for 4-6 weeks) — defined in 11_OPERATIONS, not yet scheduled
 
+---
 
+## 6. Infrastructure
+
+- [ ] Backup strategy — RAID 5 only, no offsite; define minimal mitigation
+- [ ] Snapshot retention policy and restore procedure — snapshots confirmed active, details TBD
+- [ ] Filesystem type confirmation — affects linking method options (symlinks, hard links)
+- [ ] Test `.lnk` and symlink on NAS from Windows — determines linking method for project/publication raw references
+
+---
+
+## 7. Deferred
+
+- [ ] Curated datasets area — circle back after RAW ingestion is working (12_CURATED_DATASETS, EVALUATING)
+- [ ] Raw data linking method for publications/projects — blocked on filesystem/symlink testing
+- [ ] Filename parser for legacy uploads — deprioritized
+- [ ] User-supplied metadata workflows (CSVs/Excel for sample context) — deferred to post-pilot
+- [ ] GUI wrappers for tools — deferred to post-pilot based on user feedback
+- [ ] Operator encoding in ACQ-ID — registry only for now (RAW-01)
