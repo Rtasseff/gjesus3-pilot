@@ -15,7 +15,7 @@ This is a **design, documentation, and tooling project** for a research data man
 - **Organization:** CIC biomaGUNE (research institute, Spain)
 - **Group:** MFB (led by PI Jesus Ruiz-Cabello)
 - **Data Management Lead:** Ryan Tasseff (Data Office)
-- **Infrastructure:** QNAP NAS "gjesus3" (~100 TB, RAID 5), SMB share `\\GJESUS3\gjesus3`
+- **Infrastructure:** QNAP NAS "gjesus3" (TS-864eU, 6 × 20 TB, RAID 5, ~63 TB user-available after snapshot reservation), SMB share `\\GJESUS3\gjesus3`
 - **Access:** Hardwired on-site machines only (no laptops)
 - **Status:** Pilot — directory structure deployed on NAS, first data in staging awaiting ingestion
 

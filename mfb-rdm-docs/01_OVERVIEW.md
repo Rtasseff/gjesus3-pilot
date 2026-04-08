@@ -29,7 +29,7 @@ A new whole-slide imaging instrument (Zeiss Axiocam 7) will substantially increa
 
 ### 1.3 The Opportunity
 
-The group has access to a dedicated 100 TB NAS (gjesus3) that can serve as a structured archival repository, independent of but compatible with future platform-level solutions.
+The group has access to a dedicated NAS (gjesus3 — QNAP TS-864eU, 6 × 20 TB in RAID 5, ~63 TB user-available after snapshot reservation) that can serve as a structured archival repository, independent of but compatible with future platform-level solutions.
 
 ---
 

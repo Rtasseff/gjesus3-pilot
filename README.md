@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository contains the design documentation and planning materials for a lab-specific research data management (RDM) system for the MFB group at CIC biomaGUNE. The system provides long-term archival storage for microscopy and biomedical imaging data on a dedicated QNAP NAS (gjesus3, ~100 TB usable, RAID 5).
+This repository contains the design documentation and planning materials for a lab-specific research data management (RDM) system for the MFB group at CIC biomaGUNE. The system provides long-term archival storage for microscopy and biomedical imaging data on a dedicated QNAP NAS (gjesus3 — TS-864eU, 6 × 20 TB in RAID 5, ~63 TB user-available after snapshot reservation).
 
 **This is a design project, not a software project.** The primary deliverables are specifications, conventions, and operational procedures. Supporting scripts live in `tools/`.
 

@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-02-26
+**Last Updated:** 2026-04-08
 
 ---
 
@@ -30,15 +30,19 @@ This document describes the hardware infrastructure, access model, and risk asse
 
 ### 1.2 Storage Configuration
 
-> **⚠️ GAP:** Exact drive configuration and usable capacity need confirmation from IT.
-
-| Attribute | Expected Value | Status |
-|-----------|----------------|--------|
+| Attribute | Value | Status |
+|-----------|-------|--------|
 | **RAID level** | RAID 5 | ✅ Confirmed |
-| **Drive count** | 8 | ⚠️ Needs confirmation |
-| **Drive capacity** | ~14-16 TB each (est.) | ⚠️ Needs confirmation |
-| **Usable capacity** | ~100 TB | 🔶 Approximate |
+| **Drive count** | 6 (of 8 bays populated) | ✅ Confirmed |
+| **Drive capacity** | 20 TB each | ✅ Confirmed |
+| **Raw capacity** | 120 TB (6 × 20 TB) | ✅ Confirmed |
+| **System usable capacity** | ~100 TB (after RAID 5 parity) | ✅ Confirmed |
+| **User-available capacity** | ~63 TB (after snapshot reservation) | ✅ Confirmed |
 | **Filesystem** | ext4 or ZFS | ⚠️ Needs confirmation |
+
+> **Note:** A portion of the ~100 TB system-usable space is reserved for the snapshot policy, leaving ~63 TB available for user data. Plan capacity against the 63 TB figure, not 100 TB.
+>
+> **TODO (Ryan):** Log into the QNAP admin UI directly to inspect how snapshot reservation is configured (size of reserved pool, retention schedule, which volumes/shares it covers). IT confirmed verbally that the ~37 TB gap is the snapshot reservation, but the exact configuration has not yet been verified at the source.
 
 ### 1.3 Operating System
 
@@ -118,8 +122,10 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 
 | Question | Why It Matters |
 |----------|----------------|
-| Exact drive configuration (count, model, capacity) | Confirm usable space; assess URE risk |
+| ~~Exact drive configuration (count, model, capacity)~~ Resolved: 6 × 20 TB | Confirm usable space; assess URE risk |
+| Drive model/manufacturer | URE risk assessment for 20 TB drives |
 | Filesystem (ext4, ZFS, other) | ZFS offers better integrity checking |
+| Snapshot reservation size | Confirm the ~37 TB gap between system-usable (~100 TB) and user-available (~63 TB) |
 | Snapshot capability and configuration | Key mitigation for accidental deletion |
 | Snapshot retention policy (if any) | How far back can we recover? |
 | Restore procedure and timeline | How long to recover from snapshot? |
@@ -222,7 +228,7 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 
 | ID | Question | Owner | Status |
 |----|----------|-------|--------|
-| INFRA-01 | Confirm drive configuration and usable capacity | IT | ⚠️ Open |
+| INFRA-01 | ~~Confirm drive configuration and usable capacity~~ Resolved: 6 × 20 TB, RAID 5, ~100 TB system / ~63 TB user-available | IT | ✅ Resolved |
 | INFRA-02 | Confirm filesystem (ext4/ZFS) | IT | ⚠️ Open |
 | INFRA-03 | ~~Confirm snapshot capability~~ Snapshots confirmed active (daily). Still need: retention policy details, restore procedure | IT | 🔶 Partially resolved |
 | INFRA-04 | Clarify remote/VPN access options | IT | ⚠️ Open |

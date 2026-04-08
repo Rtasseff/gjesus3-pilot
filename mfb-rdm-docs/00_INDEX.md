@@ -1,7 +1,7 @@
 # MFB gjesus3 Research Data Management — Documentation Index
 
 **System Purpose:** Long-term archival storage for MFB group microscopy and biomedical imaging data
-**Infrastructure:** QNAP TS-864eU NAS (RAID 5, ~100 TB usable)
+**Infrastructure:** QNAP TS-864eU NAS (6 × 20 TB, RAID 5, ~100 TB system / ~63 TB user-available after snapshot reservation)
 **Status:** Pilot development
 **Last Updated:** 2026-03-06
 
