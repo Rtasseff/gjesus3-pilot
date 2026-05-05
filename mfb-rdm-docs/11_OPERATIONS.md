@@ -126,7 +126,7 @@ This document covers operational aspects: roles, permissions, workflows, onboard
    - Request folder lockdown
    ↓
 5. Link to project/publication (when relevant)
-   - Add references in raw_linked/ (linking method TBD)
+   - Created automatically by ingest_raw.py when --project is set (Windows .lnk; see 10_TOOLS §2.1.1)
    - Update provenance as work progresses
 ```
 

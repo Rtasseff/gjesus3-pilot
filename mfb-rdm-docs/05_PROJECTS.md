@@ -53,7 +53,7 @@ Researchers who do most of their analysis on local machines or other drives can 
         ├── _project.yaml
         ├── provenance.csv
         ├── raw_linked/
-        │   └── ... (links or references to raw acquisitions; method TBD)
+        │   └── ... (Windows .lnk shortcuts to raw acquisitions; created automatically by ingest_raw.py when --project is set — see 10_TOOLS §2.1.1)
         └── ... (researcher-organized content)
 ```
 

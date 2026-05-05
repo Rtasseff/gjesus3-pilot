@@ -58,13 +58,16 @@ def copy_files(src_dir, dst_dir):
     return count
 
 
-def ingest_single(cfg_single, nas_root, dry_run=False):
+def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None):
     """Run the ingestion workflow for a single acquisition.
 
     Args:
         cfg_single: Validated single-case config dict.
         nas_root: Path to NAS root (e.g., /mnt/gjesus3).
         dry_run: If True, print what would happen without doing it.
+        nas_unc: UNC root for the NAS (e.g., \\\\GJESUS3\\gjesus3). Used as
+            the target prefix for project .lnk shortcuts. If None, .lnk
+            creation is skipped.
 
     Returns:
         Tuple of (acq_id_str, success_bool).
@@ -223,11 +226,60 @@ def ingest_single(cfg_single, nas_root, dry_run=False):
     manifest_path = os.path.join(nas_root, "registries", "ingest_manifest.csv")
     linker.create_manifest_entry(manifest_path, acq_id_str, original_name, canonical_path)
 
+    # --- Step 12: Project .lnk shortcut (if project_hint set) ---
+    project_hint = cfg_single.get("project_hint", "").strip()
+    if project_hint:
+        if not nas_unc:
+            log(
+                f"project_hint={project_hint} but --nas-unc not provided; "
+                f"skipping .lnk creation",
+                "WARN",
+            )
+        else:
+            projects_registry = os.path.join(
+                nas_root, "registries", "registry_projects.csv"
+            )
+            project_folder_rel = linker.lookup_project_folder(
+                projects_registry, project_hint
+            )
+            if not project_folder_rel:
+                log(
+                    f"project_hint={project_hint} not found in "
+                    f"registry_projects.csv; skipping .lnk creation",
+                    "WARN",
+                )
+            else:
+                project_folder_abs = os.path.normpath(
+                    os.path.join(nas_root, project_folder_rel.lstrip("/"))
+                )
+                folder_unc = linker.canonical_to_unc(canonical_path, nas_unc)
+                # Prefer targeting the primary archive (correct icon, opens
+                # the zip directly). Fall back to the folder if primary
+                # isn't a single file (e.g. uncompressed series/).
+                primary = cfg_single.get("primary_file_name", "")
+                if primary and not primary.endswith("/"):
+                    target_unc = f"{folder_unc}\\{primary}"
+                else:
+                    target_unc = folder_unc + "\\"
+                try:
+                    lnk_path = linker.create_lnk(
+                        project_folder_abs,
+                        original_name,
+                        target_unc,
+                        description=f"{acq_id_str} ({original_name})",
+                        dry_run=False,
+                    )
+                    log(f"Created shortcut: {lnk_path} -> {target_unc}")
+                except RuntimeError as e:
+                    log(f"Could not create .lnk: {e}", "WARN")
+                except Exception as e:
+                    log(f"Unexpected error creating .lnk: {e}", "WARN")
+
     log(f"DONE: {acq_id_str}")
     return acq_id_str, True
 
 
-def run_batch(cfg, nas_root, dry_run=False):
+def run_batch(cfg, nas_root, dry_run=False, nas_unc=None):
     """Run batch ingestion from a batch config.
 
     Returns list of (acq_id, success) tuples.
@@ -248,7 +300,7 @@ def run_batch(cfg, nas_root, dry_run=False):
             results.append((None, False))
             continue
 
-        acq_id_str, ok = ingest_single(case, nas_root, dry_run=dry_run)
+        acq_id_str, ok = ingest_single(case, nas_root, dry_run=dry_run, nas_unc=nas_unc)
         results.append((acq_id_str, ok))
 
     # --- Summary ---
@@ -269,7 +321,7 @@ def run_batch(cfg, nas_root, dry_run=False):
     return results
 
 
-def run_interactive(nas_root, dry_run=False):
+def run_interactive(nas_root, dry_run=False, nas_unc=None):
     """Interactive mode for single-case ingestion."""
     print("=== Interactive Raw Data Ingestion ===\n")
 
@@ -300,7 +352,12 @@ def run_interactive(nas_root, dry_run=False):
             log(e, "ERROR")
         sys.exit(1)
 
-    acq_id_str, ok = ingest_single(cfg_single, nas_root, dry_run=dry_run)
+    # Optional project association in interactive mode
+    proj = input("Project ID (e.g. PROJ-0001, blank for none): ").strip()
+    if proj:
+        cfg_single["project_hint"] = proj
+
+    acq_id_str, ok = ingest_single(cfg_single, nas_root, dry_run=dry_run, nas_unc=nas_unc)
     if not ok:
         sys.exit(1)
 
@@ -333,6 +390,15 @@ def main():
         "--project",
         help="Project ID (e.g. PROJ-0001) — recorded as project_hint in the raw registry",
     )
+    parser.add_argument(
+        "--nas-unc",
+        default=os.environ.get("GJESUS3_UNC", r"\\GJESUS3\gjesus3"),
+        help=(
+            "UNC root for the NAS, used as the target prefix for project "
+            ".lnk shortcuts (default: $GJESUS3_UNC or \\\\GJESUS3\\gjesus3). "
+            "Pass an empty string to disable .lnk creation."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -340,17 +406,28 @@ def main():
         parser.error("Must specify --config or --interactive")
 
     nas_root = args.nas_root
+    nas_unc = args.nas_unc or None  # empty string -> disable .lnk creation
     log(f"NAS root: {nas_root}")
+    if nas_unc:
+        log(f"NAS UNC:  {nas_unc} (used for .lnk shortcut targets)")
+    else:
+        log(".lnk shortcut creation disabled (--nas-unc empty)")
 
     if args.dry_run:
         log("*** DRY RUN MODE — no changes will be made ***")
 
     if args.interactive:
-        run_interactive(nas_root, dry_run=args.dry_run)
+        run_interactive(nas_root, dry_run=args.dry_run, nas_unc=nas_unc)
     else:
         cfg = config.load_config(args.config)
+        # CLI --project overrides project_hint in config
+        if args.project:
+            if config.is_batch_config(cfg):
+                cfg.setdefault("defaults", {})["project_hint"] = args.project
+            else:
+                cfg["project_hint"] = args.project
         if config.is_batch_config(cfg):
-            run_batch(cfg, nas_root, dry_run=args.dry_run)
+            run_batch(cfg, nas_root, dry_run=args.dry_run, nas_unc=nas_unc)
         else:
             # Single-case config
             errors = config.validate_single(cfg)
@@ -358,7 +435,7 @@ def main():
                 for e in errors:
                     log(e, "ERROR")
                 sys.exit(1)
-            _, ok = ingest_single(cfg, nas_root, dry_run=args.dry_run)
+            _, ok = ingest_single(cfg, nas_root, dry_run=args.dry_run, nas_unc=nas_unc)
             if not ok:
                 sys.exit(1)
 

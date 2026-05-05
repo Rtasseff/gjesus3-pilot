@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-05-05
 
 ---
 
@@ -45,11 +45,52 @@ tools/
 │   ├── registry.py        # Read/append registry_raw.csv
 │   ├── readme.py          # Generate README.txt from template
 │   ├── dicom_utils.py     # DICOM header extraction (pydicom)
-│   └── linker.py          # Create .lnk / symlink / manifest
+│   └── linker.py          # Create Windows .lnk shortcut + manifest CSV (see §2.1.1)
 ├── templates/
 │   └── README_raw.txt     # README template
-└── requirements.txt       # pydicom, pyyaml, pylnk3, tqdm
+└── requirements.txt       # pydicom, pyyaml, tqdm
 ```
+
+### 2.1.1 Project Linking — Windows-First Design Decision
+
+> **✅ DECIDED — Windows-first, deliberately:** Project links are created as **Windows `.lnk` shell shortcuts** by shelling out to PowerShell's `WScript.Shell` COM object. This is the right choice for the **gjesus3 pilot specifically** and is **not** the recommended default for future RDM deployments. The linker module is structured as the obvious porting seam — see "Porting to other systems" below.
+
+When `ingest_raw.py` is run with `--project <PROJ-ID>` (or `project_hint` set in the YAML config), Step 12 of full-mode ingest creates a shortcut at:
+
+```
+/projects/<project_folder>/raw_linked/<original_archive_name>.lnk
+```
+
+…targeting the primary archive on the NAS via UNC path (e.g. `\\GJESUS3\gjesus3\raw\DICOM\YYYY\YYYY-MM\ACQ-...\ACQ-....zip`). The shortcut filename preserves the **original** name from staging (e.g. `LEONE_1.01.zip.lnk`), so users browsing a project folder see familiar names; the shortcut's target points at the canonical renamed archive. Shortcuts are idempotent — re-running ingest skips any shortcut that already exists.
+
+#### Why Windows-first for gjesus3
+
+| Constraint | Effect on the choice |
+|------------|----------------------|
+| **MFB user base is Windows** | Researchers access the NAS via mapped SMB drives in Windows Explorer. Project links must look and behave like ordinary files they can double-click. `.lnk` shortcuts render with the right icon, support double-click, and "Open file location" works. |
+| **WSL → SMB symlink path didn't work cleanly** | Creating filesystem-level symbolic links against the QNAP SMB share from WSL ran into problems we couldn't work around in reasonable time. |
+| **SSH-into-NAS was blocked** | The robust alternative — creating server-side POSIX symlinks via SSH on the QNAP itself — was attempted but IT could not provide working SSH access to the appliance. We chose to stop pushing on that front and adopt a method that works within the access we already had. |
+| **`.lnk` shortcuts work without server cooperation** | Pure client-side artifacts. The NAS doesn't need to understand them; they just sit on the share like any other file. |
+
+#### Tradeoffs we accepted
+
+- **Creation is Windows-only.** The linker shells out to `powershell.exe`. Ingest must run on a Windows machine (or a machine with PowerShell 7+ on Linux, untested here). *Reading* shortcuts works fine from any OS — WSL/Linux can list, inspect, and copy `.lnk` files; only creation is restricted.
+- **Links are file-level pointers, not filesystem-level links.** They survive being browsed over SMB but are opaque to scripts that walk the filesystem and don't recognize `.lnk` as a follow-able pointer. The CSV manifest at `registries/ingest_manifest.csv` is the script-friendly equivalent and is always written.
+
+#### Porting to other systems
+
+This pilot is intentionally scoped as a test case for larger MFB-area RDM efforts. Future deployments will not share gjesus3's combination of Windows-only users + locked-down QNAP, and the linker module is the seam designed to be swapped:
+
+| Target environment | Likely method | Implementation note |
+|--------------------|---------------|---------------------|
+| Linux/macOS user base, ext4/ZFS NAS | POSIX **symlinks** | Replace the body of `linker.create_lnk()` with `os.symlink(target, lnk_path)`. Drop `.lnk` extension from the filename. |
+| Mixed user base, NAS supports SSH | Server-side POSIX symlinks via SSH | `ln -s` runs on the NAS itself; resulting symlinks are visible to every client filesystem-canonically. |
+| Constrained / mixed-OS / no link support | Manifest-only | The CSV manifest at `registries/ingest_manifest.csv` is the portable, link-free reference and is already always written. Just don't call `create_lnk`. |
+| Cross-platform desperate compromise | Both `.lnk` *and* a symlink | Possible but creates two artifacts per acquisition; usually not worth it. |
+
+The choice should be made consciously at the start of any future deployment — it affects what users can browse, how durable links are across renames, and which OSes can run the ingest pipeline.
+
+---
 
 **Two Ingest Modes:**
 
@@ -67,7 +108,7 @@ tools/
 9. Verify copy — recompute checksums on destination, compare
 10. Generate `README.txt`
 11. Append row to `registry_raw.csv` (all fields populated, including `original_name`)
-12. Create link in project folder (if `--project` specified)
+12. Append entry to `registries/ingest_manifest.csv` (always); if `--project` is set, also create a Windows `.lnk` shortcut in `<project>/raw_linked/` pointing at the canonical archive (see §2.1.1)
 13. Report summary
 
 **Lightweight Mode (`--lightweight`) — per acquisition:**
@@ -126,6 +167,7 @@ python tools/ingest_raw.py --interactive --lightweight             # lightweight
 - Collaborator instrument codes: X-prefix (e.g., `XMRI` for external MRI)
 - Copy verification: checksums computed on both source and destination, then compared
 - `original_name` field in registry tracks pre-ingestion source name
+- Project link creation: `.lnk` shortcut placed in `<project>/raw_linked/` when `--project` is set (Windows-only — see §2.1.1)
 - `--dry-run` mode for previewing without changes
 - Batch auto-discovery for processing many cases at once
 

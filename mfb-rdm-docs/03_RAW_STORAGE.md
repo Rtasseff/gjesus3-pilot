@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-05-05
 
 ---
 
@@ -364,7 +364,17 @@ This ensures metadata is captured while fresh and prevents accumulation of unreg
 
 ---
 
-## 8. Related Documents
+## 8. Linking Raw to Projects and Publications
+
+> **✅ DECIDED — Windows-first, deliberately:** Cross-references from project (and, in future, publication) folders back into raw use **Windows `.lnk` shell shortcuts**. This is a pilot-specific choice driven by the MFB Windows user base and constraints on the QNAP (no working SSH access to create server-side symlinks). It is **not** the recommended default for future RDM deployments — see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision) for the full rationale, tradeoffs, and a porting guide for Linux/WSL or SSH-capable environments.
+
+**Behavior at ingest time:** When `ingest_raw.py` is run with `--project <PROJ-ID>`, full-mode ingest creates a shortcut at `/projects/<project_folder>/raw_linked/<original_archive_name>.lnk` pointing at the canonical archive on the NAS via UNC path. Idempotent — re-running ingest skips any shortcut already in place.
+
+**Manifest as portable fallback:** Independent of `.lnk` creation, every ingest appends a row to `registries/ingest_manifest.csv` mapping the original source name to its ACQ-ID and canonical path. Scripts and non-Windows tooling that can't (or don't want to) follow `.lnk` files should consume the manifest instead.
+
+---
+
+## 9. Related Documents
 
 - [06_REGISTRIES](06_REGISTRIES.md) — Raw registry schema
 - [08_METADATA](08_METADATA.md) — README template and extended metadata

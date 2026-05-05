@@ -34,7 +34,7 @@ This document specifies the structure, conventions, and workflows for the Public
     ├── lung-fibrosis-markers-2026/         # Publication folder (short name)
     │   ├── _publication.yaml               # Publication metadata
     │   ├── provenance.csv                  # Local provenance log
-    │   ├── raw_linked/                     # References to source raw data (linking method TBD)
+    │   ├── raw_linked/                     # Windows .lnk shortcuts to source raw acquisitions (see Section 5)
     │   │   ├── ACQ-20260115-ZWSI-001      # Link or reference to raw acquisition
     │   │   └── ACQ-20260116-ZWSI-002      # ...
     │   ├── figures/                        # Final publication figures
@@ -140,7 +140,7 @@ The PUB-ID is used in the registry. The folder uses a **short name** for human r
 
 ### 4.2 In Progress
 
-- **Link raw data:** Add references to source acquisitions in `raw_linked/` (method TBD — see Section 5)
+- **Link raw data:** Add Windows `.lnk` shortcuts to source acquisitions in `raw_linked/` (see Section 5)
 - **Log provenance:** Every derived file added to folder gets a provenance entry
 - **Iterate freely:** Internal structure can change; update provenance as needed
 
@@ -168,20 +168,13 @@ Closure happens when the paper is published (or abandoned). Required steps:
 
 ### 5.1 Purpose
 
-The `raw_linked/` folder creates a clear connection between this publication and its source data without duplicating files. The implementation method (symlinks, hard links, or text-based reference list) is still under evaluation.
+The `raw_linked/` folder creates a clear connection between this publication and its source data without duplicating files.
 
-### 5.2 Options Under Consideration
+### 5.2 Method — Windows `.lnk` shell shortcuts
 
-> **🔶 DRAFT:** Linking method not yet decided. Must consider NAS filesystem type and the operating systems used by researchers (Windows, Linux, etc.).
+> **✅ DECIDED — Windows-first, deliberately:** Links use Windows `.lnk` shell shortcuts created via PowerShell's `WScript.Shell` COM. Same convention as projects (see [05_PROJECTS](05_PROJECTS.md) and [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision)). This is a **pilot-specific** choice for the gjesus3 environment (Windows user base, no SSH-into-NAS); see the full rationale and porting guide in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision).
 
-| Method | Pros | Cons | Filesystem/OS Notes |
-|--------|------|------|---------------------|
-| **Symlinks** | Clear, navigable; no duplication | Break if paths change; may not survive archival to different storage | Behavior varies across OS; Windows symlinks require specific permissions |
-| **Hard links** | Cannot break if source moves within filesystem; no duplication | Same filesystem only; less visible as a "link" | Not all filesystems support them; directories cannot be hard-linked |
-| **Reference list (text file)** | Simple, portable, OS-independent | Must look up manually; no filesystem-level navigation | Works everywhere; most robust for archival |
-| **Copy files** | Self-contained | Massive duplication | Always works but wastes space |
-
-> **📣 INPUT NEEDED:** The choice depends on the NAS filesystem (ext4? ZFS? NTFS?) and the OS used to access shares (Windows via SMB?). Need to test which linking methods actually work in our environment before deciding.
+For each linked acquisition, `raw_linked/` contains one `.lnk` file named with the original archive name (e.g. `LEONE_1.01.zip.lnk`), targeting the canonical archive on the NAS via UNC path. Windows users browsing via SMB see familiar names with the right icon and can double-click to open. Scripts and non-Windows tooling should consume the canonical paths via `registry_raw.csv` (or the per-publication provenance log) rather than following `.lnk` files.
 
 ---
 
@@ -303,4 +296,4 @@ If space becomes constrained:
 | PUB-02 | Closure checklist and automation | Data Mgmt Lead | 🔶 Draft |
 | PUB-03 | Zenodo workflow integration | Data Mgmt Lead | 📋 Future |
 | PUB-04 | How to handle publication packages that grow very large? | PI | 🔶 Draft |
-| PUB-05 | Raw data linking method: symlinks, hard links, or text reference list? Depends on filesystem and OS. | Data Mgmt Lead + IT | ⚠️ Needs decision |
+| ~~PUB-05~~ | ~~Raw data linking method: symlinks, hard links, or text reference list?~~ | — | ✅ Resolved: Windows `.lnk` shortcuts (Windows-first pilot choice; see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision)) |

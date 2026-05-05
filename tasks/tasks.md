@@ -1,6 +1,6 @@
 # MFB gjesus3 RDM Pilot — Task List
 
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-05-05
 
 This file consolidates all open and completed tasks. Completed items are kept for context but marked with ~~strikethrough~~.
 
@@ -107,37 +107,55 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 
 ### 4.1 Prepare Local Staging (one-time)
 - [x] ~~Backup originals to `staging/_originals_backup/` on NAS~~
-- [ ] **Ryan:** Copy `staging/HPIC_33cases/` and `staging/LIONS_42cases/` from NAS to local drive
-- [ ] Extract all archives on local drive (unrar/unzip)
+- [x] ~~**Ryan:** Copy `staging/HPIC_33cases/` and `staging/LIONS_42cases/` from NAS to local drive~~
+- [x] ~~Extract all archives on local drive (unrar/unzip)~~
 
 ### 4.2 Pass 1: Collaborator DICOM (HPIC/LIONS — `XMRI`)
 > First modality. Exercises DICOM header reading, archive compression, full vs lightweight modes.
-- [ ] Inspect extracted DICOM contents (verify structure, count files, check headers with pydicom)
-- [ ] Audit embedded metadata — what DICOM fields are present and useful? (feeds 2.2)
-- [ ] Test full-mode ingest: dry-run on one HPIC case, verify outputs
-- [ ] Test maximal metadata extraction (all available DICOM header fields → metadata.json)
-- [ ] Test lightweight mode (sparse registry entry, `extended_metadata_present` = `N`)
-- [ ] Test real ingest on one HPIC case, verify: acquisition folder, archive, metadata.json, checksums.json, registry row
+- [x] ~~Inspect extracted DICOM contents (verify structure, count files, check headers with pydicom)~~
+- [x] ~~Audit embedded metadata — what DICOM fields are present and useful? (feeds 2.2)~~
+- [x] ~~Test full-mode ingest: dry-run on one HPIC case, verify outputs~~
+- [x] ~~Test maximal metadata extraction (all available DICOM header fields → metadata.json)~~
+- [ ] Test lightweight mode (sparse registry entry, `extended_metadata_present` = `N`) — full-mode covered, lightweight path still untested
+- [x] ~~Test real ingest on one HPIC case, verify: acquisition folder, archive, metadata.json, checksums.json, registry row~~
 
-### 4.3 Test Linking Method and Raw Immutability (after first successful ingest)
-> **Critical constraint:** Raw acquisition folders must be read-only after deposit (DECIDED — see 03_RAW_STORAGE Section 7). The linking method must work *without* requiring write access to raw folders. Test this explicitly: lock down a raw folder first, then verify links still work.
+### 4.3 Linking Method and Raw Immutability
+> **Critical constraint:** Raw acquisition folders must be read-only after deposit (DECIDED — see 03_RAW_STORAGE Section 7). The linking method must work *without* requiring write access to raw folders.
 
+**Linking method — decision and unit test (resolved):**
+- [x] ~~Decide linking method~~ — **Windows `.lnk` shell shortcuts** (Windows-first, pilot-specific; see 10_TOOLS §2.1.1)
+- [x] ~~Validate `.lnk` behavior over SMB empirically~~ — 75 manually-created links across HPIC and LIONS work fine
+- [x] ~~Update `linker.py` to actually create `.lnk` files~~ — done 2026-05-05; PowerShell `WScript.Shell` shell-out, idempotent, Windows-only for creation
+- [x] ~~Wire linker into `ingest_raw.py`~~ — Step 12; runs when `project_hint` is set and `--nas-unc` is provided
+- [x] ~~Linker unit sanity test~~ — `create_lnk()` standalone produces a working `.lnk` (correct icon, double-click opens, target UNC correct)
+
+**Linking — end-to-end testing (still open; the new code path has never been exercised through a real ingest):**
+- [ ] Dry-run an ingest config with `project_hint: PROJ-0001` — verify Step 12 logs the would-be `.lnk` path without creating anything
+- [ ] Real single-case ingest with `--project PROJ-0001` on a fresh acquisition — verify the new `.lnk` appears in `projects/proj-lions-cardiac-mri/raw_linked/` and behaves like the existing 75
+- [ ] Idempotency check — re-run the same ingest, confirm no error and the existing `.lnk` is left untouched
+- [ ] Failure-mode sanity: bogus `--project PROJ-9999` → warns + skips, ingest still succeeds
+- [ ] Failure-mode sanity: `--nas-unc ""` → disables `.lnk` creation, ingest still succeeds
+- [ ] (Optional) Backfill check — re-run the original LIONS/HPIC batch configs with the new linker code to confirm idempotency on the existing 75
+
+**Raw immutability (still open):**
 - [ ] Apply post-deposit lockdown on one test acquisition folder (chmod or ACL — determine which works on QNAP SMB)
 - [ ] Verify raw folder is truly read-only from Windows SMB and WSL
-- [ ] Test `.lnk` creation pointing to locked raw folder — does it work over SMB?
-- [ ] Test symlink creation pointing to locked raw folder — does it work over SMB/WSL?
 - [ ] Verify links are **read-only traversal** — users can follow the link and read files but not modify raw data through the link
-- [ ] Decide linking method based on test results; update `linker.py`
-- [ ] Test project folder linking for one ingested acquisition (link appears in `projects/` raw_linked/)
 - [ ] Decide: script the post-deposit lockdown into `ingest_raw.py`, or keep it as a separate admin step?
+- [ ] (Deferred to future deployments) Symlink-based linking via WSL or SSH-into-NAS — see porting note in 10_TOOLS §2.1.1
 
 ### 4.4 Batch Ingest: Collaborator DICOM
-- [ ] End-to-end dry-run of batch config for HPIC (all 33 cases)
-- [ ] Batch ingest all 33 HPIC cases
-- [ ] Post-ingestion verification: registry completeness, checksum spot-check, Windows SMB access
-- [ ] End-to-end dry-run of batch config for LIONS (all 42 cases)
-- [ ] Batch ingest all 42 LIONS cases
-- [ ] Post-ingestion verification
+- [x] ~~End-to-end dry-run of batch config for HPIC (all 33 cases)~~
+- [x] ~~Batch ingest all 33 HPIC cases~~ — registry confirmed (PROJ-0002)
+- [x] ~~Post-ingestion verification: registry completeness, checksum spot-check, Windows SMB access~~
+- [x] ~~End-to-end dry-run of batch config for LIONS (all 42 cases)~~
+- [x] ~~Batch ingest all 42 LIONS cases~~ — registry confirmed (PROJ-0001)
+- [x] ~~Post-ingestion verification~~
+
+**Cleanup follow-ups discovered post-ingest (2026-05-05 audit):**
+- [ ] Dedupe `registries/ingest_manifest.csv` — `LEONE_1.01.zip` appears 2×, `HPIC02.rar` appears 3× (raw registry itself is clean — single row per ACQ)
+- [ ] Backfill `acquisition_datetime` for `ACQ-20260310-XMRI-001` (HPIC11) — date couldn't be parsed at ingest, fell back to registration date
+- [ ] (Optional) Re-run ingest on existing 75 acquisitions with new linker code — idempotent (skips existing `.lnk` files); confirms all 75 project links are accounted for and creates any that are missing
 
 ### 4.5 Pass 2: Platform DICOM — MRI (`MRI`)
 > Different DICOM source — platform-reconstructed rather than collaborator. May have different header conventions, different series structure.

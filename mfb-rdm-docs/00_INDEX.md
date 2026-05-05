@@ -3,7 +3,7 @@
 **System Purpose:** Long-term archival storage for MFB group microscopy and biomedical imaging data
 **Infrastructure:** QNAP TS-864eU NAS (6 × 20 TB, RAID 5, ~100 TB system / ~63 TB user-available after snapshot reservation)
 **Status:** Pilot development
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-05-05
 
 ---
 
@@ -96,6 +96,7 @@ An **archival storage system** for original imaging data that:
 | Primary staging location | Fast local/network storage (off-NAS) | NAS SMB too slow for extraction/compression; NAS staging/ retained as secondary dump |
 | Two ingest modes | Full (default) + Lightweight | Full mode extracts metadata before archiving; lightweight for constrained environments |
 | Metadata extraction at ingest | Integrated into full-mode ingest | Not a separate post-hoc tool; extraction happens before DICOM compression |
+| Project link method | **Windows `.lnk` shell shortcuts (Windows-first, pilot-specific)** | MFB user base is on Windows; WSL→SMB symlink path didn't work and SSH-into-NAS was blocked. **Deliberately not a default for future RDM deployments** — porting seam documented in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision) |
 | Provenance location | Per-publication/project folder | Local to context; enables independent archiving |
 | Extended metadata | REMBI-based subset | Community standard; pruned to essential fields |
 
@@ -107,14 +108,14 @@ An **archival storage system** for original imaging data that:
 - [ ] Backup strategy undefined — RAID 5 + daily snapshots, but no offsite backup
 - [ ] Access limited to specific hardwired on-site machines (instruments + some workstations); laptops excluded — workable but inconvenient
 - [x] ~~Snapshot capability~~ — confirmed active (daily snapshots running); retention policy and restore procedure still needed
-- [ ] Filesystem type confirmation needed — affects linking method options (symlinks, hard links)
+- [x] ~~Filesystem type confirmation needed — affects linking method options~~ — **Resolved by chosen approach:** Windows `.lnk` shortcuts sidestep the filesystem question for the pilot (see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision)). Filesystem type still unconfirmed but no longer blocking.
 
 ### Raw Storage (see [03_RAW_STORAGE](03_RAW_STORAGE.md))
 - [x] ~~Organization by instrument vs. abstract modality~~ — **Resolved:** ecosystem-based (MICROSCOPY, DICOM, EM)
 - [x] ~~Generic instrument codes for collaborator / external data~~ — **Resolved:** X-prefix codes (XMRI, XCT, XPET, XSPECT)
 
 ### Publications (see [04_PUBLICATIONS](04_PUBLICATIONS.md))
-- [ ] Raw data linking method undecided — symlinks, hard links, or text reference list? Depends on filesystem and OS
+- [x] ~~Raw data linking method undecided~~ — **Resolved:** Windows `.lnk` shortcuts (pilot-specific Windows-first choice; see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision))
 
 ### Curated Datasets (see [12_CURATED_DATASETS](12_CURATED_DATASETS.md))
 - [ ] Inclusion in pilot vs. defer to Phase 2
@@ -186,6 +187,7 @@ Explicit calls for input are marked:
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-05-05 | R. Tasseff | Project linking method resolved: Windows `.lnk` shell shortcuts (pilot-specific Windows-first choice); linker implemented in `tools/ingest/linker.py`; rationale and porting guide documented in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision); cross-doc cleanup of "linking method TBD" references |
 | 2026-03-06 | R. Tasseff | DICOM stored as compressed archives; primary staging off-NAS; two ingest modes (full + lightweight); metadata extraction integrated into full-mode ingest; one-primary-file rule simplified (no DICOM exception) |
 | 2026-03-02 | R. Tasseff | Promoted Projects area to live feature (Draft); updated key decisions, removed from deferred |
 | 2026-02-25 | R. Tasseff | Raw structure → ecosystem-based (MICROSCOPY/DICOM/EM); resolved RAW-05; added 12_CURATED_DATASETS spec; updated registries |
