@@ -18,15 +18,17 @@ There are two categories of equipment, and the meaning of "raw" data on gjesus3 
 
 > For instrument codes used in the ACQ-ID and registry (e.g., `ZWSI`, `CELL`, `LSM9`, `MRI`, `PET`), see [09_MODALITIES](../mfb-rdm-docs/09_MODALITIES.md) and [03_RAW_STORAGE](../mfb-rdm-docs/03_RAW_STORAGE.md) Section 3.2.
 
-| # | Equipment | Code | Type | Category | Our "Raw" Data | Primary Format | Source Document |
-|---|-----------|------|------|----------|----------------|----------------|-----------------|
-| 1 | Zeiss Axiocam 7 (WSI) | `ZWSI` | Whole-slide imager | Microscope | Instrument output | .czi | [Technical Review (docx)](Whole%20Slide%20Imaging%20with%20Zeiss%20Axiocam%207_%20Technical%20Review.docx) |
-| 2 | Zeiss Axio Observer (Cell Observer) | `CELL` | Inverted epifluorescence microscope | Microscope | Instrument output | .czi, .tif | [Description (pdf)](cell_observer_description_2.pdf) |
-| 3 | Zeiss LSM 900 (Confocal) | `LSM9` | Confocal microscope | Microscope | Instrument output | .czi | [Description (pdf)](confocal_microscopelsm900description.pdf) |
-| 4a | Bruker BioSpec 11.7T MRI | `MRI` | Preclinical MRI scanner | Platform instrument | Reconstructed images | DICOM | [Platform description (md)](mri_platform_discription.md) |
-| 4b | Bruker BioSpec 7T MRI | `MRI` | Preclinical MRI scanner | Platform instrument | Reconstructed images | DICOM | [Platform description (md)](mri_platform_discription.md) |
-| 5a | Molecubes PET/SPECT/CT | `PET`/`SPECT`/`CT` | Modular trimodal nuclear imaging | Platform instrument | Reconstructed images | DICOM (TBC) | [Platform description (md)](nuclearImaging_platform_description.md) |
-| 5b | MILabs VECTor PET/SPECT/CT/OI | `PET`/`SPECT`/`CT` | Integrated multimodal nuclear imaging | Platform instrument | Reconstructed images | DICOM, NIfTI | [Platform description (md)](nuclearImaging_platform_description.md) |
+| # | Equipment | Code | Type | Category | Our "Raw" Data | Primary Format | Reference Folder |
+|---|-----------|------|------|----------|----------------|----------------|------------------|
+| 1 | Zeiss Axiocam 7 (WSI) | `ZWSI` | Whole-slide imager | Microscope | Instrument output | .czi | [`axiocam7-wsi/`](./axiocam7-wsi/) |
+| 2 | Zeiss Axio Observer (Cell Observer) | `CELL` | Inverted epifluorescence microscope | Microscope | Instrument output | .czi, .tif | [`cell-observer/`](./cell-observer/) |
+| 3 | Zeiss LSM 900 (Confocal) | `LSM9` | Confocal microscope | Microscope | Instrument output | .czi | [`lsm900/`](./lsm900/) |
+| 4a | Bruker BioSpec 11.7T MRI | `MRI` | Preclinical MRI scanner | Platform instrument | Reconstructed images | DICOM | [`mri-platform/`](./mri-platform/) |
+| 4b | Bruker BioSpec 7T MRI | `MRI` | Preclinical MRI scanner | Platform instrument | Reconstructed images | DICOM | [`mri-platform/`](./mri-platform/) |
+| 5a | Molecubes PET/SPECT/CT | `PET`/`SPECT`/`CT` | Modular trimodal nuclear imaging | Platform instrument | Reconstructed images | DICOM (TBC) | [`nuclear-imaging/`](./nuclear-imaging/) |
+| 5b | MILabs VECTor PET/SPECT/CT/OI | `PET`/`SPECT`/`CT` | Integrated multimodal nuclear imaging | Platform instrument | Reconstructed images | DICOM, NIfTI | [`nuclear-imaging/`](./nuclear-imaging/) |
+
+Each reference folder is a free-form home for vendor specs, platform descriptions, user protocols, screenshots, and any other equipment-specific context. Drop new files in directly; no schema. The narrative sections below summarize what's currently in each folder.
 
 ---
 
@@ -42,7 +44,8 @@ There are two categories of equipment, and the meaning of "raw" data on gjesus3 
 - **Imaging modes:** Brightfield WSI, fluorescence WSI, tile-stitching
 - **Embedded metadata:** Extensive (objective, camera settings, stage coordinates, acquisition time, calibration)
 - **Not embedded:** Sample information, experimental context
-- **Reference doc:** Detailed technical review covering formats, software ecosystem, OMERO compatibility, FAIR considerations
+- **Reference materials** ([`axiocam7-wsi/`](./axiocam7-wsi/)):
+  - Technical review (docx) — formats, software ecosystem, OMERO compatibility, FAIR considerations
 
 ### 2. Zeiss Axio Observer — Cell Observer (Inverted Microscope)
 
@@ -55,6 +58,8 @@ There are two categories of equipment, and the meaning of "raw" data on gjesus3 
 - **Imaging modes:** Epifluorescence, brightfield, phase contrast, DIC; time lapse, z-stack, large-area tiling
 - **Objectives:** 5x to 100x (air and oil immersion)
 - **Embedded metadata:** Expected to be similar to other ZEN-based Zeiss instruments
+- **Reference materials** ([`cell-observer/`](./cell-observer/)):
+  - Vendor description (pdf)
 
 ### 3. Zeiss LSM 900 — Confocal Microscope
 
@@ -69,6 +74,8 @@ There are two categories of equipment, and the meaning of "raw" data on gjesus3 
 - **Imaging modes:** Confocal fluorescence (3 simultaneous channels), z-stack, time series, tile, FRAP, FRET
 - **Objectives:** 2.5x to 63x (air, water multi-immersion, oil)
 - **Embedded metadata:** Expected to be extensive (ZEN-based)
+- **Reference materials** ([`lsm900/`](./lsm900/)):
+  - Confocal microscope description (pdf)
 
 ---
 
@@ -96,6 +103,8 @@ The MRI platform has **two** preclinical MRI systems:
 - **Our "raw" data:** Reconstructed images provided to researchers by the platform
 - **Expected format:** DICOM (to be confirmed)
 - **True raw data:** Managed and archived by the MRI platform (e.g., k-space data, raw FIDs)
+- **Reference materials** ([`mri-platform/`](./mri-platform/)):
+  - Platform description (md) — both BioSpec systems
 
 ### 5. Nuclear Imaging Platform — PET/SPECT/CT/OI
 
@@ -123,6 +132,8 @@ The Nuclear Imaging platform has **two** multimodal imaging systems plus an auto
 - **Our "raw" data:** Reconstructed images provided to researchers by the platform
 - **Expected format:** DICOM and/or NIfTI (MILabs confirms both; Molecubes format TBC)
 - **True raw data:** Managed and archived by the Nuclear Imaging platform (e.g., PET listmode files, raw sinograms)
+- **Reference materials** ([`nuclear-imaging/`](./nuclear-imaging/)):
+  - Platform description (md) — covers Molecubes, MILabs VECTor, and autoradiography
 
 ---
 
