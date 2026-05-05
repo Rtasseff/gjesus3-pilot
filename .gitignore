@@ -15,3 +15,6 @@ desktop.ini
 # Python
 __pycache__/
 *.pyc
+
+# Claude Code personal config
+.claude/settings.local.json
