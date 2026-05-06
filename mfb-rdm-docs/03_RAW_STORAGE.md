@@ -161,7 +161,7 @@ Instrument codes identify the source instrument in the ACQ-ID and registry. They
 
 | Code | Instrument/Category | Ecosystem | Formats | Data Source |
 |------|---------------------|-----------|---------|-------------|
-| `ZWSI` | Zeiss Axiocam 7 (whole-slide imaging) | MICROSCOPY | .czi | Microscope (direct) |
+| `ZWSI` | Zeiss Axio Scan 7 (whole-slide imaging) | MICROSCOPY | .czi | Microscope (direct) |
 | `CELL` | Zeiss Axio Observer (Cell Observer) | MICROSCOPY | .czi | Microscope (direct) |
 | `LSM9` | Zeiss LSM 900 (confocal) | MICROSCOPY | .czi | Microscope (direct) |
 | `PET` | PET reconstructed (Molecubes beta-CUBE / MILabs VECTor) | DICOM | .dcm, possibly .nii (TBC) | Nuclear Imaging platform (reconstructed) |

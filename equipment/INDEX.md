@@ -20,7 +20,7 @@ There are two categories of equipment, and the meaning of "raw" data on gjesus3 
 
 | # | Equipment | Code | Type | Category | Our "Raw" Data | Primary Format | Reference Folder |
 |---|-----------|------|------|----------|----------------|----------------|------------------|
-| 1 | Zeiss Axiocam 7 (WSI) | `ZWSI` | Whole-slide imager | Microscope | Instrument output | .czi | [`axiocam7-wsi/`](./axiocam7-wsi/) |
+| 1 | Zeiss Axio Scan 7 (WSI) | `ZWSI` | Whole-slide imager | Microscope | Instrument output | .czi | [`axioscan7-wsi/`](./axioscan7-wsi/) |
 | 2 | Zeiss Axio Observer (Cell Observer) | `CELL` | Inverted epifluorescence microscope | Microscope | Instrument output | .czi, .tif | [`cell-observer/`](./cell-observer/) |
 | 3 | Zeiss LSM 900 (Confocal) | `LSM9` | Confocal microscope | Microscope | Instrument output | .czi | [`lsm900/`](./lsm900/) |
 | 4a | Bruker BioSpec 11.7T MRI | `MRI` | Preclinical MRI scanner | Platform instrument | Reconstructed images | DICOM | [`mri-platform/`](./mri-platform/) |
@@ -34,9 +34,9 @@ Each reference folder is a free-form home for vendor specs, platform description
 
 ## Microscopes (Direct Raw Acquisition)
 
-### 1. Zeiss Axiocam 7 — Whole-Slide Imaging
+### 1. Zeiss Axio Scan 7 — Whole-Slide Imaging
 
-- **Full name:** Zeiss Axiocam 7 series (705 color / 712 mono) on motorized stage
+- **Full name:** Zeiss Axio Scan 7 (uses Axiocam 705 color / 712 mono cameras) on motorized stage
 - **Location:** MFB Lab
 - **Software:** ZEN Blue (Slidescan module)
 - **Output format:** .czi (Carl Zeiss Image) — pyramidal, multi-resolution, rich embedded metadata
@@ -44,7 +44,7 @@ Each reference folder is a free-form home for vendor specs, platform description
 - **Imaging modes:** Brightfield WSI, fluorescence WSI, tile-stitching
 - **Embedded metadata:** Extensive (objective, camera settings, stage coordinates, acquisition time, calibration)
 - **Not embedded:** Sample information, experimental context
-- **Reference materials** ([`axiocam7-wsi/`](./axiocam7-wsi/)):
+- **Reference materials** ([`axioscan7-wsi/`](./axioscan7-wsi/)):
   - Technical review (docx) — formats, software ecosystem, OMERO compatibility, FAIR considerations
   - Data handling workflow notes (md) — observed/documented use at biomaGUNE: Gopticals network storage, file naming convention, post-scan review and transfer practices, open questions
 

@@ -88,7 +88,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 ```csv
 acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,notes
-ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axiocam 7,,MBC,internal,MOUSE-2024-042,mouse lung section,sample_slide.czi,,.czi,2450,4,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,First pilot deposit
+ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axio Scan 7,,MBC,internal,MOUSE-2024-042,mouse lung section,sample_slide.czi,,.czi,2450,4,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,First pilot deposit
 ACQ-20260215-MRI-001,2026-02-15T17:00:00Z,2026-02-15T10:30:00Z,DICOM,MRI,Bruker BioSpec 11.7T,,IFF,internal,MOUSE-2024-042,mouse brain,ACQ-20260215-MRI-001.zip,,.zip,1800,4,/raw/DICOM/2026/2026-02/ACQ-20260215-MRI-001/,Y,Y,,MRI follow-up (full-mode ingest)
 ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,mouse tumor,ACQ-20260220-PET-001.zip,,.zip,2100,4,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,Y,,PET/CT hybrid session (full-mode ingest)
 ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HPIC-case-01,,ACQ-20260301-XMRI-001.zip,case_01.zip,.zip,450,3,/raw/DICOM/2026/2026-03/ACQ-20260301-XMRI-001/,Y,N,,Lightweight ingest from NAS staging

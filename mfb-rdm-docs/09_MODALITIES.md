@@ -29,11 +29,11 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 
 ---
 
-### 1.1 Whole-Slide Imaging — Zeiss Axiocam 7
+### 1.1 Whole-Slide Imaging — Zeiss Axio Scan 7
 
 | Attribute | Value |
 |-----------|-------|
-| **Instrument** | Zeiss Axiocam 7 (705 color / 712 mono) on motorized stage |
+| **Instrument** | Zeiss Axio Scan 7 (with Axiocam 705 color / 712 mono cameras) on motorized stage |
 | **Category** | Microscope (direct raw) |
 | **Code** | `ZWSI` |
 | **Location** | MFB Lab |
@@ -171,7 +171,7 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 
 | Data Type | Instrument | Volunteer | Status |
 |-----------|------------|-----------|--------|
-| Whole-slide .czi | Zeiss Axiocam 7 | TBD | 📣 Needs volunteer |
+| Whole-slide .czi | Zeiss Axio Scan 7 | TBD | 📣 Needs volunteer |
 | Inverted microscopy .czi | Cell Observer (Axio Observer) | TBD | 📣 Needs volunteer |
 | Confocal .czi | Zeiss LSM 900 | TBD | 📣 Needs volunteer |
 | MRI DICOM (reconstructed) | Bruker 11.7T | TBD | 📣 Needs volunteer |
@@ -242,7 +242,7 @@ For each confirmed data type, we need a short walkthrough covering:
 
 ### 6.1 Template
 
-| Field | Axiocam 7 WSI (.czi) | Cell Observer (.czi) | LSM 900 (.czi) | DICOM (recon) | SEM/TEM |
+| Field | Axio Scan 7 WSI (.czi) | Cell Observer (.czi) | LSM 900 (.czi) | DICOM (recon) | SEM/TEM |
 |-------|----------------------|----------------------|-----------------|---------------|---------|
 | Acquisition date/time | ✅ | ✅ (expected) | ✅ (expected) | ✅ | ? |
 | Objective/magnification | ✅ | ✅ (expected) | ✅ (expected) | N/A | ? |
@@ -258,7 +258,7 @@ For each confirmed data type, we need a short walkthrough covering:
 
 ### 6.2 Action Items
 
-- [ ] Examine sample .czi files from Axiocam 7 (WSI) for metadata fields
+- [ ] Examine sample .czi files from Axio Scan 7 (WSI) for metadata fields
 - [ ] Examine sample .czi files from Cell Observer for metadata fields
 - [ ] Examine sample .czi files from LSM 900 for metadata fields
 - [ ] Examine sample DICOM from MRI platform for relevant fields

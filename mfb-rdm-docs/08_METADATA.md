@@ -112,7 +112,7 @@ A spreadsheet was circulated for users to vote on each field. Limited responses 
     "staining": "H&E"
   },
   "acquisition": {
-    "instrument": "Zeiss Axiocam 7",
+    "instrument": "Zeiss Axio Scan 7",
     "imaging_method": "brightfield",
     "objective": "20x / 0.8 NA",
     "pixel_size_um": 0.5

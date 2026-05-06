@@ -51,7 +51,7 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 ### 2.2 Instrument Metadata Audit
 > Resolved per-modality during ingestion testing (Section 4). Each test pass audits embedded metadata for that format.
 - [ ] DICOM (collaborator) — resolved during Section 4.2
-- [ ] .czi from Axiocam 7 (WSI) — resolved during Section 4.6
+- [ ] .czi from Axio Scan 7 (WSI) — resolved during Section 4.6
 - [ ] .czi from Cell Observer — resolved during Section 4.6
 - [ ] .czi from LSM 900 — resolved during Section 4.6
 - [ ] Confirm Cell Observer and LSM 900 .czi metadata is similar to WSI .czi (MOD-07)
@@ -169,7 +169,7 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 
 ### 4.6 Pass 3: Microscopy .czi (`ZWSI`, `CELL`, `LSM9`)
 > Completely different format — single-file primary, no archive needed, different metadata extraction library (aicspylibczi/czifile).
-- [ ] **Ryan:** Obtain sample .czi files (at least one from each instrument: Axiocam 7, Cell Observer, LSM 900)
+- [ ] **Ryan:** Obtain sample .czi files (at least one from each instrument: Axio Scan 7, Cell Observer, LSM 900)
 - [ ] Inspect .czi metadata — what fields are embedded? (feeds 2.2)
 - [ ] Confirm metadata similarity across the three Zeiss instruments (MOD-07)
 - [ ] Implement .czi metadata extraction in ingest pipeline (feeds 3.1)

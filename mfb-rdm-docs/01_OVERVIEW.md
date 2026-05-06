@@ -25,7 +25,7 @@ The MFB group has historically accumulated hundreds of GB of microscopy and biom
 
 ### 1.2 The Trigger
 
-A new whole-slide imaging instrument (Zeiss Axiocam 7) will substantially increase data volume, making the need for organized storage urgent. The PI (Jesús Ruiz-Cabello) does not want to wait for uncertain institutional platform timelines.
+A new whole-slide imaging instrument (Zeiss Axio Scan 7) will substantially increase data volume, making the need for organized storage urgent. The PI (Jesús Ruiz-Cabello) does not want to wait for uncertain institutional platform timelines.
 
 ### 1.3 The Opportunity
 
@@ -61,7 +61,7 @@ The group has access to a dedicated NAS (gjesus3 — QNAP TS-864eU, 6 × 20 TB i
 
 | Category | Details |
 |----------|---------|
-| **Microscopes** (direct raw) | Zeiss Axiocam 7 (WSI), Zeiss Axio Observer (Cell Observer), Zeiss LSM 900 (confocal) — instrument output (.czi) deposited directly |
+| **Microscopes** (direct raw) | Zeiss Axio Scan 7 (WSI), Zeiss Axio Observer (Cell Observer), Zeiss LSM 900 (confocal) — instrument output (.czi) deposited directly |
 | **Platform imaging** (reconstructed) | MRI (Bruker BioSpec 11.7T and 7T), Nuclear Imaging (Molecubes PET/SPECT/CT, MILabs VECTor PET/SPECT/CT/OI) — reconstructed images (DICOM, possibly NIfTI; TBC) from platforms; platforms archive true raw data |
 | **Storage areas** | Raw archive, Publication archive, Project workspaces, Staging (temporary) |
 | **Users** | MFB group members with approved access |

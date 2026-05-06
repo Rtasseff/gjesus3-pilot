@@ -53,7 +53,7 @@ An **archival storage system** for original imaging data that:
 
 | Instrument | Type | Primary Format | Status |
 |------------|------|----------------|--------|
-| Zeiss Axiocam 7 (WSI) | Whole-slide imager | .czi | ✅ Confirmed |
+| Zeiss Axio Scan 7 (WSI) | Whole-slide imager | .czi | ✅ Confirmed |
 | Zeiss Axio Observer (Cell Observer) | Inverted epifluorescence microscope | .czi | ✅ Confirmed |
 | Zeiss LSM 900 | Confocal microscope | .czi | ✅ Confirmed |
 
