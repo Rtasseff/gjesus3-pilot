@@ -46,6 +46,7 @@ Each reference folder is a free-form home for vendor specs, platform description
 - **Not embedded:** Sample information, experimental context
 - **Reference materials** ([`axiocam7-wsi/`](./axiocam7-wsi/)):
   - Technical review (docx) — formats, software ecosystem, OMERO compatibility, FAIR considerations
+  - Data handling workflow notes (md) — observed/documented use at biomaGUNE: Gopticals network storage, file naming convention, post-scan review and transfer practices, open questions
 
 ### 2. Zeiss Axio Observer — Cell Observer (Inverted Microscope)
 
