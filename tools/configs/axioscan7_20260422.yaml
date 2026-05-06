@@ -1,0 +1,31 @@
+# AxioScan 7 — 2026-04-22 day folder ingest
+#
+# Test ingest config used during AxioScan first-pass development. The
+# rows it produces are flagged "TEST INGEST 2026-05-06 - purge after
+# review"; see _test_artifacts.txt for the cleanup tracker.
+
+ingest:
+  delete_source_after_ingest: false
+
+auto_discover:
+  staging_dir: "S:/goptical/GOpticalUsers data/AxioScan/20260422"
+  pattern: "*.czi"
+  filename_parse:
+    separator: "_"
+    fields: [group_code, operator, project, sample_id, stain, magnification]
+  filter:
+    group_code: MFB
+  acquisition_date_from: parent_folder_name
+
+registry:
+  instrument:           ZWSI
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     "Zeiss Axio Scan 7"
+  modalities_in_study:  NA
+  operator:             discovered.operator
+  data_source:          internal
+  sample_id:            discovered.sample_id
+  sample_type:          NA
+  acquisition_datetime: discovered.acquisition_date
+  project_hint:         NA
+  notes:                "TEST INGEST 2026-05-06 - purge after review (${discovered.stain} stain at ${discovered.magnification})"

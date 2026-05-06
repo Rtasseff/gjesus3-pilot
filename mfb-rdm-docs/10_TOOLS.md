@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-05
+**Last Updated:** 2026-05-06
 
 ---
 
@@ -36,19 +36,27 @@ This document specifies the scripts and tools needed to support the data managem
 **Architecture:**
 ```
 tools/
-├── ingest_raw.py          # CLI entry point
+├── ingest_raw.py            # CLI entry point
 ├── ingest/
 │   ├── __init__.py
-│   ├── config.py          # YAML config loading + validation
-│   ├── acq_id.py          # ACQ-ID generation (date + inst + seq)
-│   ├── checksum.py        # SHA-256 checksums → checksums.json
-│   ├── registry.py        # Read/append registry_raw.csv
-│   ├── readme.py          # Generate README.txt from template
-│   ├── dicom_utils.py     # DICOM header extraction (pydicom)
-│   └── linker.py          # Create Windows .lnk shortcut + manifest CSV (see §2.1.1)
+│   ├── config.py            # YAML loading + validation; expand_batch (file/dir glob, filename_parse, filter, idempotency); FORMAT_SUMMARIZERS dispatch
+│   ├── resolver.py          # Resolves the YAML registry: block — literal | discovered.<x> | ${...} interp | NA
+│   ├── acq_id.py            # ACQ-ID generation (date + inst + seq)
+│   ├── checksum.py          # SHA-256 checksums → checksums.json
+│   ├── registry.py          # Read/append registry_raw.csv (REGISTRY_FIELDS includes ingest_config)
+│   ├── readme.py            # Generate README.txt from template
+│   ├── dicom_utils.py       # DICOM header extraction (pydicom)
+│   ├── microscopy_utils.py  # Single-file inventory (.czi, .tif) — sibling of dicom_utils
+│   ├── filename_parser.py   # Positional filename → {field: value}
+│   ├── metadata_sidecar.py  # metadata.json writer (cross-format; discovered + user_supplied)
+│   ├── probe_czi.py         # Standalone read-only .czi metadata probe (utility)
+│   └── linker.py            # Create Windows .lnk shortcut + manifest CSV (see §2.1.1)
+├── configs/                 # Committed ingest configs, one per batch / day folder
+│   └── axioscan7_20260422.yaml
 ├── templates/
-│   └── README_raw.txt     # README template
-└── requirements.txt       # pydicom, pyyaml, tqdm
+│   ├── README_raw.txt       # README template
+│   └── ingest_template.yaml # Starter template for new batch configs
+└── requirements.txt         # pydicom, pyyaml, tqdm, czifile
 ```
 
 ### 2.1.1 Project Linking — Windows-First Design Decision
@@ -121,33 +129,90 @@ The choice should be made consciously at the start of any future deployment — 
 7. Append row to `registry_raw.csv` (auto fields only; `extended_metadata_present` = `N`)
 8. Report summary
 
-**Single-case configuration (example):**
-```yaml
-# ingest_config.yaml
-source_path: /data/local_staging/user_dump/   # local path (recommended for full mode)
-instrument: ZWSI
-acquisition_date: 2026-02-15
-operator: MBC
-sample_id: MOUSE-2024-042
-sample_type: mouse lung section
-data_source: internal
-notes: First test of ingest workflow
-```
+**Configuration schema (since 2026-05-06):**
 
-**Batch configuration (example):**
+Three top-level blocks. `defaults:` is gone — non-registry control flags moved to `ingest:`, and the per-column registry mapping is explicit in `registry:`.
+
+| Block            | Purpose |
+|------------------|---------|
+| `ingest:`        | Pipeline control flags (e.g. `delete_source_after_ingest`). Not registry columns. |
+| `auto_discover:` | How to discover cases and what variables to extract per case. Each case's discovered fields land in a `discovered` namespace, referenceable below. |
+| `registry:`      | Explicit per-column registry mapping. Three value forms: literal text/number, `discovered.<field>` (bare reference), or `"...${discovered.<field>}..."` (interpolation). Use `NA` to leave a column intentionally empty. |
+
+The user-controllable `registry:` columns are: `instrument`, `data_ecosystem`, `instrument_model`, `modalities_in_study`, `operator`, `data_source`, `sample_id`, `sample_type`, `acquisition_datetime`, `project_hint`, `notes`. Of these, **`instrument`, `data_ecosystem`, `operator`, `data_source` must be present** (NA allowed where intentional); the rest are optional. Auto-populated columns (`acq_id`, `registration_datetime`, `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) must NOT appear in `registry:`.
+
+A starter template lives at [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml). Edited copies should be saved under [`tools/configs/`](../tools/configs/) (under git, version-locked with the script — the relative path is stamped into each registry row's `ingest_config` column).
+
+**Batch configuration — file-mode with filename parsing (AxioScan and similar):**
+
 ```yaml
-defaults:
-  data_ecosystem: DICOM
-  instrument: XMRI       # or 'auto' to detect from DICOM headers
-  operator: RT
-  data_source: "collaborator:HPIC"
-  acquisition_date: auto  # extract StudyDate from DICOM
-  archive_format: zip     # zip (default) or tar.gz
+ingest:
+  delete_source_after_ingest: false
 
 auto_discover:
-  source_dir: /data/local_staging/HPIC_33cases/   # local path for full mode
-  pattern: "HPIC*/"
-  sample_id_from: folder_name
+  staging_dir: "S:/goptical/GOpticalUsers data/AxioScan/20260422"
+  pattern: "*.czi"
+  filename_parse:
+    separator: "_"
+    fields: [group_code, operator, project, sample_id, stain, magnification]
+  filter:
+    group_code: MFB
+  acquisition_date_from: parent_folder_name
+
+registry:
+  instrument:           ZWSI
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     "Zeiss Axio Scan 7"
+  modalities_in_study:  NA
+  operator:             discovered.operator
+  data_source:          internal
+  sample_id:            discovered.sample_id
+  sample_type:          NA
+  acquisition_datetime: discovered.acquisition_date
+  project_hint:         NA
+  notes:                "Routine WSI; ${discovered.stain} @ ${discovered.magnification}"
+```
+
+**Batch configuration — directory-mode (DICOM):**
+
+```yaml
+ingest:
+  delete_source_after_ingest: false
+
+auto_discover:
+  staging_dir: /data/local_staging/HPIC_33cases/
+  pattern: "HPIC*/"           # trailing / matches directories
+  # acquisition_date_from: parent_folder_name  # if applicable
+
+registry:
+  instrument:           XMRI
+  data_ecosystem:       DICOM
+  instrument_model:     NA
+  modalities_in_study:  NA
+  operator:             RT
+  data_source:          "collaborator:HPIC"
+  sample_id:            discovered.folder_name
+  sample_type:          NA
+  acquisition_datetime: "20260301"     # literal; or NA to backfill later
+  project_hint:         NA
+  notes:                "HPIC batch ingest"
+```
+
+**Single-case configuration:**
+
+```yaml
+source_path: /data/local_staging/user_dump/
+ingest:
+  delete_source_after_ingest: false
+registry:
+  instrument:           ZWSI
+  data_ecosystem:       MICROSCOPY
+  operator:             MBC
+  data_source:          internal
+  sample_id:            MOUSE-2024-042
+  sample_type:          "mouse lung section"
+  acquisition_datetime: "2026-02-15"
+  notes:                "First test of ingest workflow"
 ```
 
 **Usage:**
@@ -156,20 +221,27 @@ python tools/ingest_raw.py --config batch_hpic.yaml --dry-run    # preview (full
 python tools/ingest_raw.py --config batch_hpic.yaml               # execute (full mode)
 python tools/ingest_raw.py --interactive                           # single case (full mode)
 python tools/ingest_raw.py --config quick.yaml --lightweight       # lightweight mode
+python tools/ingest_raw.py --config batch.yaml --delete-source     # remove source after verify (default OFF)
 python tools/ingest_raw.py --interactive --lightweight             # lightweight interactive
 ```
 
 **Key features:**
-- Two ingest modes: full (default) and lightweight (`--lightweight`)
+- Three-block YAML schema: `ingest:` (control), `auto_discover:` (extract `discovered.*`), `registry:` (explicit per-column mapping with literal | `discovered.X` | `${...}` interp | NA). Template at `tools/templates/ingest_template.yaml`.
+- Auto-populated columns (`acq_id`, `registration_datetime`, `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) — script-controlled, not user-editable.
+- `ingest_config` registry column records the relative path of the YAML config that produced the row, for auditability + reproducibility.
+- Two ingest modes: full (default) and lightweight (`--lightweight`, planned)
 - DICOM header auto-detection (modality, StudyDate via pydicom) — full mode
-- DICOM archive creation (compress to .zip or .tar.gz) — full mode
-- Metadata sidecar generation (`metadata.json`) — full mode
+- DICOM archive creation (compress to .zip or .tar.gz) — full mode (planned)
+- Microscopy single-file ingest (`.czi` etc.) with rename to canonical `{acq_id}{ext}`
+- `metadata.json` sidecar (cross-format; `user_supplied` + `discovered`; ecosystem-specific section reserved for embedded-metadata extraction)
+- Filename parser (positional) for instruments that encode metadata in filenames
 - Collaborator instrument codes: X-prefix (e.g., `XMRI` for external MRI)
-- Copy verification: checksums computed on both source and destination, then compared
-- `original_name` field in registry tracks pre-ingestion source name
+- Copy verification: SHA-256 source→dest comparison
+- **Idempotent re-runs**: `expand_batch` checks the registry by `(acquisition_date, original_name)` and skips already-ingested files
+- `--delete-source` flag removes the source file/folder after a successful verify (cross-instrument; default OFF; never touches the parent of `source_path`)
 - Project link creation: `.lnk` shortcut placed in `<project>/raw_linked/` when `--project` is set (Windows-only — see §2.1.1)
 - `--dry-run` mode for previewing without changes
-- Batch auto-discovery for processing many cases at once
+- Batch auto-discovery for processing many cases at once (file or directory globs)
 
 ### 2.2 `create_publication` — Publication Package Setup
 

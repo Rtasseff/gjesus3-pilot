@@ -8,26 +8,28 @@ This repository contains the design documentation and planning materials for a l
 
 ## Status
 
-**Pilot development — NAS deployed, design specs drafted, per-modality ingestion testing next.**
+**Pilot development — NAS deployed, design specs drafted, ingest pipeline running for two modalities.**
 
 ### What's done
 - NAS directory structure deployed: `staging/`, `raw/`, `registries/`, `publications/`, `projects/`, `curated_datasets/`
 - Raw storage organized by data ecosystem: `MICROSCOPY/`, `DICOM/`, `EM/`
 - Centralized `registries/` directory holds all CSV registries
-- `ingest_raw.py` script implemented in `tools/` (batch, single-case, interactive, dry-run)
+- `ingest_raw.py` script implemented in `tools/` (batch, single-case, interactive, dry-run; idempotent re-runs; `--delete-source`)
 - `create_project.py` script implemented in `tools/` (CLI + interactive, dry-run)
+- **Collaborator DICOM ingest tested end-to-end** — 75 acquisitions (HPIC + LIONS) on NAS with project `.lnk` shortcuts
+- **AxioScan 7 (.czi) microscopy ingest tested end-to-end** — first 3 cases ingested 2026-05-06; pending purge after review
 - Design specifications largely drafted across 12 modules
 
-### Key recent decisions (2026-03-06)
-- **DICOM stored as compressed archives** (.zip/.tar.gz) — millions of small .dcm files unworkable on SMB
-- **Primary staging off-NAS** — extraction and compression happen on fast local storage; NAS `staging/` retained as secondary dump
-- **Two ingest modes** — full (default: extracts metadata, compresses DICOM) and lightweight (copies as-is, minimal registry)
-- **Metadata extraction integrated into ingest** — not a standalone tool; happens before DICOM compression
+### Key recent decisions
+- **2026-05-06 — Three-block YAML ingest schema** (`ingest:` / `auto_discover:` / `registry:`) replaces `defaults:` and Python `SPECIAL_FIELDS`. Per-column registry mapping is explicit in YAML, supporting literal | `discovered.<field>` | `${...}` interpolation | `NA`. Configs live under git in `tools/configs/`; relative path is recorded in the new `ingest_config` registry column. See [10_TOOLS §2.1](mfb-rdm-docs/10_TOOLS.md).
+- **2026-05-05 — Project link method DECIDED — Windows `.lnk` shell shortcuts** (Windows-first, pilot-specific; full rationale + porting note in [10_TOOLS §2.1.1](mfb-rdm-docs/10_TOOLS.md)).
+- **2026-03-06 — DICOM stored as compressed archives** (.zip/.tar.gz); primary staging off-NAS; two ingest modes (full + lightweight); metadata extraction integrated into full-mode ingest.
 
 ### What's next
-- Per-modality ingestion testing: collaborator DICOM first, then microscopy .czi, platform DICOM, NIfTI
-- Test linking method and raw immutability enforcement on NAS
-- Finalize scripts after all modality passes
+- Per-modality ingestion testing: platform DICOM (MRI), nuclear imaging (DICOM/NIfTI), Cell Observer (.czi), LSM 900 (.czi)
+- DICOM full-mode metadata extraction + compression (currently lightweight only)
+- `.czi`-internal embedded metadata extraction → `discovered` namespace (post-probe)
+- Raw immutability enforcement (chmod / SMB ACLs)
 - See [tasks/tasks.md](tasks/tasks.md) for the full task list
 
 ## NAS Access
@@ -83,8 +85,9 @@ gjesus3-pilot/
 ├── tools/                     # Scripts and automation
 │   ├── ingest_raw.py          # CLI for ingesting raw data from staging
 │   ├── create_project.py      # CLI for creating project workspaces
-│   ├── ingest/                # Supporting modules
-│   ├── templates/             # README and YAML templates
+│   ├── ingest/                # Supporting modules (config, resolver, registry, sidecar, ...)
+│   ├── configs/               # Committed ingest configs (one per batch / day folder)
+│   ├── templates/             # README + ingest-config templates
 │   └── requirements.txt       # Python dependencies
 ├── equipment/                 # Reference docs for in-scope imaging equipment
 │   ├── INDEX.md               # Equipment index — start here for equipment info

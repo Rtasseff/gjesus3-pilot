@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-05-06
 
 ---
 
@@ -59,39 +59,39 @@ Authoritative record of all raw acquisitions deposited in the system.
 |-------|------|----------|------------|-------------|
 | `acq_id` | String | ✅ Yes | Auto | Unique acquisition ID (e.g., `ACQ-20260215-ZWSI-001`) |
 | `registration_datetime` | ISO DateTime | ✅ Yes | Auto | When this entry was added |
-| `acquisition_datetime` | ISO DateTime | 🔶 Recommended | Auto (full) | When the data was actually acquired; extracted from DICOM headers in full mode |
-| `data_ecosystem` | String | ✅ Yes | Auto | Top-level folder: `MICROSCOPY`, `DICOM`, or `EM` |
-| `instrument` | String | ✅ Yes | Auto | Instrument code (e.g., `ZWSI`, `LSM9`, `PET`); auto-detected from DICOM headers in full mode |
-| `instrument_model` | String | 🔶 Recommended | Auto (full) | Full instrument name (e.g., `Bruker BioSpec 11.7T`) |
-| `modalities_in_study` | String | Optional | Auto (full) | For multi-modal acquisitions: semicolon-separated DICOM modality codes (e.g., `PT;CT`) |
-| `operator` | String | ✅ Yes | User | Person who collected the data (name or initials) |
-| `data_source` | String | 🔶 Recommended | User | `internal` or `collaborator:<name>` |
-| `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier |
-| `sample_type` | String | 🔶 Recommended | User | Brief sample description |
-| `primary_file_name` | String | ✅ Yes | Auto | Name of the primary data file (for DICOM: archive filename, e.g., `ACQ-20260215-MRI-001.zip`) |
-| `original_name` | String | 🔶 Recommended | Auto | Original source name before ingestion (e.g., archive filename); required when data is renamed during ingest |
-| `file_format` | String | ✅ Yes | Auto | File extension/format (e.g., `.czi`, `.zip`, `.tar.gz`) |
-| `file_size_mb` | Number | ✅ Yes | Auto | Size of primary file in MB |
-| `file_count` | Number | ✅ Yes | Auto | Total files in acquisition folder (for DICOM: files in the folder, typically 3-5, not .dcm instance count) |
-| `canonical_path` | String | ✅ Yes | Auto | Full path to acquisition folder |
+| `acquisition_datetime` | ISO DateTime | 🔶 Recommended | User | When the data was actually acquired. User-supplied via the YAML `registry:` block — either a literal, a `discovered.<field>` reference (e.g. `discovered.acquisition_date` for AxioScan day folders), or `NA` to backfill later. Future: auto-extract from DICOM/.czi headers via the `discovered` namespace. |
+| `data_ecosystem` | String | ✅ Yes | User | `MICROSCOPY`, `DICOM`, or `EM`. Determines the top-level folder. |
+| `instrument` | String | ✅ Yes | User | Instrument code (e.g., `ZWSI`, `LSM9`, `PET`). |
+| `instrument_model` | String | 🔶 Recommended | User | Full instrument name (e.g., `Bruker BioSpec 11.7T`). |
+| `modalities_in_study` | String | Optional | User (or auto fallback) | For multi-modal acquisitions: semicolon-separated DICOM modality codes (e.g., `PT;CT`). If left empty/NA, falls back to the source summarizer's `modality` field. |
+| `operator` | String | ✅ Yes | User | Person who collected the data. |
+| `data_source` | String | ✅ Yes | User | `internal` or `collaborator:<name>`. |
+| `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. |
+| `sample_type` | String | 🔶 Recommended | User | Brief sample description. |
+| `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary file (`<ACQ-ID>.<ext>` for microscopy / `<ACQ-ID>.zip` for DICOM, or `series/` for the legacy DICOM uncompressed layout). |
+| `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
+| `file_format` | String | ✅ Yes | Auto | File extension/format (e.g., `.czi`, `.zip`). |
+| `file_size_mb` | Number | ✅ Yes | Auto | Size of primary file/folder in MB. |
+| `file_count` | Number | ✅ Yes | Auto | Total files in acquisition folder. |
+| `canonical_path` | String | ✅ Yes | Auto | Full path to acquisition folder. |
 | `checksum_present` | String (Y/N) | ✅ Yes | Auto | `Y` or `N` — is checksums.json present? |
-| `extended_metadata_present` | String (Y/N) | ✅ Yes | Auto | `Y` (full mode) or `N` (lightweight mode) — is metadata.json present? |
-| `project_hint` | String | Optional | User | Associated project ID if known at deposit |
-| `notes` | String | Optional | User | Free-text notes |
+| `extended_metadata_present` | String (Y/N) | ✅ Yes | Auto | `Y` (full mode) or `N` (lightweight mode). |
+| `project_hint` | String | Optional | User | Associated project ID if known at deposit. Triggers `.lnk` creation when set. |
+| `ingest_config` | String | 🔶 Recommended | Auto | Path (relative to repo root) of the YAML config that produced this row. Empty for interactive ingests or pre-2026-05-06 rows. Used for auditability and reproducibility. |
+| `notes` | String | Optional | User | Free-text notes. Supports `${discovered.<field>}` interpolation. |
 
 **Population key:**
-- **Auto** — populated automatically in all ingest modes
-- **Auto (full)** — populated automatically in full mode only; empty in lightweight mode
-- **User** — user-supplied (via config or interactive prompt)
+- **Auto** — set by the ingest pipeline; user must NOT put it in the YAML `registry:` block.
+- **User** — set in the YAML `registry:` block (literal, `discovered.<field>`, or `NA`). See [10_TOOLS §2.1](10_TOOLS.md).
 
 ### 2.3 Example
 
 ```csv
-acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,notes
-ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axio Scan 7,,MBC,internal,MOUSE-2024-042,mouse lung section,sample_slide.czi,,.czi,2450,4,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,First pilot deposit
-ACQ-20260215-MRI-001,2026-02-15T17:00:00Z,2026-02-15T10:30:00Z,DICOM,MRI,Bruker BioSpec 11.7T,,IFF,internal,MOUSE-2024-042,mouse brain,ACQ-20260215-MRI-001.zip,,.zip,1800,4,/raw/DICOM/2026/2026-02/ACQ-20260215-MRI-001/,Y,Y,,MRI follow-up (full-mode ingest)
-ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,mouse tumor,ACQ-20260220-PET-001.zip,,.zip,2100,4,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,Y,,PET/CT hybrid session (full-mode ingest)
-ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HPIC-case-01,,ACQ-20260301-XMRI-001.zip,case_01.zip,.zip,450,3,/raw/DICOM/2026/2026-03/ACQ-20260301-XMRI-001/,Y,N,,Lightweight ingest from NAS staging
+acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
+ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axio Scan 7,,MBC,internal,MOUSE-2024-042,mouse lung section,ACQ-20260215-ZWSI-001.czi,MFB_MBC_PROJ-0003_MOUSE-2024-042_HE_20x.czi,.czi,2450,4,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,tools/configs/axioscan7_20260215.yaml,First pilot deposit
+ACQ-20260215-MRI-001,2026-02-15T17:00:00Z,2026-02-15T10:30:00Z,DICOM,MRI,Bruker BioSpec 11.7T,,IFF,internal,MOUSE-2024-042,mouse brain,ACQ-20260215-MRI-001.zip,,.zip,1800,4,/raw/DICOM/2026/2026-02/ACQ-20260215-MRI-001/,Y,Y,,tools/configs/mri_20260215.yaml,MRI follow-up (full-mode ingest)
+ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,mouse tumor,ACQ-20260220-PET-001.zip,,.zip,2100,4,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,Y,,tools/configs/pet_20260220.yaml,PET/CT hybrid session (full-mode ingest)
+ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HPIC-case-01,,ACQ-20260301-XMRI-001.zip,case_01.zip,.zip,450,3,/raw/DICOM/2026/2026-03/ACQ-20260301-XMRI-001/,Y,N,,,Lightweight ingest from NAS staging
 ```
 
 ### 2.4 Update Rules

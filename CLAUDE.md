@@ -17,7 +17,7 @@ This is a **design, documentation, and tooling project** for a research data man
 - **Data Management Lead:** Ryan Tasseff (Data Office)
 - **Infrastructure:** QNAP NAS "gjesus3" (TS-864eU, 6 × 20 TB, RAID 5, ~63 TB user-available after snapshot reservation), SMB share `\\GJESUS3\gjesus3`
 - **Access:** Hardwired on-site machines only (no laptops)
-- **Status:** Pilot — directory structure deployed on NAS, first data in staging awaiting ingestion
+- **Status:** Pilot — NAS structure deployed; collaborator DICOM (75 acqs) and Zeiss AxioScan 7 (.czi, 3 acqs) ingest pipelines running; YAML-driven config schema in `tools/configs/`
 
 ## Development Environment
 
@@ -48,6 +48,12 @@ When updating one document, check for impacts on others:
 - `06_REGISTRIES.md` — registry schemas must match field references elsewhere
 - `07_PROVENANCE.md` — referenced by `04_PUBLICATIONS.md` and `05_PROJECTS.md`
 - `03_RAW_STORAGE.md` — instrument codes must match `09_MODALITIES.md` and `equipment/INDEX.md`
+- `10_TOOLS.md` — YAML ingest schema; if you add/rename a `registry:` column or `discovered.*` source, update `06_REGISTRIES.md` (schema), `08_METADATA.md` (sidecar), and `tools/templates/ingest_template.yaml` together
+- `08_METADATA.md` — `metadata.json` sidecar shape; the file written by `tools/ingest/metadata_sidecar.py` must match what's documented here
+
+### Ingest configs
+- Per-batch YAML configs live in `tools/configs/` (under git, version-locked with the scripts). Each row's `ingest_config` column records the relative path of the config that produced it.
+- Starter template: `tools/templates/ingest_template.yaml` — copy and edit; never edit in place.
 
 ### Equipment reference
 - `equipment/INDEX.md` is the starting point for in-scope imaging instruments.

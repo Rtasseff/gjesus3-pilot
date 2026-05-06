@@ -3,7 +3,10 @@
 import csv
 import os
 
-# Field order must match 06_REGISTRIES.md schema (with original_name added)
+
+# Field order must match 06_REGISTRIES.md schema. The `ingest_config`
+# column records the YAML config that produced each row (relative path
+# from repo root) for auditability and reproducibility.
 REGISTRY_FIELDS = [
     "acq_id",
     "registration_datetime",
@@ -25,6 +28,7 @@ REGISTRY_FIELDS = [
     "checksum_present",
     "extended_metadata_present",
     "project_hint",
+    "ingest_config",
     "notes",
 ]
 
@@ -72,30 +76,28 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt):
     Returns:
         Dict with all REGISTRY_FIELDS populated.
     """
-    # Determine acquisition_datetime from DICOM StudyDate
-    acq_dt = ""
-    study_date = summary.get("study_date")
-    if study_date and len(study_date) == 8:
-        acq_dt = (
-            f"{study_date[:4]}-{study_date[4:6]}-{study_date[6:8]}"
-            f"T00:00:00Z"
-        )
-
+    # User-controlled values come from cfg (already resolved from the
+    # YAML registry: block by config.expand_batch / config.prep_single_case).
+    # acquisition_datetime is normalized to ISO at resolve time.
     instrument = cfg.get("instrument", "")
     data_ecosystem = cfg.get("data_ecosystem", "")
-
-    # For DICOM data, primary file is series/
     primary_file = cfg.get("primary_file_name", "series/")
     file_format = cfg.get("file_format", ".dcm")
+
+    # `modalities_in_study` is unique among user-controllable columns: if
+    # the user left it empty/NA, fall back to whatever the source
+    # summarizer detected (e.g. DICOM Modality tag). Explicit user values
+    # always win.
+    modalities = cfg.get("modalities_in_study", "") or summary.get("modality", "") or ""
 
     return {
         "acq_id": acq_id,
         "registration_datetime": registration_dt,
-        "acquisition_datetime": acq_dt,
+        "acquisition_datetime": cfg.get("acquisition_datetime", ""),
         "data_ecosystem": data_ecosystem,
         "instrument": instrument,
         "instrument_model": cfg.get("instrument_model", ""),
-        "modalities_in_study": summary.get("modality", ""),
+        "modalities_in_study": modalities,
         "operator": cfg.get("operator", ""),
         "data_source": cfg.get("data_source", ""),
         "sample_id": cfg.get("sample_id", ""),
@@ -107,7 +109,8 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt):
         "file_count": summary.get("file_count", 0),
         "canonical_path": dest_path,
         "checksum_present": "Y",
-        "extended_metadata_present": "N",
+        "extended_metadata_present": cfg.get("extended_metadata_present", "N"),
         "project_hint": cfg.get("project_hint", ""),
+        "ingest_config": cfg.get("ingest_config", ""),
         "notes": cfg.get("notes", ""),
     }

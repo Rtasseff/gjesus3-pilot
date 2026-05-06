@@ -1,0 +1,66 @@
+# Ingest config template — copy and edit for your batch.
+#
+# Three top-level blocks:
+#
+#   ingest:           Pipeline control flags (not registry columns).
+#   auto_discover:    How to find cases and what variables to extract per case.
+#                     Each case's discovered fields land in `discovered.<name>`,
+#                     usable as references below.
+#   registry:         Explicit per-column mapping for the registry row. Three
+#                     value forms:
+#                       <literal>                 plain text/number
+#                       discovered.<field>        bare reference (after auto_discover)
+#                       "...${discovered.<f>}..." string interpolation
+#                       NA                        explicit "no value" (column left empty)
+#                     Auto-populated columns (acq_id, registration_datetime,
+#                     primary_file_name, file_format, file_size_mb, file_count,
+#                     canonical_path, checksum_present, extended_metadata_present,
+#                     original_name, ingest_config) are NOT listed here.
+#
+# Save edited copies under tools/configs/<instrument>_<day-or-batch>.yaml so
+# the path appears in the ingest_config registry column.
+
+# -----------------------------------------------------------------------------
+ingest:
+  delete_source_after_ingest: false   # remove source file/folder after verify
+  # archive_format: zip               # DICOM only (planned)
+  # lightweight: false                # planned
+
+# -----------------------------------------------------------------------------
+auto_discover:
+  staging_dir: "<absolute path to the source directory>"
+  pattern: "*.czi"                    # file glob (e.g. "*.czi") or dir glob ("HPIC*/")
+
+  # FILE MODE (e.g. AxioScan): parse each filename's stem on `separator`,
+  # zip with `fields` positionally. Each chunk becomes a discovered.<field>.
+  # Drop or comment out for directory-mode batches.
+  filename_parse:
+    separator: "_"
+    fields: [group_code, operator, project, sample_id, stain, magnification]
+
+  # OPTIONAL filter on parsed fields. Cases not matching are skipped.
+  filter:
+    group_code: MFB
+
+  # OPTIONAL: extract YYYYMMDD (or DDMMYYYY) from the parent folder name
+  # (e.g. AxioScan day folder) and put it in discovered.acquisition_date.
+  acquisition_date_from: parent_folder_name
+
+# -----------------------------------------------------------------------------
+registry:
+  # User-required (key must be present; NA allowed where intentional).
+  instrument:           ZWSI                          # ZWSI, CELL, LSM9, MRI, PET, ...
+  data_ecosystem:       MICROSCOPY                    # MICROSCOPY, DICOM, EM
+  operator:             discovered.operator
+  data_source:          internal                      # or "collaborator:<name>"
+
+  # Recommended.
+  acquisition_datetime: discovered.acquisition_date   # or literal ISO; NA to backfill later
+  sample_id:            discovered.sample_id
+  sample_type:          NA                            # e.g. "mouse lung section"
+  instrument_model:     "Zeiss Axio Scan 7"
+
+  # Optional.
+  modalities_in_study:  NA                            # populated for hybrid DICOM (e.g. "PT;CT")
+  project_hint:         NA                            # PROJ-XXXX, triggers .lnk creation
+  notes:                "Routine WSI batch; ${discovered.stain} stain at ${discovered.magnification}"

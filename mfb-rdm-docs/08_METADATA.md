@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-05-06
 
 ---
 
@@ -141,6 +141,29 @@ For instruments with embedded metadata:
 - README would focus on what's NOT embedded (sample info, context)
 
 > **✅ DECIDED:** Auto-extraction of embedded metadata is integrated into the full-mode ingest workflow (see [10_TOOLS](10_TOOLS.md)). DICOM storage format is resolved — compressed archives (.zip/.tar.gz); metadata is extracted before compression during full-mode ingest. Lightweight-mode ingests skip extraction but can be upgraded later via `backfill_metadata`. User-supplied metadata (sample context, experimental notes) remains deferred.
+
+### 4.3 `metadata.json` Sidecar (implemented 2026-05-06)
+
+The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode acquisition (DICOM and microscopy). On-disk shape:
+
+```json
+{
+  "acq_id": "...",
+  "generated": "<ISO UTC>",
+  "generator": "ingest_raw.py",
+  "user_supplied": { "operator", "data_source", "instrument", "sample_id", "sample_type", "original_name", "notes" },
+  "discovered":    { "<field>": "<value>", ... },
+  "<ecosystem_section>": { ... }
+}
+```
+
+| Section | Source |
+|---------|--------|
+| `user_supplied` | The resolved values from the YAML `registry:` block (literal text, `discovered.<x>` references, or `${...}` interpolation — see [10_TOOLS §2.1](10_TOOLS.md)). |
+| `discovered` | Everything `auto_discover` surfaced for the case: filename-parser output, parent-folder date, `folder_name` / `filename`, and — once implemented — DICOM/.czi embedded extracts. |
+| `<ecosystem_section>` | `dicom`, `microscopy`, etc. Reserved for embedded-metadata extraction; today `{}`. The `.czi` probe utility (`tools/ingest/probe_czi.py`) will inform what fields land here. |
+
+**Per-column registry mapping is in YAML, not Python.** The Python `SPECIAL_FIELDS` promotion mechanism (used briefly in early 2026-05) is gone — adding or renaming a column promotion is a YAML-only edit (see [10_TOOLS §2.1](10_TOOLS.md) for schema, validation rules, and template).
 
 ---
 

@@ -3,7 +3,7 @@
 **System Purpose:** Long-term archival storage for MFB group microscopy and biomedical imaging data
 **Infrastructure:** QNAP TS-864eU NAS (6 × 20 TB, RAID 5, ~100 TB system / ~63 TB user-available after snapshot reservation)
 **Status:** Pilot development
-**Last Updated:** 2026-05-05
+**Last Updated:** 2026-05-06
 
 ---
 
@@ -96,6 +96,7 @@ An **archival storage system** for original imaging data that:
 | Primary staging location | Fast local/network storage (off-NAS) | NAS SMB too slow for extraction/compression; NAS staging/ retained as secondary dump |
 | Two ingest modes | Full (default) + Lightweight | Full mode extracts metadata before archiving; lightweight for constrained environments |
 | Metadata extraction at ingest | Integrated into full-mode ingest | Not a separate post-hoc tool; extraction happens before DICOM compression |
+| Ingest config schema | Three-block YAML: `ingest:` / `auto_discover:` / `registry:` | Per-column registry mapping is explicit in YAML (literal \| `discovered.<field>` \| `${...}` interp \| `NA`); replaces the prior `defaults:` block + Python `SPECIAL_FIELDS`. Configs live under git in [`tools/configs/`](../tools/configs/); template at [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml). See [10_TOOLS §2.1](10_TOOLS.md). |
 | Project link method | **Windows `.lnk` shell shortcuts (Windows-first, pilot-specific)** | MFB user base is on Windows; WSL→SMB symlink path didn't work and SSH-into-NAS was blocked. **Deliberately not a default for future RDM deployments** — porting seam documented in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision) |
 | Provenance location | Per-publication/project folder | Local to context; enables independent archiving |
 | Extended metadata | REMBI-based subset | Community standard; pruned to essential fields |
@@ -128,7 +129,8 @@ An **archival storage system** for original imaging data that:
 - [ ] Embedded metadata audit incomplete — which instruments embed what?
 
 ### Metadata (see [08_METADATA](08_METADATA.md))
-- [x] ~~Auto-extraction of embedded metadata at ingest~~ — **Resolved:** integrated into full-mode ingest; DICOM format decision resolved (compressed archives). Implementation pending.
+- [x] ~~Per-column registry field mapping (user-supplied)~~ — **Resolved (2026-05-06):** explicit YAML `registry:` block per config; `metadata.json` sidecar generator implemented; see [10_TOOLS §2.1](10_TOOLS.md) and [08_METADATA §4.3](08_METADATA.md).
+- [ ] Auto-extraction of embedded metadata (DICOM headers, .czi internals) into the `discovered` namespace — sidecar framework is ready (`tools/ingest/probe_czi.py` for `.czi`); extraction implementation deferred.
 - [ ] REMBI field selection not finalized — user voting incomplete
 - [ ] ISA-TAB-Nano applicability for nanomaterial imaging unclear
 
@@ -187,6 +189,7 @@ Explicit calls for input are marked:
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-05-06 | R. Tasseff | AxioScan 7 (.czi) ingest end-to-end (3 test acqs on NAS, pending purge). New three-block YAML config schema (`ingest:` / `auto_discover:` / `registry:`) replaces `defaults:` + Python `SPECIAL_FIELDS` — per-column mapping explicit in YAML with `discovered.<field>` references and `${...}` interpolation; resolver in `tools/ingest/resolver.py`; configs live under `tools/configs/`. New `ingest_config` registry column records the YAML config that produced each row. `acquisition_datetime` is now strictly user-supplied via `registry:`. Cross-doc updates in [10_TOOLS §2.1](10_TOOLS.md), [08_METADATA §4.3](08_METADATA.md), [06_REGISTRIES §2.2](06_REGISTRIES.md), [03_RAW_STORAGE §2.6](03_RAW_STORAGE.md). |
 | 2026-05-05 | R. Tasseff | Project linking method resolved: Windows `.lnk` shell shortcuts (pilot-specific Windows-first choice); linker implemented in `tools/ingest/linker.py`; rationale and porting guide documented in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision); cross-doc cleanup of "linking method TBD" references |
 | 2026-03-06 | R. Tasseff | DICOM stored as compressed archives; primary staging off-NAS; two ingest modes (full + lightweight); metadata extraction integrated into full-mode ingest; one-primary-file rule simplified (no DICOM exception) |
 | 2026-03-02 | R. Tasseff | Promoted Projects area to live feature (Draft); updated key decisions, removed from deferred |

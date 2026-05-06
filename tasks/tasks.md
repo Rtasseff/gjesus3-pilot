@@ -1,6 +1,6 @@
 # MFB gjesus3 RDM Pilot — Task List
 
-**Last Updated:** 2026-05-05
+**Last Updated:** 2026-05-06
 
 This file consolidates all open and completed tasks. Completed items are kept for context but marked with ~~strikethrough~~.
 
@@ -76,9 +76,20 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 
 ### 3.1 Ingest Pipeline
 - [x] ~~`ingest_raw.py` implemented~~ — single-case, batch, interactive, dry-run modes
-- [ ] Implement full-mode ingest additions: DICOM metadata extraction, DICOM compression, metadata.json sidecar generation — tested in Section 4.2
+- [x] ~~Format-summarizer dispatch (DICOM + microscopy)~~ — `FORMAT_SUMMARIZERS` map in `config.py`; replaces hard-coded DICOM in Step 1
+- [x] ~~Microscopy single-file ingest path~~ — non-DICOM `primary_file_name = {acq_id}{ext}`, single-file copy + verify
+- [x] ~~Filename parser~~ — `tools/ingest/filename_parser.py` (positional, named fields)
+- [x] ~~`metadata.json` sidecar writer~~ — `tools/ingest/metadata_sidecar.py`; cross-format shape matching the on-disk DICOM example (`user_supplied` + `discovered` + `<ecosystem_section>`)
+- [x] ~~Auto-discover generalization~~ — `expand_batch` accepts file globs, `filename_parse`, `filter`, `acquisition_date_from: parent_folder_name`; everything lands in the per-case `discovered` namespace
+- [x] ~~Idempotent re-runs~~ — `expand_batch` skips files already in registry by `(acquisition_date, original_name)`
+- [x] ~~`--delete-source` flag~~ — cross-instrument; default OFF; never touches the parent of `source_path`
+- [x] ~~`probe_czi.py` utility~~ — read-only embedded-metadata probe (informs follow-up extraction)
+- [x] ~~Three-block YAML schema (`ingest:` / `auto_discover:` / `registry:`) replaces `defaults:` and `SPECIAL_FIELDS`~~ — explicit per-column registry mapping with literal | `discovered.X` | `${...}` interp | NA. Resolver in `tools/ingest/resolver.py`; template at `tools/templates/ingest_template.yaml`; configs land in `tools/configs/`.
+- [x] ~~`ingest_config` registry column~~ — relative path of the YAML config that produced each row, for auditability/reproducibility.
+- [ ] DICOM full-mode metadata extraction → `metadata.json.dicom` (deferred — separate stream); compression to `.zip`/`.tar.gz` — tested in Section 4.2
+- [ ] **XMRI/DICOM `acquisition_datetime` auto-extract from DICOM headers → `discovered.acquisition_date`.** Currently a manual literal in the `registry:` block. Once the DICOM extractor surfaces StudyDate into `discovered`, configs become `acquisition_datetime: discovered.acquisition_date`, eliminating the manual step.
+- [ ] **`.czi`-internal metadata → `discovered` namespace** (post-probe). After reviewing `_probes/MFB_AUA_1022_ID58T_PB_20x.json`, design which embedded fields surface as `discovered.objective`, `discovered.pixel_size_um`, etc., and which populate `metadata.json.microscopy`. Tracked under §4.6.A.
 - [ ] Implement `--lightweight` flag in `ingest_raw.py` — tested in Section 4.2
-- [ ] Add .czi metadata extraction support — tested in Section 4.6
 - [ ] Add NIfTI handling (single file, no archive) — tested in Section 4.8 if applicable
 - [ ] Implement `backfill_metadata` utility for upgrading lightweight ingests
 - [ ] Finalize scripts after all modality passes (Section 4.9)
@@ -168,14 +179,30 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [ ] Resolve: do the two MRI systems need separate instrument codes? (Section 2.4)
 
 ### 4.6 Pass 3: Microscopy .czi (`ZWSI`, `CELL`, `LSM9`)
-> Completely different format — single-file primary, no archive needed, different metadata extraction library (aicspylibczi/czifile).
-- [ ] **Ryan:** Obtain sample .czi files (at least one from each instrument: Axio Scan 7, Cell Observer, LSM 900)
-- [ ] Inspect .czi metadata — what fields are embedded? (feeds 2.2)
-- [ ] Confirm metadata similarity across the three Zeiss instruments (MOD-07)
-- [ ] Implement .czi metadata extraction in ingest pipeline (feeds 3.1)
-- [ ] Test full-mode ingest on one .czi file
-- [ ] Verify metadata.json captures microscopy-specific fields (objective, pixel size, channels, etc.)
-- [ ] Test lightweight mode on one .czi file
+> Completely different format — single-file primary, no archive needed, different metadata extraction library (czifile / aicspylibczi).
+
+**4.6.A Axio Scan 7 (`ZWSI`) — first .czi pass:**
+- [x] ~~Filename-driven auto-discover (group/operator/sample_id/...) wired into `expand_batch`~~ (see §3.1)
+- [x] ~~Microscopy single-file copy + verify + canonical rename `{acq_id}.czi`~~ (see §3.1)
+- [x] ~~`metadata.json` sidecar with `user_supplied` + `discovered`~~ (see §3.1)
+- [x] ~~Read-only probe of one real .czi from `S:\...\AxioScan\20260422` (czifile + XML dump to `_probes/`)~~
+- [x] ~~Real ingest of 3 `.czi` files from `S:\...\AxioScan\20260422` to NAS — verified correct ACQ-IDs, sizes (418/454/674 MB), operator + sample_id promotion, `acquisition_datetime`, idempotent re-run produces 0 new cases~~ — TEST DATA flagged in registry/manifest; purge tracker at `_test_artifacts.txt`
+- [ ] **User:** review the 3 test acquisitions on NAS; confirm OK or request changes
+- [ ] **User:** purge the test ingest (3 acquisition folders + 3 registry rows + 3 manifest entries) per `_test_artifacts.txt`
+- [ ] Design + implement `.czi`-internal embedded-metadata extraction → populate `metadata.json.microscopy` (uses probe output as input; deferred until probe reviewed)
+
+**4.6.B Cell Observer (`CELL`) — reuses 4.6.A pipeline:**
+- [ ] **Ryan:** Obtain sample `.czi` from Cell Observer
+- [ ] Audit embedded metadata — confirm similarity to Axio Scan 7 (MOD-07)
+- [ ] Dry-run + real ingest of one `.czi` file (filename parser config may differ if naming convention differs)
+
+**4.6.C LSM 900 (`LSM9`) — reuses 4.6.A pipeline:**
+- [ ] **Ryan:** Obtain sample `.czi` from LSM 900
+- [ ] Audit embedded metadata — confirm similarity to Axio Scan 7 (MOD-07)
+- [ ] Dry-run + real ingest of one `.czi` file
+
+**4.6.D Lightweight mode for microscopy:**
+- [ ] Test `--lightweight` mode on one `.czi` file (sets `extended_metadata_present=N`, no sidecar)
 
 ### 4.7 Pass 4: Platform DICOM — Nuclear Imaging (`PET`, `SPECT`, `CT`)
 > May include hybrid multi-modal acquisitions (PET/CT, PET/SPECT/CT). Tests the multi-modality handling.
