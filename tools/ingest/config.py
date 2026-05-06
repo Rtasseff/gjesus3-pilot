@@ -225,7 +225,9 @@ def expand_batch(cfg, nas_root=None):
             continue
 
         match_basename = Path(match_path).name
-        case = {"source_path": match_path}
+        # Carry the top-level ingest: block into each case so ingest_single
+        # can read its control flags (delete_source, auto_create_projects).
+        case = {"source_path": match_path, "ingest": cfg.get("ingest") or {}}
         discovered = {}
 
         if is_file:

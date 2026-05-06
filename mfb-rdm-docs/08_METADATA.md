@@ -139,15 +139,16 @@ This separation keeps preservation and interpretation as distinct concerns.
 
 ## 4. Embedded Metadata
 
-### 4.1 Instrument Audit Needed
+> **Where to find what we extract per instrument:** the per-instrument tables of `discovered.<eco>_*` fields (curated subset that YAML `registry:` blocks can reference) live alongside each instrument's other specs in [09_MODALITIES](09_MODALITIES.md). The richer structured form of those fields plus the lossless `_raw_metadata` dump live in the sidecar's `<ecosystem_section>` (see §4.3).
 
-> **⚠️ GAP:** We need to determine what each instrument embeds in its output files.
+### 4.1 Instrument Audit Status
 
-| Instrument | Embedded? | What's Embedded | What's NOT Embedded |
-|------------|-----------|-----------------|---------------------|
-| Zeiss WSI (.czi) | Yes | Acquisition parameters, dimensions | Sample info, experimental context |
-| Histology (.tif) | Partial | Varies by source | Usually minimal |
-| DICOM | Yes | Extensive metadata | Study context varies |
+| Instrument / format | Embedded? | Audit status | What's extracted today | What's NOT embedded (still user-supplied) |
+|---------------------|-----------|--------------|------------------------|-------------------------------------------|
+| Zeiss .czi (ZWSI / CELL / LSM9) | Yes — extensive | ✅ Audited 2026-05-06 | 21 curated `discovered.czi_*` fields + 5 structured buckets (geometry, instrument, acquisition, mosaic, document_info) + full XML in `_raw_metadata`. See [09_MODALITIES §1.1](09_MODALITIES.md#11-whole-slide-imaging--zeiss-axio-scan-7) for the field list. | Sample info, experimental context, biological/specimen attributes |
+| Histology .tif (if used) | Partial | 📋 Planned (may be deferred — mostly used for converted exports) | None yet | Most context |
+| DICOM (XMRI / MRI / PET / SPECT / CT) | Yes — extensive | ⚠️ Pending | None yet — extractor will mirror the `.czi` pattern (`discovered.dicom_*` + sidecar `dicom._raw_metadata`) | Study context varies; sample/experimental info |
+| EM (.tif / .dm3 / .dm4) | Varies by source | ⚠️ Pending (and SEM/TEM scope itself is `EVALUATING`) | None yet | Most context |
 
 ### 4.2 Extraction Possibility
 

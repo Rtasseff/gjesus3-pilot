@@ -190,9 +190,11 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [x] ~~`metadata.json` sidecar with `user_supplied` + `discovered`~~ (see §3.1)
 - [x] ~~Read-only probe of one real .czi from `S:\...\AxioScan\20260422` (czifile + XML dump to `_probes/`)~~
 - [x] ~~Real ingest of 3 `.czi` files from `S:\...\AxioScan\20260422` to NAS (first pass: filename-only metadata)~~ — first ingest 2026-05-06, then purged.
-- [x] ~~Re-ingest of the same 3 files with .czi-internal metadata extraction~~ — 2026-05-06; populated `microscopy:` sidecar blocks (geometry, instrument, acquisition, mosaic, document_info) and 21-field `discovered.czi_*` curated subset. Registry CSV migrated to 22-column schema (added `ingest_config`); defensive header check added in `registry.append_row`.
+- [x] ~~Re-ingest of the same 3 files with .czi-internal metadata extraction~~ — 2026-05-06; populated `microscopy:` sidecar blocks (geometry, instrument, acquisition, mosaic, document_info, plus full `_raw_metadata` for lossless preservation; sidecar ~850 KB matching the probe) and 21-field `discovered.czi_*` curated subset. Registry CSV migrated to 22-column schema (added `ingest_config`); defensive header check added in `registry.append_row`.
+- [x] ~~Project auto-create via `ingest.auto_create_projects: true`~~ — 2026-05-06; on first ingest with an unknown `project_hint`, ingest_raw creates the project (short_name = hint) and sets the registry's `project_hint` to the canonical `PROJ-XXXX`; subsequent acqs reuse via `short_name` lookup. Tested: PROJ-0003 (short_name=1022, owner=AUA) auto-created, 3 .lnk shortcuts placed in `/projects/proj-1022/raw_linked/`.
+- [ ] **User:** physically verify the 3 `.lnk` shortcuts at `J:/projects/proj-1022/raw_linked/` open the correct `.czi` on double-click (Windows `.lnk` for microscopy single-file confirms the linker pattern works for both DICOM archives and .czi files).
 - [ ] **User:** review the 3 test acquisitions on NAS; confirm sidecar fields look right.
-- [ ] **User:** purge the test ingest (3 acq folders + 3 registry rows + 3 manifest entries) per `_test_artifacts.txt` when ready.
+- [ ] **User:** purge the test ingest (3 acq folders + 3 registry rows + 3 manifest entries + PROJ-0003 + `/projects/proj-1022/`) per `_test_artifacts.txt` when ready.
 
 **4.6.B Cell Observer (`CELL`) — reuses 4.6.A pipeline:**
 - [ ] **Ryan:** Obtain sample `.czi` from Cell Observer

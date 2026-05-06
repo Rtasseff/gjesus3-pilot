@@ -265,13 +265,21 @@ def _build_document_info(md):
 # ------------------------------------------------------------------ public API
 
 def build_microscopy_section(md):
-    """Build the structured `microscopy:` block for the sidecar."""
+    """Build the structured `microscopy:` block for the sidecar.
+
+    Five curated buckets at the top for human skimming, plus
+    `_raw_metadata` containing the full parsed Metadata dict for
+    forensic preservation. The buckets are a best-effort summary; if
+    we missed a field today, it's still recoverable from `_raw_metadata`
+    without re-opening the .czi.
+    """
     return {
-        "geometry":      _build_geometry(md),
-        "instrument":    _build_instrument(md),
-        "acquisition":   _build_acquisition(md),
-        "mosaic":        _build_mosaic(md),
-        "document_info": _build_document_info(md),
+        "geometry":       _build_geometry(md),
+        "instrument":     _build_instrument(md),
+        "acquisition":    _build_acquisition(md),
+        "mosaic":         _build_mosaic(md),
+        "document_info":  _build_document_info(md),
+        "_raw_metadata":  md,
     }
 
 

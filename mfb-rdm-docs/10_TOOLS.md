@@ -163,9 +163,16 @@ Three top-level blocks. `defaults:` is gone — non-registry control flags moved
 
 | Block            | Purpose |
 |------------------|---------|
-| `ingest:`        | Pipeline control flags (e.g. `delete_source_after_ingest`). Not registry columns. |
+| `ingest:`        | Pipeline control flags (`delete_source_after_ingest`, `auto_create_projects`, ...). Not registry columns. |
 | `auto_discover:` | How to discover cases and what variables to extract per case. Each case's discovered fields land in a `discovered` namespace, referenceable below. |
 | `registry:`      | Explicit per-column registry mapping. Three value forms: literal text/number, `discovered.<field>` (bare reference), or `"...${discovered.<field>}..."` (interpolation). Use `NA` to leave a column intentionally empty. |
+
+`ingest:` flags currently honored:
+
+| Flag | Default | Effect |
+|------|---------|--------|
+| `delete_source_after_ingest` | `false` | Remove the source file/folder after a successful copy + verify. CLI `--delete-source` overrides. |
+| `auto_create_projects` | `false` | When `registry.project_hint` resolves to a value that isn't an existing `project_id` or `short_name`, auto-create a project with that value as the `short_name`. First ingest creates; subsequent ingests with the same hint reuse via `short_name` lookup. Useful when the project key comes from a parsed filename chunk (e.g. `project_hint: discovered.project`). Default `false` to prevent typos from silently creating rogue projects. |
 
 The user-controllable `registry:` columns are: `instrument`, `data_ecosystem`, `instrument_model`, `modalities_in_study`, `operator`, `data_source`, `sample_id`, `sample_type`, `acquisition_datetime`, `project_hint`, `notes`. Of these, **`instrument`, `data_ecosystem`, `operator`, `data_source` must be present** (NA allowed where intentional); the rest are optional. Auto-populated columns (`acq_id`, `registration_datetime`, `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) must NOT appear in `registry:`.
 

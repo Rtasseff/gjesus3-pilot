@@ -6,6 +6,10 @@
 
 ingest:
   delete_source_after_ingest: false
+  # Auto-create the project if `project_hint` doesn't match an existing
+  # project_id or short_name. The first ingest creates it; subsequent
+  # ingests with the same hint reuse via short_name lookup.
+  auto_create_projects: true
 
 auto_discover:
   staging_dir: "S:/goptical/GOpticalUsers data/AxioScan/20260422"
@@ -32,5 +36,5 @@ registry:
   # Day-folder fallback is `discovered.acquisition_date` if the .czi
   # ever lacks AcquisitionDateAndTime.
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         NA
+  project_hint:         discovered.project
   notes:                "TEST INGEST 2026-05-06 - purge after review (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"

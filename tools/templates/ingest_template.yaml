@@ -23,6 +23,12 @@
 # -----------------------------------------------------------------------------
 ingest:
   delete_source_after_ingest: false   # remove source file/folder after verify
+  # When `registry.project_hint` resolves to a value that isn't an
+  # existing PROJ-XXXX or short_name in registry_projects.csv, auto-create
+  # a project with that value as the short_name. First ingest creates;
+  # subsequent ingests with the same hint reuse via short_name lookup.
+  # Default false to prevent typos creating rogue projects silently.
+  auto_create_projects: false
   # archive_format: zip               # DICOM only (planned)
   # lightweight: false                # planned
 

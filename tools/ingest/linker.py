@@ -51,6 +51,31 @@ def lookup_project_folder(projects_registry_path, project_id):
     return None
 
 
+def resolve_project(projects_registry_path, hint):
+    """Resolve a project hint to (project_id, folder_location).
+
+    Looks up `hint` first as a `project_id` (canonical PROJ-XXXX), then
+    falls back to matching `short_name` (case-insensitive). This lets a
+    YAML config use `project_hint: discovered.project` where the parsed
+    value is a human short name like "1022" — the registry row will
+    still record the canonical PROJ-XXXX after resolution.
+
+    Returns (None, None) if the registry doesn't exist or the hint
+    matches nothing.
+    """
+    if not hint or not os.path.exists(projects_registry_path):
+        return None, None
+    hint_lower = hint.lower()
+    with open(projects_registry_path, "r", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("project_id") == hint:
+                return row["project_id"], row.get("folder_location") or None
+            if (row.get("short_name") or "").lower() == hint_lower:
+                return row["project_id"], row.get("folder_location") or None
+    return None, None
+
+
 def canonical_to_unc(canonical_path, nas_unc_root):
     """Convert a NAS-relative POSIX path to a UNC Windows path.
 

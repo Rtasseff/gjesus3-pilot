@@ -1,40 +1,39 @@
-Test ingest artifacts — 2026-05-06 (round 2: with .czi metadata extraction)
+Test ingest artifacts — 2026-05-06 (round 3: with full _raw_metadata + project auto-create + .lnk)
 
 Source files (S: drive, NOT modified — read-only):
   S:/goptical/GOpticalUsers data/AxioScan/20260422/MFB_AUA_1022_ID58T_PB_20x.czi
   S:/goptical/GOpticalUsers data/AxioScan/20260422/MFB_AUA_1022_ID77T_PB_20x.czi
   S:/goptical/GOpticalUsers data/AxioScan/20260422/MFB_AUA_1022_ID78T_PB_20x.czi
 
-NAS folders to delete (each contains the .czi, metadata.json with the
-new microscopy block populated, checksums.json, README.txt):
+NAS folders to delete:
   J:/raw/MICROSCOPY/2026/2026-04/ACQ-20260422-ZWSI-001/
   J:/raw/MICROSCOPY/2026/2026-04/ACQ-20260422-ZWSI-002/
   J:/raw/MICROSCOPY/2026/2026-04/ACQ-20260422-ZWSI-003/
+  J:/projects/proj-1022/                       <- auto-created project; whole folder
 
 Registry rows to delete from J:/registries/registry_raw.csv:
-  ACQ-20260422-ZWSI-001  (acq_dt=2026-04-22T12:40:54.9593486Z, sample=ID58T)
-  ACQ-20260422-ZWSI-002  (acq_dt=2026-04-22T12:43:24.6462136Z, sample=ID77T)
-  ACQ-20260422-ZWSI-003  (acq_dt=2026-04-22T12:46:10.8841969Z, sample=ID78T)
+  ACQ-20260422-ZWSI-001  (sample=ID58T, project_hint=PROJ-0003)
+  ACQ-20260422-ZWSI-002  (sample=ID77T, project_hint=PROJ-0003)
+  ACQ-20260422-ZWSI-003  (sample=ID78T, project_hint=PROJ-0003)
 
 Manifest entries to delete from J:/registries/ingest_manifest.csv (by acq_id):
   ACQ-20260422-ZWSI-001
   ACQ-20260422-ZWSI-002
   ACQ-20260422-ZWSI-003
 
-Note: the registry CSV was MIGRATED from 21 → 22 columns during this
-round (added `ingest_config` between `project_hint` and `notes`). The 75
-pre-existing XMRI rows now carry empty `ingest_config` values. The
-migration is independent of the test data and stays after the purge.
+Project registry row to delete from J:/registries/registry_projects.csv:
+  PROJ-0003  (short_name=1022, owner=AUA, folder=/projects/proj-1022/)
 
 After purging:
-  - registry_raw.csv: 78 rows → 75 (header unchanged at 22 cols)
-  - ingest_manifest.csv: 81 → 78
-  - The /raw/MICROSCOPY/2026/2026-04/ folder will be empty;
-    safe to leave in place (will be reused by future ingests).
+  - registry_raw.csv: 78 rows -> 75 (header unchanged at 22 cols)
+  - ingest_manifest.csv: 81 -> 78
+  - registry_projects.csv: 3 rows -> 2 (PROJ-0001, PROJ-0002 remain)
+  - /raw/MICROSCOPY/ folder will be empty; safe to leave
+  - /projects/proj-1022/ removed entirely
 
-All registry rows and metadata.json sidecars carry notes:
+Identification: registry rows + sidecars carry notes
   "TEST INGEST 2026-05-06 - purge after review (PB stain at 20x NA0.8)"
-so they remain identifiable even if this file is lost.
+PROJ-0003's _project.yaml notes: "auto-created by ingest_raw.py"
 
 Local probe (gitignored): _probes/MFB_AUA_1022_ID58T_PB_20x.json — keep
 for follow-up extraction design work, then delete.

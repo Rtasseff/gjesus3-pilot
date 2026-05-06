@@ -21,6 +21,7 @@ from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
     metadata_sidecar,
 )
+import create_project as create_project_mod
 
 
 def relative_config_path(config_path):
@@ -336,6 +337,50 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     # --- Step 9: Generate README ---
     readme.generate_readme(acq_id_str, cfg_single, summary, dest_dir)
     log("Wrote README.txt")
+
+    # --- Step 9.5: Resolve project_hint (canonicalize; optional auto-create) ---
+    # Runs before the registry append so the row records the canonical
+    # PROJ-XXXX, not whatever raw hint came in. Step 12 (.lnk) reads the
+    # resolved value too.
+    project_hint = cfg_single.get("project_hint", "").strip()
+    if project_hint:
+        projects_registry = os.path.join(nas_root, "registries", "registry_projects.csv")
+        proj_id, _proj_folder = linker.resolve_project(projects_registry, project_hint)
+        if proj_id:
+            if proj_id != project_hint:
+                log(f"Resolved project_hint '{project_hint}' -> {proj_id} (by short_name)")
+            cfg_single["project_hint"] = proj_id
+        else:
+            ingest_block = cfg_single.get("ingest") or {}
+            if ingest_block.get("auto_create_projects"):
+                short_name_norm = project_hint.lower()
+                owner = cfg_single.get("operator", "") or "?"
+                desc = (
+                    f"Auto-created during ingest of "
+                    f"{cfg_single.get('original_name', '?')} "
+                    f"(hint='{project_hint}')"
+                )
+                log(f"Auto-creating project: short_name='{short_name_norm}', owner='{owner}'")
+                new_id, ok = create_project_mod.create_project(
+                    short_name_norm, desc, owner, nas_root,
+                    dry_run=False,
+                    notes="auto-created by ingest_raw.py",
+                )
+                if ok and new_id:
+                    cfg_single["project_hint"] = new_id
+                else:
+                    log(
+                        f"Project auto-create failed for hint='{project_hint}'; "
+                        f"leaving registry project_hint as the raw value",
+                        "WARN",
+                    )
+            else:
+                log(
+                    f"project_hint='{project_hint}' not found in registry and "
+                    f"ingest.auto_create_projects is false; leaving registry "
+                    f"project_hint as the raw value",
+                    "WARN",
+                )
 
     # --- Step 10: Update registry ---
     reg_dt = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
