@@ -322,11 +322,12 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
 
     # --- Step 8.5: Write metadata.json sidecar ---
     eco_section_name = data_ecosystem.lower() if data_ecosystem else ""
+    eco_section = cfg_single.get("ecosystem_section") or {}
     sidecar_dict = metadata_sidecar.build_sidecar(
         acq_id_str,
         cfg_single,
         ecosystem_section_name=eco_section_name,
-        ecosystem_section={},  # populated by future embedded-metadata extractor
+        ecosystem_section=eco_section,
     )
     sidecar_path = metadata_sidecar.write_sidecar(dest_dir, sidecar_dict)
     cfg_single["extended_metadata_present"] = "Y"

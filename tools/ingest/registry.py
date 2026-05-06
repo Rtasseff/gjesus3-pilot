@@ -49,14 +49,32 @@ def append_row(registry_path, row_dict):
     """Append a single row to the registry CSV.
 
     Creates the directory and file with headers if they don't exist.
+
+    Raises RuntimeError if the existing file's header doesn't match
+    REGISTRY_FIELDS — silently writing N+1 values into an N-column file
+    corrupts every subsequent read (values shift into the wrong columns).
+    When this fires, run the migration: rewrite the CSV with the new
+    header and pad/reorder existing rows.
     """
     os.makedirs(os.path.dirname(registry_path), exist_ok=True)
     file_exists = os.path.exists(registry_path)
 
+    if file_exists:
+        with open(registry_path, "r", encoding="utf-8", newline="") as f:
+            existing = next(csv.reader(f), [])
+        if existing != REGISTRY_FIELDS:
+            raise RuntimeError(
+                f"registry header mismatch in {registry_path}\n"
+                f"  file has {len(existing)} columns: {existing}\n"
+                f"  code expects {len(REGISTRY_FIELDS)}: {REGISTRY_FIELDS}\n"
+                f"  refusing to append (would corrupt column alignment). "
+                f"Migrate the CSV before re-running."
+            )
+
     # Ensure all fields present (fill missing with empty string)
     row = {field: row_dict.get(field, "") for field in REGISTRY_FIELDS}
 
-    with open(registry_path, "a", newline="") as f:
+    with open(registry_path, "a", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=REGISTRY_FIELDS)
         if not file_exists:
             writer.writeheader()

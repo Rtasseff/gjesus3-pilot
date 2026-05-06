@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified  
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-05-06
 
 ---
 
@@ -44,7 +44,37 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 | **Embedded metadata** | Extensive (objective, camera settings, stage coordinates, acquisition time, calibration) |
 | **Not embedded** | Sample information, experimental context |
 | **Analysis tools** | ZEN, QuPath, ImageJ/FIJI, Bio-Formats compatible tools |
-| **Status** | ✅ Confirmed for pilot |
+| **Status** | ✅ Confirmed for pilot, end-to-end ingest tested 2026-05-06 |
+
+#### Auto-discovered fields (`discovered.czi_*`)
+
+These are surfaced from each `.czi` file's embedded XML at ingest time and may be referenced from the YAML `registry:` block (e.g. `acquisition_datetime: discovered.czi_acquisition_datetime`). Curation lives in `tools/ingest/czi_metadata.py:EXPOSED_FIELDS` — that file is the single source of truth; this table is its mirror. Any field marked here applies equally to `CELL` and `LSM9` (§1.2, §1.3) since they share the `.czi` format and ZEN ecosystem.
+
+| Field | Description | XML source |
+|-------|-------------|------------|
+| `czi_acquisition_datetime` | Full ISO timestamp of acquisition (preferred over folder date) | `Information.Image.AcquisitionDateAndTime` |
+| `czi_microscope_name` | Microscope `@Name` (e.g. `"Axioscan 7"`) | `Information.Instrument.Microscopes.Microscope @Name` |
+| `czi_microscope_type` | Geometry (e.g. `"Upright"`, `"Inverted"`) | `Information.Instrument.Microscopes.Microscope.Type` |
+| `czi_objective_name` | First objective's `@Name` (e.g. `"Plan-Apochromat 20x/0.8 M27"`) | `Information.Instrument.Objectives.Objective[0] @Name` |
+| `czi_objective_mag` | First objective's nominal magnification, no units | `…NominalMagnification` |
+| `czi_objective_na` | First objective's numerical aperture | `…LensNA` |
+| `czi_pixel_size_x_um` | Physical pixel size along X, in µm | `Scaling.Items.Distance[Id=X].Value` (m → µm) |
+| `czi_pixel_size_y_um` | Physical pixel size along Y, in µm | `Scaling.Items.Distance[Id=Y].Value` |
+| `czi_size_x` | Image width in pixels | `Information.Image.SizeX` |
+| `czi_size_y` | Image height in pixels | `Information.Image.SizeY` |
+| `czi_size_c` | Number of channels | `Information.Image.SizeC` |
+| `czi_size_z` | Number of Z slices (empty for 2D scans) | `Information.Image.SizeZ` |
+| `czi_size_t` | Number of timepoints (empty for single-shot) | `Information.Image.SizeT` |
+| `czi_scene_count` | Number of scenes (regions) on the slide | `Information.Image.SizeS` |
+| `czi_tile_count` | Number of mosaic tiles (high for WSI) | `Information.Image.SizeM` |
+| `czi_pixel_type` | Pixel encoding (e.g. `"Bgr24"`, `"Gray16"`) | `Information.Image.PixelType` |
+| `czi_compression` | Original compression (often `"JpegXr"` for WSI) | `Information.Image.OriginalCompressionMethod` |
+| `czi_acquisition_mode` | First channel mode (e.g. `"WideField"`) | `…Channel[0].AcquisitionMode` |
+| `czi_contrast_method` | First channel contrast (e.g. `"Brightfield"`) | `…Channel[0].ContrastMethod` |
+| `czi_user` | ZEN account that captured the image (often a generic instrument account) | `Information.Document.UserName` |
+| `czi_zen_version` | ZEN software version that produced the file | `Information.Application.Version` |
+
+The richer structured form of all the above plus channels/detectors/objective lists/document info is preserved in the sidecar's `microscopy:` block — see [08_METADATA §4.3](08_METADATA.md). Library/route choice (`czifile`) and what's deferred (pylibCZIrw, Bio-Formats, OMERO export) is in [10_TOOLS §2.1.3](10_TOOLS.md).
 
 ### 1.2 Inverted Microscopy — Zeiss Axio Observer (Cell Observer)
 

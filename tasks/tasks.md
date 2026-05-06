@@ -86,9 +86,12 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [x] ~~`probe_czi.py` utility~~ — read-only embedded-metadata probe (informs follow-up extraction)
 - [x] ~~Three-block YAML schema (`ingest:` / `auto_discover:` / `registry:`) replaces `defaults:` and `SPECIAL_FIELDS`~~ — explicit per-column registry mapping with literal | `discovered.X` | `${...}` interp | NA. Resolver in `tools/ingest/resolver.py`; template at `tools/templates/ingest_template.yaml`; configs land in `tools/configs/`.
 - [x] ~~`ingest_config` registry column~~ — relative path of the YAML config that produced each row, for auditability/reproducibility.
-- [ ] DICOM full-mode metadata extraction → `metadata.json.dicom` (deferred — separate stream); compression to `.zip`/`.tar.gz` — tested in Section 4.2
-- [ ] **XMRI/DICOM `acquisition_datetime` auto-extract from DICOM headers → `discovered.acquisition_date`.** Currently a manual literal in the `registry:` block. Once the DICOM extractor surfaces StudyDate into `discovered`, configs become `acquisition_datetime: discovered.acquisition_date`, eliminating the manual step.
-- [ ] **`.czi`-internal metadata → `discovered` namespace** (post-probe). After reviewing `_probes/MFB_AUA_1022_ID58T_PB_20x.json`, design which embedded fields surface as `discovered.objective`, `discovered.pixel_size_um`, etc., and which populate `metadata.json.microscopy`. Tracked under §4.6.A.
+- [x] ~~`.czi`-internal metadata → `discovered.czi_*` + `metadata.json.microscopy`~~ — done 2026-05-06; `tools/ingest/czi_metadata.py` surfaces 21 curated fields (precise acquisition timestamp, microscope, objective, pixel size, dimensions, channels, etc.) and a structured 5-bucket `microscopy:` sidecar block. Library: `czifile`. Per-instrument table in [09_MODALITIES §1.1](../mfb-rdm-docs/09_MODALITIES.md), library rationale in [10_TOOLS §2.1.2](../mfb-rdm-docs/10_TOOLS.md).
+- [x] ~~Defensive header validation in `registry.append_row`~~ — refuses to write if existing CSV header doesn't match `REGISTRY_FIELDS`; prevents silent column-shift corruption like the one caught when `ingest_config` was added.
+- [ ] **REMBI projection** — defer until batch ingestion across multiple instruments gives us real data to map *from*; then design per-instrument projections in a separate utility (lossless sidecar stays canonical). See [08_METADATA §3.5](../mfb-rdm-docs/08_METADATA.md).
+- [ ] DICOM full-mode metadata extraction → `discovered.dicom_*` + `metadata.json.dicom` (deferred — separate stream); compression to `.zip`/`.tar.gz` — tested in Section 4.2. Will mirror the `.czi` pattern.
+- [ ] **XMRI/DICOM `acquisition_datetime` auto-extract from DICOM headers → `discovered.dicom_*`.** Currently a manual literal in the `registry:` block. Becomes automatic once the DICOM extractor ships.
+- [ ] **OMERO export / pylibCZIrw / Bio-Formats** — currently unneeded; revisit when there's a concrete use case (image server, OME-XML normalization, pixel access). See [10_TOOLS §2.1.2](../mfb-rdm-docs/10_TOOLS.md).
 - [ ] Implement `--lightweight` flag in `ingest_raw.py` — tested in Section 4.2
 - [ ] Add NIfTI handling (single file, no archive) — tested in Section 4.8 if applicable
 - [ ] Implement `backfill_metadata` utility for upgrading lightweight ingests
@@ -186,10 +189,10 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [x] ~~Microscopy single-file copy + verify + canonical rename `{acq_id}.czi`~~ (see §3.1)
 - [x] ~~`metadata.json` sidecar with `user_supplied` + `discovered`~~ (see §3.1)
 - [x] ~~Read-only probe of one real .czi from `S:\...\AxioScan\20260422` (czifile + XML dump to `_probes/`)~~
-- [x] ~~Real ingest of 3 `.czi` files from `S:\...\AxioScan\20260422` to NAS — verified correct ACQ-IDs, sizes (418/454/674 MB), operator + sample_id promotion, `acquisition_datetime`, idempotent re-run produces 0 new cases~~ — TEST DATA flagged in registry/manifest; purge tracker at `_test_artifacts.txt`
-- [ ] **User:** review the 3 test acquisitions on NAS; confirm OK or request changes
-- [ ] **User:** purge the test ingest (3 acquisition folders + 3 registry rows + 3 manifest entries) per `_test_artifacts.txt`
-- [ ] Design + implement `.czi`-internal embedded-metadata extraction → populate `metadata.json.microscopy` (uses probe output as input; deferred until probe reviewed)
+- [x] ~~Real ingest of 3 `.czi` files from `S:\...\AxioScan\20260422` to NAS (first pass: filename-only metadata)~~ — first ingest 2026-05-06, then purged.
+- [x] ~~Re-ingest of the same 3 files with .czi-internal metadata extraction~~ — 2026-05-06; populated `microscopy:` sidecar blocks (geometry, instrument, acquisition, mosaic, document_info) and 21-field `discovered.czi_*` curated subset. Registry CSV migrated to 22-column schema (added `ingest_config`); defensive header check added in `registry.append_row`.
+- [ ] **User:** review the 3 test acquisitions on NAS; confirm sidecar fields look right.
+- [ ] **User:** purge the test ingest (3 acq folders + 3 registry rows + 3 manifest entries) per `_test_artifacts.txt` when ready.
 
 **4.6.B Cell Observer (`CELL`) — reuses 4.6.A pipeline:**
 - [ ] **Ryan:** Obtain sample `.czi` from Cell Observer

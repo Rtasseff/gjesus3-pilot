@@ -19,9 +19,22 @@ FORMAT_SUMMARIZERS = {
 }
 
 
+# Maps a data_ecosystem to an embedded-metadata extractor. Each must
+# return (discovered_subset_dict, ecosystem_section_dict). DICOM is
+# pending — see [10_TOOLS §2.1.3].
+FORMAT_EMBEDDED_EXTRACTORS = {
+    "MICROSCOPY": microscopy_utils.extract_embedded,
+}
+
+
 def get_summarizer(ecosystem):
     """Return the summarize_source callable for an ecosystem, or None."""
     return FORMAT_SUMMARIZERS.get(ecosystem)
+
+
+def get_embedded_extractor(ecosystem):
+    """Return the extract_embedded callable for an ecosystem, or None."""
+    return FORMAT_EMBEDDED_EXTRACTORS.get(ecosystem)
 
 
 # Valid instrument codes (internal + collaborator X-prefix)
@@ -177,6 +190,12 @@ def expand_batch(cfg, nas_root=None):
 
     filter_cfg = disco.get("filter") or {}
     date_from = disco.get("acquisition_date_from", "")
+    embed_metadata = disco.get("embedded_metadata", True)
+    # Resolve which ecosystem we're in so we know which embedded
+    # extractor to use. If `registry.data_ecosystem` references a
+    # discovered field (unusual), the lookup falls back to nothing —
+    # ecosystem-specific extraction simply won't run.
+    eco_for_extract = (cfg.get("registry") or {}).get("data_ecosystem", "")
 
     registry_block = cfg.get("registry")
     block_errors = resolver.validate_registry_block(registry_block)
@@ -249,7 +268,28 @@ def expand_batch(cfg, nas_root=None):
                     f"parent folder '{parent_name}' for {match_basename}"
                 )
 
+        # Embedded-metadata extraction (e.g. .czi → discovered.czi_*).
+        # Runs at expand_batch time so that discovered.czi_* references
+        # in the registry: block resolve cleanly. Opt-out per config.
+        eco_section = {}
+        if embed_metadata and is_file:
+            extractor = get_embedded_extractor(eco_for_extract)
+            if extractor:
+                try:
+                    eco_disc, eco_section = extractor(match_path)
+                except Exception as e:
+                    print(
+                        f"[expand_batch] WARN: embedded extraction failed "
+                        f"for {match_basename}: {e}"
+                    )
+                    eco_disc, eco_section = {}, {}
+                # Merge without overwriting earlier discovered values.
+                for k, v in (eco_disc or {}).items():
+                    if k not in discovered or not discovered[k]:
+                        discovered[k] = v
+
         case["discovered"] = discovered
+        case["ecosystem_section"] = eco_section
 
         try:
             apply_registry_block(case, registry_block)
@@ -315,6 +355,23 @@ def prep_single_case(cfg):
     src = cfg.get("source_path", "")
     if src:
         cfg.setdefault("original_name", Path(src).name)
+
+    # Single-case embedded extraction (parallels expand_batch's logic).
+    eco_section = {}
+    embed = (cfg.get("auto_discover") or {}).get("embedded_metadata", True)
+    eco = (registry_block or {}).get("data_ecosystem", "")
+    if embed and src and os.path.isfile(src):
+        extractor = get_embedded_extractor(eco)
+        if extractor:
+            try:
+                eco_disc, eco_section = extractor(src)
+                for k, v in (eco_disc or {}).items():
+                    if k not in cfg["discovered"] or not cfg["discovered"][k]:
+                        cfg["discovered"][k] = v
+            except Exception as e:
+                print(f"[prep_single_case] WARN: embedded extraction failed: {e}")
+    cfg["ecosystem_section"] = eco_section
+
     apply_registry_block(cfg, registry_block)
     return cfg
 

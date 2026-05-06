@@ -98,6 +98,34 @@ This pilot is intentionally scoped as a test case for larger MFB-area RDM effort
 
 The choice should be made consciously at the start of any future deployment — it affects what users can browse, how durable links are across renames, and which OSes can run the ingest pipeline.
 
+### 2.1.2 Microscopy metadata extraction — library choice and deferred work
+
+> **✅ DECIDED (2026-05-06):** Embedded metadata is extracted from `.czi` files via the **`czifile`** Python package. The extractor (`tools/ingest/czi_metadata.py`) parses the embedded XML directly into a curated `discovered.czi_*` subset (referenceable from YAML `registry:` blocks) and a structured `microscopy:` sidecar block. Pylibczirw, AICSImageIO, and Bio-Formats were considered and **deferred**.
+
+#### Why czifile (now)
+
+| Reason | Detail |
+|--------|--------|
+| **No new dependency surface** | czifile is pure Python; already in `requirements.txt`. Bio-Formats requires a JVM; pylibCZIrw requires a native binary; AICSImageIO pulls a heavier transitive set. |
+| **Metadata-only access is cheap** | We never read pixel data — JPEG-XR / proprietary compression of pixels is irrelevant to us. czifile happily exposes the metadata XML even for compression formats it can't decode. |
+| **Direct XML is auditable** | Our extractor walks the XML tree and the field-source mapping is visible (see `09_MODALITIES.md §1.1` "Auto-discovered fields" table). No hidden normalization layer between the file and what we record. |
+| **Cross-instrument reuse** | The same code path works for Cell Observer (`CELL`) and LSM 900 (`LSM9`) since they share `.czi`. |
+
+#### What we get / what we lose
+
+We get every field surfaced in `09_MODALITIES.md §1.1` plus the full structured `microscopy:` block in the sidecar. We do not get an OME-XML mapping, OMERO-ready exports, or pixel access. Those are the deferred items below.
+
+#### Deferred (revisit when there's a concrete need)
+
+| Tool | When it'd matter | What it adds |
+|------|------------------|--------------|
+| **Bio-Formats CLI (`showinf -nopix -omexml`)** | Ad-hoc metadata inspection; cross-format normalization. | OME-XML output for ~181 standardized CZI fields. Useful as an interactive checking tool on a dev workstation; not in the pipeline. |
+| **pylibCZIrw** (ZEISS-native) | When we need pixel access alongside metadata, raw XML editing, or `read_custom_key_value()` exposed natively. | Convenience helpers (`read_general_document_info()`, `read_scaling_info()`, etc.); ZEISS-maintained. |
+| **AICSImageIO** | If we move toward analysis-friendly Python access to image data with metadata attached. | Unified API across vendor formats; dims/shape/physical sizes; OME-converted metadata. |
+| **OMERO export** | Once researchers want a browsable image server for the ingested data. | Server-side image database; uses Bio-Formats internally. The `microscopy:` sidecar should be most of what's needed to populate OMERO annotations later. |
+
+The extractor is the natural seam to swap libraries: today it's `czi_metadata.extract(czi_path)` calling `czifile`; tomorrow that function can wrap pylibCZIrw or call out to Bio-Formats without touching the rest of the pipeline.
+
 ---
 
 **Two Ingest Modes:**

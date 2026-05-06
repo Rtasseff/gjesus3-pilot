@@ -1,14 +1,17 @@
-"""Source summarization for microscopy single-file acquisitions (.czi etc.).
+"""Source summarization + embedded-metadata extraction for microscopy.
 
-Mirrors the dicom_utils.summarize_source signature so the format-summarizer
-dispatch in ingest_raw.py can swap implementations by ecosystem.
+`summarize_source` mirrors `dicom_utils.summarize_source` and is wired
+into `config.FORMAT_SUMMARIZERS` (file inventory: counts and sizes).
 
-Embedded-metadata extraction (objective, pixel size, channels, ...) is a
-separate concern — that lives in a future probe-driven extractor and is
-not handled here. This module only inventories files.
+`extract_embedded` produces the per-case `discovered.czi_*` subset and
+the structured `microscopy:` sidecar section. It dispatches on file
+extension; today only `.czi` is implemented (delegating to
+`czi_metadata.extract`). Wired into `config.FORMAT_EMBEDDED_EXTRACTORS`.
 """
 
 import os
+
+from . import czi_metadata
 
 
 SUPPORTED_EXTENSIONS = (".czi", ".tif", ".tiff")
@@ -64,3 +67,21 @@ def summarize_source(source_path):
         "primary_filename": os.path.basename(primary) if primary else "",
         "extra_microscopy_files": extra_files,
     }
+
+
+def extract_embedded(source_path):
+    """Extract embedded metadata from a microscopy source file.
+
+    Returns (discovered_subset, ecosystem_section_dict). For .czi files,
+    delegates to czi_metadata.extract. For .tif/.tiff (not yet
+    supported), returns ({}, {}). For unrecognized extensions, also
+    ({}, {}).
+
+    Per-format extractors should never raise on simple "no metadata
+    found" — only on real errors (file unreadable, library missing).
+    Callers can decide whether to swallow exceptions per case.
+    """
+    ext = os.path.splitext(source_path)[1].lower()
+    if ext == ".czi":
+        return czi_metadata.extract(source_path)
+    return {}, {}

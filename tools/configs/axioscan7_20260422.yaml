@@ -20,12 +20,17 @@ auto_discover:
 registry:
   instrument:           ZWSI
   data_ecosystem:       MICROSCOPY
-  instrument_model:     "Zeiss Axio Scan 7"
+  # Prefer the microscope-issued name from the .czi over a literal,
+  # so different Axioscan units stay distinguishable.
+  instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
   operator:             discovered.operator
   data_source:          internal
   sample_id:            discovered.sample_id
   sample_type:          NA
-  acquisition_datetime: discovered.acquisition_date
+  # Precise timestamp from the .czi (not the day-folder coarse date).
+  # Day-folder fallback is `discovered.acquisition_date` if the .czi
+  # ever lacks AcquisitionDateAndTime.
+  acquisition_datetime: discovered.czi_acquisition_datetime
   project_hint:         NA
-  notes:                "TEST INGEST 2026-05-06 - purge after review (${discovered.stain} stain at ${discovered.magnification})"
+  notes:                "TEST INGEST 2026-05-06 - purge after review (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
