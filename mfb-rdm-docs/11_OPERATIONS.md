@@ -98,6 +98,8 @@ This document covers operational aspects: roles, permissions, workflows, onboard
 
 Daily flow for depositing a new acquisition. This is the operational view — what to do and in what order. For the underlying command syntax and flags, see [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md).
 
+> **🔶 Pilot scope (2026-05):** The example paths, config name, and filename conventions below are written from the **AxioScan 7** perspective — that's the only instrument validated end-to-end so far. The *structure* of the workflow (find/write YAML config → dry-run → real run → verify) is intended to generalize. As more instruments come online (Cell Observer, LSM 900, MRI, Nuclear Imaging), this section will be refactored to separate the common steps from the per-instrument specifics (share path, expected filename pattern, project-hint convention). For now, treat the AxioScan 7 examples as the working template and ask the Data Mgmt Lead before applying them to a different instrument.
+
 > **One-time per shell session (PowerShell on Windows):** point the script at the NAS once. Either add the line to your PowerShell profile or run it before each session:
 >
 > ```powershell
