@@ -145,7 +145,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 total_size += os.path.getsize(fpath)
         summary = {
             "file_count": file_count,
-            "total_size_mb": round(total_size / (1024 * 1024), 1),
+            "total_size_mb": round(total_size / 1_000_000, 1),
             "modality": None,
             "study_date": None,
         }

@@ -71,7 +71,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary file (`<ACQ-ID>.<ext>` for microscopy / `<ACQ-ID>.zip` for DICOM, or `series/` for the legacy DICOM uncompressed layout). |
 | `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
 | `file_format` | String | ✅ Yes | Auto | File extension/format (e.g., `.czi`, `.zip`). |
-| `file_size_mb` | Number | ✅ Yes | Auto | Size of primary file/folder in MB. |
+| `file_size_mb` | Number | ✅ Yes | Auto | Size of primary file/folder in **decimal MB** (bytes ÷ 1,000,000), rounded to 1 decimal. Convention adopted 2026-05-12; pre-cutover rows hold the binary value (bytes ÷ 1,048,576) and are not being backfilled. Windows Explorer uses its own hybrid (bytes ÷ 1024 ÷ 1000) and will not match either form exactly. |
 | `file_count` | Number | ✅ Yes | Auto | Total files in acquisition folder. |
 | `canonical_path` | String | ✅ Yes | Auto | Full path to acquisition folder. |
 | `checksum_present` | String (Y/N) | ✅ Yes | Auto | `Y` or `N` — is checksums.json present? |

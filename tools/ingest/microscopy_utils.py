@@ -32,7 +32,7 @@ def summarize_source(source_path):
         ext = os.path.splitext(source_path)[1].lower()
         return {
             "file_count": 1,
-            "total_size_mb": round(size / (1024 * 1024), 1),
+            "total_size_mb": round(size / 1_000_000, 1),
             "modality": "",
             "study_date": "",
             "primary_extension": ext,
@@ -58,7 +58,7 @@ def summarize_source(source_path):
 
     return {
         "file_count": file_count,
-        "total_size_mb": round(total_size / (1024 * 1024), 1),
+        "total_size_mb": round(total_size / 1_000_000, 1),
         "modality": "",
         "study_date": "",
         "primary_extension": (

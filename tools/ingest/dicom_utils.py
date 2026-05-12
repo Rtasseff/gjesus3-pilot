@@ -112,7 +112,7 @@ def summarize_source(source_dir):
 
     summary = {
         "file_count": len(all_files),
-        "total_size_mb": round(total_size / (1024 * 1024), 1),
+        "total_size_mb": round(total_size / 1_000_000, 1),
         "modality": detect_modality(source_dir),
         "study_date": extract_study_date(source_dir),
     }

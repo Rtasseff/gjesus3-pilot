@@ -56,7 +56,7 @@ def probe(czi_path):
             "czifile is not installed. Run: pip install czifile"
         ) from e
 
-    size_mb = round(os.path.getsize(czi_path) / (1024 * 1024), 2)
+    size_mb = round(os.path.getsize(czi_path) / 1_000_000, 2)
     with czifile.CziFile(czi_path) as czi:
         meta_xml = czi.metadata()  # str (XML) on modern czifile
 
