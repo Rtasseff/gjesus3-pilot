@@ -72,7 +72,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
 | `file_format` | String | ✅ Yes | Auto | File extension/format (e.g., `.czi`, `.zip`). |
 | `file_size_mb` | Number | ✅ Yes | Auto | Size of primary file/folder in **decimal MB** (bytes ÷ 1,000,000), rounded to 1 decimal. Convention adopted 2026-05-12; pre-cutover rows hold the binary value (bytes ÷ 1,048,576) and are not being backfilled. Windows Explorer uses its own hybrid (bytes ÷ 1024 ÷ 1000) and will not match either form exactly. |
-| `file_count` | Number | ✅ Yes | Auto | Total files in acquisition folder. |
+| `file_count` | Number | ✅ Yes | Auto | Number of **primary-data files** in the acquisition — not auxiliary or bookkeeping artifacts (`metadata.json`, `checksums.json`, `README.txt`). DICOM: count of `.dcm` (or extensionless DICOM) files. Microscopy: `1` for single-file (`.czi`) acquisitions; for folder-mode batches, count of primary-format files (`.czi`/`.tif`/`.tiff`). Convention adopted 2026-05-12; pre-cutover DICOM rows hold an uninformative count (4 = destination-folder file count) and are not being backfilled. Once DICOM compress-on-ingest ships, the count should come from the archive's central directory rather than the source walk. |
 | `canonical_path` | String | ✅ Yes | Auto | Full path to acquisition folder. |
 | `checksum_present` | String (Y/N) | ✅ Yes | Auto | `Y` or `N` — is checksums.json present? |
 | `extended_metadata_present` | String (Y/N) | ✅ Yes | Auto | `Y` (full mode) or `N` (lightweight mode). |

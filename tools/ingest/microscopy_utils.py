@@ -43,21 +43,21 @@ def summarize_source(source_path):
     primary = None
     extra_files = []
     total_size = 0
-    file_count = 0
+    primary_count = 0
     for root, _dirs, files in os.walk(source_path):
         for fname in files:
             fpath = os.path.join(root, fname)
-            file_count += 1
             total_size += os.path.getsize(fpath)
             ext = os.path.splitext(fname)[1].lower()
             if ext in SUPPORTED_EXTENSIONS:
+                primary_count += 1
                 if primary is None:
                     primary = fpath
                 else:
                     extra_files.append(fpath)
 
     return {
-        "file_count": file_count,
+        "file_count": primary_count,
         "total_size_mb": round(total_size / 1_000_000, 1),
         "modality": "",
         "study_date": "",

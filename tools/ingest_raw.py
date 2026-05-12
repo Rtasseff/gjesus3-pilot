@@ -136,6 +136,10 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             f"falling back to generic file inventory.",
             "WARN",
         )
+        # Unknown ecosystem fallback: no primary-vs-auxiliary distinction
+        # available, so file_count is just the total file count under the
+        # source path. Ecosystems that care (DICOM, MICROSCOPY) ship their
+        # own summarizers and override this.
         file_count = 0
         total_size = 0
         for root, _dirs, files in os.walk(source_path):

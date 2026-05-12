@@ -102,16 +102,23 @@ def summarize_source(source_dir):
     Returns dict with: file_count, total_size_mb, modality, study_date,
     sample_dicom_info (full header of first file).
     """
-    all_files = []
+    # Walk the source for total size; separately count primary-data files
+    # (.dcm + extensionless DICOMs) for `file_count`. Per 06_REGISTRIES §2.2,
+    # file_count is the count of primary-data files in the acquisition —
+    # not auxiliary or bookkeeping artifacts.
+    # TODO: once the DICOM compress-on-ingest path lands, count entries
+    # inside the produced .zip's central directory rather than walking the
+    # source — keeps the semantic correct when the source is already an
+    # archive provided by a collaborator.
     total_size = 0
     for root, _dirs, files in os.walk(source_dir):
         for fname in files:
-            fpath = os.path.join(root, fname)
-            all_files.append(fpath)
-            total_size += os.path.getsize(fpath)
+            total_size += os.path.getsize(os.path.join(root, fname))
+
+    dcm_files = find_dicom_files(source_dir)
 
     summary = {
-        "file_count": len(all_files),
+        "file_count": len(dcm_files),
         "total_size_mb": round(total_size / 1_000_000, 1),
         "modality": detect_modality(source_dir),
         "study_date": extract_study_date(source_dir),
