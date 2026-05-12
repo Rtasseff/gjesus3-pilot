@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-06
+**Last Updated:** 2026-05-11
 
 ---
 
@@ -66,7 +66,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `modalities_in_study` | String | Optional | User (or auto fallback) | For multi-modal acquisitions: semicolon-separated DICOM modality codes (e.g., `PT;CT`). If left empty/NA, falls back to the source summarizer's `modality` field. |
 | `operator` | String | ✅ Yes | User | Person who collected the data. |
 | `data_source` | String | ✅ Yes | User | `internal` or `collaborator:<name>`. |
-| `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. |
+| `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. See §2.3 for the recommended composite format. |
 | `sample_type` | String | 🔶 Recommended | User | Brief sample description. |
 | `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary file (`<ACQ-ID>.<ext>` for microscopy / `<ACQ-ID>.zip` for DICOM, or `series/` for the legacy DICOM uncompressed layout). |
 | `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
@@ -84,7 +84,28 @@ Authoritative record of all raw acquisitions deposited in the system.
 - **Auto** — set by the ingest pipeline; user must NOT put it in the YAML `registry:` block.
 - **User** — set in the YAML `registry:` block (literal, `discovered.<field>`, or `NA`). See [10_TOOLS §2.1](10_TOOLS.md).
 
-### 2.3 Example
+### 2.3 Sample ID Format (DRAFT)
+
+> **🔶 DRAFT pilot guidance.** Recommended `sample_id` format is `<short_project>_<short_sample>`. Status remains open (REG-01) pending PI sign-off after pilot validation.
+
+The `sample_id` chunk recorded by an instrument (e.g. `ID26H` on an AxioScan filename) is typically **not unique on its own** — the same short ID gets reused across projects. The combination `<short_project>_<short_sample>` (e.g. `0525_ID26H`) is what makes a row globally identifiable within `registry_raw.csv`.
+
+**Recommended pattern** (apply via YAML interpolation; no code change needed):
+
+```yaml
+registry:
+  sample_id: "${discovered.project}_${discovered.sample_short}"
+```
+
+This composes the registry value at ingest time from filename chunks. The raw chunks remain in the per-acquisition `metadata.json` `discovered` block (alongside any auto-extracted embedded fields), so the decomposition is never lost.
+
+**Notes:**
+
+- If a `<short_project>` is genuinely unset (no project chunk in the filename), leave `sample_id` as the bare short ID and accept that uniqueness is project-scoped only. Flag in `notes`.
+- This convention does **not** override official sample identifiers when they exist as a single string already (e.g. an animal registry ID like `MOUSE-2024-042`). Use those verbatim in `sample_id` and skip the composite.
+- Organ-letter encoding inside the short ID (e.g. `H` = Heart, `B` = Brain in `ID26H`) is not parsed today; team convention is not yet confirmed. Tracked as a future enhancement.
+
+### 2.4 Example
 
 ```csv
 acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
@@ -94,7 +115,7 @@ ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecub
 ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HPIC-case-01,,ACQ-20260301-XMRI-001.zip,case_01.zip,.zip,450,3,/raw/DICOM/2026/2026-03/ACQ-20260301-XMRI-001/,Y,N,,,Lightweight ingest from NAS staging
 ```
 
-### 2.4 Update Rules
+### 2.5 Update Rules
 
 | Action | Allowed | Who | When |
 |--------|---------|-----|------|
@@ -313,7 +334,7 @@ Generation: Next available number within each type.
 
 | ID | Question | Owner | Status |
 |----|----------|-------|--------|
-| REG-01 | Include sample_id in raw registry as required or recommended? | Users | 🔶 Draft |
+| REG-01 | Include sample_id in raw registry as required or recommended? Composite format `<short_project>_<short_sample>` recommended (§2.3); PI sign-off pending. | Users / PI | 🔶 Draft |
 | REG-02 | What additional fields needed for REMBI/ISA alignment? | Data Mgmt Lead | 🔶 See [08_METADATA](08_METADATA.md) |
 | REG-03 | Git versioning for registries? | Data Mgmt Lead | 📋 Future consideration |
 | REG-04 | Validation script requirements | Data Mgmt Lead | 📋 Planned |

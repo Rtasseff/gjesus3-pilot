@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 📋 Planned  
-**Last Updated:** 2026-03-06
+**Last Updated:** 2026-05-11
 
 ---
 
@@ -96,13 +96,40 @@ This document covers operational aspects: roles, permissions, workflows, onboard
 
 ### 3.2 Quick Start Guide
 
-> **📋 To write:** 1-page reference for daily operations.
+Daily flow for depositing a new acquisition. This is the operational view — what to do and in what order. For the underlying command syntax and flags, see [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md).
 
-**Contents:**
-- After acquisition: what to do
-- What NOT to do (don't edit raw, don't delete, etc.)
-- Where to get help
-- Key folder locations
+1. **Finish the acquisition.** Confirm the file(s) are on the instrument's usual share (e.g. AxioScan 7 writes to `\\goptical\GOpticalUsers data\AxioScan\<YYYYMMDD>\`). Do not move them yet.
+2. **Find or write the YAML config.** A versioned config per instrument lives in `tools/configs/`. Copy the nearest match for your instrument and save under a new filename (e.g. `axioscan7_20260520.yaml`). The starter template is `tools/templates/ingest_template.yaml`.
+3. **Edit the config for this batch.** At minimum, update `auto_discover.staging_dir` to your folder. Adjust per-batch fields (operator, project_hint pattern) as needed. The full schema is documented in [`10_TOOLS.md §2.1`](10_TOOLS.md).
+4. **Dry-run.** Always first. Inspect the log: file count, parsed values, project resolution, any warnings.
+
+   ```bash
+   python tools/ingest_raw.py -c tools/configs/<your_config>.yaml --dry-run
+   ```
+
+5. **Run for real.** Same command without `--dry-run`. Wait for it to finish.
+6. **Verify.** Open `registry_raw.csv`; confirm one new row per acquisition. Confirm the destination folder under `/raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/` contains `metadata.json`, `checksums.json`, `README.txt`. If a project was linked, confirm a `.lnk` shortcut appeared under `/projects/<proj-short-name>/raw_linked/`.
+
+**What NOT to do:**
+
+- Don't edit, rename, or delete anything under `/raw/` after deposit. Raw is immutable. Mistakes get fixed by the Data Mgmt Lead via documented corrections, not by hand.
+- Don't hand-edit registry CSVs. Same reason.
+- Don't pass `--delete-source` until you have confirmed the dry-run output is correct *and* you have verified the destination after a real run. The default is OFF and that is the right default.
+- Don't re-run an interrupted ingest from a different machine assuming the registry is corrupted — the script is idempotent and will skip already-ingested acquisitions cleanly.
+
+**Where to get help:** Data Mgmt Lead (see §7.1).
+
+**Key folder locations:**
+
+| What | Where |
+|------|-------|
+| YAML configs (version-controlled) | `tools/configs/` |
+| Config template | `tools/templates/ingest_template.yaml` |
+| CLI reference | `tools/INGEST_CLI.md` |
+| Full config schema | [`10_TOOLS.md §2.1`](10_TOOLS.md) |
+| Registries on NAS | `\\GJESUS3\gjesus3\registries\` |
+| Raw area | `\\GJESUS3\gjesus3\raw\` |
+| Projects area | `\\GJESUS3\gjesus3\projects\` |
 
 ---
 

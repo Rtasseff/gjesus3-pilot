@@ -1,0 +1,52 @@
+# AxioScan 7 — 2026-05-06 day folder ingest
+#
+# Production config. Same patterns as axioscan7_20260422.yaml plus:
+#   - composite sample_id via interpolation (`<project>_<sample_short>`)
+#     per 06_REGISTRIES §2.3 DRAFT guidance
+#   - full animal-project code as project_hint (`AE-biomeGUNE-<project>`)
+#     with auto-create on first encounter, short_name reuse after
+#   - one config covers all three projects in the day folder
+
+ingest:
+  delete_source_after_ingest: false
+  # Auto-create the project if `project_hint` doesn't match an existing
+  # project_id or short_name. First ingest of a given project chunk
+  # creates it; subsequent ingests reuse via short_name lookup.
+  auto_create_projects: true
+
+auto_discover:
+  staging_dir: "S:/goptical/GOpticalUsers data/AxioScan/20260506"
+  pattern: "*.czi"
+  filename_parse:
+    separator: "_"
+    # Chunk names are free-form labels. `sample_short` reads more clearly
+    # than `sample_id` when the registry's sample_id is built from it
+    # via interpolation below.
+    fields: [group_code, operator, project, sample_short, stain, magnification]
+  filter:
+    group_code: MFB
+  acquisition_date_from: parent_folder_name
+
+registry:
+  instrument:           ZWSI
+  data_ecosystem:       MICROSCOPY
+  # Prefer the microscope-issued name from the .czi over a literal,
+  # so different Axioscan units stay distinguishable.
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  operator:             discovered.operator
+  data_source:          internal
+  # Composite sample_id (06_REGISTRIES §2.3 DRAFT). The raw chunks
+  # remain in the per-acquisition metadata.json `discovered` block.
+  sample_id:            "${discovered.project}_${discovered.sample_short}"
+  sample_type:          NA
+  # Precise timestamp from the .czi. Day-folder fallback is
+  # `discovered.acquisition_date` if the .czi ever lacks
+  # AcquisitionDateAndTime.
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  # Full animal-project code. First file for a given <project> chunk
+  # triggers auto-create with short_name = "ae-biomegune-<project>"
+  # (lowercased by tools/ingest_raw.py at create time). Subsequent
+  # files reuse via short_name lookup.
+  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  notes:                "WGA fluorescence WSI batch (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"

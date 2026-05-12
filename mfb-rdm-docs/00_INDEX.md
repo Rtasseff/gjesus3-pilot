@@ -3,7 +3,7 @@
 **System Purpose:** Long-term archival storage for MFB group microscopy and biomedical imaging data
 **Infrastructure:** QNAP TS-864eU NAS (6 × 20 TB, RAID 5, ~100 TB system / ~63 TB user-available after snapshot reservation)
 **Status:** Pilot development
-**Last Updated:** 2026-05-06
+**Last Updated:** 2026-05-12
 
 ---
 
@@ -100,6 +100,7 @@ An **archival storage system** for original imaging data that:
 | Project link method | **Windows `.lnk` shell shortcuts (Windows-first, pilot-specific)** | MFB user base is on Windows; WSL→SMB symlink path didn't work and SSH-into-NAS was blocked. **Deliberately not a default for future RDM deployments** — porting seam documented in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision) |
 | Provenance location | Per-publication/project folder | Local to context; enables independent archiving |
 | Extended metadata | REMBI-based subset | Community standard; pruned to essential fields |
+| Sample ID format (DRAFT) | Composite `<short_project>_<short_sample>` (e.g. `0525_ID26H`) | Short sample IDs are not unique on their own (reused across projects); composite makes them globally unique within `registry_raw.csv`. Applied via YAML `${...}` interpolation — no code change. Status remains open (REG-01) pending PI sign-off. See [06_REGISTRIES §2.3](06_REGISTRIES.md). |
 
 ---
 
@@ -142,7 +143,7 @@ An **archival storage system** for original imaging data that:
 ### Operations (see [11_OPERATIONS](11_OPERATIONS.md))
 - [ ] Who can promote staging → raw (intake roles)
 - [ ] Permissions model details
-- [ ] Quick Start guide not written
+- [x] ~~Quick Start guide not written~~ — **Resolved (2026-05-12):** researcher-facing daily flow in [11_OPERATIONS §3.2](11_OPERATIONS.md); CLI reference with flags + config cheat-sheet at [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md)
 - [ ] Pilot review cadence not scheduled
 
 ---
@@ -189,6 +190,7 @@ Explicit calls for input are marked:
 
 | Date | Author | Changes |
 |------|--------|---------|
+| 2026-05-12 | R. Tasseff | Round-4 AxioScan 7 validation: 28-acquisition test ingest from `S:\...\AxioScan\20260506\` (3 animal projects in one folder, 1 config, auto-create-then-reuse for all 3 projects), verified end-to-end then purged. Two pilot conventions adopted via YAML interpolation (no code change): composite `sample_id = ${discovered.project}_${discovered.sample_short}` (see [06_REGISTRIES §2.3](06_REGISTRIES.md) DRAFT, REG-01 still open pending PI sign-off) and full animal-project code as `project_hint = "AE-biomeGUNE-${discovered.project}"` → auto-created short_names `ae-biomegune-NNNN`. User-facing docs: researcher Quick Start in [11_OPERATIONS §3.2](11_OPERATIONS.md) + CLI reference at [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md). Production config `tools/configs/axioscan7_20260506.yaml` ready for user manual run (Phase B). |
 | 2026-05-06 | R. Tasseff | AxioScan 7 (.czi) ingest end-to-end (3 test acqs on NAS, pending purge). New three-block YAML config schema (`ingest:` / `auto_discover:` / `registry:`) replaces `defaults:` + Python `SPECIAL_FIELDS` — per-column mapping explicit in YAML with `discovered.<field>` references and `${...}` interpolation; resolver in `tools/ingest/resolver.py`; configs live under `tools/configs/`. New `ingest_config` registry column records the YAML config that produced each row (CSV migrated 21→22 cols; defensive header check added to `registry.append_row`). `.czi`-internal metadata extraction implemented (`tools/ingest/czi_metadata.py`, library: `czifile`): 21 curated `discovered.czi_*` fields plus a structured `microscopy:` sidecar block (geometry, instrument, acquisition, mosaic, document_info). Per-instrument field reference table in [09_MODALITIES §1.1](09_MODALITIES.md); library/route rationale + OMERO/pylibCZIrw deferral in [10_TOOLS §2.1.2](10_TOOLS.md); REMBI projection deferred until cross-instrument batch data exists, plan in [08_METADATA §3.5](08_METADATA.md). Cross-doc updates in [10_TOOLS §2.1](10_TOOLS.md), [08_METADATA §4.3](08_METADATA.md), [06_REGISTRIES §2.2](06_REGISTRIES.md), [03_RAW_STORAGE §2.6](03_RAW_STORAGE.md). |
 | 2026-05-05 | R. Tasseff | Project linking method resolved: Windows `.lnk` shell shortcuts (pilot-specific Windows-first choice); linker implemented in `tools/ingest/linker.py`; rationale and porting guide documented in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision); cross-doc cleanup of "linking method TBD" references |
 | 2026-03-06 | R. Tasseff | DICOM stored as compressed archives; primary staging off-NAS; two ingest modes (full + lightweight); metadata extraction integrated into full-mode ingest; one-primary-file rule simplified (no DICOM exception) |

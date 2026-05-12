@@ -96,6 +96,10 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [ ] Add NIfTI handling (single file, no archive) — tested in Section 4.8 if applicable
 - [ ] Implement `backfill_metadata` utility for upgrading lightweight ingests
 - [ ] Finalize scripts after all modality passes (Section 4.9)
+- [ ] **Sample-ID convention follow-ups** (round-4 raised, no urgency):
+  - [ ] PI sign-off on the DRAFT composite `sample_id = <short_project>_<short_sample>` (REG-01 still open; see [06_REGISTRIES §2.3](../mfb-rdm-docs/06_REGISTRIES.md))
+  - [ ] Confirm with team whether the trailing organ letter (`H`, `B`, ...) inside short sample IDs is a real convention worth parsing into `sample_type` — currently surfaced only as part of the raw chunk; not parsed.
+  - [ ] (Optional / future) Predefined chunk-name set that auto-promotes to specific registry columns — explicit `registry:` mapping is the model today; this would be a layer on top, not a replacement.
 
 ### 3.2 Other Scripts
 - [x] ~~`create_project.py` implemented~~ — CLI + interactive, dry-run
@@ -192,9 +196,10 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [x] ~~Real ingest of 3 `.czi` files from `S:\...\AxioScan\20260422` to NAS (first pass: filename-only metadata)~~ — first ingest 2026-05-06, then purged.
 - [x] ~~Re-ingest of the same 3 files with .czi-internal metadata extraction~~ — 2026-05-06; populated `microscopy:` sidecar blocks (geometry, instrument, acquisition, mosaic, document_info, plus full `_raw_metadata` for lossless preservation; sidecar ~850 KB matching the probe) and 21-field `discovered.czi_*` curated subset. Registry CSV migrated to 22-column schema (added `ingest_config`); defensive header check added in `registry.append_row`.
 - [x] ~~Project auto-create via `ingest.auto_create_projects: true`~~ — 2026-05-06; on first ingest with an unknown `project_hint`, ingest_raw creates the project (short_name = hint) and sets the registry's `project_hint` to the canonical `PROJ-XXXX`; subsequent acqs reuse via `short_name` lookup. Tested: PROJ-0003 (short_name=1022, owner=AUA) auto-created, 3 .lnk shortcuts placed in `/projects/proj-1022/raw_linked/`.
-- [ ] **User:** physically verify the 3 `.lnk` shortcuts at `J:/projects/proj-1022/raw_linked/` open the correct `.czi` on double-click (Windows `.lnk` for microscopy single-file confirms the linker pattern works for both DICOM archives and .czi files).
-- [ ] **User:** review the 3 test acquisitions on NAS; confirm sidecar fields look right.
-- [ ] **User:** purge the test ingest (3 acq folders + 3 registry rows + 3 manifest entries + PROJ-0003 + `/projects/proj-1022/`) per `_test_artifacts.txt` when ready.
+- [x] ~~Round-4 scale + multi-project + composite sample_id test (2026-05-12)~~ — `S:\...\AxioScan\20260506\` (28 MFB `.czi` files across 3 animal projects), single config `axioscan7_20260506_TEST.yaml`, end-to-end successful (28/28). Validated: composite `sample_id` via `${discovered.project}_${discovered.sample_short}`; full-code `project_hint = "AE-biomeGUNE-${discovered.project}"` → 3 projects auto-created with short_names `ae-biomegune-{0423,0424,0525}` and reused on subsequent files; 28 `.lnk` shortcuts (8/8/12 split); idempotent re-run (0 new rows, 28 dedupe skips + 1 filter skip); sidecar `discovered` block contains all 6 filename chunks + 21 `czi_*` fields, `microscopy._raw_metadata` ~366 KB. Purged after verification.
+- [x] ~~User-facing manual-ingest documentation~~ (2026-05-12) — researcher Quick Start in [`11_OPERATIONS.md §3.2`](../mfb-rdm-docs/11_OPERATIONS.md); CLI reference (flags, config cheat-sheet, free-form chunk note) at [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md). Production config `axioscan7_20260506.yaml` shipped for user-driven Phase B re-ingest.
+- [ ] **User (Phase B):** manually run `tools/configs/axioscan7_20260506.yaml` following the new Quick Start in `11_OPERATIONS.md §3.2`. Dry-run first, then real. Outputs become production data (PROJ-0003..0005 will be re-created with the same `ae-biomegune-*` short_names). Capture any doc-gap moments so the docs can absorb them.
+- [ ] **User:** physically verify a `.lnk` shortcut opens the correct `.czi` on double-click for the new microscopy single-file shortcuts (covers the long-standing "open from .lnk" check originally tracked for the 2026-04-22 batch).
 
 **4.6.B Cell Observer (`CELL`) — reuses 4.6.A pipeline:**
 - [ ] **Ryan:** Obtain sample `.czi` from Cell Observer
