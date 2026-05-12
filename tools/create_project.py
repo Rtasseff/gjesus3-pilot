@@ -17,21 +17,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Schema lives in the ingest package so every writer of provenance.csv
+# (this script, ingest_raw.py Step 12, future Excel-importer, close-out
+# tool) shares one source of truth.
+from ingest import provenance as provenance_mod
+
 
 # --- Constants ---
-
-PROVENANCE_HEADERS = [
-    "file_id",
-    "output_path",
-    "output_type",
-    "inputs",
-    "process",
-    "creator",
-    "date",
-    "software",
-    "parameters",
-    "notes",
-]
 
 PROJECT_REGISTRY_FIELDS = [
     "project_id",
@@ -199,9 +191,7 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
 
     # --- Create empty provenance.csv ---
     prov_path = os.path.join(project_dir, "provenance.csv")
-    with open(prov_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(PROVENANCE_HEADERS)
+    provenance_mod.write_empty(prov_path)
     log("Wrote provenance.csv (empty with headers)")
 
     # --- Append to registry ---

@@ -109,13 +109,12 @@ Until this tool exists, projects should not be deleted — pause them indefinite
 
 ## 6. Provenance
 
-> **✅ DECIDED:** Provenance is recommended but not required.
+> **✅ DECIDED:** Provenance is recommended for manual analysis output; **required** for any file written into the project by a tool or script (see [07_PROVENANCE §2.1](07_PROVENANCE.md)).
 
-Same format as Publications (see [07_PROVENANCE](07_PROVENANCE.md)), but:
-- Less strict enforcement during active work
-- Required for any file intended for publication or external sharing
-
-An empty `provenance.csv` with headers is created at project setup.
+Same format as Publications (see [07_PROVENANCE](07_PROVENANCE.md)):
+- An empty `provenance.csv` with the canonical 12-field header is created at project setup by `create_project.py`.
+- Any tool that adds/removes/changes files under the project (today: `ingest_raw.py` Step 12 writing `.lnk` shortcuts into `raw_linked/`; tomorrow: the Excel-to-metadata importer and the close-out tool) auto-appends a provenance row. The schema lives in `tools/ingest/provenance.py` so writers stay aligned.
+- Manual analysis output: still strongly recommended; required for anything that will feed into a publication or external sharing.
 
 ---
 

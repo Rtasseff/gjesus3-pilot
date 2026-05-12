@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
-    metadata_sidecar,
+    metadata_sidecar, provenance,
 )
 import create_project as create_project_mod
 
@@ -440,6 +440,29 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                         dry_run=False,
                     )
                     log(f"Created shortcut: {lnk_path} -> {target_unc}")
+                    # Provenance log entry for the .lnk just created.
+                    # Idempotent on output_path: skips silently if the
+                    # project's provenance.csv already has a row for
+                    # this shortcut (self-heals if the .lnk existed but
+                    # the entry was missing).
+                    prov_path = os.path.join(project_folder_abs, "provenance.csv")
+                    lnk_filename = f"{original_name}.lnk"
+                    entry = {
+                        "output_path":         f"raw_linked/{lnk_filename}",
+                        "output_name":         lnk_filename,
+                        "file_type":           ".lnk",
+                        "date_created":        datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        "creator":             cfg_single.get("operator", "") or "",
+                        "input_refs":          acq_id_str,
+                        "process_description": "Auto-created during ingest: Windows .lnk shortcut to raw acquisition",
+                        "software_version":   provenance.software_version_string("ingest_raw.py"),
+                        "parameters_ref":      cfg_single.get("ingest_config", "") or "",
+                        "lab_notebook_ref":    "",
+                        "notes":               "Auto-generated entry from ingest",
+                    }
+                    fid = provenance.append_entry(prov_path, entry)
+                    if fid:
+                        log(f"Appended provenance entry {fid} to {prov_path}")
                 except RuntimeError as e:
                     log(f"Could not create .lnk: {e}", "WARN")
                 except Exception as e:

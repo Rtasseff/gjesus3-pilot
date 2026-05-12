@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-02-02
+**Last Updated:** 2026-05-12
 
 ---
 
@@ -52,6 +52,20 @@ We use a simple **input → process → output** model:
 ```
 
 **Each output file gets one provenance entry** that documents its inputs and the process that created it.
+
+### 2.1 Principle: any tool that changes files updates provenance
+
+> **✅ DECIDED (2026-05-12):** Any tool or script that **adds, removes, or modifies** a file under `/projects/<proj>/`, `/publications/<pub>/`, or a curated dataset folder **must update that folder's `provenance.csv`** at the same time. This is broader than the analysis-output scope the rest of this document describes — it covers system-created files too (e.g. the `.lnk` shortcuts the ingest pipeline writes into `/projects/<proj>/raw_linked/`). Manual file additions still need manual entries, but anything done by code must keep provenance in sync without the user thinking about it.
+
+In practice that means each writer calls the shared helper module `tools/ingest/provenance.py` (which owns the schema; see §3.4) to append its entry. Today's writers:
+
+| Caller | When | Entry it writes |
+|---|---|---|
+| `tools/create_project.py` | At project creation | None (writes the empty `provenance.csv` header) |
+| `tools/ingest_raw.py` (Step 12) | When a project `.lnk` is created | One row per `.lnk`, auto-populated from the ingest context (creator from the operator field, `input_refs` = the ACQ-ID, `parameters_ref` = the YAML config path, `software_version` includes the git short-SHA when available). Idempotent on `output_path` and self-healing if a `.lnk` exists without an entry. |
+| Future: Excel-to-metadata importer | When study metadata is added to `/projects/<proj>/metadata/` | One row per metadata file written |
+| Future: close-out tool | When study metadata is merged into `/raw/` | Entries documenting the merge (plus the corresponding `/publications/` side if promoted) |
+| Future: `log_activity` helper (§7.2) | Manual / scripted analysis output | One row per output the analyst declares |
 
 ---
 
@@ -190,17 +204,18 @@ For complex processes, use additional fields:
 | Area | Requirement | Minimum Scope |
 |------|-------------|---------------|
 | **Publications** | ✅ Required | All files in `figures/` and any file appearing in manuscript |
-| **Projects** | 🔶 Recommended | Files intended for publication, sharing, or reuse |
+| **Projects** | ✅ Required for tool-created files (auto via §2.1); 🔶 Recommended for manual analysis output | System-created files (`.lnk` shortcuts, future metadata writes, close-out merges) are auto-logged by the writing tool. Manual analysis output intended for publication, sharing, or reuse should also be logged. |
 | **Curated Datasets** | ✅ Required | All label/output files; every item must trace to RAW |
 
 ### 6.2 What Can Be Skipped
 
 | File Type | Log Required? | Reason |
 |-----------|---------------|--------|
-| Boilerplate (`_publication.yaml`, `provenance.csv`) | ❌ No | System files |
+| Boilerplate (`_publication.yaml`, `_project.yaml`, `provenance.csv` itself) | ❌ No | System files; would be self-referential |
 | Scratch/temporary files | ❌ No | Not retained |
 | Exploratory analysis (not used) | ❌ No | Discretionary |
 | Documentation (protocols, notes) | ❌ No | Not derived from data |
+| `.lnk` shortcuts in `raw_linked/` | ✅ Auto-logged | Written by `ingest_raw.py` Step 12 (see §2.1) — user never has to touch these entries |
 
 ### 6.3 Closure Requirement
 
