@@ -252,7 +252,7 @@ registry:
 
 **Usage:**
 
-> The script needs a valid NAS root. Set `GJESUS3_ROOT` once per shell (PowerShell: `$env:GJESUS3_ROOT = "J:/"`; bash/WSL: `export GJESUS3_ROOT=/mnt/gjesus3`) or pass `--nas-root <path>` on every command. The script fails fast if the configured path doesn't exist or doesn't contain a `registries/` subfolder. End-user-facing walkthrough: [`11_OPERATIONS.md §3.2`](11_OPERATIONS.md); flag reference: [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md).
+> The script needs a valid NAS root. Set `GJESUS3_ROOT` once per shell (PowerShell: `$env:GJESUS3_ROOT = "J:\"`; bash/WSL: `export GJESUS3_ROOT=/mnt/gjesus3`) or pass `--nas-root <path>` on every command. The script fails fast if the configured path doesn't exist or doesn't contain a `registries/` subfolder. End-user-facing walkthrough: [`11_OPERATIONS.md §3.2`](11_OPERATIONS.md); flag reference: [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md).
 
 ```bash
 python tools/ingest_raw.py --config batch_hpic.yaml --dry-run    # preview (full mode)

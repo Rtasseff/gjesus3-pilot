@@ -101,10 +101,10 @@ Daily flow for depositing a new acquisition. This is the operational view — wh
 > **One-time per shell session (PowerShell on Windows):** point the script at the NAS once. Either add the line to your PowerShell profile or run it before each session:
 >
 > ```powershell
-> $env:GJESUS3_ROOT = "J:/"   # adjust to your NAS drive letter
+> $env:GJESUS3_ROOT = "J:\"   # adjust to your NAS drive letter
 > ```
 >
-> If you forget, the script will now error out clearly rather than silently writing into a phantom path on your C: drive. The flag form `--nas-root "J:/"` on each command also works.
+> If you forget, the script will now error out clearly rather than silently writing into a phantom path on your C: drive. The flag form `--nas-root "J:\"` on each command also works.
 
 1. **Finish the acquisition.** Confirm the file(s) are on the instrument's usual share (e.g. AxioScan 7 writes to `\\goptical\GOpticalUsers data\AxioScan\<YYYYMMDD>\`). Do not move them yet.
 2. **Find or write the YAML config.** A versioned config per instrument lives in `tools/configs/`. Copy the nearest match for your instrument and save under a new filename (e.g. `axioscan7_20260520.yaml`). The starter template is `tools/templates/ingest_template.yaml`.

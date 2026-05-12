@@ -622,7 +622,7 @@ def main():
         )
         log(
             "Pass --nas-root <path> explicitly, or set GJESUS3_ROOT in your "
-            "shell. On Windows PowerShell: $env:GJESUS3_ROOT = 'J:/'  "
+            "shell. On Windows PowerShell: $env:GJESUS3_ROOT = 'J:\\'  "
             "(adjust drive letter to your NAS mount). On WSL: typically "
             "/mnt/gjesus3.",
             "ERROR",
