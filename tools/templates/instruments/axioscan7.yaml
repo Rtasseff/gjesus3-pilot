@@ -66,7 +66,8 @@ registry:
   # Composite sample_id (06_REGISTRIES §2.3 DRAFT). Raw chunks remain in
   # the per-acquisition metadata.json `discovered` block.
   sample_id:            "${discovered.project}_${discovered.sample_short}"
-  sample_type:          NA
+  # AxioScan WSI is always excised tissue sections for this group (06_REGISTRIES §2.4 DRAFT vocab).
+  sample_type:          tissue
   # Precise timestamp from the .czi. Day-folder fallback is
   # `discovered.acquisition_date` if a .czi ever lacks
   # AcquisitionDateAndTime.

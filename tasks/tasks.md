@@ -98,8 +98,12 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [ ] Finalize scripts after all modality passes (Section 4.9)
 - [ ] **Sample-ID convention follow-ups** (round-4 raised, no urgency):
   - [ ] PI sign-off on the DRAFT composite `sample_id = <short_project>_<short_sample>` (REG-01 still open; see [06_REGISTRIES §2.3](../mfb-rdm-docs/06_REGISTRIES.md))
-  - [ ] Confirm with team whether the trailing organ letter (`H`, `B`, ...) inside short sample IDs is a real convention worth parsing into `sample_type` — currently surfaced only as part of the raw chunk; not parsed.
+  - [ ] Confirm with team whether the trailing organ letter (`H`, `B`, ...) inside short sample IDs is a real convention worth parsing — feeds into the `anatomical_entity` future column below.
   - [ ] (Optional / future) Predefined chunk-name set that auto-promotes to specific registry columns — explicit `registry:` mapping is the model today; this would be a layer on top, not a replacement.
+- [ ] **Sample-type vocabulary follow-ups** (REG-07; see [06_REGISTRIES §2.4](../mfb-rdm-docs/06_REGISTRIES.md)):
+  - [ ] PI sign-off on the DRAFT 5-value vocab (`tissue` / `organism` / `cells` / `material` / `phantom`).
+  - [ ] Apply across remaining instruments as they come online — set the appropriate default in each per-instrument template under `tools/templates/instruments/`.
+  - [ ] (Future) Add dedicated `sample_organism` (e.g. `Mus musculus`) and `anatomical_entity` (e.g. `heart`, `brain`) columns to the raw registry — splits the current freeform `"mouse lung section"`-style strings into queryable fields. Coordinate with REG-01 (composite sample_id) and the organ-letter parsing question so we don't duplicate effort.
 - [ ] **Refactor [11_OPERATIONS §3.2 Quick Start](../mfb-rdm-docs/11_OPERATIONS.md) for multi-instrument** — current text is AxioScan-7-specific (share path example, config-name example, filename pattern). Once 2-3 instruments are live, separate the common workflow steps from the per-instrument specifics (per-instrument Quick Start subsections or table of "for your instrument, share = ... / filename pattern = ... / starter config = ...").
 
 ### 3.2 Other Scripts

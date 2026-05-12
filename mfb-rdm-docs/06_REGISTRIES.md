@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-11
+**Last Updated:** 2026-05-12
 
 ---
 
@@ -67,7 +67,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `operator` | String | ✅ Yes | User | Person who collected the data. |
 | `data_source` | String | ✅ Yes | User | `internal` or `collaborator:<name>`. |
 | `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. See §2.3 for the recommended composite format. |
-| `sample_type` | String | 🔶 Recommended | User | Brief sample description. |
+| `sample_type` | String | 🔶 Recommended | User | Category of biological material. Use the controlled vocabulary in §2.4 (DRAFT). |
 | `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary file (`<ACQ-ID>.<ext>` for microscopy / `<ACQ-ID>.zip` for DICOM, or `series/` for the legacy DICOM uncompressed layout). |
 | `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
 | `file_format` | String | ✅ Yes | Auto | File extension/format (e.g., `.czi`, `.zip`). |
@@ -105,7 +105,29 @@ This composes the registry value at ingest time from filename chunks. The raw ch
 - This convention does **not** override official sample identifiers when they exist as a single string already (e.g. an animal registry ID like `MOUSE-2024-042`). Use those verbatim in `sample_id` and skip the composite.
 - Organ-letter encoding inside the short ID (e.g. `H` = Heart, `B` = Brain in `ID26H`) is not parsed today; team convention is not yet confirmed. Tracked as a future enhancement.
 
-### 2.4 Example
+### 2.4 Sample Type Vocabulary (DRAFT)
+
+> **🔶 DRAFT pilot guidance.** `sample_type` is the category of biological material in REMBI terms — *not* the species and *not* the anatomy. Status open (REG-07) pending PI sign-off.
+
+REMBI separates concerns: **sample type** (the kind of biological material), **organism/species**, **anatomical entity**, **preparation**, and **imaging mode**. In the current registry only one of these has its own column (`sample_type`); the others ride along in `sample_id` / `notes` for now (see future split tracked in `tasks/tasks.md` §3.1).
+
+**Controlled vocabulary** — small enough to remember, broad enough to cover everything in scope:
+
+| Value | Means | Examples in this project |
+|-------|-------|--------------------------|
+| `tissue` | Excised biological material (sections, slices, biopsies, fixed/unfixed) | All AxioScan / Cell Observer / LSM 900 WSI of mouse organ sections |
+| `organism` | Whole live or post-mortem animal | In vivo MRI, PET/CT, SPECT of mice |
+| `cells` | Cultured or isolated cell preparations | Future Cell Observer cell-culture work (if it lands in scope) |
+| `material` | Non-biological samples (nanoparticles, contrast agents, synthetic constructs) | Future SEM/TEM nanomaterial characterization |
+| `phantom` | Imaging calibration objects | Platform commissioning / QA scans, if archived |
+
+**Notes:**
+
+- Use lowercase, one of the five values verbatim. If a future sample doesn't fit, flag for vocab extension before ingest rather than inventing a value on the fly.
+- Species/anatomy details that today appear as freeform `"mouse lung section"`-style strings in pre-cutover example rows should migrate to dedicated columns once REG-07 closes (proposed `sample_organism` + `anatomical_entity`; tracked in `tasks/tasks.md` §3.1).
+- For batches where every acquisition shares the same type, set the value at the YAML template level rather than per-row. The AxioScan 7 per-instrument template pre-fills `sample_type: tissue` for this reason.
+
+### 2.5 Example
 
 ```csv
 acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
@@ -115,7 +137,7 @@ ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecub
 ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HPIC-case-01,,ACQ-20260301-XMRI-001.zip,case_01.zip,.zip,450,3,/raw/DICOM/2026/2026-03/ACQ-20260301-XMRI-001/,Y,N,,,Lightweight ingest from NAS staging
 ```
 
-### 2.5 Update Rules
+### 2.6 Update Rules
 
 | Action | Allowed | Who | When |
 |--------|---------|-----|------|
@@ -340,3 +362,4 @@ Generation: Next available number within each type.
 | REG-04 | Validation script requirements | Data Mgmt Lead | 📋 Planned |
 | REG-05 | Curated datasets registry: finalize schema after pilot experience | Data Mgmt Lead | ❓ Evaluating |
 | REG-06 | Track DICOM instance count (.dcm files) in registry or only in extended metadata? | Data Mgmt Lead | 🔶 Draft |
+| REG-07 | Sample type controlled vocabulary (`tissue`/`organism`/`cells`/`material`/`phantom`) DRAFT in §2.4; PI sign-off + first round of cross-instrument application pending. Future split of species/anatomy into dedicated columns. | Users / PI | 🔶 Draft |
