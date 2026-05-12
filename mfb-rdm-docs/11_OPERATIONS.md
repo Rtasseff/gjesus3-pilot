@@ -98,12 +98,20 @@ This document covers operational aspects: roles, permissions, workflows, onboard
 
 Daily flow for depositing a new acquisition. This is the operational view — what to do and in what order. For the underlying command syntax and flags, see [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md).
 
+> **One-time per shell session (PowerShell on Windows):** point the script at the NAS once. Either add the line to your PowerShell profile or run it before each session:
+>
+> ```powershell
+> $env:GJESUS3_ROOT = "J:/"   # adjust to your NAS drive letter
+> ```
+>
+> If you forget, the script will now error out clearly rather than silently writing into a phantom path on your C: drive. The flag form `--nas-root "J:/"` on each command also works.
+
 1. **Finish the acquisition.** Confirm the file(s) are on the instrument's usual share (e.g. AxioScan 7 writes to `\\goptical\GOpticalUsers data\AxioScan\<YYYYMMDD>\`). Do not move them yet.
 2. **Find or write the YAML config.** A versioned config per instrument lives in `tools/configs/`. Copy the nearest match for your instrument and save under a new filename (e.g. `axioscan7_20260520.yaml`). The starter template is `tools/templates/ingest_template.yaml`.
 3. **Edit the config for this batch.** At minimum, update `auto_discover.staging_dir` to your folder. Adjust per-batch fields (operator, project_hint pattern) as needed. The full schema is documented in [`10_TOOLS.md §2.1`](10_TOOLS.md).
 4. **Dry-run.** Always first. Inspect the log: file count, parsed values, project resolution, any warnings.
 
-   ```bash
+   ```powershell
    python tools/ingest_raw.py -c tools/configs/<your_config>.yaml --dry-run
    ```
 

@@ -608,6 +608,26 @@ def main():
     nas_root = args.nas_root
     nas_unc = args.nas_unc or None  # empty string -> disable .lnk creation
     log(f"NAS root: {nas_root}")
+
+    # Fail fast if nas_root doesn't look like a real NAS root. Without this
+    # check, Python silently creates whatever path was passed (e.g. the WSL
+    # default "/mnt/gjesus3" resolves to "C:\mnt\gjesus3" on Windows native
+    # Python) and the ingest runs to completion writing into a phantom tree.
+    registries_dir = os.path.join(nas_root, "registries")
+    if not os.path.isdir(nas_root) or not os.path.isdir(registries_dir):
+        log(
+            f"NAS root does not look valid: '{nas_root}' (expected a "
+            f"directory containing a 'registries/' subfolder).",
+            "ERROR",
+        )
+        log(
+            "Pass --nas-root <path> explicitly, or set GJESUS3_ROOT in your "
+            "shell. On Windows PowerShell: $env:GJESUS3_ROOT = 'J:/'  "
+            "(adjust drive letter to your NAS mount). On WSL: typically "
+            "/mnt/gjesus3.",
+            "ERROR",
+        )
+        sys.exit(2)
     if nas_unc:
         log(f"NAS UNC:  {nas_unc} (used for .lnk shortcut targets)")
     else:

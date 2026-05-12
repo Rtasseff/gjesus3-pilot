@@ -4,6 +4,18 @@ One-page reference for the raw-data ingest tool. For the operational ("when do I
 
 ---
 
+## Set the NAS root first (one-time per shell)
+
+The script needs to know where the NAS is mounted. **PowerShell on Windows** — set it once per session (or add the line to your `$PROFILE` to make it permanent):
+
+```powershell
+$env:GJESUS3_ROOT = "J:/"   # adjust to your NAS drive letter
+```
+
+**WSL / Linux** — the default `/mnt/gjesus3` usually already works; set explicitly if your mount is elsewhere.
+
+Alternatively, pass `--nas-root <path>` on every command (e.g. `--nas-root "J:/"`). The script now fails fast with a clear message if the configured NAS root doesn't exist or doesn't contain a `registries/` subfolder — it will no longer silently write into a phantom path.
+
 ## Quick commands
 
 ```bash
