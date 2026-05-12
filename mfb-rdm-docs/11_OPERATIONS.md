@@ -109,7 +109,7 @@ Daily flow for depositing a new acquisition. This is the operational view — wh
 > If you forget, the script will now error out clearly rather than silently writing into a phantom path on your C: drive. The flag form `--nas-root "J:\"` on each command also works.
 
 1. **Finish the acquisition.** Confirm the file(s) are on the instrument's usual share (e.g. AxioScan 7 writes to `\\goptical\GOpticalUsers data\AxioScan\<YYYYMMDD>\`). Do not move them yet.
-2. **Find or write the YAML config.** A versioned config per instrument lives in `tools/configs/`. Copy the nearest match for your instrument and save under a new filename (e.g. `axioscan7_20260520.yaml`). The starter template is `tools/templates/ingest_template.yaml`.
+2. **Find or write the YAML config.** Start from the **per-instrument template** at [`tools/templates/instruments/<instrument>.yaml`](../tools/templates/instruments/) (currently: `axioscan7.yaml`). If your instrument doesn't have one yet, start from the universal [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml) and ask the Data Mgmt Lead before running — the per-instrument template captures conventions that aren't obvious. Save your copy as `tools/configs/<instrument>_<batch>.yaml` (e.g. `axioscan7_20260520.yaml`). The configs folder is under git and the relative path of the config you ran is stamped into every registry row it produces (`ingest_config` column).
 3. **Edit the config for this batch.** At minimum, update `auto_discover.staging_dir` to your folder. Adjust per-batch fields (operator, project_hint pattern) as needed. The full schema is documented in [`10_TOOLS.md §2.1`](10_TOOLS.md).
 4. **Dry-run.** Always first. Inspect the log: file count, parsed values, project resolution, any warnings.
 
@@ -134,7 +134,8 @@ Daily flow for depositing a new acquisition. This is the operational view — wh
 | What | Where |
 |------|-------|
 | YAML configs (version-controlled) | `tools/configs/` |
-| Config template | `tools/templates/ingest_template.yaml` |
+| Per-instrument config templates | `tools/templates/instruments/` |
+| Universal config template (fallback) | `tools/templates/ingest_template.yaml` |
 | CLI reference | `tools/INGEST_CLI.md` |
 | Full config schema | [`10_TOOLS.md §2.1`](10_TOOLS.md) |
 | Registries on NAS | `\\GJESUS3\gjesus3\registries\` |

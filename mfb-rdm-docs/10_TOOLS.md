@@ -52,10 +52,14 @@ tools/
 │   ├── probe_czi.py         # Standalone read-only .czi metadata probe (utility)
 │   └── linker.py            # Create Windows .lnk shortcut + manifest CSV (see §2.1.1)
 ├── configs/                 # Committed ingest configs, one per batch / day folder
-│   └── axioscan7_20260422.yaml
+│   ├── axioscan7_20260422.yaml
+│   └── axioscan7_20260506.yaml
 ├── templates/
-│   ├── README_raw.txt       # README template
-│   └── ingest_template.yaml # Starter template for new batch configs
+│   ├── README_raw.txt       # README template (per-acquisition README content)
+│   ├── ingest_template.yaml # Universal starter template for new batch configs
+│   └── instruments/         # Per-instrument templates (conventions locked-in)
+│       └── axioscan7.yaml   # Zeiss AxioScan 7 (.czi) — MFB filename convention
+├── INGEST_CLI.md            # CLI reference (flags, schema cheat-sheet, templates layout)
 └── requirements.txt         # pydicom, pyyaml, tqdm, czifile
 ```
 
@@ -176,7 +180,7 @@ Three top-level blocks. `defaults:` is gone — non-registry control flags moved
 
 The user-controllable `registry:` columns are: `instrument`, `data_ecosystem`, `instrument_model`, `modalities_in_study`, `operator`, `data_source`, `sample_id`, `sample_type`, `acquisition_datetime`, `project_hint`, `notes`. Of these, **`instrument`, `data_ecosystem`, `operator`, `data_source` must be present** (NA allowed where intentional); the rest are optional. Auto-populated columns (`acq_id`, `registration_datetime`, `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) must NOT appear in `registry:`.
 
-A starter template lives at [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml). Edited copies should be saved under [`tools/configs/`](../tools/configs/) (under git, version-locked with the script — the relative path is stamped into each registry row's `ingest_config` column).
+**Templates layout** — start from the per-instrument template under [`tools/templates/instruments/`](../tools/templates/instruments/) (currently: `axioscan7.yaml`); the universal starter [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml) is the fallback for instruments not yet onboarded. Edited copies are saved under [`tools/configs/`](../tools/configs/) (under git, version-locked with the script — the relative path is stamped into each registry row's `ingest_config` column). See [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md) for the full templates/configs layout table.
 
 **Batch configuration — file-mode with filename parsing (AxioScan and similar):**
 
@@ -264,7 +268,7 @@ python tools/ingest_raw.py --interactive --lightweight             # lightweight
 ```
 
 **Key features:**
-- Three-block YAML schema: `ingest:` (control), `auto_discover:` (extract `discovered.*`), `registry:` (explicit per-column mapping with literal | `discovered.X` | `${...}` interp | NA). Template at `tools/templates/ingest_template.yaml`.
+- Three-block YAML schema: `ingest:` (control), `auto_discover:` (extract `discovered.*`), `registry:` (explicit per-column mapping with literal | `discovered.X` | `${...}` interp | NA). Universal starter at `tools/templates/ingest_template.yaml`; per-instrument templates under `tools/templates/instruments/`.
 - Auto-populated columns (`acq_id`, `registration_datetime`, `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) — script-controlled, not user-editable.
 - `ingest_config` registry column records the relative path of the YAML config that produced the row, for auditability + reproducibility.
 - Two ingest modes: full (default) and lightweight (`--lightweight`, planned)

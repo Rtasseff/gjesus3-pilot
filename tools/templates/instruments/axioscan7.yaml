@@ -1,0 +1,81 @@
+# Per-instrument template — AxioScan 7 (Zeiss whole-slide scanner).
+#
+# Copy this file to `tools/configs/axioscan7_<batch>.yaml` (a name that
+# identifies this run — e.g. the day folder date or campaign label),
+# edit the marked placeholders, then run.
+#
+# What's pre-filled (don't touch unless you know why):
+#   - `pattern`, `filename_parse`, `filter`, `acquisition_date_from`
+#     encode the AxioScan-7 / MFB filename and day-folder conventions:
+#     `<group_code>_<operator>_<project>_<sample_short>_<stain>_<magnification>.czi`
+#     in a day folder named `YYYYMMDD`.
+#   - `instrument`, `data_ecosystem`, `instrument_model`,
+#     `acquisition_datetime` use the .czi-embedded values where they
+#     beat any filename or folder-derived guess.
+#   - `sample_id`, `project_hint`: pilot conventions per
+#     06_REGISTRIES §2.3 (composite sample_id) and the AE-biomeGUNE-NNNN
+#     animal-project naming.
+#
+# What you must edit per batch:
+#   - `auto_discover.staging_dir`         <-- point at this batch's day folder
+#   - `registry.notes`                    <-- short batch description
+#
+# What you may want to change per batch (rarely):
+#   - `ingest.delete_source_after_ingest` (default false; opt in only after
+#     you've verified a real run for this batch)
+#   - `ingest.auto_create_projects` (default true for AxioScan: animal
+#     project codes are derived from the filename, so first-encounter
+#     auto-create + subsequent reuse-by-short-name is the intended flow)
+#
+# Extends the universal starter at tools/templates/ingest_template.yaml.
+# Per-instrument convention only — other groups using the same scanner
+# with different filename conventions would need their own template.
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  # EDIT: absolute path to this batch's day folder under the AxioScan
+  # share. Use forward slashes; Python normalizes on Windows.
+  staging_dir: "S:/goptical/GOpticalUsers data/AxioScan/<YYYYMMDD>"
+  pattern: "*.czi"
+  filename_parse:
+    separator: "_"
+    # AxioScan + MFB convention:
+    # <group_code>_<operator>_<project>_<sample_short>_<stain>_<magnification>.czi
+    # Chunk names are free-form labels; the registry: block below
+    # references them via ${discovered.<name>}.
+    fields: [group_code, operator, project, sample_short, stain, magnification]
+  # MFB-only filter; non-MFB files in the same day folder are skipped.
+  filter:
+    group_code: MFB
+  # Day-folder name is YYYYMMDD; parsed into discovered.acquisition_date
+  # as a fallback if a .czi ever lacks AcquisitionDateAndTime.
+  acquisition_date_from: parent_folder_name
+
+registry:
+  instrument:           ZWSI
+  data_ecosystem:       MICROSCOPY
+  # Prefer the microscope-issued name from the .czi over a literal, so
+  # different AxioScan units stay distinguishable in the registry.
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  operator:             discovered.operator
+  data_source:          internal
+  # Composite sample_id (06_REGISTRIES §2.3 DRAFT). Raw chunks remain in
+  # the per-acquisition metadata.json `discovered` block.
+  sample_id:            "${discovered.project}_${discovered.sample_short}"
+  sample_type:          NA
+  # Precise timestamp from the .czi. Day-folder fallback is
+  # `discovered.acquisition_date` if a .czi ever lacks
+  # AcquisitionDateAndTime.
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  # Full animal-project code. First file for a given <project> chunk
+  # triggers auto-create with short_name = "ae-biomegune-<project>"
+  # (lowercased at create time). Subsequent files reuse via short_name
+  # lookup. Disable `ingest.auto_create_projects` above if you don't
+  # want auto-create behaviour for a particular batch.
+  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  # EDIT: short description of this batch.
+  notes:                "WGA fluorescence WSI batch (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"

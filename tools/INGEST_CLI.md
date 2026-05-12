@@ -49,7 +49,7 @@ The script is idempotent: re-running the same config skips acquisitions already 
 
 ## Config schema cheat-sheet
 
-Every config has three top-level blocks. Full spec in [`10_TOOLS.md §2.1`](../mfb-rdm-docs/10_TOOLS.md); starter template at [`tools/templates/ingest_template.yaml`](templates/ingest_template.yaml).
+Every config has three top-level blocks. Full spec in [`10_TOOLS.md §2.1`](../mfb-rdm-docs/10_TOOLS.md). Start from the **per-instrument template** at [`tools/templates/instruments/<instrument>.yaml`](templates/instruments/) (currently: `axioscan7.yaml`). For instruments without a per-instrument template, fall back to the universal [`tools/templates/ingest_template.yaml`](templates/ingest_template.yaml) and ask the Data Mgmt Lead before running.
 
 | Block | Purpose |
 |-------|---------|
@@ -79,14 +79,31 @@ The pipeline fills these itself: `acq_id`, `registration_datetime`, `primary_fil
 
 ---
 
-## Per-instrument configs
+## Templates and configs — the layout
 
-Live, version-controlled configs ship in `tools/configs/`. Copy the nearest match for your instrument, edit `staging_dir` and any per-batch overrides, save under a new filename, and run. The path of the config you used is recorded in the `ingest_config` column of every row it produced.
+```
+tools/templates/
+├── ingest_template.yaml          # universal generic starter
+└── instruments/
+    └── axioscan7.yaml            # per-instrument template (locked-in conventions)
+                                   # — more added as instruments come online —
 
-| Instrument | Example config |
-|------------|----------------|
-| AxioScan 7 (`ZWSI`, `.czi`) | `tools/configs/axioscan7_20260506.yaml` |
-| HPIC XMRI (collaborator DICOM) | `tools/configs/hpic_*.yaml` |
+tools/configs/
+└── <instrument>_<batch>.yaml     # the live, version-controlled, per-batch
+                                   # configs produced by editing a template
+```
+
+| Where | What lives there | When to touch |
+|-------|------------------|---------------|
+| `tools/templates/instruments/` | Per-instrument starters with all the instrument-specific patterns (filename parse, registry mapping, project_hint convention) locked in. Edit only when the convention itself changes. | Add a new file when bringing a new instrument online. |
+| `tools/templates/ingest_template.yaml` | Universal generic starter — fallback for instruments without their own template yet. | Edit only when the YAML schema itself changes. |
+| `tools/configs/` | Live, version-controlled per-batch configs (one per ingest run). Their relative path is stamped into every registry row's `ingest_config` column for auditability. | Add a new file every batch — copy the matching template, edit `staging_dir` + `notes`, run. |
+
+**Per-instrument templates currently available:**
+
+| Instrument | Template | Notes |
+|------------|----------|-------|
+| Zeiss AxioScan 7 (`ZWSI`, `.czi`) | [`tools/templates/instruments/axioscan7.yaml`](templates/instruments/axioscan7.yaml) | MFB filename convention; auto-create projects from filename's `<project>` chunk |
 
 ---
 

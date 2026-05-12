@@ -48,13 +48,14 @@ When updating one document, check for impacts on others:
 - `06_REGISTRIES.md` — registry schemas must match field references elsewhere
 - `07_PROVENANCE.md` — referenced by `04_PUBLICATIONS.md` and `05_PROJECTS.md`
 - `03_RAW_STORAGE.md` — instrument codes must match `09_MODALITIES.md` and `equipment/INDEX.md`
-- `10_TOOLS.md` — YAML ingest schema; if you add/rename a `registry:` column or `discovered.*` source, update `06_REGISTRIES.md` (schema), `08_METADATA.md` (sidecar), and `tools/templates/ingest_template.yaml` together
+- `10_TOOLS.md` — YAML ingest schema; if you add/rename a `registry:` column or `discovered.*` source, update `06_REGISTRIES.md` (schema), `08_METADATA.md` (sidecar), `tools/templates/ingest_template.yaml` (universal), AND every `tools/templates/instruments/*.yaml` (per-instrument) together
 - `08_METADATA.md` — `metadata.json` sidecar shape; the file written by `tools/ingest/metadata_sidecar.py` must match what's documented here
 - `EXPOSED_FIELDS` in any `tools/ingest/<eco>_metadata.py` is the truth for which `discovered.<eco>_*` fields are surfaced; the matching table in `09_MODALITIES.md` (per-instrument "Auto-discovered fields" subsection) mirrors it. When you add or rename a field, update both
 
 ### Ingest configs
-- Per-batch YAML configs live in `tools/configs/` (under git, version-locked with the scripts). Each row's `ingest_config` column records the relative path of the config that produced it.
-- Starter template: `tools/templates/ingest_template.yaml` — copy and edit; never edit in place.
+- **Per-instrument templates** live in `tools/templates/instruments/` (e.g. `axioscan7.yaml`) — they lock in the instrument-specific patterns (filename parse, registry mapping, project_hint convention). Copy and edit; never edit in place. Add a new template when bringing a new instrument online.
+- **Universal starter** at `tools/templates/ingest_template.yaml` — fallback for instruments not yet onboarded.
+- **Per-batch configs** live in `tools/configs/` (under git, version-locked with the scripts) — produced by copying the matching per-instrument template, editing `staging_dir` + `notes`, saving as `<instrument>_<batch>.yaml`. Each row's `ingest_config` column records the relative path of the config that produced it.
 
 ### Equipment reference
 - `equipment/INDEX.md` is the starting point for in-scope imaging instruments.
