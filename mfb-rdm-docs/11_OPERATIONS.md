@@ -19,12 +19,17 @@ This document covers operational aspects: roles, permissions, workflows, onboard
 | Role | Responsibilities | Who |
 |------|------------------|-----|
 | **System Owner** | Strategic decisions; access authorization; escalation | Jesús Ruiz-Cabello (PI) |
-| **Data Management Lead** | Define rules; implement system; support users; manage registries | Ryan Tasseff |
-| **Operator** | Deposit data; maintain provenance; follow conventions | Trained group members |
+| **Data Management Lead** | Define rules; implement system; support users; manage registries; admin writes to `/raw/` (corrections, project close-out merges) | Ryan Tasseff |
+| **Operator** | Deposit data into `/raw/`; fill ingest-time metadata; maintain provenance; follow conventions | Trained lab technicians |
+| **User** | Read raw data; work in own project folder under `/projects/`; **supply study-level metadata** under `/projects/<own>/metadata/`; contribute to publications | Researchers (e.g. PhD students, postdocs) |
+
+The **Operator vs User** distinction is the writeability boundary on `/raw/` and on which area each role primarily inhabits. Operators bring data IN at ingest time; Users work WITH data after deposit. A single person can wear both hats — but the roles describe the *action*, not the person. The new `User` role is the home for **study-level metadata work** in `/projects/<own>/metadata/` (see [08_METADATA §1](08_METADATA.md)).
 
 ### 1.2 Authorized Users (Initial Pilot)
 
-| Name | Role | Notes |
+> **⚠️ Role designations below predate the User/Operator split (added 2026-05-12) and need PI review.** Several people listed as "Operator" likely fit the new "User" role (researchers contributing study metadata) rather than the technician-style Operator role (data deposit). The Owner/Lead designations are unchanged.
+
+| Name | Role (pending review) | Notes |
 |------|------|-------|
 | Jesús Ruiz-Cabello | Owner | PI |
 | Ryan Tasseff | Data Management Lead | Data Office |
@@ -42,16 +47,25 @@ This document covers operational aspects: roles, permissions, workflows, onboard
 
 ### 2.1 Area Permissions
 
-| Area | Data Mgmt Lead | Operators | Others |
-|------|----------------|-----------|--------|
-| `/staging/` ¹ | Read/Write | Read/Write | None |
-| `/raw/` (pre-deposit) | Read/Write | Create/Write | None |
-| `/raw/` (post-deposit) | Read | Read | Read (if granted) |
-| `/publications/` | Read/Write | Read/Write (own) | Read (if granted) |
-| `/projects/` | Read/Write | Read/Write (own) | None |
-| Registries | Read/Write | Read | None |
+> **✅ DECIDED (2026-05-12):** Permissions are folder-level, anchored on the [08_METADATA §1](08_METADATA.md) split between immutable acquisition-level metadata (in `/raw/`) and mutable study-level metadata (in `/projects/<proj>/metadata/`). `/raw/` is uniformly read-only post-deposit for everyone except the Data Mgmt Lead doing controlled admin writes (corrections, project close-out merges).
+
+| Area | Data Mgmt Lead | Operators (technicians) | Users (researchers) | Others |
+|------|----------------|-------------------------|---------------------|--------|
+| `/staging/` ¹ | Read/Write | Read/Write | — | — |
+| `/raw/` (pre-deposit) | Read/Write | Create/Write | — | — |
+| `/raw/` (post-deposit) — incl. `metadata.json` sidecars | Read/Write (admin corrections + close-out merges) | Read | Read | Read (if granted) |
+| `/projects/<own>/` (incl. `metadata/`) | Read/Write | Read | Read/Write | — |
+| `/projects/<other>/` | Read/Write | Read | Read (if granted) | — |
+| `/publications/<own>/` | Read/Write | Read/Write | Read/Write | Read (if granted) |
+| Registries | Read/Write | Read | Read | — |
 
 > ¹ NAS `staging/` is a **secondary convenience dump**. The recommended ingest path uses fast local or network storage as the primary source (see [03_RAW_STORAGE](03_RAW_STORAGE.md) Section 5.2).
+
+**Key consequences of this model:**
+
+- After ingest finishes, even the Operator who ran it loses write access to that acquisition. Corrections route through the Data Mgmt Lead. (See §4.2 Exception Handling.)
+- Users (researchers) can never modify raw data or its sidecar — but they have a clean writeable area for study-level metadata in `/projects/<own>/metadata/`. This is the home for the eventual Excel-import metadata tool (see `tasks/tasks.md`).
+- The only writes to `/raw/` post-deposit are by the Data Mgmt Lead, in two situations: (a) ad-hoc correction of an error caught after ingest; (b) project close-out — merging the study-level metadata from `/projects/<proj>/metadata/` into the corresponding `/raw/<ACQ-ID>/metadata.json` sidecars before the project folder is deleted (see [05_PROJECTS §4.x](05_PROJECTS.md)).
 
 ### 2.2 Intake Roles
 

@@ -112,6 +112,11 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [ ] `log_activity` (provenance helper) — requirements defined, not yet implemented
 - [ ] `validate_registries` — planned (REG-04)
 - [ ] `verify_checksums` — planned
+- [ ] **Study-metadata work stream** (architecture in [08_METADATA §1](../mfb-rdm-docs/08_METADATA.md), 2026-05-12). Order is roughly: gather → import → close-out. None blocks the first user-driven Phase B ingest.
+  - [ ] **`gather_metadata.py`** (read-only utility) — given an acq_id (or project), join `/raw/<ACQ-ID>/metadata.json` with the corresponding `/projects/<proj>/metadata/<acq_id>.json` (and `study.json` / `biosamples.json`) on `acq_id` and emit a merged view (JSON or pretty-printed). The "single source of truth" for consumers (OMERO, future DB, analysis scripts) until indexing is built. Small (~40 lines); ship early.
+  - [ ] **Excel → study-metadata importer** (researcher-facing). Reads a per-project `study.xlsx` with a defined sheet layout (study sheet + biosamples sheet + optional per-acquisition supplements sheet), validates against a schema, writes `/projects/<proj>/metadata/{study,biosamples,<acq_id>}.json`. Schema needs design; the Excel layout will live alongside the tool. This is what unblocks Users (researchers) to actually contribute REMBI study/biosample context.
+  - [ ] **Project close-out tool** (Data Mgmt Lead procedure). Given a project ready for closure: (1) read `/projects/<proj>/metadata/`; (2) for each acq_id referenced, merge the study-level metadata into `/raw/<ACQ-ID>/metadata.json` under a `study:` block (additive, never overwriting acquisition-level fields); (3) if the project promoted to a publication, also stage a copy under `/publications/<pub-id>/`; (4) verify writes; (5) only then delete the project folder. Requires admin write access to `/raw/`. Has implications for the raw-immutability lockdown (§4.3) — that lockdown design must allow the Lead to perform these merges. Document the procedure (manual recipe first, scripted tool after).
+  - [ ] Document the merge format in [08_METADATA](../mfb-rdm-docs/08_METADATA.md) — `metadata.json.study` block shape — once the Excel-importer schema settles.
 
 ### 3.3 Infrastructure Decisions
 - [ ] Where scripts will run — designated workstation vs user machines (TOOL-01)
@@ -165,6 +170,7 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [ ] Verify raw folder is truly read-only from Windows SMB and WSL
 - [ ] Verify links are **read-only traversal** — users can follow the link and read files but not modify raw data through the link
 - [ ] Decide: script the post-deposit lockdown into `ingest_raw.py`, or keep it as a separate admin step?
+- [ ] **The lockdown must preserve a Data-Mgmt-Lead write path** — the project close-out tool (§3.2) needs to merge study-level metadata into `/raw/<ACQ-ID>/metadata.json` post-lockdown. Either: (a) Lead has an admin account whose group ACL allows write on `/raw/` even when general users see it as read-only; or (b) Lead temporarily un-locks → writes → re-locks. Pick when implementing the lockdown.
 - [ ] (Deferred to future deployments) Symlink-based linking via WSL or SSH-into-NAS — see porting note in 10_TOOLS §2.1.1
 
 ### 4.4 Batch Ingest: Collaborator DICOM

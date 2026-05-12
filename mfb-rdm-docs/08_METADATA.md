@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-05-06
+**Last Updated:** 2026-05-12
 
 ---
 
@@ -12,12 +12,51 @@ This document specifies the metadata requirements for raw acquisitions, includin
 
 ---
 
-## 1. Metadata Tiers
+## 1. Where Metadata Lives
 
-| Tier | Location | Purpose | Requirement |
-|------|----------|---------|-------------|
-| **Core** | Registry | Quick lookup, indexing | ✅ Required |
-| **Extended** | Acquisition folder | Detailed interpretation | 🔶 Recommended |
+> **✅ DECIDED (2026-05-12):** Metadata is split between **acquisition-level** (in `/raw/`, immutable after ingest) and **study-level** (in `/projects/`, writeable by researchers during the project's life). The split aligns with REMBI's hierarchy and lets `/raw/` enforce strict permissions without blocking researcher metadata work.
+
+### 1.1 Three locations
+
+| Location | What lives there | Set by | When | Mutable post-ingest? |
+|----------|------------------|--------|------|----------------------|
+| `registry_raw.csv` | Indexed core fields (`acq_id`, `instrument`, `sample_id`, `sample_type`, `project_hint`, etc.). See [06_REGISTRIES](06_REGISTRIES.md). | Auto + Operator (via YAML `registry:` block) | At ingest | Admin-only (corrections) |
+| `/raw/<ACQ-ID>/metadata.json` | Per-acquisition sidecar — `user_supplied` (Operator at ingest), `discovered` (filename chunks + embedded auto-extracts), `<ecosystem_section>` (structured + `_raw_metadata` lossless). | Auto + Operator | At ingest | No (raw is read-only post-deposit) |
+| `/projects/<proj>/metadata/` | Study-level metadata — experimental aim, biological subject details (strain, age, sex, treatment), experimental groups, per-acquisition supplements. REMBI's **Study** + **Biosample** context. | Researcher (eventually via the Excel-import tool — see [10_TOOLS](10_TOOLS.md)) | After ingest, iteratively | Yes (project owners write during the project's life) |
+
+### 1.2 Why the split
+
+REMBI is hierarchical: **Study** contains **Biosamples**, which undergo **Image Acquisitions**, which produce **Images**. Image-acquisition metadata is a property of the capture event (locked in at acquisition time). Study/biosample metadata is a property of the experiment (refined as the researcher learns and writes).
+
+Collapsing both into `/raw/<ACQ-ID>/metadata.json` worked while the only writer was the Operator at ingest. As soon as researchers needed to edit study context, it conflicted with the "raw is immutable" rule. The split resolves it: `/raw/` stays strictly read-only after deposit; `/projects/` is where researchers do mutable work.
+
+### 1.3 Permanent vs ephemeral storage
+
+- `/raw/` and `/publications/` are **permanent archives.** RAID-protected; eventually cold storage. Anything that must survive in perpetuity lives here.
+- `/projects/` is **temporary working space.** Projects are created, used, then closed and **deleted** (see [05_PROJECTS §5](05_PROJECTS.md)). Study-level metadata in `/projects/<proj>/metadata/` is therefore at risk of loss without an explicit preservation step.
+
+**Implication: at project close-out, study-level metadata must migrate into the permanent archive** before the project folder is deleted. The intended mechanism is a close-out tool (run by the Data Mgmt Lead) that appends/merges the contents of `/projects/<proj>/metadata/` into the corresponding `/raw/<ACQ-ID>/metadata.json` files — a controlled, one-time admin write to `/raw/`. Tracked in `tasks/tasks.md` §3.2.
+
+### 1.4 Joining the two locations
+
+Consumers (OMERO, future indexing DB, ad-hoc analysis scripts) join `/raw/<ACQ-ID>/metadata.json` and `/projects/<proj>/metadata/<acq_id>.json` on `acq_id`. A small utility `tools/gather_metadata.py` will produce a merged view on demand; tracked in `tasks/tasks.md` §3.2. Until that ships, joins are a two-file read.
+
+### 1.5 Project metadata layout
+
+The intended layout under each project folder:
+
+```
+/projects/proj-<short_name>/
+├── _project.yaml
+├── provenance.csv
+├── raw_linked/             # .lnk shortcuts to raw acquisitions
+└── metadata/               # study-level metadata (this section)
+    ├── study.json          # study aim, hypothesis, principal contact, biological-subject defaults
+    ├── biosamples.json     # mouse-by-mouse details: strain, age, sex, treatment, timepoints
+    └── <acq_id>.json       # per-acquisition supplements (optional, one per acq when needed)
+```
+
+Shape details are deferred to the Excel-import tool spec (`tasks/tasks.md` §3.2). For now the architectural rule is: **study/biosample/experimental-context metadata lives under `/projects/<proj>/metadata/`, period.**
 
 ---
 

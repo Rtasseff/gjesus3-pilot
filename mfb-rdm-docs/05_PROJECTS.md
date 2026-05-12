@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-05-12
 
 ---
 
@@ -19,8 +19,11 @@ The Projects area provides semi-structured workspaces on gjesus3 for ongoing res
 **What Projects are for:**
 - Organizing work that spans multiple potential publications
 - Working on data before it becomes publication-ready
+- Holding researcher-supplied **study-level metadata** (the experimental context that isn't captured at ingest — see [08_METADATA §1](08_METADATA.md))
 - Tracking provenance for work-in-progress
 - Shared workspace within the group
+
+> **⚠️ Important — projects are ephemeral.** `/projects/` is **temporary working space**, not permanent archive. Projects are created, used, and then closed and **deleted**. Only `/raw/` and `/publications/` are permanent archives. Anything in a project folder that needs to survive long-term (most importantly the **study-level metadata** in `metadata/`) must be preserved into the permanent archive at close-out — see §4 and [08_METADATA §1.3](08_METADATA.md). The Data Mgmt Lead is responsible for the preservation step.
 
 **Known limitations:**
 - gjesus3 is accessible only from specific hardwired on-site machines (not laptops)
@@ -52,17 +55,23 @@ Researchers who do most of their analysis on local machines or other drives can 
     └── proj-ipf-biomarkers/
         ├── _project.yaml
         ├── provenance.csv
-        ├── raw_linked/
-        │   └── ... (Windows .lnk shortcuts to raw acquisitions; created automatically by ingest_raw.py when --project is set — see 10_TOOLS §2.1.1)
-        └── ... (researcher-organized content)
+        ├── raw_linked/                 # Windows .lnk shortcuts to raw acquisitions
+        │   └── ...                     # (created by ingest_raw.py when project_hint set — see 10_TOOLS §2.1.1)
+        ├── metadata/                   # Study-level metadata (researcher-supplied)
+        │   ├── study.json              #   study aim, hypothesis, principal contact
+        │   ├── biosamples.json         #   biosample-level details (strain, age, sex, treatment)
+        │   └── <acq_id>.json           #   optional per-acquisition supplements
+        └── ... (researcher-organized analysis output, notes, working files)
 ```
+
+`metadata/` is **the only place researchers should edit study-level metadata.** It is the writeable counterpart to the read-only `/raw/<ACQ-ID>/metadata.json` sidecars. Architecture rationale in [08_METADATA §1](08_METADATA.md). The file shapes (`study.json`, `biosamples.json`, per-acq supplements) are deferred to the Excel-import tool spec — see `tasks/tasks.md` §3.2.
 
 ---
 
 ## 4. Project Lifecycle
 
 ```
-Created ──▶ Active ──▶ Paused ──▶ Closed
+Created ──▶ Active ──▶ Paused ──▶ Closed ──▶ DELETED
                   │
                   └──▶ Promoted to Publication
 ```
@@ -72,14 +81,29 @@ Created ──▶ Active ──▶ Paused ──▶ Closed
 - **Exported:** Data copied out to external storage; project deleted
 - **Abandoned:** No further work; project deleted after retention period
 
+### 4.x Close-out: preserving study-level metadata
+
+Whatever the closure path, **`/projects/<proj>/metadata/` does not get to disappear with the project folder.** The study-level metadata in there is critical for long-term archive value of the raw acquisitions (without it, future analysts won't know what experiment the imaging belonged to).
+
+Mechanism (intended; tracked in `tasks/tasks.md` §3.2):
+
+1. The Data Mgmt Lead runs a close-out tool against the project before deletion.
+2. The tool reads `/projects/<proj>/metadata/` and merges its contents into the corresponding `/raw/<ACQ-ID>/metadata.json` files (per the architecture in [08_METADATA §1.3](08_METADATA.md)) — a controlled, one-time admin write to `/raw/`. The merge is additive only; nothing in the existing acquisition-level metadata is overwritten.
+3. If the project produced a publication, the close-out tool also stages a copy of the study metadata into the publication folder for the publication record.
+4. After both writes verify, the project folder is deleted.
+
+Until this tool exists, projects should not be deleted — pause them indefinitely if needed, and flag the Data Mgmt Lead.
+
 ---
 
 ## 5. Retention
 
-> **✅ DECIDED:** Projects are temporary.
+> **✅ DECIDED:** Projects are temporary and **deleted** at close-out — they are not part of the permanent archive.
 > - Active: No limit
 > - Paused: 6-month maximum
 > - After 6 months paused: Require decision (promote, export, or delete)
+>
+> Project deletion is **blocked** until close-out preserves the study-level metadata into `/raw/` (and, where applicable, `/publications/`). See §4.x.
 
 ---
 
