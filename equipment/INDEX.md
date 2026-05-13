@@ -61,6 +61,7 @@ Each reference folder is a free-form home for vendor specs, platform description
 - **Embedded metadata:** Expected to be similar to other ZEN-based Zeiss instruments
 - **Reference materials** ([`cell-observer/`](./cell-observer/)):
   - Vendor description (pdf)
+  - Data handling workflow notes (md) — operator walkthrough from rough transcript: local-PC acquisition + manual save to operator's group-drive folder; filename convention weaker than AxioScan; **directory structure carries most context**; two effective modes (animal/histology vs. cell-assay / live-cell / plate-based); confocal LSM 900 reportedly follows the same model. Open questions captured at end of file.
 
 ### 3. Zeiss LSM 900 — Confocal Microscope
 

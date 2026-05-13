@@ -1,8 +1,25 @@
 # MFB gjesus3 RDM Pilot — Task List
 
-**Last Updated:** 2026-05-06
+**Last Updated:** 2026-05-13
 
 This file consolidates all open and completed tasks. Completed items are kept for context but marked with ~~strikethrough~~.
+
+---
+
+## 0. Active Pass / Up Next
+
+Round 4 (AxioScan 7) is **done** — 28 production acquisitions deposited, 3 projects auto-created (`ae-biomegune-{0423,0424,0525}`), provenance auto-logging verified end-to-end. See §4.6.A for the round-4 detail trail.
+
+**Next active pass is one of two, depending on which operator responds first:**
+
+| Option | Pass | Section | What's needed to start |
+|--------|------|---------|------------------------|
+| **A** | **Round 5 — Cell Observer (`CELL`)** | §4.6.B | One real `.czi` from the Cell Observer + an example folder path from the operator (Marta). |
+| **B** | **Round 5 — Platform MRI DICOM (`MRI`)** | §4.5 | One sample MRI DICOM dataset from the MRI Platform (Irantzu's group). |
+
+Either pass exercises the same architecture (the ingest pipeline, sample_type vocab, metadata-split rules) on a new instrument. Cell Observer is closer (same `.czi` extractor reuses 1:1; just needs new YAML config patterns including the new `path_parse` design intent in §3.1). MRI is fully new code (DICOM full-mode metadata extraction, compress-on-ingest — §3.1 deferred items).
+
+**If switching between A and B**, the per-pass sections (§4.5, §4.6.B) are written to be picked up cold. Read the section's "Pickup context" subsection first.
 
 ---
 
@@ -92,6 +109,26 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [ ] DICOM full-mode metadata extraction → `discovered.dicom_*` + `metadata.json.dicom` (deferred — separate stream); compression to `.zip`/`.tar.gz` — tested in Section 4.2. Will mirror the `.czi` pattern.
 - [ ] **XMRI/DICOM `acquisition_datetime` auto-extract from DICOM headers → `discovered.dicom_*`.** Currently a manual literal in the `registry:` block. Becomes automatic once the DICOM extractor ships.
 - [ ] **OMERO export / pylibCZIrw / Bio-Formats** — currently unneeded; revisit when there's a concrete use case (image server, OME-XML normalization, pixel access). See [10_TOOLS §2.1.2](../mfb-rdm-docs/10_TOOLS.md).
+- [ ] **`path_parse` YAML feature** (design intent locked 2026-05-13; implementation deferred to round-5 Cell Observer pass when there's a real folder structure to test against). Symmetric to today's `filename_parse`: name the path components between `staging_dir` and the file, each becomes a `discovered.<name>` available to `${discovered.x}` references in the `registry:` block. Lets operators put metadata in folder names instead of (or in addition to) filenames — important for Cell Observer / LSM 900 where filenames are weak. Sketch:
+  ```yaml
+  auto_discover:
+    staging_dir: "G:/Lab/CellObserver/MBC"
+    pattern:     "**/*.czi"          # recursive glob (the only new globbing behavior)
+    path_parse:
+      levels:                         # top-down, between staging_dir and the file
+        - researcher
+        - project
+        - experiment_short
+    filename_parse:                   # still works alongside, for whatever the filename carries
+      separator: "_"
+      fields:    [image_name]
+    # Optional: secondary split of a single path level
+    # path_subparse:
+    #   experiment_short:
+    #     separator: "-"
+    #     fields:    [anatomy, stain, magnification]
+  ```
+  Mismatched-depth files skip with WARN (same pattern as today's `filename_parse`). Implementation lives in `tools/ingest/config.py`'s `expand_batch`, ~40 lines.
 - [ ] Implement `--lightweight` flag in `ingest_raw.py` — tested in Section 4.2
 - [ ] Add NIfTI handling (single file, no archive) — tested in Section 4.8 if applicable
 - [ ] Implement `backfill_metadata` utility for upgrading lightweight ingests
@@ -187,14 +224,31 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [ ] (Optional) Re-run ingest on existing 75 acquisitions with new linker code — idempotent (skips existing `.lnk` files); confirms all 75 project links are accounted for and creates any that are missing
 
 ### 4.5 Pass 2: Platform DICOM — MRI (`MRI`)
-> Different DICOM source — platform-reconstructed rather than collaborator. May have different header conventions, different series structure.
-- [ ] **Ryan:** Obtain sample MRI DICOM dataset from MRI platform
-- [ ] Confirm DICOM as the output format from MRI platform (MOD-05)
-- [ ] Inspect file structure and headers — compare with collaborator DICOM
-- [ ] Audit embedded metadata — what fields differ from collaborator DICOM? (feeds 2.2)
-- [ ] Test full-mode ingest on one MRI case
-- [ ] Verify metadata.json captures MRI-specific fields
-- [ ] Resolve: do the two MRI systems need separate instrument codes? (Section 2.4)
+
+> **Pickup context (read first if returning to this section cold):**
+> - Round-5 candidate alternative to §4.6.B Cell Observer. Pick whichever has a sample dataset available first (see §0 Active Pass).
+> - DICOM ingest already works for **collaborator XMRI** (HPIC + LIONS, 75 production rows ingested round-1/2). MRI Platform DICOM is **different source, same format** — expect different header conventions, different series structure (platform-reconstructed vs collaborator-archived).
+> - Today's ingest skips DICOM full-mode metadata extraction (the `discovered.dicom_*` + `microscopy._raw_metadata`-equivalent block) — that's queued in §3.1 as **deferred**. Round-5 MRI is the natural moment to implement it, mirroring what we did for `.czi` in round-3 (`tools/ingest/czi_metadata.py`).
+> - DICOM compress-on-ingest is also still queued in §3.1. The 75 production collaborator rows came in as already-zipped `.zip`/`.rar` from collaborators; for platform MRI we'll need to compress at ingest time (the source folders contain many `.dcm` instances).
+> - Two MRI systems live on the platform (Bruker BioSpec 11.7T and 7T) — open question whether they need separate instrument codes or share `MRI`. See `equipment/mri-platform/` for the platform description.
+
+**Prerequisites (need before starting):**
+- [ ] **Ryan:** Obtain one sample MRI DICOM dataset from the MRI Platform (Irantzu's group). One acquisition's worth of `.dcm` files in their typical folder layout.
+- [ ] Confirm DICOM is the output format (MOD-05).
+
+**Round-5 execution:**
+- [ ] Inspect file structure and headers — compare with collaborator DICOM (HPIC/LIONS reference).
+- [ ] Audit embedded metadata — what header fields are populated? What differs from collaborator DICOM? (feeds §2.2)
+- [ ] Implement DICOM full-mode metadata extraction (`tools/ingest/dicom_metadata.py`, mirrors `czi_metadata.py`): curated `discovered.dicom_*` fields + structured `dicom:` sidecar block + full pydicom-dump `_raw_metadata`.
+- [ ] Implement compress-on-ingest for DICOM (`.zip` archive of the source `.dcm` collection, `file_count` from archive central directory per §3.1).
+- [ ] Test full-mode ingest on one MRI case.
+- [ ] Verify `metadata.json.dicom` captures MRI-specific fields.
+- [ ] Resolve: do the two MRI systems need separate instrument codes? (§2.4)
+
+**Documentation (during / after the pass):**
+- [ ] `09_MODALITIES.md` MRI section — per-instrument `discovered.dicom_*` fields table.
+- [ ] `08_METADATA.md` — update for `dicom:` sidecar block.
+- [ ] `00_INDEX.md` — version history.
 
 ### 4.6 Pass 3: Microscopy .czi (`ZWSI`, `CELL`, `LSM9`)
 > Completely different format — single-file primary, no archive needed, different metadata extraction library (czifile / aicspylibczi).
@@ -212,10 +266,35 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 - [ ] **User (Phase B):** manually run `tools/configs/axioscan7_20260506.yaml` following the new Quick Start in `11_OPERATIONS.md §3.2`. Dry-run first, then real. Outputs become production data (PROJ-0003..0005 will be re-created with the same `ae-biomegune-*` short_names). Capture any doc-gap moments so the docs can absorb them.
 - [ ] **User:** physically verify a `.lnk` shortcut opens the correct `.czi` on double-click for the new microscopy single-file shortcuts (covers the long-standing "open from .lnk" check originally tracked for the 2026-04-22 batch).
 
-**4.6.B Cell Observer (`CELL`) — reuses 4.6.A pipeline:**
-- [ ] **Ryan:** Obtain sample `.czi` from Cell Observer
-- [ ] Audit embedded metadata — confirm similarity to Axio Scan 7 (MOD-07)
-- [ ] Dry-run + real ingest of one `.czi` file (filename parser config may differ if naming convention differs)
+**4.6.B Cell Observer (`CELL`) — Round 5 test pass:**
+
+> **Pickup context (read first if returning to this section cold):**
+> - Cell Observer is a **separate physical instrument** from AxioScan 7 — different hardware (inverted epifluorescence vs. WSI scanner), different software module, different cameras. But same vendor (Zeiss) and **same `.czi` format**, so the metadata-extraction code (`tools/ingest/czi_metadata.py`) reuses 1:1 — to be confirmed by the first real probe.
+> - Operator workflow differs from AxioScan: data lives on the **instrument-local PC**, operator manually saves retained files to **their own group-drive folder** (variable per-operator path, no day-folder convention). See `equipment/cell-observer/cell_observer_data_handling_workflow_notes.md` for the full operator walkthrough.
+> - Filename convention is **weak**; folder structure carries most of the metadata context. This means the round-4 AxioScan template (which leaned on six-chunk filenames) **doesn't transfer as-is** — we need the new `path_parse` YAML feature (design in §3.1).
+> - Two effective modes of Cell Observer use: (a) **animal/histology** (operator may follow AxioScan-like naming for these); (b) **cell-assay / live-cell / plate-based** (sparse filenames, deep folder hierarchy). Plan: ship animal/histology mode in round 5 if the operator's example data supports it; defer cell-assay mode pending real example data.
+> - **The confocal (LSM 900) reportedly follows the same Cell Observer playbook**, so round-5 work here unblocks §4.6.C as well.
+
+**Prerequisites (need before starting):**
+- [ ] **Ryan:** Obtain one real `.czi` from the Cell Observer (any recent example).
+- [ ] **Ryan:** Get an example folder path from the operator (Marta?) showing where Cell Observer files actually live and how they're organized.
+
+**Round-5 execution (mirrors round-4 AxioScan rhythm):**
+- [ ] Read-only probe with `tools/ingest/probe_czi.py` on the sample `.czi`. Confirm the 21 curated `discovered.czi_*` fields populate (or surface which ones differ — e.g. Cell Observer may not produce `mosaic.tile_count` if no tiling).
+- [ ] Implement `path_parse` YAML feature per §3.1 design intent. Add unit smoke against a fake folder fixture.
+- [ ] Create `tools/templates/instruments/cell_observer.yaml` — clone of AxioScan template, swap `instrument: CELL`, swap `data_ecosystem: MICROSCOPY` (same), drop the strong filename_parse if filenames are sparse and replace with `path_parse`, leave per-batch `staging_dir` placeholder, default `sample_type: tissue` for animal/histology mode (or `cells` if cell-assay).
+- [ ] Author the first per-batch config under `tools/configs/` and dry-run against the test data.
+- [ ] Real test ingest → verify → purge (same as round-4 Phase A).
+- [ ] User-driven Phase B re-ingest to validate the docs cover the new instrument.
+
+**Documentation (during / after the pass):**
+- [ ] `mfb-rdm-docs/09_MODALITIES.md` §1.2 (Cell Observer) — fill in the per-instrument `discovered.czi_*` fields table; note any deviations from AxioScan.
+- [ ] `mfb-rdm-docs/11_OPERATIONS.md §3.2` Quick Start — refactor the AxioScan-specific examples once Cell Observer is the second validated instrument (§3.1 task already tracks this).
+- [ ] `mfb-rdm-docs/00_INDEX.md` — version history.
+
+**Deferred from this pass (queued for later):**
+- [ ] Cell-assay / live-cell / plate-based mode template — needs real example data of that type to design well. Likely a different `path_parse` shape (researcher / experiment / condition levels) and probably a different `sample_type` default (`cells`).
+- [ ] LSM 900 (§4.6.C) — should reuse most of the Cell Observer template once it's validated; same instrument family, same data-handling model per the operator.
 
 **4.6.C LSM 900 (`LSM9`) — reuses 4.6.A pipeline:**
 - [ ] **Ryan:** Obtain sample `.czi` from LSM 900
