@@ -146,6 +146,66 @@ def resolve_registry_block(registry_block, discovered):
     }
 
 
+# Fields recognized in the optional `auto_create_project:` YAML block.
+# These map directly to the project-creation arguments of create_project.
+AUTO_CREATE_PROJECT_FIELDS = {"owner", "description", "notes"}
+
+
+def validate_auto_create_project_block(block):
+    """Return list of validation error strings for the auto_create_project: block.
+
+    The block is OPTIONAL — None / missing is fine (returns []). When
+    present it must be a mapping, and may only contain keys in
+    AUTO_CREATE_PROJECT_FIELDS. See [10_TOOLS §2.1.4] for semantics.
+    """
+    if block is None:
+        return []
+    if not isinstance(block, dict):
+        return [
+            f"`auto_create_project:` must be a mapping, "
+            f"got {type(block).__name__}"
+        ]
+    errors = []
+    for k in block:
+        if k not in AUTO_CREATE_PROJECT_FIELDS:
+            errors.append(
+                f"auto_create_project: '{k}' is not a recognized field. "
+                f"Allowed: {sorted(AUTO_CREATE_PROJECT_FIELDS)}"
+            )
+    return errors
+
+
+def resolve_auto_create_project_block(block, discovered):
+    """Resolve owner/description/notes for first-time project auto-creation.
+
+    Returns dict with all three keys always present (empty string when
+    the field was not supplied or resolves to empty). Missing-discovered
+    references degrade gracefully to an empty string with a WARN — the
+    create-project step proceeds with empty values and the operator can
+    fix them by hand in `_project.yaml` later. This is intentional: the
+    auto_create_project: block sets initial defaults, not strict
+    requirements. Strict naming/ownership is the operator's call.
+    """
+    out = {key: "" for key in AUTO_CREATE_PROJECT_FIELDS}
+    if not block:
+        return out
+    for key in AUTO_CREATE_PROJECT_FIELDS:
+        raw = block.get(key)
+        if raw is None:
+            continue
+        try:
+            out[key] = resolve_value(
+                raw, discovered, key_for_error=f"auto_create_project.{key}"
+            )
+        except ResolverError as e:
+            print(
+                f"[resolve_auto_create_project] WARN: {e} -- "
+                f"leaving '{key}' empty; edit _project.yaml after creation."
+            )
+            out[key] = ""
+    return out
+
+
 def normalize_acquisition_datetime(value):
     """Coerce a date-shaped string into ISO. Empty pass-through; ISO pass-through.
 

@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
-    metadata_sidecar, provenance,
+    metadata_sidecar, provenance, resolver,
 )
 import create_project as create_project_mod
 
@@ -353,22 +353,55 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         if proj_id:
             if proj_id != project_hint:
                 log(f"Resolved project_hint '{project_hint}' -> {proj_id} (by short_name)")
+            # First-write-wins: if the YAML config supplied an
+            # auto_create_project: block but the project already exists,
+            # the block is silently ignored — log an INFO line so the
+            # operator sees it didn't apply.
+            if cfg_single.get("auto_create_project"):
+                log(
+                    f"Project '{proj_id}' already exists; auto_create_project "
+                    f"block ignored (first-write-wins). Edit "
+                    f"_project.yaml directly if you need to update."
+                )
             cfg_single["project_hint"] = proj_id
         else:
             ingest_block = cfg_single.get("ingest") or {}
             if ingest_block.get("auto_create_projects"):
                 short_name_norm = project_hint.lower()
-                owner = cfg_single.get("operator", "") or "?"
-                desc = (
+
+                # Resolve the optional auto_create_project: block against
+                # this case's discovered fields. The block is the new
+                # canonical source for owner/description/notes; legacy
+                # fallback values are used only if the block didn't
+                # supply them (empty / unsupplied).
+                acp_resolved = resolver.resolve_auto_create_project_block(
+                    cfg_single.get("auto_create_project"),
+                    cfg_single.get("discovered") or {},
+                )
+                owner = acp_resolved.get("owner") or cfg_single.get("operator", "") or "?"
+                desc = acp_resolved.get("description") or (
                     f"Auto-created during ingest of "
                     f"{cfg_single.get('original_name', '?')} "
                     f"(hint='{project_hint}')"
                 )
+                notes_for_proj = (
+                    acp_resolved.get("notes") or "auto-created by ingest_raw.py"
+                )
+
+                if not owner or owner == "?":
+                    log(
+                        f"Auto-creating project '{short_name_norm}' with "
+                        f"empty/unknown owner. Edit "
+                        f"projects/proj-{short_name_norm}/_project.yaml "
+                        f"after creation to set ownership.",
+                        "WARN",
+                    )
+
                 log(f"Auto-creating project: short_name='{short_name_norm}', owner='{owner}'")
                 new_id, ok = create_project_mod.create_project(
                     short_name_norm, desc, owner, nas_root,
                     dry_run=False,
-                    notes="auto-created by ingest_raw.py",
+                    notes=notes_for_proj,
                 )
                 if ok and new_id:
                     cfg_single["project_hint"] = new_id

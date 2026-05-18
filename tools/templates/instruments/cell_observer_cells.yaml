@@ -1,0 +1,149 @@
+# Per-instrument template — Cell Observer (Zeiss Axio Observer), cells mode.
+#
+# Cell Observer is the inverted epifluorescence microscope in Room 2.66
+# (instrument code: CELL). This template covers the CELL-CULTURE use case
+# (live-cell / cell-assay / plate-based) that has become the dominant
+# Cell Observer workflow now that AxioScan 7 absorbed most tissue/histology
+# imaging. For animal/histology mode use a separate template (deferred —
+# needs a real example folder to design well; tracked in tasks/tasks.md
+# §4.6.B).
+#
+# Copy this file to `tools/configs/cell_observer_<researcher>_<experiment>.yaml`
+# (or similar), edit the marked placeholders, then run.
+#
+# What's pre-filled (don't touch unless you know why):
+#   - `pattern`, `path_parse`, `filename_parse` encode the Cell Observer
+#     cells-mode convention (Ainhize-acquired example, 2026-05 round-5):
+#       <staging>/<researcher>/<cell_line>/<experiment>/<cell_line>_<experiment>_<magnification>_<condition>_<image_num>.czi
+#     The path levels and filename chunks are FREE-FORM LABELS — they're
+#     descriptive names we chose for this convention, not magic keys. If a
+#     different researcher organizes differently, rename the levels/chunks
+#     to whatever fits their layout.
+#   - `instrument: CELL`, `data_ecosystem: MICROSCOPY`,
+#     `instrument_model: discovered.czi_microscope_name` — pulls the
+#     .czi-embedded name ("Axio Observer.Z1 / 7") so it stays accurate.
+#   - `acquisition_datetime: discovered.czi_acquisition_datetime` —
+#     precise timestamp from the .czi (no day-folder fallback; cells-mode
+#     folders don't carry the date in their names).
+#   - `sample_type: cells` — DRAFT REMBI vocab (06_REGISTRIES §2.4).
+#   - `sample_id: ${cell_line}_${condition}` — composite (06_REGISTRIES §2.3).
+#     Note: in cells-mode workflows, multiple acquisitions can legitimately
+#     share a sample_id (e.g. when the operator captures N images per
+#     condition). That is correct REMBI semantics — biosample contains
+#     many acquisitions — not duplication. The registry will reflect
+#     whatever pattern the data shows; do not assume a fixed cardinality.
+#   - `auto_create_project:` — sets the project owner to the researcher
+#     (data User, not Operator), description from experiment chunk.
+#
+# What you must edit per batch:
+#   - `auto_discover.staging_dir`         <-- absolute path to your batch
+#                                             root (the directory above
+#                                             the researcher level)
+#   - `registry.notes`                    <-- short batch description
+#
+# What you may want to change per batch (rarely):
+#   - `ingest.delete_source_after_ingest` (default false; opt in only
+#     after you've verified a real run for this batch)
+#   - `ingest.auto_create_projects` (default true; cells-mode projects
+#     are typically auto-created on first encounter)
+#
+# Extends the universal starter at tools/templates/ingest_template.yaml.
+#
+# --------------------------------------------------------------------------
+# ⚠️ PROVISIONAL PROJECT NAMING — see 05_PROJECTS §9 (PROJ-05)
+# --------------------------------------------------------------------------
+# This template uses `project_hint: ${researcher}-${experiment}` because
+# Cell Observer cells-mode folders don't carry a durable project handle
+# the way AxioScan animal-project codes do. This is a STOPGAP, not a
+# long-term convention. Experiments are metadata; projects are bigger
+# than that. The right project_hint will come from a group conversation
+# about how to name projects meaningfully — funded grant names, an
+# internal scheme, or some other durable handle. Until that conversation
+# happens, this template will produce projects named like
+# `itziar-alphasma`, `itziar-othersight`, etc. — useful but not what we
+# want at scale.
+#
+# When the group converges on a real convention, replace the project_hint
+# expression below to match it. The auto_create_project: block stays.
+# --------------------------------------------------------------------------
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  # EDIT: absolute path to the batch root — the directory that contains
+  # the per-researcher subfolders. Use forward slashes; Python normalizes
+  # on Windows. Example for the round-5 test:
+  #   K:/gjesus/Ainhize/CELL OBSERVER
+  staging_dir: "K:/gjesus/<operator>/CELL OBSERVER"
+
+  # Recursive glob — required so path_parse can split the levels.
+  pattern: "**/*.czi"
+
+  # PATH LEVELS — free-form labels. These describe the Ainhize-acquired
+  # convention <researcher>/<cell_line>/<experiment>/. Replace level
+  # names if you onboard a researcher with a different layout.
+  path_parse:
+    levels:
+      - researcher
+      - cell_line
+      - experiment
+
+  # FILENAME CHUNKS — free-form labels. Cells-mode convention is
+  # <cell_line>_<experiment>_<magnification>_<condition>_<image_num>.czi.
+  # On name collision with path_parse (`cell_line`, `experiment`), the
+  # filename value wins — it's typically the more specific cross-check.
+  # If a file has a non-conforming chunk count (e.g. extra free-text
+  # without underscores), expand_batch skips it with a WARN.
+  filename_parse:
+    separator: "_"
+    fields: [cell_line, experiment, magnification, condition, image_num]
+
+  # No filter — every .czi under staging_dir is in scope. Add a filter
+  # block (e.g. `filter: { cell_line: HLF }`) if you need to scope down.
+
+  # No acquisition_date_from — cells-mode folders don't carry the date.
+  # The precise timestamp comes from the .czi embedded metadata
+  # (discovered.czi_acquisition_datetime), set in the registry: block below.
+
+registry:
+  instrument:           CELL
+  data_ecosystem:       MICROSCOPY
+  # Prefer the microscope-issued name from the .czi — keeps instances
+  # of Cell Observer at other sites distinguishable in the registry.
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  # In cells-mode, the registry `operator` column captures the data
+  # OWNER (the researcher whose data this is), not the technician who
+  # ran the scope. The technician/operator-acquirer is not currently
+  # surfaced as a registry column; it's implicit in the staging_dir path
+  # (e.g. K:/gjesus/Ainhize/...) and lives in the sidecar `discovered`
+  # block via czi_user if needed. Future schema split may add a separate
+  # `data_user` column — tracked alongside REG-01 in tasks §3.1.
+  operator:             discovered.researcher
+  data_source:          internal
+  # Composite sample_id (06_REGISTRIES §2.3 DRAFT). Replicates within the
+  # same (cell_line, condition) share one sample_id by design; the
+  # image_num distinguishes the acquisitions, not the biosamples.
+  sample_id:            "${discovered.cell_line}_${discovered.condition}"
+  # REMBI sample_type (06_REGISTRIES §2.4 DRAFT).
+  sample_type:          cells
+  # Precise timestamp from the .czi.
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  # PROVISIONAL — see warning at top of file (PROJ-05 open question).
+  # First-time auto-create produces short_name=lowercase of this string.
+  project_hint:         "${discovered.researcher}-${discovered.experiment}"
+  # EDIT: short description of this batch.
+  notes:                "Cell-culture imaging (${discovered.cell_line} / ${discovered.experiment}): ${discovered.condition}, image ${discovered.image_num}; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na}"
+
+# First-time project-creation defaults (10_TOOLS §2.1.4). Read only on
+# initial project creation; ignored otherwise. For cells-mode work, the
+# project owner is the researcher (data User), and the description
+# captures the experiment so the auto-created project tells you what
+# work it represents at a glance. Edit /projects/proj-<name>/_project.yaml
+# after creation to refine.
+auto_create_project:
+  owner:       "${discovered.researcher}"
+  description: "Auto-created from Cell Observer cells-mode ingest; experiment chunk '${discovered.experiment}', cell line ${discovered.cell_line}. PROVISIONAL project_hint — see 05_PROJECTS §9."
+  notes:       "Auto-created on first ingest. Owner = researcher folder name; rename short_name and update owner via _project.yaml as project naming convention matures."

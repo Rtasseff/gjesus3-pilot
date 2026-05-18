@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-12
+**Last Updated:** 2026-05-14
 
 ---
 
@@ -143,6 +143,8 @@ notes: |
   Initial exploratory analysis of IPF biomarker data.
 ```
 
+**Auto-population at ingest-time creation.** When a project is auto-created by `ingest_raw.py` (with `ingest.auto_create_projects: true`), the ingest config's optional `auto_create_project:` block supplies the initial values for `owner`, `description`, and `notes` — resolver-evaluated, so they can pull from `discovered.<field>` parsed from filenames or paths. See [10_TOOLS §2.1.4](10_TOOLS.md). **First-write-wins:** the block is read only on the project's initial creation; subsequent ingests touching the same project ignore it. The source of truth after creation is this `_project.yaml` file — edit it directly to correct or extend the auto-populated values.
+
 ---
 
 ## 8. Registry Fields
@@ -164,6 +166,21 @@ See [06_REGISTRIES](06_REGISTRIES.md) Section 4 for full schema. Key fields:
 ---
 
 ## 9. Naming Conventions
+
+> **⚠️ OPEN — project naming requires group consensus.**
+>
+> A project's `short_name` is the **human-meaningful** identifier the group will use every day — it should map to a durable unit of work that everyone recognizes. Candidates include funded project names, animal-project approval IDs (e.g. `AE-biomeGUNE-NNNN`), or explicit internal names the group agrees on.
+>
+> **Experiments, assays, and studies are NOT projects.** A project typically *contains* many experiments, assays, or studies over its lifetime. Using an experiment label as the project name produces sprawling, low-value project folders that fragment work and obscure the actual scope.
+>
+> **Provisional patterns currently in use during the pilot:**
+>
+> | Instrument / batch | Provisional `short_name` pattern | Status |
+> |--------------------|----------------------------------|--------|
+> | AxioScan 7 (round-4) | `ae-biomegune-NNNN` (animal-project code, lowercased) | 🔶 Reasonable interim — animal-project codes are durable units |
+> | Cell Observer (round-5 cells-mode) | `${researcher}-${experiment}` (e.g. `itziar-alphasma`) | ⚠️ **Stopgap only** — experiment is not a project |
+>
+> **Required next step:** Convene the relevant project-lead users to converge on a real naming convention before the pilot scales out. Only the project-lead users can decide what's meaningful for organizing *their* work; the data office cannot make this call for them. The system's value compounds once a consistent convention is in place — researchers will find their raw data, intermediates, and projects via these names, so the name needs to bear real meaning. Tracked as an open question in [00_INDEX.md](00_INDEX.md).
 
 ### 9.1 Project ID
 
@@ -217,6 +234,8 @@ python tools/create_project.py \
 python tools/create_project.py --interactive
 ```
 
+**Auto-creation during ingest.** When `ingest_raw.py` runs with `ingest.auto_create_projects: true` and encounters a `project_hint` that doesn't match any existing project, `create_project` is invoked programmatically. The ingest config's optional `auto_create_project:` block (see [10_TOOLS §2.1.4](10_TOOLS.md)) supplies the new project's `owner`, `description`, and `notes` — values may be literal text or interpolate `discovered.<field>` parsed from the source data. First-write-wins: the block is read only on initial creation; subsequent ingests with the same `project_hint` reuse the existing project and ignore the block.
+
 ---
 
 ## 11. Related Documents
@@ -237,3 +256,4 @@ python tools/create_project.py --interactive
 | PROJ-02 | What retention policy? | PI | ✅ Resolved — 6-month paused review |
 | PROJ-03 | How strict on provenance? | Data Mgmt Lead | ✅ Resolved — recommended, not required |
 | PROJ-04 | Where do researchers actually work now? | Users | 📣 Need input |
+| PROJ-05 | **Project naming convention** — group consensus needed. Experiments ≠ projects. Candidates: funded names, animal-project IDs, explicit internal names. Provisional patterns (`ae-biomegune-NNNN`, `${researcher}-${experiment}`) are stopgaps. See §9 for the warning callout. | Project-lead users + PI | ⚠️ Pilot blocker once cell-mode work scales beyond the test batch |

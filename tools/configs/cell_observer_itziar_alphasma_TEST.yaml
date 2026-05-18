@@ -1,0 +1,48 @@
+# Round-5 Phase A TEST config — Cell Observer cells-mode.
+#
+# Scope: Itziar's HLF/alphasma cell-culture batch (~60 .czi files,
+# Ainhize-acquired, 2025-01 acquisition timestamps).
+#
+# This is a TEST INGEST — purge after review. The corresponding
+# production config (notes prefix removed) is
+# cell_observer_itziar_alphasma.yaml (to be created after Phase A passes).
+#
+# Path-scope is narrowed to Itziar/ only via the `Itziar/**/*.czi` pattern
+# so we don't pull in other researchers' folders living next to Itziar's
+# under CELL OBSERVER/. path_parse still sees 3 levels relative to
+# staging_dir because the matched paths start at Itziar/.
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  staging_dir: "K:/gjesus/Ainhize/CELL OBSERVER"
+  # Scope to Itziar/ only for this Phase A test — recursive within Itziar.
+  pattern: "Itziar/**/*.czi"
+  path_parse:
+    levels:
+      - researcher
+      - cell_line
+      - experiment
+  filename_parse:
+    separator: "_"
+    fields: [cell_line, experiment, magnification, condition, image_num]
+
+registry:
+  instrument:           CELL
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  operator:             discovered.researcher
+  data_source:          internal
+  sample_id:            "${discovered.cell_line}_${discovered.condition}"
+  sample_type:          cells
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  project_hint:         "${discovered.researcher}-${discovered.experiment}"
+  notes:                "TEST INGEST 2026-05-14 - purge after review (Cell Observer cells mode: ${discovered.cell_line} / ${discovered.experiment} / ${discovered.condition} #${discovered.image_num})"
+
+auto_create_project:
+  owner:       "${discovered.researcher}"
+  description: "TEST auto-created from Cell Observer cells-mode round-5 (Phase A) — experiment '${discovered.experiment}', cell line ${discovered.cell_line}. Purge after review. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
+  notes:       "Auto-created on Phase A test ingest 2026-05-14. Will be purged with the rest of the test artifacts."

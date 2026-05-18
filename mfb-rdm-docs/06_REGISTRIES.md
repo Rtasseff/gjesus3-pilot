@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-12
+**Last Updated:** 2026-05-14
 
 ---
 
@@ -210,14 +210,14 @@ Index of project workspaces with ownership and status tracking.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `project_id` | String | ✅ Yes | Unique ID (e.g., `PROJ-0001`) |
-| `short_name` | String | ✅ Yes | Folder name |
-| `description` | String | ✅ Yes | Brief description of project scope |
-| `owner` | String | ✅ Yes | Primary owner/SPOC |
+| `short_name` | String | ✅ Yes | Folder name. **See [05_PROJECTS §9](05_PROJECTS.md) for the open-question warning on naming conventions — group consensus required.** |
+| `description` | String | ✅ Yes | Brief description of project scope. May be auto-populated at ingest-time creation; see `owner` note. |
+| `owner` | String | ✅ Yes | Primary owner/SPOC. When the project is auto-created by `ingest_raw.py` (via `auto_create_projects: true` and the `auto_create_project:` block — see [10_TOOLS §2.1.4](10_TOOLS.md)), the initial value can be supplied by literal or `${discovered.<field>}` interpolation. **First-write-wins:** subsequent ingests touching the same project never update this column. The source of truth after creation is `_project.yaml` (manually editable). |
 | `start_date` | Date | ✅ Yes | When project started |
 | `status` | Enum | ✅ Yes | `active`, `paused`, `closed` |
 | `last_activity` | Date | 🔶 Recommended | Last modification (for retention tracking) |
 | `folder_location` | String | ✅ Yes | Path to folder |
-| `notes` | String | Optional | Free-text notes |
+| `notes` | String | Optional | Free-text notes. Like `description`, can be auto-populated at first creation. |
 
 ### 4.3 Example
 

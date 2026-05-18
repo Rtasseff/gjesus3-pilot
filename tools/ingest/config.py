@@ -154,14 +154,18 @@ def expand_batch(cfg, nas_root=None):
 
       ingest:
         delete_source_after_ingest: false      # control flags
+        auto_create_projects: true             # see ingest_raw.py auto-create site
         archive_format: zip                    # DICOM only (planned)
 
       auto_discover:
         staging_dir: <dir>
-        pattern: <glob>                        # "*/" (dirs) or "*.czi" (files)
-        filename_parse:                        # file mode only
+        pattern: <glob>                        # "*/" (dirs) or "*.czi" (files);
+                                               # "**/*.czi" for recursive (path_parse)
+        filename_parse:                        # file mode; positional split
           separator: "_"
           fields: [group_code, operator, sample_id, ...]
+        path_parse:                            # OPTIONAL; names path levels
+          levels: [researcher, cell_line, experiment]
         filter:                                # file mode; on parsed values
           group_code: MFB
         acquisition_date_from: parent_folder_name
@@ -175,10 +179,18 @@ def expand_batch(cfg, nas_root=None):
         acquisition_datetime: discovered.acquisition_date
         notes:                "Slide ${discovered.stain} @ ${discovered.magnification}"
 
-    Per case, expand_batch builds case["discovered"] (filename-parser
-    output + parent-folder date + folder_name/filename), then resolves
-    cfg["registry"] against it and promotes the result to flat top-level
-    keys on the case dict.
+      auto_create_project:                     # OPTIONAL; first-write-wins
+        owner:       "${discovered.researcher}"
+        description: "..."
+        notes:       "..."
+
+    Per case, expand_batch builds case["discovered"] (path_parse +
+    filename-parser output + parent-folder date + folder_name/filename,
+    in that order — filename chunks override path levels on name
+    collision), then resolves cfg["registry"] against it and promotes
+    the result to flat top-level keys on the case dict. The raw
+    auto_create_project: block is stashed on the case for later
+    resolution at the auto-create site in ingest_raw.py.
     """
     disco = cfg["auto_discover"]
     staging_dir = disco["staging_dir"]
@@ -187,6 +199,12 @@ def expand_batch(cfg, nas_root=None):
     parse_cfg = disco.get("filename_parse") or {}
     parse_sep = parse_cfg.get("separator", "_")
     parse_fields = parse_cfg.get("fields") or []
+
+    # path_parse: free-form named levels between staging_dir and the file.
+    # Each level becomes a discovered.<name>. Requires a recursive glob
+    # ("**/...") on `pattern` for any non-trivial hierarchy.
+    path_parse_cfg = disco.get("path_parse") or {}
+    path_levels = path_parse_cfg.get("levels") or []
 
     filter_cfg = disco.get("filter") or {}
     date_from = disco.get("acquisition_date_from", "")
@@ -204,6 +222,13 @@ def expand_batch(cfg, nas_root=None):
             "Invalid registry: block:\n  - " + "\n  - ".join(block_errors)
         )
 
+    acp_block = cfg.get("auto_create_project")
+    acp_errors = resolver.validate_auto_create_project_block(acp_block)
+    if acp_errors:
+        raise ValueError(
+            "Invalid auto_create_project: block:\n  - " + "\n  - ".join(acp_errors)
+        )
+
     # Build idempotency index from existing registry (if known)
     registry_path = (
         os.path.join(nas_root, "registries", "registry_raw.csv")
@@ -212,8 +237,10 @@ def expand_batch(cfg, nas_root=None):
     existing_keys = _build_dedupe_index(registry_path)
 
     # Discover cases (allow both files and directories).
+    # recursive=True is harmless for non-"**" patterns and enables
+    # recursive discovery when path_parse expects multiple folder levels.
     search = os.path.join(staging_dir, pattern)
-    matches = sorted(globmod.glob(search))
+    matches = sorted(globmod.glob(search, recursive=True))
     if not matches:
         raise ValueError(f"No matches for {search}")
 
@@ -225,10 +252,33 @@ def expand_batch(cfg, nas_root=None):
             continue
 
         match_basename = Path(match_path).name
-        # Carry the top-level ingest: block into each case so ingest_single
-        # can read its control flags (delete_source, auto_create_projects).
-        case = {"source_path": match_path, "ingest": cfg.get("ingest") or {}}
+        # Carry the top-level ingest: and auto_create_project: blocks into
+        # each case so ingest_single can read control flags and supply
+        # project-creation metadata on first-time auto-create.
+        case = {
+            "source_path": match_path,
+            "ingest": cfg.get("ingest") or {},
+            "auto_create_project": acp_block,
+        }
         discovered = {}
+
+        # path_parse: split the path components between staging_dir and
+        # the file (or directory) basename into the named levels.
+        if path_levels:
+            rel_path = os.path.relpath(match_path, staging_dir)
+            rel_parts = list(Path(rel_path).parts)
+            # Strip the basename (the matched file/dir itself) so what
+            # remains is the levels between staging_dir and the match.
+            path_parts = rel_parts[:-1] if rel_parts else []
+            if len(path_parts) != len(path_levels):
+                print(
+                    f"[expand_batch] SKIP {match_basename}: path_parse expects "
+                    f"{len(path_levels)} level(s) {path_levels}, got "
+                    f"{len(path_parts)} {path_parts}"
+                )
+                continue
+            for level_name, component in zip(path_levels, path_parts):
+                discovered[level_name] = component
 
         if is_file:
             case["original_name"] = match_basename
@@ -254,6 +304,27 @@ def expand_batch(cfg, nas_root=None):
                         break
                 if skip:
                     continue
+                # Cross-check: WARN when path_parse and filename_parse
+                # produce DIFFERENT values for the same discovered key.
+                # filename still wins on collision (documented behaviour
+                # — see 10_TOOLS §2.1.3), but a mismatch is a useful
+                # misfiled-file signal worth surfacing. Same-value
+                # collisions are silent (redundant but harmless).
+                for k, fname_v in parsed.items():
+                    if k in path_levels:
+                        path_v = discovered.get(k)
+                        if path_v != fname_v:
+                            print(
+                                f"[expand_batch] WARN {match_basename}: "
+                                f"path_parse and filename_parse disagree on "
+                                f"'{k}': path={path_v!r}, filename={fname_v!r}. "
+                                f"Using filename value (documented behaviour); "
+                                f"confirm this file isn't misfiled."
+                            )
+                # filename_parse runs AFTER path_parse; on name collision
+                # the filename chunk wins (it's typically the more
+                # specific value). Operators who want to distinguish
+                # should give the two sides different names.
                 discovered.update(parsed)
         else:
             case["original_name"] = match_basename
@@ -352,6 +423,13 @@ def prep_single_case(cfg):
     if block_errors:
         raise ValueError(
             "Invalid registry: block:\n  - " + "\n  - ".join(block_errors)
+        )
+    acp_errors = resolver.validate_auto_create_project_block(
+        cfg.get("auto_create_project")
+    )
+    if acp_errors:
+        raise ValueError(
+            "Invalid auto_create_project: block:\n  - " + "\n  - ".join(acp_errors)
         )
     cfg.setdefault("discovered", {})
     src = cfg.get("source_path", "")

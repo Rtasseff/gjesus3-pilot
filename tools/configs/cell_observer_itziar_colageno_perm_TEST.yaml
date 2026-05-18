@@ -1,0 +1,67 @@
+# Round-5 Phase A TEST config #2 — Cell Observer cells-mode, ABBREVIATED filename variant.
+#
+# Same researcher (Itziar) and same instrument (Cell Observer) as the
+# primary round-5 test (cell_observer_itziar_alphasma_TEST.yaml), but a
+# different filename convention in this experiment's folder:
+#
+#   K:/gjesus/Ainhize/CELL OBSERVER/Itziar/HLF/Colageno_permeabilizado_definitivas/<condition>_<image_num>.czi
+#
+# Here the operator only encodes `condition` + `image_num` in the filename
+# (e.g. `CC-Mn-29a_1.czi`, `Control_5.czi`) and relies on the path
+# (Itziar / HLF / Colageno_permeabilizado_definitivas) to carry the rest
+# of the context.
+#
+# Exhibit purpose (group review): show that the SAME pipeline machinery
+# handles a different filename convention by changing only the YAML —
+# no code change. One per-batch config per distinct convention.
+#
+# Project naming note: the folder name `Colageno_permeabilizado_definitivas`
+# contains underscores and is long. `create_project.validate_short_name`
+# requires `^[a-z0-9][a-z0-9-]*$` (lowercase alphanumeric with hyphens
+# only). So `${discovered.researcher}-${discovered.experiment}` would
+# resolve to `itziar-Colageno_permeabilizado_definitivas` and fail
+# validation. We use a literal `project_hint` here instead. This is one
+# more reason the provisional `${researcher}-${experiment}` pattern is a
+# stopgap — the right long-term answer is a real naming convention the
+# group converges on (05_PROJECTS §9 PROJ-05).
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  staging_dir: "K:/gjesus/Ainhize/CELL OBSERVER"
+  # Scoped to just this folder — non-recursive within it.
+  pattern: "Itziar/HLF/Colageno_permeabilizado_definitivas/*.czi"
+  path_parse:
+    # path_parse still gets 3 levels: Itziar / HLF / Colageno_permeabilizado_definitivas
+    levels:
+      - researcher
+      - cell_line
+      - experiment
+  filename_parse:
+    separator: "_"
+    # Abbreviated: only 2 chunks. cell_line and experiment come from the
+    # path (above), not the filename.
+    fields: [condition, image_num]
+
+registry:
+  instrument:           CELL
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  operator:             discovered.researcher
+  data_source:          internal
+  # Composite sample_id. cell_line comes from path_parse here.
+  sample_id:            "${discovered.cell_line}_${discovered.condition}"
+  sample_type:          cells
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  # Literal short_name — folder name doesn't sanitize to a valid one
+  # automatically. See note at top of file.
+  project_hint:         "itziar-colageno-permeabilizado"
+  notes:                "TEST INGEST 2026-05-15 - purge after review (Cell Observer cells mode, abbreviated filename: ${discovered.cell_line} / ${discovered.experiment} / ${discovered.condition} #${discovered.image_num})"
+
+auto_create_project:
+  owner:       "${discovered.researcher}"
+  description: "TEST auto-created from Cell Observer cells-mode round-5 (Phase A) — experiment '${discovered.experiment}' (abbreviated-filename variant), cell line ${discovered.cell_line}. Purge after review. Project short_name is a LITERAL because the folder name contains underscores; provisional anyway (05_PROJECTS §9 PROJ-05)."
+  notes:       "Auto-created on Phase A test ingest 2026-05-15 (round-5 follow-up). Will be purged with the rest of the test artifacts."

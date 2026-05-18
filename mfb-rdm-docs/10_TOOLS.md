@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-06
+**Last Updated:** 2026-05-14
 
 ---
 
@@ -130,6 +130,66 @@ We get every field surfaced in `09_MODALITIES.md §1.1` plus the full structured
 
 The extractor is the natural seam to swap libraries: today it's `czi_metadata.extract(czi_path)` calling `czifile`; tomorrow that function can wrap pylibCZIrw or call out to Bio-Formats without touching the rest of the pipeline.
 
+### 2.1.3 Auto-discovery: `filename_parse` and `path_parse`
+
+Two parallel mechanisms in the `auto_discover:` block extract metadata from where it already sits in the source layout. Both produce values in the per-case `discovered.<name>` namespace, available everywhere the resolver runs (`registry:`, `auto_create_project:`).
+
+| Feature | What it parses | Where it lives in YAML |
+|---------|---------------|------------------------|
+| `filename_parse:` | The filename, split on a separator into named positional chunks | `auto_discover.filename_parse` |
+| `path_parse:` | The path components **between `staging_dir` and the file**, top-down, one named level per component | `auto_discover.path_parse` |
+
+Both are **fully free-form on the level/chunk names** — they are labels the operator picks to describe the layout, not a fixed vocabulary. The pipeline never inspects the names; only the `registry:` and `auto_create_project:` references (`discovered.<name>` and `${discovered.<name>}`) consume them. Pick names that read clearly for the instrument and convention you're documenting.
+
+**`filename_parse`** — positional split:
+
+```yaml
+auto_discover:
+  filename_parse:
+    separator: "_"
+    fields: [cell_line, experiment, magnification, condition, image_num]
+```
+
+For `HLF_alphasma_10x_CC-miR-29a_1.czi` this populates `discovered.cell_line = "HLF"`, `discovered.experiment = "alphasma"`, etc. Mismatched-chunk-count files are skipped with a WARN.
+
+**`path_parse`** — top-down path levels between `staging_dir` and the file:
+
+```yaml
+auto_discover:
+  staging_dir: "G:/Lab/CellObserver/MBC"
+  pattern:     "**/*.czi"          # recursive glob — required when path_parse is in use
+  path_parse:
+    levels:
+      - researcher
+      - cell_line
+      - experiment
+```
+
+For a file at `G:/Lab/CellObserver/MBC/Itziar/HLF/alphasma/HLF_alphasma_10x_CC-miR-29a_1.czi`, the three levels (`Itziar`, `HLF`, `alphasma`) become `discovered.researcher`, `discovered.cell_line`, `discovered.experiment`. Mismatched-depth files (too few or too many levels) are skipped with a WARN — same pattern as `filename_parse`.
+
+Both can be used together; if a value is parsed from both sides (e.g. both filename and path carry `cell_line`), `path_parse` runs first and the filename value **overwrites** it — so `filename_parse` wins on collision. Same-value collisions are silent (redundant but harmless). **Different-value collisions emit a per-key WARN** that names the file, the key, both values, and reminds the operator the filename wins by design — a misfiled-file signal. The cleaner approach when you don't actually want the redundancy is to give parallel chunks distinct names (e.g. `path_cell_line` vs `filename_cell_line`) and let the `registry:` block decide which to record.
+
+### 2.1.4 `auto_create_project:` block
+
+When `ingest.auto_create_projects: true` and a new project is about to be created during an ingest, the optional `auto_create_project:` block supplies the project's metadata. Values resolve through the same mechanism as `registry:` — literal text, `discovered.<field>`, `${...}` interpolation, or `NA`.
+
+```yaml
+auto_create_project:
+  owner:       "${discovered.researcher}"
+  description: "${discovered.experiment} (auto-created from ${discovered.researcher} folder)"
+  notes:       ""
+```
+
+**Recognized fields:** `owner`, `description`, `notes`. Any field omitted is left empty in `_project.yaml` and `registry_projects.csv`; the project can be edited manually afterward.
+
+**First-write-wins.** The block is read **only** when the project does not already exist. On subsequent ingests that resolve `project_hint` to the same existing project, the block is ignored and an INFO line is logged (`"Project proj-<name> already exists; auto_create_project block ignored."`). This is deliberate — auto-create sets initial defaults, and the source of truth after that is `_project.yaml` (manually editable). No silent updates from later ingests.
+
+**Empty resolved values.** If `${discovered.<x>}` resolves to empty (the discovered field is missing on a given file), the resulting metadata field is empty and the ingest logs a WARN. Project creation proceeds; the field can be filled in by hand later via `_project.yaml`.
+
+**Project naming caveat.** The `short_name` of the auto-created project comes from `registry.project_hint`, not from this block. Any expression in `project_hint` (literal, `discovered.X`, interpolation) is allowed. **Provisional name patterns** like `${researcher}-${experiment}` should be documented as such in the YAML comments — see the Cell Observer example below. [05_PROJECTS §9](05_PROJECTS.md) elaborates on the requirement that the group converge on a durable, meaning-bearing naming convention; auto-create is not a substitute for that conversation.
+
+When `auto_create_projects: false` (the default) or when the project already exists, the `auto_create_project:` block is ignored entirely.
+
 ---
 
 **Two Ingest Modes:**
@@ -163,20 +223,21 @@ The extractor is the natural seam to swap libraries: today it's `czi_metadata.ex
 
 **Configuration schema (since 2026-05-06):**
 
-Three top-level blocks. `defaults:` is gone — non-registry control flags moved to `ingest:`, and the per-column registry mapping is explicit in `registry:`.
+Three required top-level blocks plus one optional. `defaults:` is gone — non-registry control flags moved to `ingest:`, and the per-column registry mapping is explicit in `registry:`.
 
-| Block            | Purpose |
-|------------------|---------|
-| `ingest:`        | Pipeline control flags (`delete_source_after_ingest`, `auto_create_projects`, ...). Not registry columns. |
-| `auto_discover:` | How to discover cases and what variables to extract per case. Each case's discovered fields land in a `discovered` namespace, referenceable below. |
-| `registry:`      | Explicit per-column registry mapping. Three value forms: literal text/number, `discovered.<field>` (bare reference), or `"...${discovered.<field>}..."` (interpolation). Use `NA` to leave a column intentionally empty. |
+| Block                   | Required? | Purpose |
+|-------------------------|-----------|---------|
+| `ingest:`               | Yes       | Pipeline control flags (`delete_source_after_ingest`, `auto_create_projects`, ...). Not registry columns. |
+| `auto_discover:`        | Yes       | How to discover cases and what variables to extract per case. Each case's discovered fields land in a `discovered` namespace, referenceable below. Supports `filename_parse:` and `path_parse:` (see §2.1.3). |
+| `registry:`             | Yes       | Explicit per-column registry mapping. Three value forms: literal text/number, `discovered.<field>` (bare reference), or `"...${discovered.<field>}..."` (interpolation). Use `NA` to leave a column intentionally empty. |
+| `auto_create_project:`  | Optional  | Project-creation metadata used only when `ingest.auto_create_projects: true` and a new project is being created. Resolver-evaluated like `registry:`. First-write-wins (see §2.1.4). |
 
 `ingest:` flags currently honored:
 
 | Flag | Default | Effect |
 |------|---------|--------|
 | `delete_source_after_ingest` | `false` | Remove the source file/folder after a successful copy + verify. CLI `--delete-source` overrides. |
-| `auto_create_projects` | `false` | When `registry.project_hint` resolves to a value that isn't an existing `project_id` or `short_name`, auto-create a project with that value as the `short_name`. First ingest creates; subsequent ingests with the same hint reuse via `short_name` lookup. Useful when the project key comes from a parsed filename chunk (e.g. `project_hint: discovered.project`). Default `false` to prevent typos from silently creating rogue projects. |
+| `auto_create_projects` | `false` | When `registry.project_hint` resolves to a value that isn't an existing `project_id` or `short_name`, auto-create a project with that value as the `short_name`. First ingest creates; subsequent ingests with the same hint reuse via `short_name` lookup. Useful when the project key comes from a parsed filename chunk (e.g. `project_hint: discovered.project`). Default `false` to prevent typos from silently creating rogue projects. When enabled, the optional `auto_create_project:` block (§2.1.4) supplies the new project's `owner` / `description` / `notes`. |
 
 The user-controllable `registry:` columns are: `instrument`, `data_ecosystem`, `instrument_model`, `modalities_in_study`, `operator`, `data_source`, `sample_id`, `sample_type`, `acquisition_datetime`, `project_hint`, `notes`. Of these, **`instrument`, `data_ecosystem`, `operator`, `data_source` must be present** (NA allowed where intentional); the rest are optional. Auto-populated columns (`acq_id`, `registration_datetime`, `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) must NOT appear in `registry:`.
 
@@ -237,6 +298,49 @@ registry:
   notes:                "HPIC batch ingest"
 ```
 
+**Batch configuration — file-mode with `path_parse` + `auto_create_project` (Cell Observer cells-mode):**
+
+```yaml
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects:       true   # see auto_create_project: block below
+
+auto_discover:
+  staging_dir: "G:/Lab/CellObserver/Ainhize"
+  pattern:     "**/*.czi"           # recursive — required when path_parse is in use
+  path_parse:
+    levels:                          # FREE-FORM LABELS — names below are example only
+      - researcher
+      - cell_line
+      - experiment
+  filename_parse:
+    separator: "_"
+    fields:    [cell_line, experiment, magnification, condition, image_num]
+  acquisition_date_from: parent_folder_name   # if applicable; otherwise rely on .czi internal
+
+registry:
+  instrument:           CELL
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     "Zeiss Axio Observer (Cell Observer)"
+  operator:             discovered.researcher   # see note on operator vs user below
+  data_source:          internal
+  sample_id:            "${discovered.cell_line}_${discovered.condition}"
+  sample_type:          cells
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  project_hint:         "${discovered.researcher}-${discovered.experiment}"
+  notes:                "${discovered.experiment} cells at ${discovered.magnification}, condition ${discovered.condition}, image ${discovered.image_num}"
+
+# ⚠️ PROVISIONAL PROJECT NAMING — the ${researcher}-${experiment} pattern is a stopgap.
+# Experiments are metadata, not projects. A real project name should map to a unit of
+# funded/owned work (funded project name, animal-project approval ID, or an explicit
+# internal name the group agrees on). See 05_PROJECTS §9 for the warning + open
+# question; the group must converge on a real naming convention.
+auto_create_project:
+  owner:       "${discovered.researcher}"
+  description: "Auto-created from ${discovered.researcher} Cell Observer folder; experiment chunk = ${discovered.experiment}"
+  notes:       "Provisional auto-created project — edit owner/description as needed."
+```
+
 **Single-case configuration:**
 
 ```yaml
@@ -268,7 +372,7 @@ python tools/ingest_raw.py --interactive --lightweight             # lightweight
 ```
 
 **Key features:**
-- Three-block YAML schema: `ingest:` (control), `auto_discover:` (extract `discovered.*`), `registry:` (explicit per-column mapping with literal | `discovered.X` | `${...}` interp | NA). Universal starter at `tools/templates/ingest_template.yaml`; per-instrument templates under `tools/templates/instruments/`.
+- Three required top-level blocks plus one optional: `ingest:` (control), `auto_discover:` (extract `discovered.*` via `filename_parse` and/or `path_parse` — see §2.1.3), `registry:` (explicit per-column mapping with literal | `discovered.X` | `${...}` interp | NA), and optional `auto_create_project:` (owner/description/notes for first-time project auto-creation — see §2.1.4). Universal starter at `tools/templates/ingest_template.yaml`; per-instrument templates under `tools/templates/instruments/`.
 - Auto-populated columns (`acq_id`, `registration_datetime`, `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) — script-controlled, not user-editable.
 - `ingest_config` registry column records the relative path of the YAML config that produced the row, for auditability + reproducibility.
 - Two ingest modes: full (default) and lightweight (`--lightweight`, planned)

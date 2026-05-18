@@ -1,24 +1,51 @@
 # Ingest config template — copy and edit for your batch.
 #
-# Three top-level blocks:
+# Three required top-level blocks, plus one optional:
 #
-#   ingest:           Pipeline control flags (not registry columns).
-#   auto_discover:    How to find cases and what variables to extract per case.
-#                     Each case's discovered fields land in `discovered.<name>`,
-#                     usable as references below.
-#   registry:         Explicit per-column mapping for the registry row. Three
-#                     value forms:
-#                       <literal>                 plain text/number
-#                       discovered.<field>        bare reference (after auto_discover)
-#                       "...${discovered.<f>}..." string interpolation
-#                       NA                        explicit "no value" (column left empty)
-#                     Auto-populated columns (acq_id, registration_datetime,
-#                     primary_file_name, file_format, file_size_mb, file_count,
-#                     canonical_path, checksum_present, extended_metadata_present,
-#                     original_name, ingest_config) are NOT listed here.
+#   ingest:                Pipeline control flags (not registry columns).
+#   auto_discover:         How to find cases and what variables to extract per case.
+#                          Each case's discovered fields land in `discovered.<name>`,
+#                          usable as references below. Supports filename_parse and/or
+#                          path_parse — see comments in that block.
+#   registry:              Explicit per-column mapping for the registry row. Three
+#                          value forms:
+#                            <literal>                 plain text/number
+#                            discovered.<field>        bare reference (after auto_discover)
+#                            "...${discovered.<f>}..." string interpolation
+#                            NA                        explicit "no value" (column left empty)
+#                          Auto-populated columns (acq_id, registration_datetime,
+#                          primary_file_name, file_format, file_size_mb, file_count,
+#                          canonical_path, checksum_present, extended_metadata_present,
+#                          original_name, ingest_config) are NOT listed here.
+#   auto_create_project:   OPTIONAL. Only consulted when ingest.auto_create_projects
+#                          is true AND a project is being created for the first
+#                          time. Supplies owner/description/notes for the new
+#                          project. Resolver-evaluated like `registry:`.
+#                          First-write-wins — never updates an existing project.
 #
 # Save edited copies under tools/configs/<instrument>_<day-or-batch>.yaml so
 # the path appears in the ingest_config registry column.
+#
+# --------------------------------------------------------------------------
+# ⚠️ PROJECT NAMING — OPEN GROUP-CONSENSUS QUESTION
+# --------------------------------------------------------------------------
+# `registry.project_hint` determines the short_name of any auto-created
+# project. The project short_name is the daily handle the group will use
+# to find raw data and intermediates — it needs to MEAN something to them.
+#
+# A project is NOT an experiment, an assay, or a study. A real project
+# typically contains many of those over its lifetime. Good candidates:
+#   - funded project name (e.g. ERC grant ID)
+#   - animal-project approval ID (e.g. AE-biomeGUNE-NNNN)
+#   - an explicit internal name the group has agreed on
+#
+# Provisional patterns currently in use during the pilot (stopgaps):
+#   - AxioScan: AE-biomeGUNE-NNNN — reasonable interim (animal-project codes)
+#   - Cell Observer cells-mode: ${researcher}-${experiment} — stopgap only
+#
+# See 05_PROJECTS.md §9 for the full warning and open question (PROJ-05).
+# When you set project_hint below, prefer a real, durable naming convention.
+# --------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 ingest:
@@ -28,6 +55,7 @@ ingest:
   # a project with that value as the short_name. First ingest creates;
   # subsequent ingests with the same hint reuse via short_name lookup.
   # Default false to prevent typos creating rogue projects silently.
+  # When you enable it, fill in the `auto_create_project:` block below.
   auto_create_projects: false
   # archive_format: zip               # DICOM only (planned)
   # lightweight: false                # planned
@@ -35,14 +63,39 @@ ingest:
 # -----------------------------------------------------------------------------
 auto_discover:
   staging_dir: "<absolute path to the source directory>"
-  pattern: "*.czi"                    # file glob (e.g. "*.czi") or dir glob ("HPIC*/")
 
-  # FILE MODE (e.g. AxioScan): parse each filename's stem on `separator`,
-  # zip with `fields` positionally. Each chunk becomes a discovered.<field>.
-  # Drop or comment out for directory-mode batches.
+  # Use "*.czi" for a single-level file glob, or "**/*.czi" for recursive
+  # (required when path_parse is in use). For directory-mode batches
+  # (e.g. DICOM source folders), use a trailing slash: "HPIC*/".
+  pattern: "*.czi"
+
+  # FILE MODE — parse each filename's stem on `separator`, zip with
+  # `fields` positionally. Each chunk becomes a discovered.<field>.
+  # Drop or comment out for directory-mode batches or when all the
+  # metadata lives in the path instead.
+  #
+  # CHUNK NAMES ARE FREE-FORM LABELS — they're picked by you to describe
+  # this instrument's filename convention. The pipeline never inspects
+  # them; only the registry: and auto_create_project: references consume
+  # them. Pick names that read clearly for the convention you're capturing.
   filename_parse:
     separator: "_"
     fields: [group_code, operator, project, sample_id, stain, magnification]
+
+  # PATH MODE (optional, can be combined with filename_parse) — parse the
+  # path components BETWEEN staging_dir AND the file, top-down, one named
+  # level per component. Each level becomes a discovered.<name>.
+  #
+  # Requires `pattern: "**/*.czi"` (or similar recursive glob).
+  # LEVEL NAMES ARE FREE-FORM LABELS — same rule as filename_parse fields.
+  # Mismatched-depth files are skipped with a WARN.
+  #
+  # Example (Cell Observer-style layout, <staging_dir>/<researcher>/<cell_line>/<experiment>/file.czi):
+  # path_parse:
+  #   levels:
+  #     - researcher
+  #     - cell_line
+  #     - experiment
 
   # OPTIONAL filter on parsed fields. Cases not matching are skipped.
   filter:
@@ -63,10 +116,25 @@ registry:
   # Recommended.
   acquisition_datetime: discovered.acquisition_date   # or literal ISO; NA to backfill later
   sample_id:            discovered.sample_id
-  sample_type:          NA                            # e.g. "mouse lung section"
+  sample_type:          NA                            # tissue/organism/cells/material/phantom (06_REGISTRIES §2.4 DRAFT)
   instrument_model:     "Zeiss Axio Scan 7"
 
   # Optional.
   modalities_in_study:  NA                            # populated for hybrid DICOM (e.g. "PT;CT")
-  project_hint:         NA                            # PROJ-XXXX, triggers .lnk creation
+  project_hint:         NA                            # PROJ-XXXX, triggers .lnk creation. See WARNING at top of file.
   notes:                "Routine WSI batch; ${discovered.stain} stain at ${discovered.magnification}"
+
+# -----------------------------------------------------------------------------
+# OPTIONAL — only consulted when ingest.auto_create_projects: true AND
+# the project named by registry.project_hint does not yet exist.
+# Resolver-evaluated like the registry: block. First-write-wins: this
+# block is NEVER read for an already-existing project. The source of
+# truth after creation is /projects/<proj>/_project.yaml (manually
+# editable). Empty resolved values produce a WARN, not an error.
+#
+# Recognized fields: owner, description, notes.
+#
+# auto_create_project:
+#   owner:       "${discovered.operator}"
+#   description: "Auto-created on first ingest from ${discovered.<something>}"
+#   notes:       ""

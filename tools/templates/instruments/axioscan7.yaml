@@ -15,6 +15,10 @@
 #   - `sample_id`, `project_hint`: pilot conventions per
 #     06_REGISTRIES §2.3 (composite sample_id) and the AE-biomeGUNE-NNNN
 #     animal-project naming.
+#   - `auto_create_project:` block — first-time project creation defaults
+#     for owner/description/notes. Read only when a NEW project is being
+#     created (first-write-wins); subsequent ingests touching the same
+#     project ignore it. See 10_TOOLS §2.1.4.
 #
 # What you must edit per batch:
 #   - `auto_discover.staging_dir`         <-- point at this batch's day folder
@@ -30,6 +34,13 @@
 # Extends the universal starter at tools/templates/ingest_template.yaml.
 # Per-instrument convention only — other groups using the same scanner
 # with different filename conventions would need their own template.
+#
+# Project naming note: AE-biomeGUNE-NNNN comes from the animal-project
+# approval system — durable, meaning-bearing, and shared across the
+# institute. This is a "reasonable interim" naming pattern per the
+# 05_PROJECTS §9 callout (PROJ-05); not a stopgap. Group-consensus on
+# the long-term convention may still tighten this, but AxioScan batches
+# are not blocked on that conversation today.
 
 ingest:
   delete_source_after_ingest: false
@@ -80,3 +91,15 @@ registry:
   project_hint:         "AE-biomeGUNE-${discovered.project}"
   # EDIT: short description of this batch.
   notes:                "WGA fluorescence WSI batch (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
+
+# First-time project-creation defaults. Read only when the project named
+# by registry.project_hint above does NOT yet exist; ignored otherwise.
+# For AxioScan, the project owner is the operator who initiated the
+# imaging run (encoded in filename chunk 2). Researchers/end-users may
+# differ from the operator in some workflows — that distinction is
+# captured at project creation here, and can be hand-edited afterwards
+# in /projects/proj-<name>/_project.yaml.
+auto_create_project:
+  owner:       "${discovered.operator}"
+  description: "Auto-created from AxioScan 7 ingest; animal-project chunk ${discovered.project}."
+  notes:       "Auto-created on first ingest. Owner = filename operator chunk; edit _project.yaml to reassign."

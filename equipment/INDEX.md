@@ -107,6 +107,7 @@ The MRI platform has **two** preclinical MRI systems:
 - **True raw data:** Managed and archived by the MRI platform (e.g., k-space data, raw FIDs)
 - **Reference materials** ([`mri-platform/`](./mri-platform/)):
   - Platform description (md) — both BioSpec systems
+  - Data access & ingestion strategy (md) — acquisition machine is NOT directly network-accessible; researchers FTP from acq machine to their workstations. Captures three architectural options (FTP-pull, on-machine push agent, hybrid), recommended pacing, the technical + forward-looking questions to ask the platform manager, and a working email draft. **Pending platform manager input on FTP credentials and folder conventions.**
 
 ### 5. Nuclear Imaging Platform — PET/SPECT/CT/OI
 
