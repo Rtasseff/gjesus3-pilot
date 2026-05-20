@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-05-12
+**Last Updated:** 2026-05-20 (MRI ParaVision sidecar `mri:` block shape; project-level NIfTI generation tool added to the project-tool family)
 
 ---
 
@@ -40,6 +40,19 @@ Collapsing both into `/raw/<ACQ-ID>/metadata.json` worked while the only writer 
 ### 1.4 Joining the two locations
 
 Consumers (OMERO, future indexing DB, ad-hoc analysis scripts) join `/raw/<ACQ-ID>/metadata.json` and `/projects/<proj>/metadata/<acq_id>.json` on `acq_id`. A small utility `tools/gather_metadata.py` will produce a merged view on demand; tracked in `tasks/tasks.md` §3.2. Until that ships, joins are a two-file read.
+
+### 1.5a Project-level tool family (the things that write to `/projects/`)
+
+A small family of project-scoped tools share the same pattern: read from `/raw/` (immutable), do their work under `/projects/<proj>/`, and accept that anything written under `/projects/` is **ephemeral** (lost at project close-out unless explicitly preserved). Tracked in `tasks/tasks.md` §3.2:
+
+| Tool | What it does | Status |
+|---|---|---|
+| `gather_metadata.py` | Read-only join of `/raw/<ACQ-ID>/metadata.json` + `/projects/<proj>/metadata/<acq_id>.json` | Planned |
+| Excel → study-metadata importer | Researcher-facing tool that writes `/projects/<proj>/metadata/{study,biosamples,<acq_id>}.json` from a per-project Excel | Planned (schema in design) |
+| Project close-out tool | Admin tool that merges `/projects/<proj>/metadata/` into the corresponding `/raw/<ACQ-ID>/metadata.json` files **before** the project folder is deleted; controlled one-time write to `/raw/` | Planned |
+| Project-level NIfTI generation (NEW, planned 2026-05-20) | For MRI projects: read chosen ACQ-IDs via the project's `raw_linked/` shortcuts, run `dcm2niix` (or `bruker2nifti`) per acquisition, write `<ACQ-ID>.nii.gz` under `/projects/<proj>/derived_nifti/`. Removed at project close-out — regenerable from raw if needed later. Aligns with the [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) reframe (research-facing derivatives belong in projects). | Planned |
+
+All of these are post-deposit; none of them modify `/raw/` except the close-out tool (which does a single controlled merge).
 
 ### 1.5 Project metadata layout
 
@@ -186,7 +199,9 @@ This separation keeps preservation and interpretation as distinct concerns.
 |---------------------|-----------|--------------|------------------------|-------------------------------------------|
 | Zeiss .czi (ZWSI / CELL / LSM9) | Yes — extensive | ✅ Audited 2026-05-06 | 21 curated `discovered.czi_*` fields + 5 structured buckets (geometry, instrument, acquisition, mosaic, document_info) + full XML in `_raw_metadata`. See [09_MODALITIES §1.1](09_MODALITIES.md#11-whole-slide-imaging--zeiss-axio-scan-7) for the field list. | Sample info, experimental context, biological/specimen attributes |
 | Histology .tif (if used) | Partial | 📋 Planned (may be deferred — mostly used for converted exports) | None yet | Most context |
-| DICOM (XMRI / MRI / PET / SPECT / CT) | Yes — extensive | ⚠️ Pending | None yet — extractor will mirror the `.czi` pattern (`discovered.dicom_*` + sidecar `dicom._raw_metadata`) | Study context varies; sample/experimental info |
+| Bruker ParaVision (internal MRI) | Yes — extensive (JCAMP-DX aux files) | 🔶 In progress (round 6, 2026-05-20) | ~15 curated `discovered.mri_*` fields + 4 structured buckets (`subject`, `acquisition`, `geometry`, `reconstruction`) + full JCAMP-DX dump in `_raw_metadata`. Implementation in `tools/ingest/paravision_metadata.py` (mirrors `czi_metadata.py` shape). See §4.3 below + 09_MODALITIES MRI section. **ParaVision aux files are canonical** (acqp / method / visu_pars / subject); pure-DICOM-header extraction stays deferred. | Sample/experimental context beyond what `subject` already captures |
+| Collaborator DICOM (XMRI / XCT / XPET / XSPECT) | Yes — embedded DICOM headers | ⚠️ Pending (§3.1 deferred item) | None yet — extractor will mirror the `.czi` pattern (`discovered.dicom_*` + sidecar `dicom._raw_metadata`). Independent of the ParaVision work above. | Study context varies; sample/experimental info |
+| Internal PET / SPECT / CT | TBD per platform | 📋 Planned (round 7, blocked on Unai answering naming-convention question) | None yet | TBD |
 | EM (.tif / .dm3 / .dm4) | Varies by source | ⚠️ Pending (and SEM/TEM scope itself is `EVALUATING`) | None yet | Most context |
 
 ### 4.2 Extraction Possibility
@@ -215,10 +230,47 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 | Section | Source |
 |---------|--------|
 | `user_supplied` | The resolved values from the YAML `registry:` block (literal text, `discovered.<x>` references, or `${...}` interpolation — see [10_TOOLS §2.1](10_TOOLS.md)). |
-| `discovered` | Everything `auto_discover` surfaced for the case: filename-parser output, parent-folder date, `folder_name` / `filename`, and — once implemented — DICOM/.czi embedded extracts. |
-| `<ecosystem_section>` | `dicom`, `microscopy`, etc. Reserved for embedded-metadata extraction; today `{}`. The `.czi` probe utility (`tools/ingest/probe_czi.py`) will inform what fields land here. |
+| `discovered` | Everything `auto_discover` surfaced for the case: filename-parser output, parent-folder date, `folder_name` / `filename`, and embedded extracts (`discovered.czi_*` for microscopy, `discovered.mri_*` for ParaVision). |
+| `<ecosystem_section>` | The structured embedded-metadata block keyed by ecosystem subfield: `microscopy` (for .czi), `mri` (for Bruker ParaVision — new 2026-05-20). Each has curated buckets at the top for human skimming + a `_raw_metadata` dump for forensic preservation. |
 
 **Per-column registry mapping is in YAML, not Python.** The Python `SPECIAL_FIELDS` promotion mechanism (used briefly in early 2026-05) is gone — adding or renaming a column promotion is a YAML-only edit (see [10_TOOLS §2.1](10_TOOLS.md) for schema, validation rules, and template).
+
+#### `mri:` block shape (new 2026-05-20)
+
+For an internal MRI acquisition (Bruker ParaVision), the sidecar's `mri:` block parses the JCAMP-DX aux files from the exam:
+
+```json
+"mri": {
+  "subject": {
+    "animal_id", "name", "study_name", "sex", "weight_g", "date",
+    "position", "referring_operator"
+  },
+  "acquisition": {
+    "sequence_name", "pulse_program", "datetime", "duration_s",
+    "TR_ms", "TE_ms", "flip_angle_deg", "nucleus", "frequency_MHz",
+    "gating_used", "BPM_used", "respiration_rate_used"
+  },
+  "geometry": {
+    "matrix", "FOV_mm", "slice_thickness_mm", "slice_count",
+    "orientation", "position"
+  },
+  "reconstruction": {
+    "indices_present": ["1", "3"],
+    "methods": { "1": "auto", "3": "user-controlled" },
+    "intensity_ranges": { "3": {"min": ..., "max": ...} },
+    "frame_labels": { "3": ["Cardiac Frame 1", ...] }
+  },
+  "_raw_metadata": {
+    "subject": { ...full JCAMP-DX dump of study-root subject file... },
+    "acqp":    { ...full dump... },
+    "method":  { ...full dump... },
+    "visu_pars": { ...full dump... },
+    "pdata_3": { "visu_pars": {...}, "reco": {...} }
+  }
+}
+```
+
+Buckets are best-effort summaries; if a field is missed today, it's still recoverable from `_raw_metadata` without re-reading the raw aux files. Curated `discovered.mri_*` subset (surfaced for YAML reference) is documented in `tools/ingest/paravision_metadata.py::EXPOSED_FIELDS` and mirrored in [09_MODALITIES](09_MODALITIES.md) per the CLAUDE.md cross-reference rule.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-14
+**Last Updated:** 2026-05-20 (round-6 prep: ParaVision JCAMP-DX extractor, `regex_extract:` in filename_parse, `reconstructions:` flag, `acquisition_layout: folder` for no-zip MRI, project-level NIfTI tool stub)
 
 ---
 
@@ -130,7 +130,27 @@ We get every field surfaced in `09_MODALITIES.md §1.1` plus the full structured
 
 The extractor is the natural seam to swap libraries: today it's `czi_metadata.extract(czi_path)` calling `czifile`; tomorrow that function can wrap pylibCZIrw or call out to Bio-Formats without touching the rest of the pipeline.
 
-### 2.1.3 Auto-discovery: `filename_parse` and `path_parse`
+### 2.1.2b Bruker ParaVision metadata extraction (round 6, 2026-05-20)
+
+> **🔶 IN PROGRESS:** Internal MRI ingest uses **JCAMP-DX text aux files** (`subject`, `acqp`, `method`, `visu_pars`, per-recon `visu_pars`/`reco`) as the canonical metadata source — *not* the embedded DICOM headers. ParaVision aux files carry pulse sequence parameters, gating values, reconstruction index, animal subject info that the DICOM headers strip. Pure-DICOM-header extraction (for collaborator XMRI) stays deferred as an independent stream.
+
+| Module | Role |
+|---|---|
+| `tools/ingest/jcampdx.py` | Minimal pure-Python JCAMP-DX parser. `parse_file(path) -> dict`. Handles `##KEY=value` scalars, `##KEY=( N )` arrays spanning multiple lines, `<...>` strings, `$$` comments. Used by `paravision_metadata.py`; no third-party dependency. |
+| `tools/ingest/paravision_metadata.py` | Mirrors `czi_metadata.py` shape. `load_paravision_exam(exam_path) -> dict`, `build_mri_section() -> dict` (4 curated buckets: `subject`, `acquisition`, `geometry`, `reconstruction` + `_raw_metadata`), `EXPOSED_FIELDS` (~15 curated `discovered.mri_*` fields), `extract(exam_path) -> (discovered_subset, mri_section)`. |
+| `tools/ingest/probe_paravision.py` | Standalone read-only probe utility, mirrors `probe_czi.py`. Dumps parsed JCAMP-DX + the curated subset to `_probes/`. |
+
+**Dispatcher.** `FORMAT_EMBEDDED_EXTRACTORS["DICOM"]` runs a content-based detector: if `acqp` + `method` files are present alongside the source, it dispatches to `paravision_metadata.extract`. If not (collaborator XMRI shape — a zip), it returns `({}, {})` (current behaviour preserved). This keeps the MRI → DICOM ecosystem mapping intact while supporting two very different internal data shapes under the same bucket.
+
+#### Why JCAMP-DX text parsing (and not nmrglue / bruker2nifti)
+
+| Reason | Detail |
+|---|---|
+| **Minimal dependency surface** | A small text parser (~80 LOC) is cheaper than pulling in `nmrglue` or `bruker2nifti`, which carry NMR/MR-image conversion logic we don't need at ingest. |
+| **Auditable** | Walking JCAMP-DX is straightforward; the field-source mapping is visible in `paravision_metadata.EXPOSED_FIELDS` (and mirrored in `09_MODALITIES.md` MRI section). |
+| **Library deps stay future** | If we later add raw → NIfTI conversion as a project-level tool (see §2.6 below), pulling in `dcm2niix` or `bruker2nifti` happens *there*, not in the ingest pipeline. |
+
+### 2.1.3 Auto-discovery: `filename_parse`, `path_parse`, `regex_extract`
 
 Two parallel mechanisms in the `auto_discover:` block extract metadata from where it already sits in the source layout. Both produce values in the per-case `discovered.<name>` namespace, available everywhere the resolver runs (`registry:`, `auto_create_project:`).
 
@@ -168,6 +188,25 @@ auto_discover:
 For a file at `G:/Lab/CellObserver/MBC/Itziar/HLF/alphasma/HLF_alphasma_10x_CC-miR-29a_1.czi`, the three levels (`Itziar`, `HLF`, `alphasma`) become `discovered.researcher`, `discovered.cell_line`, `discovered.experiment`. Mismatched-depth files (too few or too many levels) are skipped with a WARN — same pattern as `filename_parse`.
 
 Both can be used together; if a value is parsed from both sides (e.g. both filename and path carry `cell_line`), `path_parse` runs first and the filename value **overwrites** it — so `filename_parse` wins on collision. Same-value collisions are silent (redundant but harmless). **Different-value collisions emit a per-key WARN** that names the file, the key, both values, and reminds the operator the filename wins by design — a misfiled-file signal. The cleaner approach when you don't actually want the redundancy is to give parallel chunks distinct names (e.g. `path_cell_line` vs `filename_cell_line`) and let the `registry:` block decide which to record.
+
+**`regex_extract`** — optional named-group extraction for messy names (new 2026-05-20):
+
+When positional `separator + fields` splitting doesn't fit (e.g. FTP server names that mix timestamps + duplicated study IDs + serials), add a `regex:` block to `filename_parse` with a Python regex that uses named groups. Each named group becomes a `discovered.<name>`.
+
+```yaml
+auto_discover:
+  filename_parse:
+    regex: '(?P<jrc_id>jrc_?\d{6,8}_m\d+_\d{4})'
+```
+
+For a folder name like `20251016_083822_jrc_251016_m17_0424_jrc_251016_m17_0424_1_1`, the regex pulls `discovered.jrc_id = "jrc_251016_m17_0424"` and ignores the surrounding noise. Use cases: Bruker ParaVision FTP folder names (round 6); any future instrument that produces noisy filenames.
+
+**`separator`/`fields` vs `regex` choice:**
+
+- Use `separator` + `fields` when every chunk of the name is meaningful in a stable positional order — works for AxioScan and Cell Observer.
+- Use `regex` when you want to extract a few named values from a name with extra positional noise — works for the MRI FTP folder convention.
+- Mixing is allowed: a `regex:` block runs first; any `discovered.<name>` it sets overrides defaults. Then `separator` + `fields` runs on the same input (if both are present) and applies normal collision rules.
+- WARN on regex non-match (no name groups extracted) — file is still ingested with whatever other discovery sources populate `discovered`.
 
 ### 2.1.4 `auto_create_project:` block
 
@@ -238,8 +277,10 @@ Three required top-level blocks plus one optional. `defaults:` is gone — non-r
 |------|---------|--------|
 | `delete_source_after_ingest` | `false` | Remove the source file/folder after a successful copy + verify. CLI `--delete-source` overrides. |
 | `auto_create_projects` | `false` | When `registry.project_hint` resolves to a value that isn't an existing `project_id` or `short_name`, auto-create a project with that value as the `short_name`. First ingest creates; subsequent ingests with the same hint reuse via `short_name` lookup. Useful when the project key comes from a parsed filename chunk (e.g. `project_hint: discovered.project`). Default `false` to prevent typos from silently creating rogue projects. When enabled, the optional `auto_create_project:` block (§2.1.4) supplies the new project's `owner` / `description` / `notes`. |
+| `acquisition_layout` | `file` | New 2026-05-20. One of `file` (single primary file: microscopy `.czi`), `archive` (compressed archive: legacy collaborator DICOM `.zip`), or `folder` (folder-as-primary: internal MRI ParaVision bundle — no zip). Drives the file-copy step and the `primary_kind` registry column. Per-instrument templates set this; per-batch configs rarely override. See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
+| `reconstructions` | (none) | New 2026-05-20 (MRI-specific). Selects which reconstruction indices to retain from a ParaVision exam. Values: `all` \| an integer (e.g. `3`) \| a list of integers (e.g. `[3]` or `[1, 3]`). The platform convention is `/3` user-trusted, but the user explicitly decides per-batch; there is no implicit default. Indices not listed stay only on the platform's deep-archive. The registry's `discovered.mri_recon_indices` column records what was kept. |
 
-The user-controllable `registry:` columns are: `instrument`, `data_ecosystem`, `instrument_model`, `modalities_in_study`, `operator`, `data_source`, `sample_id`, `sample_type`, `acquisition_datetime`, `project_hint`, `notes`. Of these, **`instrument`, `data_ecosystem`, `operator`, `data_source` must be present** (NA allowed where intentional); the rest are optional. Auto-populated columns (`acq_id`, `registration_datetime`, `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) must NOT appear in `registry:`.
+The user-controllable `registry:` columns are: `instrument`, `data_ecosystem`, `instrument_model`, `modalities_in_study`, `operator`, `data_source`, `sample_id`, `sample_type`, `session_id` (DRAFT — see [06_REGISTRIES §2.2 + §2.3a](06_REGISTRIES.md)), `acquisition_datetime`, `project_hint`, `notes`. Of these, **`instrument`, `data_ecosystem`, `operator`, `data_source` must be present** (NA allowed where intentional); the rest are optional. Auto-populated columns (`acq_id`, `registration_datetime`, `primary_kind` (DRAFT), `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) must NOT appear in `registry:`.
 
 **Templates layout** — start from the per-instrument template under [`tools/templates/instruments/`](../tools/templates/instruments/) (currently: `axioscan7.yaml`); the universal starter [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml) is the fallback for instruments not yet onboarded. Edited copies are saved under [`tools/configs/`](../tools/configs/) (under git, version-locked with the script — the relative path is stamped into each registry row's `ingest_config` column). See [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md) for the full templates/configs layout table.
 

@@ -1,6 +1,6 @@
 # MFB gjesus3 RDM Pilot — Task List
 
-**Last Updated:** 2026-05-18
+**Last Updated:** 2026-05-20
 
 This file consolidates all open and completed tasks. Completed items are kept for context but marked with ~~strikethrough~~.
 
@@ -9,6 +9,8 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 ## 0. Active Pass / Up Next
 
 > **⚠️ All current ingests are quasi-production.** Each instrument is iterated test → purge → accept-as-quasi-production. After the team exhibition, **everything gets purged** and true production restarts incorporating exhibition feedback. "Done" below means done in the quasi-production sense; the TEST tagging in config filenames + registry notes is intentional and stays.
+>
+> **⚠️ System role reframed 2026-05-20.** gjesus3 = research-facing working layer (5-year active window), complementing — not replacing — the platforms' deep-archive of raw bytes. Folder-as-primary is now permitted for ecosystems whose data lands as many files (internal MRI). See [`13_GJESUS3_ROLE`](../mfb-rdm-docs/13_GJESUS3_ROLE.md).
 
 **Rounds completed in quasi-production state:**
 
@@ -20,15 +22,26 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 
 Round-5 round-up (Cell Observer) detail trail in §4.6.B.
 
-**We are now waiting on three external blockers — no rounds are actively code-blocked.** Pick up whichever lands first:
+### Round 6 — **Internal MRI (Bruker ParaVision)** — ACTIVE
+
+Creds for the MRI server obtained 2026-05-20; sample data manually pulled to `D:\projects\gjesus3\data_test\` (one ParaVision study with ~10–16 numbered exams). Implementation plan locked in [the round-6 plan file](../../../.claude/plans/i-have-the-creds-reactive-candle.md).
+
+**Decisions locked for this round:**
+- ACQ unit = examination (assay). One numbered ParaVision exam = one ACQ-ID. ISA terminology adopted: investigation=project, study=session, assay=acquisition.
+- **No zipping.** Folder-as-primary in `/raw/` for internal MRI. Acquisition folder = the unit (with `reconstructions/pdata_<idx>/` + `acquisition_aux/` substructure). New registry column `primary_kind: folder` (DRAFT).
+- **ParaVision JCAMP-DX aux files (`subject`/`acqp`/`method`/`visu_pars`) are canonical metadata source**, not DICOM headers. New `tools/ingest/paravision_metadata.py` mirroring `czi_metadata.py` shape. New `tools/ingest/jcampdx.py` parser.
+- **Reconstruction selection = per-batch YAML flag** (`reconstructions: all | [3] | 3`); no implicit default.
+- **`regex_extract:` option in `filename_parse`** — extracts named groups from messy FTP folder names.
+- **NIfTI generation is a project-level tool**, deferred — NOT a `/raw/` ingest step. Lives in `/projects/<proj>/derived_nifti/`, removed at project close-out.
+
+§4.5 has the full execution checklist. Stream A (docs) is in progress; Streams B (extractor + parser + probe) and C (pipeline + template + config + FTP) follow.
+
+**Other waits (not blocking round 6):**
 
 | Pass | Section | Blocked on |
 |------|---------|-----------|
-| LSM 900 confocal (`LSM9`) | §4.6.C | Ainhize Urkola Arsuaga to provide a detailed example. Expected source `K:\gjesus\Ainhize\CONFOCAL LSM 900\`. Should reuse Cell Observer cells-mode template with minor tweaks. |
-| Platform MRI DICOM (`MRI`) | §4.5 | (a) Platform manager to answer FTP/access questions; (b) sample MRI DICOM dataset. Strategy doc: [`equipment/mri-platform/mri_data_access_strategy.md`](../equipment/mri-platform/mri_data_access_strategy.md). |
+| LSM 900 confocal (`LSM9`) | §4.6.C | Ainhize Urkola Arsuaga to provide a detailed example. Expected source `K:\gjesus\Ainhize\CONFOCAL LSM 900\`. |
 | Nuclear Imaging (`PET`/`SPECT`/`CT`) | §4.7 | Platform Manager **Unai** to answer one outstanding question before we submit the data-workflow documentation + example. |
-
-**Code-side prerequisite** that's independent of all three waits and worth doing in the interim: **DICOM full-mode metadata extractor + compress-on-ingest** (§3.1). Mirrors what `tools/ingest/czi_metadata.py` did for `.czi`. Can be prototyped against the existing 75 collaborator XMRI acquisitions; needed for both MRI and Nuclear Imaging rounds.
 
 **If switching between passes**, each per-pass section has a "Pickup context" subsection written to be read cold.
 
@@ -137,6 +150,23 @@ Round-5 round-up (Cell Observer) detail trail in §4.6.B.
   - [ ] (Future) Add dedicated `sample_organism` (e.g. `Mus musculus`) and `anatomical_entity` (e.g. `heart`, `brain`) columns to the raw registry — splits the current freeform `"mouse lung section"`-style strings into queryable fields. Coordinate with REG-01 (composite sample_id) and the organ-letter parsing question so we don't duplicate effort.
 - [ ] **Refactor [11_OPERATIONS §3.2 Quick Start](../mfb-rdm-docs/11_OPERATIONS.md) for multi-instrument** — current text is AxioScan-7-specific (share path example, config-name example, filename pattern). Once 2-3 instruments are live, separate the common workflow steps from the per-instrument specifics (per-instrument Quick Start subsections or table of "for your instrument, share = ... / filename pattern = ... / starter config = ...").
 
+#### Round 6 (Internal MRI / Bruker ParaVision) — in progress 2026-05-20
+
+- [ ] **`tools/ingest/jcampdx.py`** — minimal pure-Python JCAMP-DX text parser (~80 LOC). Handles `##KEY=value` scalars, `##KEY=( N )` arrays spanning multiple lines, `<...>` strings, `$$` comments. No third-party dependency. Used by `paravision_metadata.py`.
+- [ ] **`tools/ingest/paravision_metadata.py`** — Bruker ParaVision metadata extractor mirroring `czi_metadata.py` shape. `load_paravision_exam()`, `build_mri_section()` (4 curated buckets + `_raw_metadata`), `EXPOSED_FIELDS` (~15 `discovered.mri_*`), `extract(exam_path) -> (discovered_subset, mri_section)`. ParaVision aux files (`subject`/`acqp`/`method`/`visu_pars`) are canonical metadata source for internal MRI — not DICOM headers. Documented in [10_TOOLS §2.1.2b](../mfb-rdm-docs/10_TOOLS.md), [08_METADATA §4.3](../mfb-rdm-docs/08_METADATA.md), [09_MODALITIES](../mfb-rdm-docs/09_MODALITIES.md) MRI section.
+- [ ] **`tools/ingest/probe_paravision.py`** — read-only probe utility mirroring `probe_czi.py`. Dumps parsed JCAMP-DX + curated subset to `_probes/` for review.
+- [ ] **Detector dispatch under `FORMAT_EMBEDDED_EXTRACTORS["DICOM"]`** in `tools/ingest/config.py` — if `acqp` + `method` are present alongside the source, call `paravision_metadata.extract`; else return `({}, {})` (collaborator XMRI behaviour preserved).
+- [ ] **`regex_extract:` option in `filename_parse`** — optional `regex:` block in `auto_discover.filename_parse` extracts named groups from arbitrary names. Needed for messy FTP folder names like `20251016_083822_jrc_251016_m17_0424_jrc_251016_m17_0424_1_1` → `discovered.jrc_id`. Reusable beyond MRI. Documented in [10_TOOLS §2.1.3](../mfb-rdm-docs/10_TOOLS.md).
+- [ ] **`acquisition_layout: file | archive | folder` flag** in `ingest:` block (default `file`). MRI uses `folder` (no zip, folder-as-primary). Drives the file-copy step and the new `primary_kind` registry column. Documented in [10_TOOLS](../mfb-rdm-docs/10_TOOLS.md) `ingest:` flags table and [03_RAW_STORAGE §4.2](../mfb-rdm-docs/03_RAW_STORAGE.md).
+- [ ] **`reconstructions:` flag** (MRI-specific) — `all` \| integer \| list of integers. Selects which ParaVision `pdata/<idx>/` reconstructions to retain. No implicit default; user explicitly decides per-batch. Discarded indices stay only on the platform's deep-archive.
+- [ ] **`tools/ftp_mirror.py`** — standalone SFTP CLI using `paramiko`. Inputs: host, user, password (env var / local file outside repo), remote study path, local staging dir. Recursively mirrors a study folder to local staging; idempotent. Decoupled from `ingest_raw.py` — fetch first, then ingest the staged copy. On-acquisition-machine script remains out of scope (Phase 4 of [`mri_data_access_strategy.md`](../equipment/mri-platform/mri_data_access_strategy.md)).
+
+#### Future work (documented for later, not in scope this round)
+
+- [ ] **Our own raw→DICOM regeneration at ingest** (assessment task). Currently Bruker's converter produces the per-frame `.dcm` files; the user has flagged that we may want to generate DICOM ourselves so we know exactly what's in them. Tasks: characterize what Bruker's converter does, identify what we'd want to differ, evaluate cost of replacing it. Decision deferred.
+- [ ] **Enhanced MR / Multi-Frame DICOM evaluation.** The classic per-frame `.dcm` layout is why an MR acquisition lands as N files. The modern DICOM standard (Enhanced MR / Multi-Frame DICOM) puts all frames in one file — if we adopt it, we get back to one-primary-file-per-ACQ even for DICOM. Evaluate in connection with the previous future-task.
+- [ ] **DICOM full-mode metadata extraction for collaborator XMRI** (existing §3.1 deferred item, independent of round-6 work). Will mirror the `.czi` pattern: curated `discovered.dicom_*` + structured `dicom:` sidecar block + full pydicom dump. Library: `pydicom`. Doesn't block any in-flight round; can be prototyped against the 75 existing XMRI acquisitions whenever.
+
 ### 3.2 Other Scripts
 - [x] ~~`create_project.py` implemented~~ — CLI + interactive, dry-run
 - [ ] `create_publication` — requirements defined, not yet implemented
@@ -148,6 +178,7 @@ Round-5 round-up (Cell Observer) detail trail in §4.6.B.
   - [ ] **Excel → study-metadata importer** (researcher-facing). Reads a per-project `study.xlsx` with a defined sheet layout (study sheet + biosamples sheet + optional per-acquisition supplements sheet), validates against a schema, writes `/projects/<proj>/metadata/{study,biosamples,<acq_id>}.json`. Schema needs design; the Excel layout will live alongside the tool. This is what unblocks Users (researchers) to actually contribute REMBI study/biosample context.
   - [ ] **Project close-out tool** (Data Mgmt Lead procedure). Given a project ready for closure: (1) read `/projects/<proj>/metadata/`; (2) for each acq_id referenced, merge the study-level metadata into `/raw/<ACQ-ID>/metadata.json` under a `study:` block (additive, never overwriting acquisition-level fields); (3) if the project promoted to a publication, also stage a copy under `/publications/<pub-id>/`; (4) verify writes; (5) only then delete the project folder. Requires admin write access to `/raw/`. Has implications for the raw-immutability lockdown (§4.3) — that lockdown design must allow the Lead to perform these merges. Document the procedure (manual recipe first, scripted tool after).
   - [ ] Document the merge format in [08_METADATA](../mfb-rdm-docs/08_METADATA.md) — `metadata.json.study` block shape — once the Excel-importer schema settles.
+  - [ ] **Project-level NIfTI generation tool** (NEW 2026-05-20, MRI-driven but generalizable). Reads chosen ACQ-IDs via the project's `raw_linked/` shortcuts, runs `dcm2niix` (or `bruker2nifti`) per acquisition, writes `<ACQ-ID>.nii.gz` under `/projects/<proj>/derived_nifti/`. Removed at project close-out — regenerable from raw if needed later. Aligns with the [13_GJESUS3_ROLE](../mfb-rdm-docs/13_GJESUS3_ROLE.md) reframe (research-facing derivatives belong in projects, not in `/raw/`). Library choice (dcm2niix subprocess vs bruker2nifti Python) TBD when implementation starts. Cross-referenced in [08_METADATA §1.5a](../mfb-rdm-docs/08_METADATA.md).
 
 ### 3.3 Infrastructure Decisions
 - [ ] Where scripts will run — designated workstation vs user machines (TOOL-01)
@@ -217,31 +248,52 @@ Round-5 round-up (Cell Observer) detail trail in §4.6.B.
 - [ ] Backfill `acquisition_datetime` for `ACQ-20260310-XMRI-001` (HPIC11) — date couldn't be parsed at ingest, fell back to registration date
 - [ ] (Optional) Re-run ingest on existing 75 acquisitions with new linker code — idempotent (skips existing `.lnk` files); confirms all 75 project links are accounted for and creates any that are missing
 
-### 4.5 Pass 2: Platform DICOM — MRI (`MRI`)
+### 4.5 Pass 2: Platform DICOM — Internal MRI (`MRI`) — ROUND 6 ACTIVE 2026-05-20
 
 > **Pickup context (read first if returning to this section cold):**
-> - Round-5 candidate alternative to §4.6.B Cell Observer. Pick whichever has a sample dataset available first (see §0 Active Pass).
-> - DICOM ingest already works for **collaborator XMRI** (HPIC + LIONS, 75 production rows ingested round-1/2). MRI Platform DICOM is **different source, same format** — expect different header conventions, different series structure (platform-reconstructed vs collaborator-archived).
-> - Today's ingest skips DICOM full-mode metadata extraction (the `discovered.dicom_*` + `microscopy._raw_metadata`-equivalent block) — that's queued in §3.1 as **deferred**. Round-5 MRI is the natural moment to implement it, mirroring what we did for `.czi` in round-3 (`tools/ingest/czi_metadata.py`).
-> - DICOM compress-on-ingest is also still queued in §3.1. The 75 production collaborator rows came in as already-zipped `.zip`/`.rar` from collaborators; for platform MRI we'll need to compress at ingest time (the source folders contain many `.dcm` instances).
-> - Two MRI systems live on the platform (Bruker BioSpec 11.7T and 7T) — open question whether they need separate instrument codes or share `MRI`. See `equipment/mri-platform/` for the platform description.
-> - **🔑 ACCESS IS THE BLOCKER, NOT CODE.** The MRI acquisition machine is NOT directly network-accessible the way the other instruments are — researchers pull data via FTP from the acq machine to their own workstations. Architectural options, recommended pacing (Option A: pull-from-FTP via our ingest first; Option B: on-machine agent later if needed), open questions for the platform manager, and a working email draft are captured in [`equipment/mri-platform/mri_data_access_strategy.md`](../equipment/mri-platform/mri_data_access_strategy.md). Read that doc before resuming MRI work. The code-side prerequisites (DICOM full-mode extractor + compress-on-ingest from §3.1) are independent of access negotiation — can be prototyped against the existing collaborator XMRI data while platform-access conversation is in flight.
+> - **This is round 6 of the pilot, in progress.** Internal MRI = Bruker ParaVision platform (two systems: 7T and 11.7T, three ParaVision versions coexist v3.6/v6/v7). NOT to be confused with collaborator XMRI (rounds 1-2, already deposited as zips).
+> - **Access:** SFTP credentials obtained 2026-05-20. Sample data manually pulled to `D:\projects\gjesus3\data_test\` (one ParaVision study with ~10–16 numbered exams). Full access-strategy still in [`equipment/mri-platform/mri_data_access_strategy.md`](../equipment/mri-platform/mri_data_access_strategy.md) — Option A (FTP-from-workstation) is what we're executing.
+> - **Round 6 reframe** ([13_GJESUS3_ROLE](../mfb-rdm-docs/13_GJESUS3_ROLE.md), 2026-05-20): gjesus3 is the research-facing working layer; the platform's own archive handles deep preservation. This justifies the no-zip / folder-as-primary layout for internal MRI.
+> - **Acquisition unit:** examination (assay). One numbered ParaVision exam = one ACQ-ID. ISA terminology: investigation=project, study=session (`session_id` column DRAFT), assay=acquisition.
+> - **Metadata source:** ParaVision JCAMP-DX aux files (`subject`/`acqp`/`method`/`visu_pars`/per-recon `visu_pars`+`reco`) are **canonical**, not DICOM headers. New `paravision_metadata.py` + `jcampdx.py` modules mirror the `.czi` extractor shape. Collaborator XMRI DICOM-header extraction stays deferred as an independent stream.
+> - **Layout:** `/raw/DICOM/<year>/<year-month>/ACQ-<date>-MRI-<exam>/` with `metadata.json` + `checksums.json` at the root, `reconstructions/pdata_<idx>/` subfolders (per `reconstructions:` YAML flag), `acquisition_aux/` for exam-level aux files. No zip. `primary_kind: folder` in the registry.
+> - **Two MRI systems** (Bruker BioSpec 11.7T and 7T) — open question whether they need separate instrument codes or share `MRI`. Default: share, until evidence pushes otherwise.
+> - **NIfTI conversion is OUT OF SCOPE** for this round at `/raw/` ingest. Project-level NIfTI generation tool tracked in §3.2 as future work. The platform's own NIfTI from `tools.all2nifti.sh` may or may not be in the source data; we don't depend on it.
+> - **Plan file:** [the round-6 plan](../../../.claude/plans/i-have-the-creds-reactive-candle.md) has the full design + sizing.
 
-**Prerequisites (need before starting):**
-- [ ] **Ryan:** Obtain one sample MRI DICOM dataset from the MRI Platform (Irantzu's group). One acquisition's worth of `.dcm` files in their typical folder layout.
-- [ ] Confirm DICOM is the output format (MOD-05).
+**Prerequisites:**
+- [x] ~~SFTP credentials obtained~~ — 2026-05-20.
+- [x] ~~Sample data pulled to `D:\projects\gjesus3\data_test\`~~ — one ParaVision study with ~10–16 numbered exams.
+- [ ] Confirm DICOM and/or NIfTI is on the source (sample shows: ParaVision `2dseq` + Bruker-exported `.dcm` per reconstruction; NIfTI not present in this sample). NIfTI generation deferred to project-level tool per [13_GJESUS3_ROLE §5.3](../mfb-rdm-docs/13_GJESUS3_ROLE.md).
 
-**Round-5 execution:**
-- [ ] Inspect file structure and headers — compare with collaborator DICOM (HPIC/LIONS reference).
-- [ ] Audit embedded metadata — what header fields are populated? What differs from collaborator DICOM? (feeds §2.2)
-- [ ] Implement DICOM full-mode metadata extraction (`tools/ingest/dicom_metadata.py`, mirrors `czi_metadata.py`): curated `discovered.dicom_*` fields + structured `dicom:` sidecar block + full pydicom-dump `_raw_metadata`.
-- [ ] Implement compress-on-ingest for DICOM (`.zip` archive of the source `.dcm` collection, `file_count` from archive central directory per §3.1).
-- [ ] Test full-mode ingest on one MRI case.
-- [ ] Verify `metadata.json.dicom` captures MRI-specific fields.
-- [ ] Resolve: do the two MRI systems need separate instrument codes? (§2.4)
+**Stream A — Documentation (in progress 2026-05-20):**
+- [ ] [13_GJESUS3_ROLE.md](../mfb-rdm-docs/13_GJESUS3_ROLE.md) — NEW (the reframe doc).
+- [ ] [01_OVERVIEW.md](../mfb-rdm-docs/01_OVERVIEW.md) §2 + §5.3 reframe.
+- [ ] [03_RAW_STORAGE.md](../mfb-rdm-docs/03_RAW_STORAGE.md) — per-ecosystem layouts + MRI folder exception in §4.
+- [ ] [06_REGISTRIES.md](../mfb-rdm-docs/06_REGISTRIES.md) §2.3a ISA terminology + DRAFT `session_id` + `primary_kind` columns.
+- [ ] [08_METADATA.md](../mfb-rdm-docs/08_METADATA.md) §4.3 `mri:` block + project-level tool family additions.
+- [ ] [10_TOOLS.md](../mfb-rdm-docs/10_TOOLS.md) §2.1.2b ParaVision extractor + §2.1.3 `regex_extract:` + `ingest:` flags table updates.
+- [ ] [tasks.md §0 + §3.1 + §3.2](.) — round-6 active state + future-work entries.
+
+**Stream B — Extractor + JCAMP-DX parser + probe:**
+- [ ] `tools/ingest/jcampdx.py` (NEW) — JCAMP-DX text parser (~80 LOC).
+- [ ] `tools/ingest/paravision_metadata.py` (NEW) — extractor mirroring `czi_metadata.py` (~250 LOC). EXPOSED_FIELDS lists the curated `discovered.mri_*` fields.
+- [ ] `tools/ingest/filename_parser.py` — add optional `regex:` extraction (~30 LOC).
+- [ ] `tools/ingest/config.py` — wire ParaVision dispatcher under `FORMAT_EMBEDDED_EXTRACTORS["DICOM"]` (content-based detect).
+- [ ] `tools/ingest/probe_paravision.py` (NEW) — probe utility (~40 LOC).
+- [ ] **Probe verification** — run on one exam from `D:\projects\gjesus3\data_test\<study>\29\`. Confirm ~15 `discovered.mri_*` fields populate. Iterate EXPOSED_FIELDS if needed.
+
+**Stream C — Ingest pipeline + per-instrument template + per-batch config + FTP retrieval:**
+- [ ] `tools/ingest/config.py` — add `acquisition_layout: file | archive | folder` flag (default `file`); add `reconstructions:` plumbing.
+- [ ] `tools/ingest_raw.py` — honour `reconstructions:` and no-zip folder layout for MRI: copy chosen recon indices into `reconstructions/pdata_<idx>/`, exam aux into `acquisition_aux/`.
+- [ ] `tools/templates/instruments/mri_bruker.yaml` (NEW) — per-instrument template. `pattern: "*/*"` (study folders → exam folders). `regex_extract:` for the messy folder name. `reconstructions:` flag. `auto_create_project:` targeting the 4-digit project code.
+- [ ] `tools/configs/mri_bruker_<test-batch>_TEST.yaml` (NEW) — first per-batch config against `D:\projects\gjesus3\data_test\`. Quasi-production TEST tagging per the established pattern.
+- [ ] **Dry-run + real ingest** against the sample. Verify NAS state: acquisition folder, sidecar `mri:` block, registry row with exam-level granularity + `primary_kind: folder` + populated `discovered.mri_*` + `session_id`, project auto-create off the JRC project code, `.lnk` shortcuts, provenance row, **direct viewability without unzipping**.
+- [ ] **Idempotency check** — re-run, verify zero duplicate rows.
+- [ ] `tools/ftp_mirror.py` (NEW) — SFTP CLI via `paramiko`. Mirrors a remote study folder to local staging. Decoupled from ingest.
 
 **Documentation (during / after the pass):**
-- [ ] `09_MODALITIES.md` MRI section — per-instrument `discovered.dicom_*` fields table.
+- [ ] [09_MODALITIES.md](../mfb-rdm-docs/09_MODALITIES.md) MRI section — per-instrument `discovered.mri_*` fields table mirroring the AxioScan §1.1 pattern.
 - [ ] `08_METADATA.md` — update for `dicom:` sidecar block.
 - [ ] `00_INDEX.md` — version history.
 

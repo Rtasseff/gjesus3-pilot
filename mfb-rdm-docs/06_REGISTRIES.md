@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-14
+**Last Updated:** 2026-05-20 (DRAFT `session_id` + `primary_kind` columns for ISA grouping + per-ecosystem layout shapes; ISA terminology mapping added in §2.3a)
 
 ---
 
@@ -68,7 +68,9 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `data_source` | String | ✅ Yes | User | `internal` or `collaborator:<name>`. |
 | `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. See §2.3 for the recommended composite format. |
 | `sample_type` | String | 🔶 Recommended | User | Category of biological material. Use the controlled vocabulary in §2.4 (DRAFT). |
-| `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary file (`<ACQ-ID>.<ext>` for microscopy / `<ACQ-ID>.zip` for DICOM, or `series/` for the legacy DICOM uncompressed layout). |
+| `session_id` | String | 🔶 Recommended (DRAFT) | User | DRAFT 2026-05-20. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc251016_m17_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. Status open (REG-08) pending PI sign-off. |
+| `primary_kind` | String | ✅ Yes (DRAFT) | Auto | DRAFT 2026-05-20. One of `file` \| `archive` \| `folder` — the shape of the primary entity on disk. `file` = single canonical file (microscopy `.czi`). `archive` = compressed archive (legacy collaborator DICOM `.zip`). `folder` = the acquisition folder itself is the unit (internal MRI ParaVision bundle). See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
+| `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary entity. When `primary_kind` = `file` or `archive`, this is a filename (`<ACQ-ID>.czi`, `<ACQ-ID>.zip`). When `primary_kind` = `folder`, this is the folder name (`<ACQ-ID>`) — the unit IS the folder, see [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
 | `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
 | `file_format` | String | ✅ Yes | Auto | File extension/format (e.g., `.czi`, `.zip`). |
 | `file_size_mb` | Number | ✅ Yes | Auto | Size of primary file/folder in **decimal MB** (bytes ÷ 1,000,000), rounded to 1 decimal. Convention adopted 2026-05-12; pre-cutover rows hold the binary value (bytes ÷ 1,048,576) and are not being backfilled. Windows Explorer uses its own hybrid (bytes ÷ 1024 ÷ 1000) and will not match either form exactly. |
@@ -83,6 +85,24 @@ Authoritative record of all raw acquisitions deposited in the system.
 **Population key:**
 - **Auto** — set by the ingest pipeline; user must NOT put it in the YAML `registry:` block.
 - **User** — set in the YAML `registry:` block (literal, `discovered.<field>`, or `NA`). See [10_TOOLS §2.1](10_TOOLS.md).
+
+### 2.3a ISA Terminology Mapping (DRAFT)
+
+> **🔶 DRAFT pilot guidance (2026-05-20).** The MFB workflow maps cleanly onto **ISA** (Investigation / Study / Assay) terminology. Adopting that vocabulary in the registry makes the data more compatible with REMBI-style metadata standards and any future migration to XNAT / OMERO / institutional platforms. Status open (REG-09) pending PI sign-off.
+
+| ISA term | gjesus3 equivalent | Where recorded | Example |
+|---|---|---|---|
+| **Investigation** | Project | `registry_projects.csv` → `project_id` + `short_name` | `PROJ-0007` / `itziar-alphasma` (or for MRI, an animal-protocol-coded project like `PROJ-NNNN` with short_name `ae-biomegune-0525`) |
+| **Study** | Session — a coherent acquisition session (one animal session, one slide-loading round) | `registry_raw.csv` → new `session_id` column (DRAFT, see §2.2) | `jrc251016_m17_0424` for an internal MRI session |
+| **Assay** | Acquisition — one scan with a distinct protocol | `registry_raw.csv` → `acq_id` (one row) | `ACQ-20251016-MRI-029` |
+
+**Why this matters:**
+
+- For MRI: one ParaVision study folder contains many numbered exams (assays). Each exam is its own ACQ-ID; they share a `session_id` (the JRC study identifier) so the session can be reconstructed via simple registry query.
+- For collaborator DICOM (rounds 1-2): the existing zip-per-session model maps onto session=assay (one row, no separate `session_id` populated). Legacy; not retrofitting.
+- For microscopy: typically session and assay collapse (one `.czi` = one slide = one session = one assay). `session_id` may be empty/NA; sample_id carries the grouping.
+
+**Implementation:** `session_id` is User-populated via the YAML `registry:` block (literal, `discovered.<field>`, or NA). Existing rows are not backfilled; pre-cutover acquisitions hold empty `session_id`.
 
 ### 2.3 Sample ID Format (DRAFT)
 
@@ -129,12 +149,14 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 
 ### 2.5 Example
 
+> **Note:** The CSV example below shows the schema **including** the DRAFT `session_id` and `primary_kind` columns. Production registry rows pre-2026-05-20 do not have these columns; the schema grows column-by-column with a defensive header check (see [10_TOOLS](10_TOOLS.md)) preventing silent shift.
+
 ```csv
-acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
-ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axio Scan 7,,MBC,internal,MOUSE-2024-042,mouse lung section,ACQ-20260215-ZWSI-001.czi,MFB_MBC_PROJ-0003_MOUSE-2024-042_HE_20x.czi,.czi,2450,4,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,tools/configs/axioscan7_20260215.yaml,First pilot deposit
-ACQ-20260215-MRI-001,2026-02-15T17:00:00Z,2026-02-15T10:30:00Z,DICOM,MRI,Bruker BioSpec 11.7T,,IFF,internal,MOUSE-2024-042,mouse brain,ACQ-20260215-MRI-001.zip,,.zip,1800,4,/raw/DICOM/2026/2026-02/ACQ-20260215-MRI-001/,Y,Y,,tools/configs/mri_20260215.yaml,MRI follow-up (full-mode ingest)
-ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,mouse tumor,ACQ-20260220-PET-001.zip,,.zip,2100,4,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,Y,,tools/configs/pet_20260220.yaml,PET/CT hybrid session (full-mode ingest)
-ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HPIC-case-01,,ACQ-20260301-XMRI-001.zip,case_01.zip,.zip,450,3,/raw/DICOM/2026/2026-03/ACQ-20260301-XMRI-001/,Y,N,,,Lightweight ingest from NAS staging
+acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,session_id,primary_kind,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
+ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axio Scan 7,,MBC,internal,MOUSE-2024-042,tissue,,file,ACQ-20260215-ZWSI-001.czi,MFB_MBC_PROJ-0003_MOUSE-2024-042_HE_20x.czi,.czi,2450,1,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,tools/configs/axioscan7_20260215.yaml,Microscopy single-file
+ACQ-20251016-MRI-029,2025-10-16T17:00:00Z,2025-10-16T08:38:22Z,DICOM,MRI,Bruker BioSpec 7T,,IFF,internal,jrc251016_m17_0424_heart,organism,jrc251016_m17_0424,folder,ACQ-20251016-MRI-029,29,folder,150,17,/raw/DICOM/2025/2025-10/ACQ-20251016-MRI-029/,Y,Y,PROJ-0009,tools/configs/mri_bruker_20251016_TEST.yaml,Internal MRI ParaVision exam 29 (cine cardiac)
+ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,organism,,archive,ACQ-20260220-PET-001.zip,,.zip,2100,4,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,Y,,tools/configs/pet_20260220.yaml,Legacy PET/CT zip-per-session (pre-folder-bundle)
+ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HPIC-case-01,,,archive,ACQ-20260301-XMRI-001.zip,case_01.zip,.zip,450,3,/raw/DICOM/2026/2026-03/ACQ-20260301-XMRI-001/,Y,N,,,Lightweight collaborator zip
 ```
 
 ### 2.6 Update Rules

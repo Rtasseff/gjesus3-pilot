@@ -1,8 +1,8 @@
 # 01 — System Overview
 
-**Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** ✅ Current  
-**Last Updated:** 2026-03-06
+**Parent:** [Documentation Index](00_INDEX.md)
+**Status:** ✅ Current
+**Last Updated:** 2026-05-20 (system role reframed — see §2 and [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md))
 
 ---
 
@@ -35,23 +35,25 @@ The group has access to a dedicated NAS (gjesus3 — QNAP TS-864eU, 6 × 20 TB i
 
 ## 2. System Purpose
 
-> **✅ DECIDED:** gjesus3 is an **archival storage system** for original imaging data, not a primary working drive.
+> **✅ DECIDED (reframed 2026-05-20):** gjesus3 is the **research-facing working layer** for MFB imaging data in the 5-year active window — organised, searchable, directly viewable. It is **not** the deep-time archive of every raw byte; the instrument platforms already serve that role. See [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) for the full two-tier framing and the design implications.
 
 ### 2.1 What the System Does
 
-1. **Preserves raw acquisitions** in an organized, immutable structure organized by data ecosystem and date
-2. **Archives publication data packages** with complete provenance documentation
-3. **Enables traceability** from published outputs back to source data
-4. **Maintains registries** documenting what data exists and where it came from
+1. **Registers raw acquisitions** from approved modalities in a structured registry (`registry_raw.csv`) with rich JSON metadata sidecars (REMBI-aligned where practical)
+2. **Provides project workspaces** with shortcuts back to raw + space for project-level derivatives (e.g. NIfTI generated from MR raw, splits, segmentations) and project-level metadata that supplements the raw sidecar
+3. **Archives publication-ready data packages** with complete provenance documentation
+4. **Enables traceability** from published outputs back to raw source data
+5. **Operates in two-tier complement** with the instrument platforms' own raw archives — gjesus3 optimises for active use; the platforms handle deep-time preservation
 
 ### 2.2 What the System Does Not Do
 
 | Not This | Because |
 |----------|---------|
-| Primary working drive for active analysis | Access limited to specific hardwired on-site machines (excludes most laptops); RAID 5 write performance not optimized for heavy I/O |
-| General file share | Requires enforced conventions; not open for unstructured dumping |
-| Backup/disaster recovery | RAID 5 protects single-drive failure only; no offsite backup configured |
-| Platform raw data store | Platform-originated raw data (e.g., PET listmode) maintained by platforms; we store derived/reconstructed files |
+| Deep-time archive of every raw byte | Platforms (MRI, Nuclear Imaging, microscopy facilities) already maintain their own raw archives — awkward to access but reliable as a last resort. gjesus3's "raw" is research-facing: organised, registered, sometimes lightly normalised (per-ecosystem format choices in [03_RAW_STORAGE](03_RAW_STORAGE.md)). The 1% case needing forensic access to original bytes falls back to the platform. |
+| Primary working drive for heavy active analysis | Access limited to specific hardwired on-site machines (excludes most laptops); RAID 5 write performance not optimised for high-volume I/O. Researchers analyse on their workstations and check derivatives back into `/projects/`. |
+| General file share | Structured storage with enforced conventions; not open for unstructured dumping. |
+| Backup/disaster recovery | RAID 5 protects single-drive failure only; no offsite backup currently configured. |
+| Platform raw acquisition store | Platform-originated raw artifacts (PET listmode, ParaVision `2dseq` originals not chosen for ingest, k-space) stay with the platforms; gjesus3 ingests the research-facing slice. |
 
 ---
 
@@ -128,9 +130,17 @@ Original acquisition files are **never modified, renamed, or moved** after regis
 
 Every derived output used in publications **must be traceable** back to its raw source(s). This is achieved through provenance logging, not folder structure alone.
 
-### 5.3 Archival First, Convenience Second
+### 5.3 Two-tier Complement, Not Replacement
 
-The system prioritizes long-term preservation and discoverability over ease of daily use. This is intentional given the infrastructure constraints.
+gjesus3 is the research-facing working layer; the instrument platforms own the deep-time raw archive. These are complementary tiers, not competitors — gjesus3 does not aim to byte-perfect-preserve every artifact, and the platforms do not aim to be searchable or research-facing. Design choices on gjesus3 (per-ecosystem format normalisation, opinionated `reconstructions:` selection, project-scoped derivatives) are licensed by the fact that the platform tier exists. See [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md).
+
+### 5.3a Research-Facing First in the 5-Year Window
+
+Most of a project's reuse / extension / publication-traceability value lives in roughly its first 5 years on gjesus3. Designs optimise that window: organised, viewable without unzipping, searchable by metadata, fast to find. Beyond ~5 years, value tapers — projects close, derivatives can be cleaned up, the registry retains the row. The platform's deep-freeze remains the ultimate fallback for the rare older-than-5-year case.
+
+### 5.3b Derivatives Belong in Projects
+
+Research-facing derivatives (NIfTI generated from MR raw, splits, segmentations, project-level metadata) live in `/projects/<proj>/`, not in `/raw/`. They're regenerable from raw, kept while the project is active, and removed at project close-out. This applies the metadata-location-split decision (2026-05-12, see [08_METADATA §1](08_METADATA.md)) to image derivatives too.
 
 ### 5.4 Minimum Viable Compliance
 

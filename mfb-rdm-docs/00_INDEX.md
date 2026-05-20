@@ -1,9 +1,9 @@
 # MFB gjesus3 Research Data Management — Documentation Index
 
-**System Purpose:** Long-term archival storage for MFB group microscopy and biomedical imaging data
+**System Purpose:** Research-facing working layer for MFB group imaging data in the 5-year active window — organised, searchable, directly viewable. Complements (does not replace) the platforms' own deep-archive of raw bytes. See [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) for the two-tier framing.
 **Infrastructure:** QNAP TS-864eU NAS (6 × 20 TB, RAID 5, ~100 TB system / ~63 TB user-available after snapshot reservation)
 **Status:** Pilot development
-**Last Updated:** 2026-05-18 (round 5 Cell Observer landed in quasi-production: 165 acqs across 3 projects exhibiting both filename- and path-focused metadata extraction)
+**Last Updated:** 2026-05-20 (gjesus3 role reframe + internal MRI round-6 prep)
 
 ---
 
@@ -23,6 +23,7 @@
 | [10_TOOLS](10_TOOLS.md) | Scripts and automation | 🔶 Draft |
 | [11_OPERATIONS](11_OPERATIONS.md) | Workflows, permissions, onboarding | 📋 Planned |
 | [12_CURATED_DATASETS](12_CURATED_DATASETS.md) | Curated derived datasets (segmentation, etc.) | ❓ Under evaluation |
+| [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) | What gjesus3 is and is not, relative to platform archives | 🔶 Draft (reframe 2026-05-20) |
 
 **Legend:** ✅ Current | 🔶 Draft | ⚠️ Gaps identified | ❓ Under evaluation | 📋 Planned
 
@@ -30,18 +31,20 @@
 
 ## What This System Is
 
-An **archival storage system** for original imaging data that:
+A **research-facing working layer** for MFB group imaging data — organised, searchable, directly viewable — covering the 5-year active window where most of a project's value lives. Specifically, gjesus3:
 
-1. Preserves raw acquisitions from approved modalities in an organized, immutable structure
-2. Maintains publication-ready data packages with full provenance
-3. Supports traceability from published figures back to source data
-4. Operates independently of (but compatible with) future platform-level solutions
+1. Registers raw acquisitions in a structured registry with rich JSON metadata sidecars
+2. Provides project workspaces with shortcuts back to raw data + space for project-level derivatives (e.g. NIfTI generated from MR raw)
+3. Maintains publication-ready data packages with full provenance
+4. Supports traceability from published figures back to source data
+5. Operates in two-tier complement with the platforms' own deep-archives — see [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md)
 
 ## What This System Is NOT
 
-- **Not a primary working drive** — access limited to specific hardwired on-site machines (not laptops), and RAID 5 performance is not optimized for active analysis workflows
-- **Not a general file share** — structured storage with enforced conventions, not open dumping
-- **Not a backup solution** — RAID protects against single-drive failure only; no offsite backup currently configured
+- **Not the deep-time archive of every raw byte.** The instrument platforms (MRI, Nuclear Imaging, microscopy facilities) already keep raw originals in their own — admittedly awkward — archives. gjesus3 doesn't replicate or replace that role; the 1% of cases needing forensic access to original bytes falls back to those archives.
+- **Not a primary working drive for heavy active analysis** — access is limited to specific hardwired on-site machines (not laptops), and RAID 5 performance is not optimised for high-volume read/write. Researchers analyse on their own workstations and check derivatives back into project workspaces.
+- **Not a general file share** — structured storage with enforced conventions, not open dumping.
+- **Not a backup solution** — RAID 5 protects against single-drive failure only; no offsite backup currently configured.
 
 ---
 
