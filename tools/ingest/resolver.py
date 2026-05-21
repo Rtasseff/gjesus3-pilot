@@ -78,6 +78,7 @@ USER_CONTROLLABLE_COLUMNS = {
     "data_source",
     "sample_id",
     "sample_type",
+    "session_id",    # DRAFT 2026-05-20 — ISA "study" grouping; see 06_REGISTRIES §2.3a
     "project_hint",
     "notes",
 }
@@ -214,6 +215,7 @@ def normalize_acquisition_datetime(value):
         "20260422"   -> "2026-04-22T00:00:00Z"
         "2026-04-22" -> "2026-04-22T00:00:00Z"
         "<already ISO>" -> as-is
+        "<ParaVision ISO with , decimal and tight tz>" -> normalised ISO
     """
     if not value:
         return ""
@@ -222,4 +224,9 @@ def normalize_acquisition_datetime(value):
         return f"{s[:4]}-{s[4:6]}-{s[6:8]}T00:00:00Z"
     if len(s) == 10 and s[4] == "-" and s[7] == "-":
         return f"{s}T00:00:00Z"
+    # ParaVision dialect: "2025-10-16T08:38:22,085+0200" — comma decimal
+    # before the timezone, and tight `+HHMM` tz without colon. Normalize
+    # both to standard ISO 8601 (`.` decimal, `+HH:MM` tz).
+    s = re.sub(r"(\d{2}:\d{2}:\d{2}),(\d+)", r"\1.\2", s)
+    s = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", s)
     return s

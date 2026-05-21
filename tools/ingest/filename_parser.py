@@ -1,15 +1,21 @@
-"""Positional filename parser for ingest auto-discovery.
+"""Filename / folder-name parser for ingest auto-discovery.
 
-Used by AxioScan 7 (and similar) where filenames carry metadata chunks
-separated by a known character. The parser is pure: given a filename,
-a separator, and an ordered list of field names, it returns a dict.
+Two complementary parsers:
 
-Special meaning (e.g. promoting `sample_id` into a registry column) is
-handled separately in registry.apply_special_fields — this module only
-splits.
+  - `parse(name, separator, fields)` — positional split (AxioScan-style,
+    where every chunk in the name is a meaningful piece in a stable
+    position).
+  - `parse_regex(name, pattern)` — named-group regex extraction (for
+    messy names like Bruker ParaVision FTP folder names where only
+    parts of the name are meaningful).
+
+Both return a `{field: value}` dict on success. Both can be used
+together in a config; the caller decides precedence (see
+`config.expand_batch`).
 """
 
 import os
+import re
 
 
 class FilenameParseError(ValueError):
@@ -57,3 +63,46 @@ def count_extra_chunks(filename, separator, fields):
     stem = os.path.splitext(os.path.basename(filename))[0]
     chunks = stem.split(separator)
     return max(0, len(chunks) - len(fields))
+
+
+def parse_regex(name, pattern):
+    """Extract named-group values from a name via regex.
+
+    Args:
+        name: file or folder basename. Extension is NOT stripped — the
+            caller's regex can match or ignore it. (This differs from
+            `parse()`, which strips the extension; regex use is opt-in
+            and the operator usually wants control over the full name.)
+        pattern: a Python regex string containing named groups
+            `(?P<name>...)`. Searched (not anchored — use `^`/`$` in the
+            pattern if you want anchoring).
+
+    Returns:
+        dict mapping each named group to its matched value (empty
+        string for groups that didn't participate in the match).
+
+    Raises:
+        FilenameParseError when the pattern doesn't match anywhere in
+        the name, or when the pattern has no named groups.
+    """
+    if not pattern:
+        raise ValueError("pattern must be non-empty")
+
+    try:
+        rx = re.compile(pattern)
+    except re.error as e:
+        raise ValueError(f"Invalid regex pattern {pattern!r}: {e}")
+
+    if not rx.groupindex:
+        raise ValueError(
+            f"Regex pattern {pattern!r} has no named groups — "
+            f"use `(?P<name>...)` to extract values"
+        )
+
+    base = os.path.basename(name)
+    m = rx.search(base)
+    if not m:
+        raise FilenameParseError(
+            f"Regex {pattern!r} did not match name {base!r}"
+        )
+    return {k: (v if v is not None else "") for k, v in m.groupdict().items()}
