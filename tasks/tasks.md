@@ -1,6 +1,6 @@
 # MFB gjesus3 RDM Pilot — Task List
 
-**Last Updated:** 2026-05-20
+**Last Updated:** 2026-05-22
 
 This file consolidates all open and completed tasks. Completed items are kept for context but marked with ~~strikethrough~~.
 
@@ -34,7 +34,7 @@ Creds for the MRI server obtained 2026-05-20; sample data manually pulled to `D:
 - **`regex_extract:` option in `filename_parse`** — extracts named groups from messy FTP folder names.
 - **NIfTI generation is a project-level tool**, deferred — NOT a `/raw/` ingest step. Lives in `/projects/<proj>/derived_nifti/`, removed at project close-out.
 
-§4.5 has the full execution checklist. Stream A (docs) is in progress; Streams B (extractor + parser + probe) and C (pipeline + template + config + FTP) follow.
+§4.5 has the full execution checklist. Stream A (docs, ✅ committed `17ac781`) and Stream B (extractor + parser + probe, ✅ committed `66887ae`) shipped. Stream C (pipeline + template + config + FTP) ran end-to-end with 97/97 success but surfaced two bugs (sidecar key `dicom`→`mri` + `.lnk` filename collisions). **Stream D** (in progress 2026-05-22): adds the `link_filename:` YAML field framework, exhaustive per-instrument template comments listing `discovered.*` references, systematic-naming-convention docs for MRI + the NI future round, and the user-as-operator / NI-tgz / MRI-naming-ambiguity future tasks. After Stream D the 97 first-ingest acqs get purged and re-ingested with the corrected `.lnk` naming.
 
 **Other waits (not blocking round 6):**
 
@@ -160,12 +160,18 @@ Creds for the MRI server obtained 2026-05-20; sample data manually pulled to `D:
 - [ ] **`acquisition_layout: file | archive | folder` flag** in `ingest:` block (default `file`). MRI uses `folder` (no zip, folder-as-primary). Drives the file-copy step and the new `primary_kind` registry column. Documented in [10_TOOLS](../mfb-rdm-docs/10_TOOLS.md) `ingest:` flags table and [03_RAW_STORAGE §4.2](../mfb-rdm-docs/03_RAW_STORAGE.md).
 - [ ] **`reconstructions:` flag** (MRI-specific) — `all` \| integer \| list of integers. Selects which ParaVision `pdata/<idx>/` reconstructions to retain. No implicit default; user explicitly decides per-batch. Discarded indices stay only on the platform's deep-archive.
 - [ ] **`tools/ftp_mirror.py`** — standalone SFTP CLI using `paramiko`. Inputs: host, user, password (env var / local file outside repo), remote study path, local staging dir. Recursively mirrors a study folder to local staging; idempotent. Decoupled from `ingest_raw.py` — fetch first, then ingest the staged copy. On-acquisition-machine script remains out of scope (Phase 4 of [`mri_data_access_strategy.md`](../equipment/mri-platform/mri_data_access_strategy.md)).
+- [ ] **`link_filename:` YAML field** (added 2026-05-22 in response to round-6 first-ingest `.lnk` collision bug). New top-level field, resolver-evaluated at link-creation time. Context = `discovered.*` + resolved registry fields + `acq_id` + `acq_date`. Per-instrument templates ship recommended defaults: microscopy / external = `${instrument}_${original_name}`; internal MRI = `MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`. Falls back to `original_name` when unset (backward-compatible with rounds 1-2 / 4 / 5). Implementation: `resolver.resolve_link_filename()` + config pass-through + `ingest_raw.py` Step 12 wiring. Documented in [10_TOOLS §2.1.5](../mfb-rdm-docs/10_TOOLS.md).
+- [ ] **Sidecar section-name override** (round-6 first-ingest fix). Embedded-metadata extractors may return a 3-tuple `(discovered, section_dict, section_name_override)` to control the sidecar block key. ParaVision dispatcher uses this to put data under `metadata.json.mri` (not `dicom`) since the contents are ParaVision-specific, not generic DICOM headers. Backward-compatible with 2-tuple returns. Implementation in `tools/ingest/config.py::_extract_dicom_embedded` + downstream consumers.
 
 #### Future work (documented for later, not in scope this round)
 
 - [ ] **Our own raw→DICOM regeneration at ingest** (assessment task). Currently Bruker's converter produces the per-frame `.dcm` files; the user has flagged that we may want to generate DICOM ourselves so we know exactly what's in them. Tasks: characterize what Bruker's converter does, identify what we'd want to differ, evaluate cost of replacing it. Decision deferred.
 - [ ] **Enhanced MR / Multi-Frame DICOM evaluation.** The classic per-frame `.dcm` layout is why an MR acquisition lands as N files. The modern DICOM standard (Enhanced MR / Multi-Frame DICOM) puts all frames in one file — if we adopt it, we get back to one-primary-file-per-ACQ even for DICOM. Evaluate in connection with the previous future-task.
 - [ ] **DICOM full-mode metadata extraction for collaborator XMRI** (existing §3.1 deferred item, independent of round-6 work). Will mirror the `.czi` pattern: curated `discovered.dicom_*` + structured `dicom:` sidecar block + full pydicom dump. Library: `pydicom`. Doesn't block any in-flight round; can be prototyped against the 75 existing XMRI acquisitions whenever.
+- [ ] **User-as-operator permissions model for internal MRI / internal NI** (added 2026-05-22). Unlike microscopy, internal MRI and NI have no dedicated operator — researchers run the equipment themselves. Today the data office runs ingest under a shared platform-account identity. Future model needs an ingest-time write path to `/raw/` that respects the "raw is read-only after deposit" rule without requiring a dedicated technician account. Coordinate with the raw-immutability lockdown design (§4.3) and the project close-out tool's controlled-write path (§3.2). Open question to the platform managers: do they have user-accounts that could be used? Or should ingest always run under a service identity? Captured but not designed.
+- [ ] **Internal Nuclear Imaging (NI) ingest round** — likely round 7 or 8, depending on when Unai answers the naming-convention question (§4.7). Conventions documented in [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md); per-instrument template will be cloned from `mri_bruker.yaml` and adapted. Pre-requisite work that's not blocked on Unai: design the tgz-aware staging step (below).
+- [ ] **NI tgz nested-archive parsing** (future-round prep). NI data lands as `.tgz` archives on `\\cicmgsp02\gnuclear2$`; inside is a `.tar` containing the recon-level dir structure. Two options: (a) extract tgz → local staging area before `expand_batch` runs (simpler, matches the `ftp_mirror.py → ingest` pattern); (b) extend the ingest with a tgz-aware glob. Option (a) recommended. Will need a small `tgz_extract.py` utility or just a shell-out step before ingest. Documented in the NI workflow notes.
+- [ ] **MRI naming-convention stakeholder follow-up** (added 2026-05-22). The platform's project-folder naming has a documented ambiguity: `<group PI initials><YYYYMMDD>` is sometimes written `jrc251016` (intended convention) and sometimes `jrc_251016` (with underscore). The round-6 `regex:` extractor handles both, but a long-term fix is to ask the platform manager to standardise. Captured in [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) "Systematic naming convention" section.
 
 ### 3.2 Other Scripts
 - [x] ~~`create_project.py` implemented~~ — CLI + interactive, dry-run
@@ -294,8 +300,21 @@ Creds for the MRI server obtained 2026-05-20; sample data manually pulled to `D:
 
 **Documentation (during / after the pass):**
 - [ ] [09_MODALITIES.md](../mfb-rdm-docs/09_MODALITIES.md) MRI section — per-instrument `discovered.mri_*` fields table mirroring the AxioScan §1.1 pattern.
-- [ ] `08_METADATA.md` — update for `dicom:` sidecar block.
-- [ ] `00_INDEX.md` — version history.
+- [x] ~~[08_METADATA.md](../mfb-rdm-docs/08_METADATA.md) §4.3 — `mri:` sidecar block shape (committed in Stream A 17ac781).~~
+- [x] ~~[10_TOOLS.md](../mfb-rdm-docs/10_TOOLS.md) §2.1.2b — ParaVision extractor; §2.1.3 — `regex_extract:`; §2.1.5 — `link_filename:` (committed in Stream A 17ac781 + Stream D).~~
+- [x] ~~[equipment/mri-platform/internal_mri_data_handling_workflow_notes.md](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) — new "Systematic naming convention" section (2026-05-22).~~
+- [x] ~~[equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md) — NEW doc capturing NI convention for the future round (2026-05-22).~~
+- [ ] `00_INDEX.md` — version history (round-6 final entry once Stream D commits).
+
+**Stream D — round-6 follow-up (2026-05-22, in progress):**
+The first round-6 ingest (97/97 success against `D:\projects\gjesus3\data_test\`) surfaced two bugs that the round-6 plan was extended to fix:
+1. **Sidecar key `dicom:` should be `mri:` for ParaVision data.** Fixed: extractor dispatcher returns a 3-tuple `(discovered, section, "mri")` to override the ecosystem-derived section name. See `tools/ingest/config.py::_extract_dicom_embedded`.
+2. **`.lnk` filename collisions** — 35 of 97 shortcuts silently lost because exam numbers (e.g. `27.lnk`) clash when multiple animal sessions land in the same project. Fixed via new top-level `link_filename:` YAML field; per-instrument templates ship recommended defaults. MRI default: `MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`. See [10_TOOLS §2.1.5](../mfb-rdm-docs/10_TOOLS.md).
+
+**Outstanding:**
+- [ ] **Purge** the first-ingest 97 acqs (registry restore from `.bak.20260521-171748`, delete acq folders, trim manifest, clean `.lnk` shortcuts + provenance rows). User-authorized.
+- [ ] **Re-ingest** with the new `link_filename` pattern. Verify: 97 unique `.lnk` names, `metadata.json.mri` block populated, cross-modality demo (proj-0424 has both AxioScan + MRI shortcuts).
+- [ ] **Commit Stream C + Stream D** as one atomic round-6 changeset, push to origin.
 
 ### 4.6 Pass 3: Microscopy .czi (`ZWSI`, `CELL`, `LSM9`)
 > Completely different format — single-file primary, no archive needed, different metadata extraction library (czifile / aicspylibczi).
@@ -377,9 +396,11 @@ Creds for the MRI server obtained 2026-05-20; sample data manually pulled to `D:
 
 > **Pickup context (read first if returning cold):**
 > - Multimodal platform — PET, SPECT, CT, OI from Molecubes (γ/β/X-CUBES) + MILabs VECTor; may include hybrid PET/CT or PET/SPECT/CT sessions. Tests the multi-modality handling (a hybrid session should stay as one acquisition with `modalities_in_study` populated). Platform description: `equipment/nuclear-imaging/nuclearImaging_platform_description.md`.
+> - **Naming convention + archive structure already documented** (2026-05-22) in [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md). Covers the archive path on `\\cicmgsp02\gnuclear2$`, the `<archive name>.tgz → .tar → user/series/.../recon_<n>/` nested structure, the funded-project-id vs animal-protocol-id distinction, and the proposed `link_filename` pattern. **No NI data is ingested yet.**
 > - Both DICOM and NIfTI exports are produced (per the platform description). Confirm output format(s) with the platform manager when we engage them.
 > - **Blocked on:** Platform Manager **Unai** to answer one outstanding question (around the data naming convention) before we submit our data-workflow documentation + example to him. Until that round-trip closes, we can't formalize the ingest workflow proposal, and we don't have sample data to probe yet.
 > - **Code-side prerequisite shared with §4.5 MRI:** the DICOM full-mode metadata extractor + compress-on-ingest (§3.1) is the same code path. Prototype it against the existing 75 collaborator XMRI acquisitions while waiting on Unai — it'll be ready when sample data lands.
+> - **NI tgz-aware staging** (§3.1 future work): NI archives unpack tgz → tar → nested tree; the ingest pipeline should extract to local staging before `expand_batch` runs (matches the `ftp_mirror.py → ingest` pattern). Design captured in the workflow notes.
 
 **Prerequisites (need before starting):**
 - [ ] **Ryan:** Resolve the open question with Unai (Platform Manager) on the naming convention; submit data-workflow documentation + example for his review once resolved.

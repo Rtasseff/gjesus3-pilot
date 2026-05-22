@@ -7,6 +7,12 @@ import os
 # Field order must match 06_REGISTRIES.md schema. The `ingest_config`
 # column records the YAML config that produced each row (relative path
 # from repo root) for auditability and reproducibility.
+#
+# `session_id` and `primary_kind` are DRAFT additions 2026-05-20 (round
+# 6 / ISA terminology + per-ecosystem primary-entity shape — see
+# 06_REGISTRIES.md §2.3a). When this list changes, the defensive header
+# check in append_row() refuses to write until the existing CSV is
+# migrated to match (tools/migrate_registry_columns.py).
 REGISTRY_FIELDS = [
     "acq_id",
     "registration_datetime",
@@ -19,6 +25,8 @@ REGISTRY_FIELDS = [
     "data_source",
     "sample_id",
     "sample_type",
+    "session_id",        # DRAFT 2026-05-20
+    "primary_kind",      # DRAFT 2026-05-20
     "primary_file_name",
     "original_name",
     "file_format",
@@ -120,6 +128,8 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt):
         "data_source": cfg.get("data_source", ""),
         "sample_id": cfg.get("sample_id", ""),
         "sample_type": cfg.get("sample_type", ""),
+        "session_id": cfg.get("session_id", ""),
+        "primary_kind": cfg.get("primary_kind", ""),
         "primary_file_name": primary_file,
         "original_name": cfg.get("original_name", ""),
         "file_format": file_format,

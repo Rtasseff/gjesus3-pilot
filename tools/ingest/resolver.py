@@ -176,6 +176,75 @@ def validate_auto_create_project_block(block):
     return errors
 
 
+# Pattern for the `link_filename:` resolver. Broader than the registry-
+# block resolver: matches `${X}` where X can be a flat key (e.g.
+# `sample_id`, `acq_date`) or a dotted reference (e.g. `discovered.foo`).
+# Allows `-` and `.` in keys so names like `mri_recon_indices` work as well
+# as future dotted paths.
+_LINK_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_.]*)\}")
+
+
+def resolve_link_filename(template, cfg_single, acq_id_str, acq_date):
+    """Resolve the top-level `link_filename:` YAML field for this case.
+
+    Returns the resolved string, or None if `template` is empty / not set
+    (caller falls back to a default like `original_name`).
+
+    The context dict against which `${X}` references are resolved is
+    richer than the registry-block resolver. It includes:
+
+      - `discovered.<key>` for every entry in `cfg_single['discovered']`
+        (the auto-discovered namespace — filename chunks + embedded
+        extractor output like `discovered.mri_exam_number`)
+      - Resolved registry fields directly by name: `sample_id`,
+        `session_id`, `instrument`, `instrument_model`, `operator`,
+        `data_source`, `sample_type`, `acquisition_datetime`,
+        `project_hint`, `original_name`, `data_ecosystem`, `notes`
+      - `acq_id` — the generated ACQ-ID string for this case
+      - `acq_date` — YYYYMMDD form of the acquisition date (already
+        computed in ingest_raw.py Step 3)
+
+    Unresolved references log a WARN and are left as a literal `${X}`
+    in the output — better than silently producing a half-formed name.
+    Resolved-to-empty substitutions go through quietly (operator's
+    choice if they reference a key that may be empty).
+
+    No filename-character sanitisation is applied — the documented
+    `discovered.*` fields don't contain Windows-unsafe characters in
+    practice. Add a sanitisation pass later if a real case requires it.
+    """
+    if not template or not isinstance(template, str):
+        return None
+
+    # Build the flat context dict.
+    context = {}
+    discovered = cfg_single.get("discovered") or {}
+    for k, v in discovered.items():
+        context[f"discovered.{k}"] = "" if v is None else str(v)
+    for k in (
+        "instrument", "instrument_model", "operator", "data_source",
+        "sample_id", "sample_type", "session_id", "acquisition_datetime",
+        "project_hint", "original_name", "data_ecosystem", "notes",
+    ):
+        if k in cfg_single:
+            v = cfg_single[k]
+            context[k] = "" if v is None else str(v)
+    context["acq_id"] = acq_id_str or ""
+    context["acq_date"] = acq_date or ""
+
+    def _sub(match):
+        key = match.group(1)
+        if key in context:
+            return context[key]
+        print(
+            f"[resolve_link_filename] WARN: ${{{key}}} not found in "
+            f"context (keys: {sorted(context.keys())}); leaving literal."
+        )
+        return match.group(0)
+
+    return _LINK_REF_RE.sub(_sub, template)
+
+
 def resolve_auto_create_project_block(block, discovered):
     """Resolve owner/description/notes for first-time project auto-creation.
 

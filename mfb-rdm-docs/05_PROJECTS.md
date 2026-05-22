@@ -56,7 +56,9 @@ Researchers who do most of their analysis on local machines or other drives can 
         ├── _project.yaml
         ├── provenance.csv
         ├── raw_linked/                 # Windows .lnk shortcuts to raw acquisitions
-        │   └── ...                     # (created by ingest_raw.py when project_hint set — see 10_TOOLS §2.1.1)
+        │   └── ...                     # (created by ingest_raw.py when project_hint set — see 10_TOOLS §2.1.1;
+        │                               #  shortcut filename comes from the per-instrument `link_filename:`
+        │                               #  template — see 10_TOOLS §2.1.5)
         ├── metadata/                   # Study-level metadata (researcher-supplied)
         │   ├── study.json              #   study aim, hypothesis, principal contact
         │   ├── biosamples.json         #   biosample-level details (strain, age, sex, treatment)

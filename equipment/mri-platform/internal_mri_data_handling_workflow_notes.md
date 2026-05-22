@@ -226,6 +226,79 @@ This downstream analysis is not the target of the ingestion design, but it is wo
 
 ---
 
+## Systematic naming convention (parsable)
+
+> **Added 2026-05-22 as the framework for `discovered.*` auto-discovery and `link_filename:` templating.** The MRI workflow uses a much more systematic naming convention than microscopy — folders and filenames are largely set by the instrument or by platform-wide rules rather than by individual operator preference. That systematic structure lets us *parse* a lot of metadata directly from paths, which then becomes available to ingest YAML configs.
+
+### The full path structure (server side)
+
+```
+<data dir>/<project folder>/<protocol number>/pdata/<reconstruction number>/
+```
+
+| Level | What it represents |
+|---|---|
+| `<data dir>` | The platform's data root on the acquisition machine (e.g. `/opt/PV-7.0.0/data/nmr/`). Mirrored verbatim by FileZilla pulls. |
+| `<project folder>` | One animal session (ISA "study"). Full structure broken down below. |
+| `<protocol number>` | One ParaVision examination — a scan with a distinct protocol. ACQ-ID maps here (ISA "assay"). |
+| `pdata/<reconstruction number>` | One reconstruction of that protocol. The user-trusted recon is typically `/3` (see §4a above). |
+
+### `<project folder>` structure
+
+The project folder name is set by the platform / instrument software:
+
+```
+<YYYYMMDD>_<time code>_<group and date>_<short sample id>_<short project id>_<group and date>_<short sample id>_<short project id>_1_1
+```
+
+The first `<YYYYMMDD>_<time code>` prefix is the *FTP server-side* timestamp of when the folder was created. The remaining components are duplicated (`_<group and date>_<short sample id>_<short project id>` appears twice) plus a trailing `_1_1` — that's a quirk of how the platform writes the folder name, not a meaningful pattern.
+
+Per-component breakdown:
+
+| Component | Meaning | Example |
+|---|---|---|
+| `<group and date>` | Compound: `<group PI initials><YYYYMMDD>`. *Expected to be no underscore between them.* See ambiguity note below. | `jrc251016` or — observed — `jrc_251016` |
+| `<short sample id>` | Either `<animal type><short animal id>` for animal work, OR an arbitrary free-text label like `phantom xyz` for QC/QA. `<animal type>` is `m` (mouse) or `r` (rat); `<short animal id>` is a numeric inside the protocol. | `m17` (mouse #17), `r5`, or `phantom_xyz` |
+| `<short project id>` | Four-digit **animal-protocol code**. This is *not* the funded-project id. The protocol is required for animal-use compliance. Sometimes arbitrary (for QC/QA when no animals are used). | `0424` |
+| `<group PI initials>` | Lowercase initials of the group's PI. For MFB: `jrc` (Jesús Ruiz-Cabello). | `jrc` |
+
+The **true unique animal id** is the composite: `<short project id>_<short animal id>` — e.g. `0424_17` means "animal #17 under protocol 0424." Two different protocols can both have an animal #17; only the composite is unique.
+
+### The `jrc` vs `jrc_` ambiguity
+
+Observed in real data: sometimes the folder name has `jrc251016_m17_0424` (no underscore between PI initials and date — the intended convention) and sometimes `jrc_251016_m17_0424` (with an underscore). The latter breaks naive split-on-underscore parsing.
+
+**Round 6 handles both forms** via the `regex:` extractor in `filename_parse` (see `tools/templates/instruments/mri_bruker.yaml`):
+
+```
+(?P<jrc_id>jrc_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))
+```
+
+The `jrc_?` matches `jrc` or `jrc_`; `\d{6,8}` covers 6-digit (`YYMMDD`) or 8-digit (`YYYYMMDD`) dates. The named groups `jrc_id`, `animal_num`, `project_code` become `discovered.*` for use elsewhere in the YAML config.
+
+A **long-term fix** is to ask the platform manager to standardise the convention; that's tracked as future work in `tasks/tasks.md`.
+
+### Terminology confusion: "project" in MRI vs Nuclear Imaging
+
+The word "project" is overloaded across the institute:
+
+- **In internal MRI**: the four-digit `<short project id>` in the folder name is the **animal-protocol short id** — a regulatory artifact (the approved animal protocol the work is being done under).
+- **In internal Nuclear Imaging**: the `<series id>` in the folder structure is the **funded-project id** — a financial-administrative artifact (the grant or funded project the work charges against).
+
+These are different numbers, and users sometimes conflate them in conversation. The animal-protocol id often *relates to* a funded project (work under a grant is usually approved as one animal protocol per project), but the numbers don't align.
+
+For gjesus3 round 6 we use the **animal-protocol short id** as the project `short_name` (`ae-biomegune-NNNN`). For the future NI round, the funded-project id will play a similar role. The terminology distinction is captured in [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../nuclear-imaging/internal_ni_data_handling_workflow_notes.md).
+
+### What's parsed today
+
+The round-6 ingest config exposes these `discovered.*` fields per acquisition (from the path + regex + ParaVision JCAMP-DX extractor):
+
+- From `filename_parse` regex on the study folder name: `discovered.jrc_id`, `discovered.animal_num`, `discovered.project_code`.
+- From standard auto-discovery: `discovered.folder_name` (the exam folder basename, i.e. the protocol number).
+- From `paravision_metadata.py` parsing of `subject` + `acqp` + `method` + `visu_pars`: ~20 `discovered.mri_*` fields including `mri_exam_number`, `mri_recon_indices`, `mri_sequence_name`, `mri_acquisition_datetime`. See [`mri_bruker.yaml`](../../tools/templates/instruments/mri_bruker.yaml) for the full reference card.
+
+---
+
 ## Documented workflow vs. observed workflow
 
 ### Documented platform expectations (from protocol + email reminders + walkthrough)

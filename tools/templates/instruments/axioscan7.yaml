@@ -1,46 +1,94 @@
 # Per-instrument template — AxioScan 7 (Zeiss whole-slide scanner).
+# Instrument code: ZWSI. Ecosystem: MICROSCOPY.
 #
 # Copy this file to `tools/configs/axioscan7_<batch>.yaml` (a name that
 # identifies this run — e.g. the day folder date or campaign label),
 # edit the marked placeholders, then run.
 #
-# What's pre-filled (don't touch unless you know why):
+# ============================================================================
+# AUTO-DISCOVERED FIELDS AVAILABLE TO THE OPERATOR
+# ============================================================================
+# Every entry below is automatically populated per acquisition and may be
+# referenced as `discovered.<name>` (bare ref) or `${discovered.<name>}`
+# (interpolation) in any resolver-evaluated YAML field below (`registry:`,
+# `auto_create_project:`, top-level `link_filename:`).
+#
+# Filename chunks (from filename_parse below, split on `_`):
+#   discovered.group_code         e.g. "MFB" (project filter — fixed)
+#   discovered.operator           e.g. "MBC" (initials)
+#   discovered.project            e.g. "0423" — animal-project short id
+#   discovered.sample_short       e.g. "ID13B" — short sample identifier
+#                                  (organ-letter suffix not parsed today)
+#   discovered.stain              e.g. "WGA"
+#   discovered.magnification      e.g. "10x"
+#
+# Standard auto-discovery (any instrument):
+#   discovered.filename           full basename incl. .czi extension
+#   discovered.acquisition_date   YYYYMMDD parsed from the parent folder
+#                                  name (used only as a fallback when
+#                                  .czi-embedded timestamp is unavailable)
+#
+# .czi-embedded metadata (21 fields, all prefixed `czi_`) — extracted via
+# `czifile` from each file at ingest time. See 09_MODALITIES §1.1 for the
+# full per-instrument table. Highlights:
+#   discovered.czi_acquisition_datetime  ISO timestamp (preferred)
+#   discovered.czi_microscope_name       e.g. "Axioscan 7"
+#   discovered.czi_microscope_type       e.g. "Upright"
+#   discovered.czi_objective_name        e.g. "Plan-Apochromat 20x/0.8 M27"
+#   discovered.czi_objective_mag         e.g. "20"
+#   discovered.czi_objective_na          e.g. "0.8"
+#   discovered.czi_pixel_size_x_um       µm; same for y
+#   discovered.czi_size_x / _y / _c / _z / _t / _s / _m   image dims
+#   discovered.czi_pixel_type            e.g. "Bgr24"
+#   discovered.czi_compression           e.g. "JpegXr"
+#   discovered.czi_acquisition_mode      e.g. "WideField"
+#   discovered.czi_contrast_method       e.g. "Brightfield"
+#   discovered.czi_user                  ZEN account
+#   discovered.czi_zen_version           e.g. "3.6"
+#
+# Resolver also provides these in resolver-evaluated fields below:
+#   ${instrument}              "ZWSI" after registry resolution
+#   ${sample_id}               resolved composite per registry: block
+#   ${acquisition_datetime}    resolved ISO datetime
+#   ${original_name}           source filename (the .czi as deposited)
+#   ${acq_id}                  generated ACQ-ID (e.g. ACQ-20260215-ZWSI-001)
+#   ${acq_date}                YYYYMMDD form of the acquisition date
+#
+# ============================================================================
+# WHAT'S PRE-FILLED (don't touch unless you know why)
+# ============================================================================
 #   - `pattern`, `filename_parse`, `filter`, `acquisition_date_from`
-#     encode the AxioScan-7 / MFB filename and day-folder conventions:
-#     `<group_code>_<operator>_<project>_<sample_short>_<stain>_<magnification>.czi`
-#     in a day folder named `YYYYMMDD`.
+#     encode the AxioScan-7 / MFB filename and day-folder conventions.
 #   - `instrument`, `data_ecosystem`, `instrument_model`,
 #     `acquisition_datetime` use the .czi-embedded values where they
 #     beat any filename or folder-derived guess.
 #   - `sample_id`, `project_hint`: pilot conventions per
 #     06_REGISTRIES §2.3 (composite sample_id) and the AE-biomeGUNE-NNNN
 #     animal-project naming.
-#   - `auto_create_project:` block — first-time project creation defaults
-#     for owner/description/notes. Read only when a NEW project is being
-#     created (first-write-wins); subsequent ingests touching the same
-#     project ignore it. See 10_TOOLS §2.1.4.
+#   - `auto_create_project:` — first-time project creation defaults; see
+#     10_TOOLS §2.1.4.
+#   - `link_filename:` — `${instrument}_${original_name}` keeps the full
+#     informative filename + a clear instrument prefix in the project's
+#     raw_linked/ folder. Resolver-evaluated at .lnk creation time.
 #
-# What you must edit per batch:
+# ============================================================================
+# WHAT YOU MUST EDIT PER BATCH
+# ============================================================================
 #   - `auto_discover.staging_dir`         <-- point at this batch's day folder
 #   - `registry.notes`                    <-- short batch description
 #
 # What you may want to change per batch (rarely):
 #   - `ingest.delete_source_after_ingest` (default false; opt in only after
 #     you've verified a real run for this batch)
-#   - `ingest.auto_create_projects` (default true for AxioScan: animal
-#     project codes are derived from the filename, so first-encounter
-#     auto-create + subsequent reuse-by-short-name is the intended flow)
+#   - `ingest.auto_create_projects` (default true for AxioScan)
 #
 # Extends the universal starter at tools/templates/ingest_template.yaml.
 # Per-instrument convention only — other groups using the same scanner
 # with different filename conventions would need their own template.
 #
 # Project naming note: AE-biomeGUNE-NNNN comes from the animal-project
-# approval system — durable, meaning-bearing, and shared across the
-# institute. This is a "reasonable interim" naming pattern per the
-# 05_PROJECTS §9 callout (PROJ-05); not a stopgap. Group-consensus on
-# the long-term convention may still tighten this, but AxioScan batches
-# are not blocked on that conversation today.
+# approval system — durable and shared across the institute. Reasonable
+# interim pattern per 05_PROJECTS §9 (PROJ-05); not a stopgap.
 
 ingest:
   delete_source_after_ingest: false
@@ -55,51 +103,33 @@ auto_discover:
     separator: "_"
     # AxioScan + MFB convention:
     # <group_code>_<operator>_<project>_<sample_short>_<stain>_<magnification>.czi
-    # Chunk names are free-form labels; the registry: block below
-    # references them via ${discovered.<name>}.
     fields: [group_code, operator, project, sample_short, stain, magnification]
-  # MFB-only filter; non-MFB files in the same day folder are skipped.
   filter:
     group_code: MFB
-  # Day-folder name is YYYYMMDD; parsed into discovered.acquisition_date
-  # as a fallback if a .czi ever lacks AcquisitionDateAndTime.
   acquisition_date_from: parent_folder_name
 
 registry:
   instrument:           ZWSI
   data_ecosystem:       MICROSCOPY
-  # Prefer the microscope-issued name from the .czi over a literal, so
-  # different AxioScan units stay distinguishable in the registry.
   instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
   operator:             discovered.operator
   data_source:          internal
-  # Composite sample_id (06_REGISTRIES §2.3 DRAFT). Raw chunks remain in
-  # the per-acquisition metadata.json `discovered` block.
   sample_id:            "${discovered.project}_${discovered.sample_short}"
-  # AxioScan WSI is always excised tissue sections for this group (06_REGISTRIES §2.4 DRAFT vocab).
   sample_type:          tissue
-  # Precise timestamp from the .czi. Day-folder fallback is
-  # `discovered.acquisition_date` if a .czi ever lacks
-  # AcquisitionDateAndTime.
   acquisition_datetime: discovered.czi_acquisition_datetime
-  # Full animal-project code. First file for a given <project> chunk
-  # triggers auto-create with short_name = "ae-biomegune-<project>"
-  # (lowercased at create time). Subsequent files reuse via short_name
-  # lookup. Disable `ingest.auto_create_projects` above if you don't
-  # want auto-create behaviour for a particular batch.
   project_hint:         "AE-biomeGUNE-${discovered.project}"
-  # EDIT: short description of this batch.
   notes:                "WGA fluorescence WSI batch (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
 
-# First-time project-creation defaults. Read only when the project named
-# by registry.project_hint above does NOT yet exist; ignored otherwise.
-# For AxioScan, the project owner is the operator who initiated the
-# imaging run (encoded in filename chunk 2). Researchers/end-users may
-# differ from the operator in some workflows — that distinction is
-# captured at project creation here, and can be hand-edited afterwards
-# in /projects/proj-<name>/_project.yaml.
+# First-time project-creation defaults (10_TOOLS §2.1.4).
 auto_create_project:
   owner:       "${discovered.operator}"
   description: "Auto-created from AxioScan 7 ingest; animal-project chunk ${discovered.project}."
   notes:       "Auto-created on first ingest. Owner = filename operator chunk; edit _project.yaml to reassign."
+
+# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
+# Resolver-evaluated; see the "AUTO-DISCOVERED FIELDS" section above.
+# Default keeps the full informative source filename and adds an
+# instrument prefix so MRI / EM / etc. shortcuts coexist cleanly.
+# Example resolved value: ZWSI_MFB_MBC_0423_ID13B_WGA_10x.czi
+link_filename: "${instrument}_${original_name}"

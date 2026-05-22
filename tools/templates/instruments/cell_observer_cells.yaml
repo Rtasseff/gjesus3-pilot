@@ -1,41 +1,85 @@
 # Per-instrument template — Cell Observer (Zeiss Axio Observer), cells mode.
+# Instrument code: CELL. Ecosystem: MICROSCOPY.
 #
-# Cell Observer is the inverted epifluorescence microscope in Room 2.66
-# (instrument code: CELL). This template covers the CELL-CULTURE use case
-# (live-cell / cell-assay / plate-based) that has become the dominant
-# Cell Observer workflow now that AxioScan 7 absorbed most tissue/histology
-# imaging. For animal/histology mode use a separate template (deferred —
-# needs a real example folder to design well; tracked in tasks/tasks.md
-# §4.6.B).
+# Cell Observer is the inverted epifluorescence microscope in Room 2.66.
+# This template covers the CELL-CULTURE use case (live-cell / cell-assay
+# / plate-based) that has become the dominant Cell Observer workflow now
+# that AxioScan 7 absorbed most tissue/histology imaging. For
+# animal/histology mode use a separate template (deferred — needs a real
+# example folder to design well; tracked in tasks/tasks.md §4.6.B).
 #
 # Copy this file to `tools/configs/cell_observer_<researcher>_<experiment>.yaml`
 # (or similar), edit the marked placeholders, then run.
 #
-# What's pre-filled (don't touch unless you know why):
+# ============================================================================
+# AUTO-DISCOVERED FIELDS AVAILABLE TO THE OPERATOR
+# ============================================================================
+# Every entry below is automatically populated per acquisition and may be
+# referenced as `discovered.<name>` (bare ref) or `${discovered.<name>}`
+# (interpolation) in any resolver-evaluated YAML field below.
+#
+# Path levels (from path_parse, between staging_dir and the file):
+#   discovered.researcher         top-level folder under staging_dir
+#   discovered.cell_line          second-level folder
+#   discovered.experiment         third-level folder
+#
+# Filename chunks (from filename_parse, split on `_`):
+#   discovered.cell_line          (collision with path_parse — filename wins)
+#   discovered.experiment         (collision — filename wins)
+#   discovered.magnification      e.g. "10x"
+#   discovered.condition          e.g. "CC-miR-29a"
+#   discovered.image_num          e.g. "1"
+#
+# Standard auto-discovery (any instrument):
+#   discovered.filename           full basename incl. .czi extension
+#   (no acquisition_date — cells-mode folders don't carry the date)
+#
+# .czi-embedded metadata (21 fields, all prefixed `czi_`) — extracted via
+# `czifile` from each file at ingest time. See 09_MODALITIES §1.1 for the
+# full per-instrument table. Highlights:
+#   discovered.czi_acquisition_datetime  ISO timestamp (used in registry)
+#   discovered.czi_microscope_name       e.g. "Axio Observer.Z1 / 7"
+#   discovered.czi_objective_name        objective lens name
+#   discovered.czi_objective_mag         e.g. "10"
+#   discovered.czi_objective_na          numerical aperture
+#   discovered.czi_pixel_size_x_um       µm (and _y_um)
+#   discovered.czi_size_x / _y / _c / _z / _t / _s / _m   image dims
+#   discovered.czi_acquisition_mode      e.g. "WideField"
+#   discovered.czi_contrast_method       e.g. "Fluorescence"
+#   discovered.czi_user                  ZEN account
+#   discovered.czi_zen_version           ZEN software version
+#
+# Resolver also provides these in resolver-evaluated fields below:
+#   ${instrument}              "CELL" after registry resolution
+#   ${sample_id}               resolved composite per registry: block
+#   ${acquisition_datetime}    resolved ISO datetime
+#   ${original_name}           source filename (the .czi as deposited)
+#   ${acq_id}                  generated ACQ-ID (e.g. ACQ-20250107-CELL-001)
+#   ${acq_date}                YYYYMMDD form of the acquisition date
+#
+# ============================================================================
+# WHAT'S PRE-FILLED (don't touch unless you know why)
+# ============================================================================
 #   - `pattern`, `path_parse`, `filename_parse` encode the Cell Observer
 #     cells-mode convention (Ainhize-acquired example, 2026-05 round-5):
 #       <staging>/<researcher>/<cell_line>/<experiment>/<cell_line>_<experiment>_<magnification>_<condition>_<image_num>.czi
-#     The path levels and filename chunks are FREE-FORM LABELS — they're
-#     descriptive names we chose for this convention, not magic keys. If a
-#     different researcher organizes differently, rename the levels/chunks
-#     to whatever fits their layout.
+#     Path levels and filename chunks are FREE-FORM LABELS — descriptive
+#     names we chose, not magic keys. Rename to fit a different layout.
 #   - `instrument: CELL`, `data_ecosystem: MICROSCOPY`,
-#     `instrument_model: discovered.czi_microscope_name` — pulls the
-#     .czi-embedded name ("Axio Observer.Z1 / 7") so it stays accurate.
+#     `instrument_model: discovered.czi_microscope_name`.
 #   - `acquisition_datetime: discovered.czi_acquisition_datetime` —
-#     precise timestamp from the .czi (no day-folder fallback; cells-mode
-#     folders don't carry the date in their names).
+#     precise timestamp from the .czi (no day-folder fallback).
 #   - `sample_type: cells` — DRAFT REMBI vocab (06_REGISTRIES §2.4).
 #   - `sample_id: ${cell_line}_${condition}` — composite (06_REGISTRIES §2.3).
-#     Note: in cells-mode workflows, multiple acquisitions can legitimately
-#     share a sample_id (e.g. when the operator captures N images per
-#     condition). That is correct REMBI semantics — biosample contains
-#     many acquisitions — not duplication. The registry will reflect
-#     whatever pattern the data shows; do not assume a fixed cardinality.
-#   - `auto_create_project:` — sets the project owner to the researcher
-#     (data User, not Operator), description from experiment chunk.
+#     Note: multiple acquisitions can legitimately share a sample_id in
+#     cells-mode (N images per condition). Correct REMBI semantics.
+#   - `auto_create_project:` — sets owner to the researcher.
+#   - `link_filename:` — `${instrument}_${original_name}` keeps the source
+#     filename + a clear instrument prefix in raw_linked/.
 #
-# What you must edit per batch:
+# ============================================================================
+# WHAT YOU MUST EDIT PER BATCH
+# ============================================================================
 #   - `auto_discover.staging_dir`         <-- absolute path to your batch
 #                                             root (the directory above
 #                                             the researcher level)
@@ -44,8 +88,7 @@
 # What you may want to change per batch (rarely):
 #   - `ingest.delete_source_after_ingest` (default false; opt in only
 #     after you've verified a real run for this batch)
-#   - `ingest.auto_create_projects` (default true; cells-mode projects
-#     are typically auto-created on first encounter)
+#   - `ingest.auto_create_projects` (default true)
 #
 # Extends the universal starter at tools/templates/ingest_template.yaml.
 #
@@ -147,3 +190,9 @@ auto_create_project:
   owner:       "${discovered.researcher}"
   description: "Auto-created from Cell Observer cells-mode ingest; experiment chunk '${discovered.experiment}', cell line ${discovered.cell_line}. PROVISIONAL project_hint — see 05_PROJECTS §9."
   notes:       "Auto-created on first ingest. Owner = researcher folder name; rename short_name and update owner via _project.yaml as project naming convention matures."
+
+# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
+# Resolver-evaluated; see the "AUTO-DISCOVERED FIELDS" section above.
+# Default keeps the full informative source filename + an instrument
+# prefix. Example resolved value: CELL_HLF_alphasma_10x_CC-miR-29a_1.czi
+link_filename: "${instrument}_${original_name}"

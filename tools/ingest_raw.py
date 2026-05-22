@@ -85,6 +85,106 @@ def copy_files(src_dir, dst_dir):
     return count
 
 
+def _normalize_reconstructions(value):
+    """Normalise the YAML `reconstructions:` value to a set of index strings
+    or None (== keep all).
+
+    Accepts: "all" (case-insensitive), a single int, a single str like "3",
+    or a list of ints/strings (e.g. [3] or ["1", "3"]).
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, str) and value.lower() == "all":
+        return None
+    if isinstance(value, (int, str)):
+        return {str(value).strip()}
+    if isinstance(value, list):
+        return {str(v).strip() for v in value if v != "" and v is not None}
+    return None
+
+
+def copy_paravision_exam(source_path, dest_dir, reconstructions, log_fn):
+    """Folder-as-primary copy for a Bruker ParaVision exam.
+
+    Reorganises the as-found exam tree into:
+      <dest_dir>/
+        acquisition_aux/<every file at exam root>
+        reconstructions/pdata_<idx>/<full pdata/<idx>/ subtree>
+          (only for idx values in the `reconstructions` selection;
+           omitted indices stay on the platform deep-archive)
+
+    Returns a dict mapping `<dst_relative_path> -> sha256` for the
+    checksums.json file. Raises RuntimeError if any source/dest hash
+    mismatch is detected (a fail-the-ingest condition).
+    """
+    src = Path(source_path)
+    keep = _normalize_reconstructions(reconstructions)
+
+    # Plan the copy: build (src_file, dst_relpath) pairs.
+    plan = []
+
+    # Exam-root files -> acquisition_aux/<filename>
+    for entry in sorted(src.iterdir()):
+        if entry.is_file():
+            plan.append((entry, os.path.join("acquisition_aux", entry.name)))
+
+    # pdata/<idx>/<subtree> -> reconstructions/pdata_<idx>/<subtree>
+    pdata_src = src / "pdata"
+    selected = []
+    skipped = []
+    if pdata_src.is_dir():
+        for entry in sorted(pdata_src.iterdir()):
+            if not entry.is_dir():
+                continue
+            idx = entry.name
+            if keep is not None and idx not in keep:
+                skipped.append(idx)
+                continue
+            selected.append(idx)
+            for root, _dirs, files in os.walk(entry):
+                for fname in sorted(files):
+                    sp = Path(root) / fname
+                    rel_under_pdata = os.path.relpath(sp, entry)
+                    dst_rel = os.path.join(
+                        "reconstructions", f"pdata_{idx}", rel_under_pdata,
+                    )
+                    plan.append((sp, dst_rel))
+
+    if keep is not None:
+        log_fn(
+            f"Reconstructions selected: kept={sorted(selected)} "
+            f"skipped={sorted(skipped)} (per `reconstructions:` config)"
+        )
+    elif selected:
+        log_fn(f"Reconstructions: keeping all ({sorted(selected)})")
+
+    if not plan:
+        raise RuntimeError(
+            f"No files to copy from {source_path} — "
+            f"empty exam folder or invalid reconstructions selection?"
+        )
+
+    # Execute: copy + per-file source/dest verify.
+    iterator = tqdm(plan, desc="Copying", unit="file") if HAS_TQDM else plan
+    checksums = {}
+    for src_file, dst_rel in iterator:
+        dst_abs = os.path.join(dest_dir, dst_rel)
+        os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
+        shutil.copy2(src_file, dst_abs)
+        src_hash = checksum.sha256_file(src_file)
+        dst_hash = checksum.sha256_file(dst_abs)
+        if src_hash != dst_hash:
+            raise RuntimeError(
+                f"Checksum mismatch on copy:\n"
+                f"  src: {src_file} ({src_hash[:12]})\n"
+                f"  dst: {dst_abs} ({dst_hash[:12]})"
+            )
+        # Normalise path separators in the keys for cross-OS readability
+        checksums[dst_rel.replace(os.sep, "/")] = dst_hash
+
+    return checksums
+
+
 def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_source=False):
     """Run the ingestion workflow for a single acquisition.
 
@@ -210,10 +310,25 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     )
     canonical_path = f"/raw/{data_ecosystem}/{year_str}/{month_str}/{acq_id_str}/"
 
-    if data_ecosystem == "DICOM":
-        # DICOM: files copied into a series/ subfolder; primary is the folder.
+    # `acquisition_layout` from the ingest: block selects the per-ecosystem
+    # primary-entity shape. Implicit defaults per ecosystem when not set.
+    acquisition_layout = (ingest_block.get("acquisition_layout") or "").lower()
+
+    if data_ecosystem == "DICOM" and acquisition_layout == "folder":
+        # NEW 2026-05-20: folder-as-primary (internal MRI ParaVision).
+        # No zip, no series/ wrapper. The acquisition folder IS the unit.
+        # Selective copy honours `reconstructions:` flag (see Steps 6-8).
+        copy_dest = dest_dir
+        cfg_single["primary_file_name"] = acq_id_str
+        cfg_single["primary_kind"] = "folder"
+        cfg_single["file_format"] = ""
+    elif data_ecosystem == "DICOM":
+        # Legacy collaborator DICOM: files copied into a series/ subfolder.
+        # (compress-on-ingest is queued in §3.1; today the series/ tree
+        # stands in for the eventual zip.)
         copy_dest = os.path.join(dest_dir, "series")
         cfg_single["primary_file_name"] = "series/"
+        cfg_single["primary_kind"] = "archive"
         cfg_single["file_format"] = ".dcm"
     elif data_ecosystem == "MICROSCOPY":
         # Microscopy: single primary file copied directly into dest_dir under
@@ -225,9 +340,11 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         )
         primary_name = f"{acq_id_str}{primary_ext}"
         cfg_single["primary_file_name"] = primary_name
+        cfg_single["primary_kind"] = "file"
         cfg_single["file_format"] = primary_ext
     else:
         copy_dest = dest_dir
+        cfg_single["primary_kind"] = ""
 
     # --- Summary ---
     log(f"  Source:      {source_path}")
@@ -248,7 +365,48 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     # --- Steps 6-8: Copy + checksum + verify (per-ecosystem) ---
     os.makedirs(copy_dest, exist_ok=True)
 
-    if data_ecosystem == "MICROSCOPY":
+    if data_ecosystem == "DICOM" and acquisition_layout == "folder":
+        # NEW 2026-05-20: ParaVision folder-as-primary copy.
+        # Selective: only the reconstructions listed in `reconstructions:`
+        # are kept; everything at the exam root lands in acquisition_aux/.
+        # Per-file source/dest hash verification raises on mismatch.
+        reconstructions = ingest_block.get("reconstructions")
+        log(f"Folder-as-primary copy (reconstructions: {reconstructions!r})")
+        try:
+            dest_checksums = copy_paravision_exam(
+                source_path, dest_dir, reconstructions, log,
+            )
+        except RuntimeError as e:
+            log(str(e), "ERROR")
+            return acq_id_str, False
+        log(f"Copied + verified {len(dest_checksums)} files")
+        checksum.write_checksums(
+            dest_checksums,
+            os.path.join(dest_dir, "checksums.json"),
+        )
+        log(f"Wrote checksums.json ({len(dest_checksums)} files)")
+
+        # Recompute file_count and size from the DESTINATION (not the
+        # source) — the registry should reflect what actually landed on
+        # the NAS, which is selective (omits unwanted recon indices and
+        # any pre-reconstruction raw the layout drops).
+        dest_size = 0
+        dcm_count = 0
+        for root, _dirs, files in os.walk(dest_dir):
+            for fname in files:
+                if fname in ("checksums.json", "metadata.json", "README.txt"):
+                    continue
+                fpath = os.path.join(root, fname)
+                dest_size += os.path.getsize(fpath)
+                if fname.lower().endswith(".dcm"):
+                    dcm_count += 1
+        summary["file_count"] = dcm_count
+        summary["total_size_mb"] = round(dest_size / 1_000_000, 1)
+        log(
+            f"Registry will record file_count={summary['file_count']} (.dcm), "
+            f"size={summary['total_size_mb']} MB (deposited)"
+        )
+    elif data_ecosystem == "MICROSCOPY":
         # Single-file copy with rename. Source must be a file.
         if not os.path.isfile(source_path):
             log(
@@ -326,7 +484,15 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             log(f"Could not delete source: {e}", "WARN")
 
     # --- Step 8.5: Write metadata.json sidecar ---
-    eco_section_name = data_ecosystem.lower() if data_ecosystem else ""
+    # Section name defaults to lowercased ecosystem ("dicom", "microscopy")
+    # but can be overridden by the extractor's 3-tuple return form (e.g.
+    # ParaVision data lives under metadata.json.mri even though ecosystem
+    # is DICOM, since the contents are ParaVision-specific not generic
+    # DICOM headers). See config._extract_dicom_embedded.
+    eco_section_name = (
+        cfg_single.get("ecosystem_section_name")
+        or (data_ecosystem.lower() if data_ecosystem else "")
+    )
     eco_section = cfg_single.get("ecosystem_section") or {}
     sidecar_dict = metadata_sidecar.build_sidecar(
         acq_id_str,
@@ -458,16 +624,43 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 folder_unc = linker.canonical_to_unc(canonical_path, nas_unc)
                 # Prefer targeting the primary archive (correct icon, opens
                 # the zip directly). Fall back to the folder if primary
-                # isn't a single file (e.g. uncompressed series/).
+                # isn't a single file (e.g. uncompressed series/ or the
+                # folder-as-primary MRI layout).
                 primary = cfg_single.get("primary_file_name", "")
-                if primary and not primary.endswith("/"):
+                primary_kind = cfg_single.get("primary_kind", "")
+                if primary and primary_kind == "folder":
+                    # MRI folder layout: primary IS the acquisition folder
+                    # itself. Target the folder UNC; double-clicking opens
+                    # Explorer at the acq directory.
+                    target_unc = folder_unc + "\\"
+                elif primary and not primary.endswith("/"):
                     target_unc = f"{folder_unc}\\{primary}"
                 else:
                     target_unc = folder_unc + "\\"
+                # The .lnk filename is operator-controlled via the new
+                # `link_filename:` top-level YAML field (see
+                # resolver.resolve_link_filename). Per-instrument templates
+                # set a meaningful default; per-batch configs may override.
+                # Falls back to `original_name` when the field is unset —
+                # preserves backward compatibility with rounds 1-2 / 4 / 5.
+                link_template = cfg_single.get("link_filename") or ""
+                lnk_name = None
+                if link_template:
+                    lnk_name = resolver.resolve_link_filename(
+                        link_template, cfg_single, acq_id_str, acq_date,
+                    )
+                    if lnk_name:
+                        # Trailing slash is allowed in the template as a
+                        # visual hint ("this links to a folder") but the
+                        # `.lnk` extension is appended by linker.create_lnk
+                        # so we strip the slash here.
+                        lnk_name = lnk_name.rstrip("/").rstrip("\\")
+                if not lnk_name:
+                    lnk_name = original_name
                 try:
                     lnk_path = linker.create_lnk(
                         project_folder_abs,
-                        original_name,
+                        lnk_name,
                         target_unc,
                         description=f"{acq_id_str} ({original_name})",
                         dry_run=False,
@@ -479,7 +672,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     # this shortcut (self-heals if the .lnk existed but
                     # the entry was missing).
                     prov_path = os.path.join(project_folder_abs, "provenance.csv")
-                    lnk_filename = f"{original_name}.lnk"
+                    lnk_filename = f"{lnk_name}.lnk"
                     entry = {
                         "output_path":         f"raw_linked/{lnk_filename}",
                         "output_name":         lnk_filename,

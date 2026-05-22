@@ -1,0 +1,52 @@
+# Round-6 Phase A TEST config — Internal MRI (Bruker ParaVision).
+#
+# Scope: 7 study folders manually pulled from the 7T MRI server
+# (`/opt/PV-7.0.0/data/nmr/`) to local staging at D:\projects\gjesus3\data_test\.
+# Studies span 2025-10 through 2026-03; animal protocols 0423 and 0424.
+#
+# This is a TEST INGEST — purge after review. The corresponding
+# production config (notes prefix removed) is
+# mri_bruker_<batch>.yaml (to be created after Phase A passes).
+#
+# Reconstruction selection: [3] — keep only the user-trusted
+# reconstruction per the cardiac flow workflow convention. /1 (auto)
+# and any other indices stay only on the platform's deep-archive.
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+  acquisition_layout: folder
+  reconstructions: [3]
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/data_test"
+  pattern: "*/*"
+  filename_parse:
+    source: parent_name
+    regex: '(?P<jrc_id>jrc_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))'
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     "Bruker BioSpec 7T"
+  modalities_in_study:  NA
+  operator:             NMR-platform
+  data_source:          internal
+  sample_id:            "${discovered.jrc_id}"
+  sample_type:          organism
+  session_id:           "${discovered.jrc_id}"
+  acquisition_datetime: discovered.mri_acquisition_datetime
+  project_hint:         "ae-biomegune-${discovered.project_code}"
+  notes:                "TEST INGEST 2026-05-21 - purge after review (internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, animal m${discovered.animal_num}, recon ${discovered.mri_recon_indices})"
+
+auto_create_project:
+  owner:       "NMR-platform"
+  description: "TEST auto-created from internal MRI round-6 (Phase A) — animal-protocol code ${discovered.project_code}. Purge after review. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
+  notes:       "Auto-created on Phase A test ingest 2026-05-21. Will be purged with the rest of the round-6 test artifacts."
+
+# .lnk shortcut name (resolver-evaluated at link-creation time).
+# Inherits the MRI default pattern from the per-instrument template:
+# unique per (sample, date, exam, recon) — fixes the round-6 first-ingest
+# collision bug where exam-number-only names clashed across animals.
+# Example resolved value: MRI_jrc_251016_m17_0424_20251016_29_3
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"

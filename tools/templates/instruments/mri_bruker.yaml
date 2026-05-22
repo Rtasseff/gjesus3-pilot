@@ -1,0 +1,239 @@
+# Per-instrument template — Internal MRI (Bruker BioSpec / ParaVision).
+# Instrument code: MRI. Ecosystem: DICOM (folder-as-primary layout).
+#
+# Internal MRI is the preclinical MRI platform managed by the institute's
+# NMR group. Two physical systems (7T and 11.7T BioSpec) and three
+# ParaVision versions in concurrent use (v3.6, v6, v7); folder layouts
+# are similar enough to share one template.
+#
+# UNLIKE microscopy, internal MRI has NO dedicated operator — researchers
+# run the scanner themselves. The permission model for ingest-time write
+# access is tracked as future work (tasks/tasks.md §3.3); for now ingest
+# is run by the data office using a shared platform-account identity.
+#
+# Round 6 (2026-05-20) shipped this as the FIRST internal modality using
+# folder-as-primary (no zip). See 13_GJESUS3_ROLE.md for the research-
+# facing reframe and 03_RAW_STORAGE §4.2 for the per-ecosystem layout
+# table.
+#
+# Copy this file to `tools/configs/mri_bruker_<batch>.yaml`, edit the
+# marked placeholders + reconstructions: selection, then run.
+#
+# ============================================================================
+# AUTO-DISCOVERED FIELDS AVAILABLE TO THE OPERATOR
+# ============================================================================
+# Every entry below is automatically populated per acquisition and may be
+# referenced as `discovered.<name>` (bare ref) or `${discovered.<name>}`
+# (interpolation) in any resolver-evaluated YAML field below.
+#
+# Regex extraction from the study-folder name (the messy FTP form
+# `20251016_083822_jrc_251016_m17_0424_jrc_251016_m17_0424_1_1`):
+#   discovered.jrc_id              e.g. "jrc_251016_m17_0424" — the
+#                                   canonical study identifier (acts as
+#                                   sample_id and session_id by default)
+#   discovered.animal_num          e.g. "17" — short animal number
+#                                   inside the protocol
+#   discovered.project_code        e.g. "0424" — the animal-protocol id
+#                                   used as the gjesus3 project name
+#
+# Standard auto-discovery (any instrument):
+#   discovered.folder_name         basename of the matched exam folder
+#                                   (the ParaVision exam number, e.g. "29")
+#
+# ParaVision JCAMP-DX metadata (~20 fields prefixed `mri_`) — extracted
+# from subject + acqp + method + visu_pars by paravision_metadata.py.
+# See 09_MODALITIES MRI section for the full per-instrument table.
+#   discovered.mri_study_name           e.g. "jrc_251016_m17_0424"
+#   discovered.mri_animal_id            normally same as study_name
+#   discovered.mri_animal_sex           "unknown" | "male" | "female"
+#   discovered.mri_animal_weight        e.g. 0.025 (units: kg, may vary)
+#   discovered.mri_animal_type          e.g. "Quadruped"
+#   discovered.mri_position             e.g. "SUBJ_POS_Supine"
+#   discovered.mri_study_datetime       ISO timestamp from `subject`
+#   discovered.mri_paravision_version   e.g. "7.0.0"
+#   discovered.mri_exam_number          ParaVision exam folder number
+#   discovered.mri_acquisition_datetime ISO timestamp from visu_pars
+#                                       (the per-exam recon time — used
+#                                        as registry acquisition_datetime)
+#   discovered.mri_modality             e.g. "MR"
+#   discovered.mri_sequence_name        e.g. "Bruker:IgFLASH"
+#   discovered.mri_pulse_program        e.g. "IgFLASH.ppg"
+#   discovered.mri_nucleus              e.g. "1H"
+#   discovered.mri_echo_time_ms         TE in ms
+#   discovered.mri_repetition_time_ms   TR in ms
+#   discovered.mri_scan_time_str        human-readable, e.g. "0h3m17s865ms"
+#   discovered.mri_matrix               e.g. "256x128"
+#   discovered.mri_frame_count          per recon (cardiac frames etc.)
+#   discovered.mri_recon_indices        comma-list of pdata/<idx>/ kept
+#                                        (e.g. "3" or "1,3")
+#
+# Resolver also provides these in resolver-evaluated fields below:
+#   ${instrument}              "MRI" after registry resolution
+#   ${sample_id}               resolved from registry: block (jrc_id today)
+#   ${session_id}              resolved from registry: block (jrc_id today)
+#   ${acquisition_datetime}    resolved ISO datetime
+#   ${original_name}           exam folder basename (e.g. "29")
+#   ${acq_id}                  generated ACQ-ID (e.g. ACQ-20251016-MRI-029)
+#   ${acq_date}                YYYYMMDD form of the acquisition date
+#
+# ============================================================================
+# WHAT'S PRE-FILLED (don't touch unless you know why)
+# ============================================================================
+#   - `pattern: "*/*"` — matches every <study>/<exam> folder. Each
+#     numbered exam folder = one ACQ-ID (ISA "assay"). Non-exam siblings
+#     (AdjResult, NIFTI, subject, etc.) fail the ParaVision detector
+#     and are skipped cleanly.
+#   - `filename_parse.source: parent_name` + `regex:` — pulls the
+#     canonical JRC ID + project_code out of the messy FTP folder name.
+#     The regex handles BOTH `jrc251016` (no underscore) AND
+#     `jrc_251016` (with underscore) forms — see equipment/mri-platform/
+#     internal_mri_data_handling_workflow_notes.md "Systematic naming
+#     convention" section for the convention details.
+#   - `acquisition_layout: folder` — no zip; the acquisition folder is
+#     the unit. Registry's primary_kind = "folder". See 10_TOOLS.md.
+#   - `instrument_model` — set per per-batch config (7T vs 11.7T).
+#   - `sample_type: organism` — DRAFT REMBI vocab; in-vivo MRI.
+#   - `session_id` + `sample_id` both = JRC study ID for now (one animal
+#     per session). Refine when biosample modelling matures (REG-01).
+#   - `project_hint: ae-biomegune-${discovered.project_code}` — the
+#     animal-protocol code becomes the project short_name. Same pattern
+#     AxioScan round 4 uses; cross-modality projects share workspaces.
+#   - `auto_create_project:` — owner = `NMR-platform` since there's no
+#     dedicated technician. Edit _project.yaml after creation.
+#   - `link_filename:` — `MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`.
+#     Example: `MRI_jrc_251016_m17_0424_20251016_29_3`. Each .lnk is
+#     unique within a project even when multiple animals (m17/m18/m19)
+#     share exam numbers — the round-6 collision bug fix.
+#
+# ============================================================================
+# WHAT YOU MUST EDIT PER BATCH
+# ============================================================================
+#   - `auto_discover.staging_dir`         <-- absolute path to your
+#                                             batch root (the directory
+#                                             containing the FTP-pulled
+#                                             study folders)
+#   - `ingest.reconstructions`            <-- which pdata/<idx>/ recons
+#                                             to keep (all | int | list)
+#   - `registry.instrument_model`         <-- "Bruker BioSpec 7T" or
+#                                             "Bruker BioSpec 11.7T"
+#   - `registry.notes`                    <-- short batch description
+#
+# What you may want to change per batch (rarely):
+#   - `ingest.delete_source_after_ingest` (default false; opt in only
+#     after you've verified a real run for this batch)
+#   - `ingest.auto_create_projects` (default true)
+#
+# Extends the universal starter at tools/templates/ingest_template.yaml.
+#
+# --------------------------------------------------------------------------
+# ⚠️ RECONSTRUCTION SELECTION — choose deliberately, no implicit default
+# --------------------------------------------------------------------------
+# Bruker ParaVision typically creates:
+#   pdata/1/  — original/auto reconstruction
+#   pdata/2/  — duplicate of /1 (often discarded by user)
+#   pdata/3/  — USER-CONTROLLED reconstruction (the trusted one for
+#               cardiac flow work — manual heart-rate-matched recon)
+#   pdata/4/, /5/, ... — alternate trials, occasionally used
+#
+# `reconstructions: [3]` is the convention for the documented cardiac
+# flow workflow. Use `all` to preserve everything (larger acquisitions
+# on the NAS). Discarded indices stay only on the platform's deep-
+# archive — gjesus3 doesn't replicate the platform's role. See
+# 13_GJESUS3_ROLE.md §5.5.
+# --------------------------------------------------------------------------
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+  acquisition_layout: folder      # no-zip folder-as-primary (round 6)
+  # EDIT: per-batch reconstruction selection.
+  # Examples:
+  #   reconstructions: [3]        # only the user-trusted reconstruction
+  #   reconstructions: all        # everything ParaVision produced
+  #   reconstructions: 3          # equivalent to [3]
+  #   reconstructions: [1, 3]     # /1 + /3 (e.g. if /1 was actually used)
+  reconstructions: [3]
+
+auto_discover:
+  # EDIT: absolute path to the batch root — the directory containing
+  # the FTP-pulled study folders (one per animal session).
+  # Use forward slashes; Python normalises on Windows.
+  # Example for the round-6 test data:
+  #   D:/projects/gjesus3/data_test
+  staging_dir: "D:/projects/gjesus3/<batch-root>"
+
+  # Recursive: every <study>/<exam> folder one level deep becomes a
+  # candidate ACQ. Non-exam siblings (AdjResult, NIFTI, subject, etc.)
+  # fail the embedded-extractor's ParaVision detector and get skipped
+  # cleanly by the resolver (no `discovered.mri_*` populated).
+  pattern: "*/*"
+
+  filename_parse:
+    # `source: parent_name` targets the parent of the match (the study
+    # folder), not the match itself (the exam folder).
+    source: parent_name
+    # FTP server folder names look like:
+    #   20251016_083822_jrc_251016_m17_0424_jrc_251016_m17_0424_1_1
+    # Regex pulls the canonical JRC ID + project_code (animal_num is
+    # optional but useful for sample_id refinement).
+    # Both `jrc251016_m17_0424` (no underscore after jrc) and
+    # `jrc_251016_m17_0424` (with) are observed; \d{6,8} covers
+    # both 6-digit and 8-digit dates.
+    regex: '(?P<jrc_id>jrc_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))'
+
+  # Embedded extraction (ParaVision JCAMP-DX aux files) populates
+  # ~20 discovered.mri_* fields. Don't turn off unless you know why.
+  # embedded_metadata: true   # default
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  # EDIT: which scanner produced this batch.
+  instrument_model:     "Bruker BioSpec <7T|11.7T>"
+  modalities_in_study:  NA
+  # Operator-of-record for the registry is the platform group, not the
+  # researcher (the researcher is captured as the auto-created project's
+  # owner, set in auto_create_project below).
+  operator:             NMR-platform
+  data_source:          internal
+  # sample_id and session_id both pin to the JRC study ID for now.
+  # session_id groups all exams of one animal session (ISA "study");
+  # sample_id is the biological subject identifier. Treating them as
+  # equal is correct for the one-animal-per-session pattern — refine
+  # when biosample modelling matures (REG-01 in 06_REGISTRIES §2.3).
+  sample_id:            "${discovered.jrc_id}"
+  sample_type:          organism
+  session_id:           "${discovered.jrc_id}"
+  acquisition_datetime: discovered.mri_acquisition_datetime
+  # PROVISIONAL — see warning in 05_PROJECTS §9 (PROJ-05). The
+  # animal-protocol code becomes the project short_name.
+  project_hint:         "ae-biomegune-${discovered.project_code}"
+  # EDIT: short batch description.
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol ${discovered.project_code}); recons kept: ${discovered.mri_recon_indices}"
+
+# First-time project-creation defaults (10_TOOLS §2.1.4). Read only on
+# initial project creation; ignored otherwise. For internal MRI work,
+# the project owner is the NMR platform (the actual researcher behind
+# the animal protocol can be filled in by editing _project.yaml after
+# creation).
+auto_create_project:
+  owner:       "NMR-platform"
+  description: "Auto-created from internal MRI ingest; animal-protocol code ${discovered.project_code}. PROVISIONAL project_hint — see 05_PROJECTS §9."
+  notes:       "Auto-created on first ingest. Edit owner via _project.yaml to record the researcher behind the animal protocol."
+
+# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
+# Resolver-evaluated; see "AUTO-DISCOVERED FIELDS" section above for
+# every placeholder available.
+#
+# Default pattern uniquely identifies each acquisition within the project
+# even when multiple animals from the same protocol land in the same
+# project (e.g. m17/m18/m19/m20 all under proj-ae-biomegune-0424). The
+# round-6 first ingest exposed a collision bug when .lnk names were just
+# the exam number — the four animals each had exam 27, so `27.lnk` clashed
+# and only one survived. The new pattern includes sample_id, date, exam,
+# and reconstruction → guaranteed unique per (animal, exam, recon).
+#
+# Example resolved value:
+#   MRI_jrc_251016_m17_0424_20251016_29_3
+#   (.lnk extension appended automatically by linker.create_lnk)
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"

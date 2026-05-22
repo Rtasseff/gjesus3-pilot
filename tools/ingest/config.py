@@ -44,9 +44,18 @@ def _extract_dicom_embedded(path):
     `paravision_metadata.extract`. For everything else under DICOM
     (collaborator XMRI zips, future PET/SPECT/CT), returns empty —
     pure-DICOM-header extraction is queued as deferred work.
+
+    Returns either a 2-tuple `(discovered, section_dict)` or a 3-tuple
+    `(discovered, section_dict, section_name)`. The 3-tuple form lets
+    the dispatcher override the sidecar section name — e.g. ParaVision
+    data lives under `metadata.json.mri` even though the ecosystem is
+    DICOM, because the contents are ParaVision-specific (not generic
+    DICOM headers, which will eventually populate a separate
+    `metadata.json.dicom` block when that extractor ships).
     """
     if _is_paravision_exam(path):
-        return paravision_metadata.extract(path)
+        disc, section = paravision_metadata.extract(path)
+        return disc, section, "mri"
     return ({}, {})
 
 
@@ -291,11 +300,14 @@ def expand_batch(cfg, nas_root=None):
         match_basename = Path(match_path).name
         # Carry the top-level ingest: and auto_create_project: blocks into
         # each case so ingest_single can read control flags and supply
-        # project-creation metadata on first-time auto-create.
+        # project-creation metadata on first-time auto-create. Also
+        # capture link_filename: (resolver-evaluated at .lnk creation
+        # time — see resolver.resolve_link_filename).
         case = {
             "source_path": match_path,
             "ingest": cfg.get("ingest") or {},
             "auto_create_project": acp_block,
+            "link_filename": cfg.get("link_filename") or "",
         }
         discovered = {}
 
@@ -409,17 +421,27 @@ def expand_batch(cfg, nas_root=None):
         # (e.g. Bruker ParaVision exam → discovered.mri_*); each
         # ecosystem's extractor decides what it accepts.
         eco_section = {}
+        eco_section_name_override = None
         if embed_metadata and (is_file or is_dir):
             extractor = get_embedded_extractor(eco_for_extract)
             if extractor:
                 try:
-                    eco_disc, eco_section = extractor(match_path)
+                    result = extractor(match_path)
                 except Exception as e:
                     print(
                         f"[expand_batch] WARN: embedded extraction failed "
                         f"for {match_basename}: {e}"
                     )
-                    eco_disc, eco_section = {}, {}
+                    result = ({}, {})
+                # Extractors return either a 2-tuple (discovered, section)
+                # — section name comes from the ecosystem — or a 3-tuple
+                # (discovered, section, name_override) — section name is
+                # provided explicitly. The DICOM dispatcher uses the
+                # 3-tuple form for ParaVision (override to "mri").
+                if len(result) == 3:
+                    eco_disc, eco_section, eco_section_name_override = result
+                else:
+                    eco_disc, eco_section = result
                 # Merge without overwriting earlier discovered values.
                 for k, v in (eco_disc or {}).items():
                     if k not in discovered or not discovered[k]:
@@ -427,6 +449,8 @@ def expand_batch(cfg, nas_root=None):
 
         case["discovered"] = discovered
         case["ecosystem_section"] = eco_section
+        if eco_section_name_override:
+            case["ecosystem_section_name"] = eco_section_name_override
 
         try:
             apply_registry_block(case, registry_block)
@@ -503,21 +527,29 @@ def prep_single_case(cfg):
     # Single-case embedded extraction (parallels expand_batch's logic).
     # Accepts both file and folder source_paths so that ecosystem
     # extractors that work on folders (e.g. ParaVision exam folders)
-    # are reachable here too.
+    # are reachable here too. Honours the 3-tuple section-name
+    # override (see expand_batch).
     eco_section = {}
+    eco_section_name_override = None
     embed = (cfg.get("auto_discover") or {}).get("embedded_metadata", True)
     eco = (registry_block or {}).get("data_ecosystem", "")
     if embed and src and os.path.exists(src):
         extractor = get_embedded_extractor(eco)
         if extractor:
             try:
-                eco_disc, eco_section = extractor(src)
+                result = extractor(src)
+                if len(result) == 3:
+                    eco_disc, eco_section, eco_section_name_override = result
+                else:
+                    eco_disc, eco_section = result
                 for k, v in (eco_disc or {}).items():
                     if k not in cfg["discovered"] or not cfg["discovered"][k]:
                         cfg["discovered"][k] = v
             except Exception as e:
                 print(f"[prep_single_case] WARN: embedded extraction failed: {e}")
     cfg["ecosystem_section"] = eco_section
+    if eco_section_name_override:
+        cfg["ecosystem_section_name"] = eco_section_name_override
 
     apply_registry_block(cfg, registry_block)
     return cfg

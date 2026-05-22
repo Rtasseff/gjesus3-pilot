@@ -229,6 +229,50 @@ auto_create_project:
 
 When `auto_create_projects: false` (the default) or when the project already exists, the `auto_create_project:` block is ignored entirely.
 
+### 2.1.5 `link_filename:` field (round 6, 2026-05-22)
+
+> **✅ DECIDED:** The `.lnk` shortcut name placed under `/projects/<proj>/raw_linked/` is operator-controlled via a new top-level YAML field `link_filename:`. Each per-instrument template ships a meaningful default; per-batch configs may override. Resolver-evaluated at link-creation time.
+
+Why this exists: round 6 (internal MRI) exposed a real failure mode of the previous default (`.lnk` named after `original_name`). For one-file-per-acquisition formats (`.czi`, collaborator zips) the original filename is already long and unique enough to avoid collisions inside a project. For systematic-naming environments (internal MRI, future internal NI) the *source* identifier is a folder path + numeric position — and naming the `.lnk` after the position alone collides when multiple sessions land in the same project (e.g. four animals under `proj-ae-biomegune-0424` all having an exam `27`). The first-ingest of round 6 silently lost 35 of 97 shortcuts to such collisions. `link_filename:` lets the per-instrument template specify a name pattern that's both human-meaningful AND globally unique.
+
+**Syntax:** top-level field, sibling of `ingest:` / `auto_discover:` / `registry:` / `auto_create_project:`. Value is a string template with `${X}` references.
+
+```yaml
+# Per-instrument template default for internal MRI:
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
+
+# Per-instrument template default for microscopy / external:
+link_filename: "${instrument}_${original_name}"
+```
+
+**Context dict** — `${X}` references resolve against this merged context (built per acquisition at link-creation time, after registry resolution + ACQ-ID generation):
+
+| `${X}` | Source | Example |
+|---|---|---|
+| `${discovered.<key>}` | The auto-discovered namespace — every entry from `auto_discover` (filename chunks, path levels, parent-folder date, embedded-extractor output like `discovered.czi_*` / `discovered.mri_*`). The full set per instrument is documented in each per-instrument template's header comments. | `${discovered.mri_exam_number}` → `"29"` |
+| `${sample_id}`, `${session_id}`, `${instrument}`, `${instrument_model}`, `${operator}`, `${data_source}`, `${sample_type}`, `${acquisition_datetime}`, `${project_hint}`, `${original_name}`, `${data_ecosystem}`, `${notes}` | Resolved registry-block fields | `${sample_id}` → `"jrc_251016_m17_0424"` |
+| `${acq_id}` | The generated ACQ-ID for this case | `"ACQ-20251016-MRI-029"` |
+| `${acq_date}` | YYYYMMDD form of the acquisition date | `"20251016"` |
+
+**Resolution rules:**
+
+- Empty / missing `link_filename:` → fall back to `original_name` (current behaviour for rounds 1-2, 4, 5 — backward compatible).
+- Unresolved `${X}` (key not in context dict) → log WARN, leave the literal `${X}` in the output. Safer than silently producing a half-formed name; the operator sees the broken-template indicator and fixes it.
+- Resolved-to-empty substitutions go through quietly — operator's choice if they reference a key that may be empty (e.g. `${discovered.mri_recon_indices}` could be empty for an exam where no reconstructions were kept).
+- Trailing `/` in the resolved value is stripped (operator may use it as a visual "this links to a folder" hint; the `.lnk` extension is appended by `linker.create_lnk`).
+- No Windows-unsafe-character sanitisation is applied — the documented `discovered.*` fields don't contain unsafe characters in practice. Add a sanitisation pass later if a real case requires it.
+
+**Per-instrument defaults (recommended patterns):**
+
+| Instrument | Default `link_filename:` | Example resolved |
+|---|---|---|
+| AxioScan 7 (ZWSI) | `${instrument}_${original_name}` | `ZWSI_MFB_MBC_0423_ID13B_WGA_10x.czi` |
+| Cell Observer (CELL) | `${instrument}_${original_name}` | `CELL_HLF_alphasma_10x_CC-miR-29a_1.czi` |
+| Internal MRI (Bruker) | `MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}` | `MRI_jrc_251016_m17_0424_20251016_29_3` |
+| Internal NI (future) | `${discovered.modality}_${sample_id}_${acq_date}_${discovered.recon_number}` | `PET_0424_m17_20250612_3` |
+
+See each per-instrument template under `tools/templates/instruments/` for the in-context comment block listing every `discovered.*` field that instrument exposes.
+
 ---
 
 **Two Ingest Modes:**
