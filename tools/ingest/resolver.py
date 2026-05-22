@@ -280,10 +280,13 @@ def normalize_acquisition_datetime(value):
     """Coerce a date-shaped string into ISO. Empty pass-through; ISO pass-through.
 
     Accepts:
-        ""           -> ""
-        "20260422"   -> "2026-04-22T00:00:00Z"
-        "2026-04-22" -> "2026-04-22T00:00:00Z"
-        "<already ISO>" -> as-is
+        ""                 -> ""
+        "20260422"         -> "2026-04-22T00:00:00Z"
+        "2026-04-22"       -> "2026-04-22T00:00:00Z"
+        "20251029100641"   -> "2025-10-29T10:06:41Z" (Molecubes NI archive
+                              names use this 14-digit YYYYMMDDhhmmss form;
+                              added round 8, 2026-05-22)
+        "<already ISO>"    -> as-is
         "<ParaVision ISO with , decimal and tight tz>" -> normalised ISO
     """
     if not value:
@@ -291,6 +294,8 @@ def normalize_acquisition_datetime(value):
     s = value.strip()
     if len(s) == 8 and s.isdigit():
         return f"{s[:4]}-{s[4:6]}-{s[6:8]}T00:00:00Z"
+    if len(s) == 14 and s.isdigit():
+        return f"{s[:4]}-{s[4:6]}-{s[6:8]}T{s[8:10]}:{s[10:12]}:{s[12:14]}Z"
     if len(s) == 10 and s[4] == "-" and s[7] == "-":
         return f"{s}T00:00:00Z"
     # ParaVision dialect: "2025-10-16T08:38:22,085+0200" — comma decimal

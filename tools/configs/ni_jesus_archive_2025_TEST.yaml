@@ -1,0 +1,60 @@
+# Round-8 Phase A TEST config — Nuclear Imaging archive (Jesus's 2025).
+#
+# Scope: every .tgz archive under
+#   \\cicmgsp02\gnuclear2$\2025\Jesus\
+# that has been pre-extracted by `tools/extract_ni_archives.py` to
+# D:\projects\Nuke\test_data\. Each extracted folder = one acquisition.
+#
+# Verified pre-ingest scope: 84 .tgz archives total (24 from series
+# 0525 + 60 from series 1207), split evenly across PET and CT modalities
+# (42 PET + 42 CT). All from operator "irene" under PI Jesus's group.
+#
+# This is a TEST INGEST in **archive mode** — purge after review. The
+# corresponding production config (for the future live-machine NI
+# ingest workflow) will look different — different source, different
+# template — and will get its own per-batch config when that stream
+# lands. See equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md
+# for the archive-vs-live design.
+#
+# Workflow:
+#   1. python tools/extract_ni_archives.py \
+#        --archive-root "//cicmgsp02/gnuclear2\$/2025/Jesus/" \
+#        --staging      "D:/projects/Nuke/test_data/"
+#      (extracts all 84 .tgz → individual folders under staging)
+#   2. python tools/ingest_raw.py --config tools/configs/ni_jesus_archive_2025_TEST.yaml \
+#        --nas-root J:/ --dry-run
+#      (verify, then drop --dry-run for the real run)
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+  acquisition_layout: folder
+
+auto_discover:
+  staging_dir: "D:/projects/Nuke/test_data"
+  pattern: "*/"
+  filename_parse:
+    regex: '^(?P<user>[a-z]+)_(?P<series_id>\d+)_(?P<acq_date_short>\d{6})_(?P<short_project>\d+)_(?P<short_sample>[A-Za-z]+\d+|phantom[_a-z0-9]*)_(?P<acq_datetime_full>\d{14})_(?P<modality>PET|CT|SPECT|OI)$'
+
+registry:
+  instrument:           discovered.modality
+  data_ecosystem:       DICOM
+  instrument_model:     "Molecubes (PET/SPECT/CT)"
+  modalities_in_study:  NA
+  operator:             NI-platform
+  data_source:          internal
+  sample_id:            "${discovered.short_sample}_${discovered.short_project}"
+  sample_type:          organism
+  session_id:           "${discovered.user}_${discovered.series_id}_${discovered.acq_date_short}_${discovered.short_sample}"
+  acquisition_datetime: discovered.acq_datetime_full
+  project_hint:         "ae-biomegune-${discovered.short_project}"
+  notes:                "TEST INGEST 2026-05-22 - purge after review (round-8 archive-mode NI: ${discovered.modality} of ${discovered.short_sample}, animal protocol ${discovered.short_project}, funded project ${discovered.series_id}; operator ${discovered.user}, acquired ${discovered.acq_datetime_full})"
+
+auto_create_project:
+  owner:       "NI-platform"
+  description: "TEST auto-created during round-8 NI archive-mode ingest — animal-protocol short id ${discovered.short_project} (funded project ${discovered.series_id}). Purge after review. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
+  notes:       "Auto-created on Phase A test ingest 2026-05-22. Will be purged with the rest of the round-8 test artifacts."
+
+# Unique-per-acquisition link name.
+# Example resolved: PET_m14_20251029_20251029100641
+link_filename: "${discovered.modality}_${discovered.short_sample}_${acq_date}_${discovered.acq_datetime_full}"

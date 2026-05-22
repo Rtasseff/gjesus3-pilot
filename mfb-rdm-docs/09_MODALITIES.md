@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-05-22 (Internal MRI §1.4 updated for round-6 folder-as-primary layout + `discovered.mri_*` table; LSM 900 §1.3 round-7 active with per-instrument template + workflow notes)
+**Last Updated:** 2026-05-22 (Internal MRI §1.4 updated for round-6 folder-as-primary layout + `discovered.mri_*` table; LSM 900 §1.3 round-7 active with per-instrument template + workflow notes; Nuclear Imaging §1.5 round-8 active in archive mode)
 
 ---
 
@@ -179,18 +179,36 @@ For the systematic naming convention used by the MRI platform (parsable folder-n
 | **System 2** | MILabs VECTor PET/SPECT/CT/OI — integrated multimodal; submillimeter PET/SPECT; multi-isotope (e.g., 18F + 89Zr simultaneous); MLEM/POSEM/SROSEM reconstruction; GPU server (36 TB) |
 | **Other** | Autoradiography system (endpoint imaging) |
 | **Category** | Platform instrument (reconstructed data) |
-| **Codes** | `PET`, `SPECT`, `CT` (individual codes per modality) |
+| **Codes** | `PET`, `SPECT`, `CT` (one per archive — set per case via `discovered.modality` from the archive-name regex) |
 | **Workstations** | 3 dedicated workstations with PMOD and Imalytics |
-| **Primary format** | DICOM and NIfTI (MILabs confirms both exports; Molecubes **format TBC**) |
-| **Storage on gjesus3** | DICOM stored as compressed archive (.zip or .tar.gz); NIfTI files stored as-is (single files, no archive needed) |
-| **Typical size** | 100 MB - 10 GB per series |
-| **Embedded metadata** | Extensive (DICOM standard); NIfTI has limited header metadata |
-| **Not embedded** | Study context beyond headers |
+| **Source format (archive mode, observed 2026-05-22)** | Molecubes-native `.bin` reconstruction binaries + XML aux files (`protocol.xml`, `acqparams.xml`, `recontemplate.xml`, etc.) — NOT DICOM at the leaf despite the "DICOM ecosystem" assignment. MILabs VECTor format **not yet observed** in our archives. **Earlier doc draft was wrong** about DICOM `.dcm` files at the deepest level — round-8 archive inspection corrected this. |
+| **Storage on gjesus3 (round 8, 2026-05-22)** | **Folder-as-primary** (same model as internal MRI round 6 — no zip). Pre-extracted from the SMB archive via `tools/extract_ni_archives.py` to a local staging dir, then ingested as a folder bundle under `/raw/DICOM/<year>/<year-month>/ACQ-<date>-<modality>-NNN/`. Registry `primary_kind = folder`. See [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
+| **Typical size** | 1-15 GB per acquisition (unpacked). PET ~3-6 GB, CT ~6-12 GB. |
+| **Embedded metadata** | Per-acquisition XML aux files (`protocol.xml`, `acqparams.xml`, `recontemplate.xml`) — NOT extracted by the round-8 ingest. The archive-name regex captures the essentials (user, series_id, short_project, short_sample, timestamp, modality); a future-work XML-aux extractor (analogous to ParaVision's `discovered.mri_*`) could surface richer fields. |
+| **Not embedded** | Study context (research question, sample preparation) — captured at project level. |
 | **Analysis tools** | PMOD, Imalytics, 3D Slicer, ITK-SNAP, MATLAB |
 | **Raw data responsibility** | Nuclear Imaging platform archives true raw data (listmode, sinograms) |
-| **Status** | ✅ Confirmed for pilot |
+| **Operator model** | **No dedicated technician** — researchers run the equipment themselves. Permission model for ingest-time `/raw/` writes is future work (see `tasks/tasks.md` §3.3 user-as-operator). |
+| **Status** | 🔶 Round 8 active in **archive mode** (2026-05-22). Live-machine workflow still pending Platform Manager Unai's answer on the workflow + access model — see `tasks/tasks.md §4.7`. Round 8 pulls `.tgz` archives from `\\cicmgsp02\gnuclear2$\<year>\<PI>\` per the convention documented in [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md). |
 
 > **⚠️ GAP:** MILabs VECTor exports both DICOM and NIfTI. Need to confirm which format(s) the platform provides to researchers, and whether NIfTI should be an accepted format on gjesus3.
+
+#### Auto-discovered fields (`discovered.<key>`)
+
+Round-8 archive-mode ingest exposes these per-acquisition fields via the archive-basename regex (`tools/templates/instruments/molecubes_ni.yaml`). No `.dcm`/XML-aux extractor is registered yet — these are parsed from the archive basename only.
+
+| Field | Description | Source (in archive basename `<user>_<series_id>_<YYMMDD>_<short_project>_<short_sample>_<YYYYMMDDhhmmss>_<modality>.tgz`) |
+|-------|-------------|----|
+| `user` | NI user (e.g. `irene`) | first underscore-delimited chunk |
+| `series_id` | **Funded-project id** (e.g. `0525`, `1207`). Different from MRI's animal-protocol short id; see workflow notes for the distinction. | second chunk |
+| `acq_date_short` | YYMMDD form of the acquisition date (e.g. `251029`) | third chunk |
+| `short_project` | **Animal-protocol short id** (e.g. `0525`, `0424`). Drives `project_hint` (cross-modality reuse with rounds 4 + 6 `ae-biomegune-NNNN` workspaces). | fourth chunk |
+| `short_sample` | Sample identifier — `<animal type><number>` for animals (e.g. `m13`) or `phantom_*` free-text for QC | fifth chunk |
+| `acq_datetime_full` | Full YYYYMMDDhhmmss timestamp (e.g. `20251029100641`) — drives the registry `acquisition_datetime`. Round-8 extended `resolver.normalize_acquisition_datetime` to handle this 14-digit form. | sixth chunk |
+| `modality` | `PET` / `CT` / `SPECT` / `OI` — drives the per-case `registry.instrument` | seventh chunk |
+| `folder_name` | Standard auto-discovery — equals the archive basename | derived |
+
+Round-8 ingest config: [`tools/configs/ni_jesus_archive_2025_TEST.yaml`](../tools/configs/ni_jesus_archive_2025_TEST.yaml). Workflow notes (archive-mode + live-mode preview): [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md).
 
 ---
 

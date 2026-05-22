@@ -20,18 +20,35 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 | 4 | AxioScan 7 (ZWSI) | 28 acqs across PROJ-0003/0004/0005 (`ae-biomegune-{0423,0424,0525}`) | `axioscan7_20260506.yaml` (+ TEST) |
 | 5 | Cell Observer (CELL) | **165 acqs across PROJ-0006/0007/0008** (`itziar-colageno`, `itziar-alphasma`, `itziar-colageno-permeabilizado`) — exercised **both filename-focused and path-focused metadata extraction** on real Ainhize/Itziar data | `cell_observer_itziar_alphasma_TEST.yaml`, `cell_observer_itziar_colageno_perm_TEST.yaml` |
 | 6 | Internal MRI (Bruker ParaVision) | 97 acqs across PROJ-0003 (26) + PROJ-0004 (71) — cross-modality reuse with round-4 AxioScan workspaces. **First no-zip folder-as-primary layout**; ParaVision JCAMP-DX metadata in `metadata.json.mri`; new `link_filename:` framework produces unique `MRI_<jrc_id>_<acq_date>_<exam>_<recon>.lnk` shortcut names. | `mri_bruker_20251016_TEST.yaml` |
-| 7 | LSM 900 confocal (LSM9) | **In progress 2026-05-22** — first batch LAURA_UPTAKE_LP-IONP-doxo_MDA (~14 acqs). Third .czi-family instrument; reuses czi_metadata.py extractor. New folder-name regex on `<researcher>_<experiment>_<cell_line>` batch convention; filename variable-chunk handling deferred (captured in workflow notes). | `lsm900_laura_uptake_TEST.yaml` |
+| 7 | LSM 900 confocal (LSM9) | 13 acqs in PROJ-0009 (`proj-laura`) — first batch LAURA_UPTAKE_LP-IONP-doxo_MDA. Third .czi-family instrument; reuses czi_metadata.py extractor. New folder-name regex on `<researcher>_<experiment>_<cell_line>` batch convention; filename variable-chunk handling deferred. | `lsm900_laura_uptake_TEST.yaml` |
+| 8 | Nuclear Imaging archive (PET/CT) | **In progress 2026-05-22** — archive-mode ingest of Jesus's 2025 NI archive (`\\cicmgsp02\gnuclear2$\2025\Jesus\` — 84 `.tgz` archives, 42 PET + 42 CT, ~298 GB compressed). Pre-extraction via `tools/extract_ni_archives.py` → D:/projects/Nuke/test_data/, then folder-as-primary ingest. **Live-machine mode still pending Unai's workflow answer** — round 8 is archive-mode only. | `ni_jesus_archive_2025_TEST.yaml` |
 
 Round-5 round-up (Cell Observer) detail trail in §4.6.B.
 
-### Round 7 — **LSM 900 confocal (LSM9)** — ACTIVE 2026-05-22
+### Round 8 — **Nuclear Imaging archive (PET/CT)** — ACTIVE 2026-05-22
 
-Third Zeiss .czi-family instrument; reuses `tools/ingest/czi_metadata.py` extractor (no new code). New per-instrument template at [`tools/templates/instruments/lsm900.yaml`](../tools/templates/instruments/lsm900.yaml); first batch config at [`tools/configs/lsm900_laura_uptake_TEST.yaml`](../tools/configs/lsm900_laura_uptake_TEST.yaml) targeting `LAURA_UPTAKE_LP-IONP-doxo_MDA` (~14 .czi files). Operator directions + parsable naming convention captured in [`equipment/lsm900/lsm900_data_handling_workflow_notes.md`](../equipment/lsm900/lsm900_data_handling_workflow_notes.md). §4.6.C has the full execution checklist + deferred items.
+**Archive-mode ingest** of Jesus's 2025 NI archive on `\\cicmgsp02\gnuclear2$\2025\Jesus\`. 84 `.tgz` archives (42 PET + 42 CT) from operator Irene, ~298 GB compressed across series 0525 (12 animals × 2 modalities on one date) and series 1207 (multi-visit study, ~30 animal-visits × 2 modalities). All from the Molecubes system.
 
-**Decisions locked for this round (light — most reused from rounds 5/6):**
-- Folder-name regex extracts `researcher / experiment / cell_line` from the `<researcher>_<experiment-w/-internal-underscores>_<cell_line>` batch convention (greedy-middle pattern, same trick used for MRI's `jrc` regex). Reuses `filename_parse.source: parent_name` + `regex:` from round 6.
-- Filename positional parse **deferred** — real-data chunk count varies (4–6) so positional would skip half the files. Filename context lives in `${discovered.filename}` + the .czi-embedded fields. Future enhancement queued in §4.6.C deferred items.
-- `link_filename: ${instrument}_${original_name}` — same microscopy convention as AxioScan + Cell Observer.
+**Live-machine workflow** still pending Platform Manager Unai's answer on workflow + access. Round 8 is archive-mode-only — a pragmatic Phase A that validates the framework against representative NI data while the live-mode conversation continues. See `equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md` for the archive-vs-live design.
+
+**Pipeline:**
+1. [`tools/extract_ni_archives.py`](../tools/extract_ni_archives.py) — pulls `.tgz` from SMB, extracts to `D:/projects/Nuke/test_data/<archive_basename>/` with `--strip-components=6` (strips the 6-level outer nesting). Idempotent (`.extracted` sentinel). Retry-hardened against transient `WinError 59` SMB drops.
+2. [`tools/ingest_raw.py`](../tools/ingest_raw.py) with [`tools/configs/ni_jesus_archive_2025_TEST.yaml`](../tools/configs/ni_jesus_archive_2025_TEST.yaml) — folder-as-primary ingest. Each `.tgz` → one ACQ (PET or CT) under `/raw/DICOM/<year>/<year-month>/`. `link_filename` produces `<modality>_<animal>_<acq_date>_<acq_datetime_full>.lnk` (unique per acq).
+
+**Decisions locked for this round:**
+- Archive name encodes the full registry-level metadata; no new extractor module needed. `filename_parse.regex:` on the staged folder basename (= archive basename without `.tgz`) extracts 7 `discovered.*` fields.
+- `instrument: discovered.modality` — per-case PET / CT / SPECT (one .tgz = one modality).
+- `project_hint: ae-biomegune-${discovered.short_project}` — same animal-protocol convention as AxioScan + MRI; cross-modality reuse with `proj-ae-biomegune-{0424,0525}` from rounds 4 + 6.
+- `session_id: ${discovered.user}_${discovered.series_id}_${discovered.acq_date_short}_${discovered.short_sample}` — groups PET + CT of the same animal-visit into one ISA "study" (verified on pilot: PET m13 + CT m13 share `session_id=irene_0525_251029_m13`).
+- `acquisition_datetime` resolver now handles 14-digit `YYYYMMDDhhmmss` timestamps (Molecubes archive-name format) — small extension to `normalize_acquisition_datetime`.
+- DICOM-Modality-tag auto-detect produces incidental noise (e.g. extensionless files like `ACQSTATUS` get mistaken for DICOM); ignored since the registry `instrument` is driven by `discovered.modality` from the filename regex, not auto-detection. WARN messages are informational.
+- `metadata.json.dicom` block ships empty (no NI XML-aux extractor yet — queued as future work).
+
+§4.7 has the full execution checklist + scope.
+
+### Round 7 — LSM 900 confocal (LSM9) — ✅ COMPLETE (in quasi-production)
+
+13 acqs in PROJ-0009 (`proj-laura`); first batch LAURA_UPTAKE_LP-IONP-doxo_MDA. Third .czi-family instrument; reused `tools/ingest/czi_metadata.py` 1:1 (zero new code). Folder-name regex on `<researcher>_<experiment-w/-internal-underscores>_<cell_line>` batch convention. Commit: `2bbbf4d`. §4.6.C has the detail trail.
 
 ### Round 6 — Internal MRI (Bruker ParaVision) — ✅ COMPLETE (in quasi-production)
 
@@ -414,26 +431,54 @@ The first round-6 ingest (97/97 success against `D:\projects\gjesus3\data_test\`
 **4.6.D Lightweight mode for microscopy:**
 - [ ] Test `--lightweight` mode on one `.czi` file (sets `extended_metadata_present=N`, no sidecar)
 
-### 4.7 Pass 4: Platform DICOM — Nuclear Imaging (`PET`, `SPECT`, `CT`)
+### 4.7 Pass 4: Nuclear Imaging — ROUND 8 ACTIVE 2026-05-22 (archive mode)
 
-> **Pickup context (read first if returning cold):**
-> - Multimodal platform — PET, SPECT, CT, OI from Molecubes (γ/β/X-CUBES) + MILabs VECTor; may include hybrid PET/CT or PET/SPECT/CT sessions. Tests the multi-modality handling (a hybrid session should stay as one acquisition with `modalities_in_study` populated). Platform description: `equipment/nuclear-imaging/nuclearImaging_platform_description.md`.
-> - **Naming convention + archive structure already documented** (2026-05-22) in [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md). Covers the archive path on `\\cicmgsp02\gnuclear2$`, the `<archive name>.tgz → .tar → user/series/.../recon_<n>/` nested structure, the funded-project-id vs animal-protocol-id distinction, and the proposed `link_filename` pattern. **No NI data is ingested yet.**
-> - Both DICOM and NIfTI exports are produced (per the platform description). Confirm output format(s) with the platform manager when we engage them.
-> - **Blocked on:** Platform Manager **Unai** to answer one outstanding question (around the data naming convention) before we submit our data-workflow documentation + example to him. Until that round-trip closes, we can't formalize the ingest workflow proposal, and we don't have sample data to probe yet.
-> - **Code-side prerequisite shared with §4.5 MRI:** the DICOM full-mode metadata extractor + compress-on-ingest (§3.1) is the same code path. Prototype it against the existing 75 collaborator XMRI acquisitions while waiting on Unai — it'll be ready when sample data lands.
-> - **NI tgz-aware staging** (§3.1 future work): NI archives unpack tgz → tar → nested tree; the ingest pipeline should extract to local staging before `expand_batch` runs (matches the `ftp_mirror.py → ingest` pattern). Design captured in the workflow notes.
+> **Round 8 split into two streams:**
+> - **Archive mode (active 2026-05-22):** ingest pre-archived `.tgz` files from `\\cicmgsp02\gnuclear2$\<year>\<PI>\`. Validates the framework against representative NI data while the live-machine workflow conversation continues.
+> - **Live-machine mode (still blocked):** waiting on Platform Manager Unai to answer one outstanding question on the workflow + naming convention. Will get its own per-instrument template + per-batch config when ready.
+>
+> Both modes are documented in [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md).
 
-**Prerequisites (need before starting):**
-- [ ] **Ryan:** Resolve the open question with Unai (Platform Manager) on the naming convention; submit data-workflow documentation + example for his review once resolved.
-- [ ] **Ryan:** Obtain sample Nuclear Imaging datasets (ideally one single-modality and one hybrid).
-- [ ] Confirm output format(s) from the platform — DICOM, NIfTI, or both per acquisition? (MOD-05, Section 2.4).
+**Round-8 archive-mode scope (Jesus's 2025 archive):**
 
-**Execution (once unblocked):**
-- [ ] Inspect file structure and headers — compare with MRI and collaborator DICOM.
-- [ ] Audit embedded metadata (feeds 2.2).
-- [ ] Test full-mode ingest on one case.
-- [ ] Test hybrid handling — does a PET/CT session stay as one acquisition? Verify `modalities_in_study` field.
+| Series ID | Date(s) | Animals | PET | CT | Notes |
+|---|---|---|---|---|---|
+| 0525 | 251029 | m13–m22 | 12 | 12 | All one session date |
+| 1207 | 251021 + 3 dates | various | 30 | 30 | Multi-visit study |
+| **Total** | | | **42** | **42** | **84 .tgz archives, ~298 GB compressed** |
+
+All from operator `irene` under PI Jesus. All Molecubes (PET + CT modalities; no SPECT/OI in this archive).
+
+**Pipeline (orchestrated by the operator):**
+
+1. **Extraction:** `python tools/extract_ni_archives.py --archive-root "//cicmgsp02/gnuclear2\$/2025/Jesus/" --staging "D:/projects/Nuke/test_data/"` — pulls each `.tgz`, extracts with `--strip-components=6` to its own folder under D:. Idempotent (`.extracted` sentinel). Retry-hardened against transient `WinError 59` SMB drops (observed in the round-8 first run on 2026-05-22).
+2. **Ingest:** `python tools/ingest_raw.py --config tools/configs/ni_jesus_archive_2025_TEST.yaml --nas-root J:/` — folder-as-primary ingest from the staged copies. Idempotent via the registry's (acquisition_date, original_name) dedup.
+
+**Files created (2026-05-22):**
+- [`tools/extract_ni_archives.py`](../tools/extract_ni_archives.py) — SMB → staging extraction utility.
+- [`tools/templates/instruments/molecubes_ni.yaml`](../tools/templates/instruments/molecubes_ni.yaml) — per-instrument template with exhaustive `discovered.*` reference card.
+- [`tools/configs/ni_jesus_archive_2025_TEST.yaml`](../tools/configs/ni_jesus_archive_2025_TEST.yaml) — round-8 batch config.
+
+**Files updated (2026-05-22):**
+- [`tools/ingest/resolver.py`](../tools/ingest/resolver.py) — `normalize_acquisition_datetime` now handles the 14-digit `YYYYMMDDhhmmss` form from Molecubes archive names.
+- [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md) — rewritten for archive mode + corrected the earlier "DICOM .dcm at leaf" claim (Molecubes is .bin + XML aux).
+
+**Execution checklist (round 8 archive-mode):**
+
+- [x] ~~Pilot: 2 archives (m13 PET + m13 CT, series 0525) end-to-end.~~ Done 2026-05-22; both landed in `proj-ae-biomegune-0525` with cross-modality session_id grouping confirmed.
+- [ ] **Full extraction** of all 84 .tgz to D:/projects/Nuke/test_data/ (~70 min estimated; in progress 2026-05-22).
+- [ ] **Full ingest** of all 84 acquisitions to NAS (~70 min estimated; chained behind extraction).
+- [ ] **Verify on NAS:** 84 NI registry rows (42 PET + 42 CT), `proj-ae-biomegune-0525` (round 0525 series) + `proj-ae-biomegune-0424` (1207 series) gain the new shortcuts (cross-modality with round-6 MRI), `metadata.json.dicom` blocks empty (no NI extractor — future work).
+- [ ] **00_INDEX.md** version history entry once complete.
+
+**Live-machine workflow follow-up (future, not in scope this round):**
+- [ ] **Ryan:** Resolve the open question with Unai on the naming convention; submit data-workflow documentation + example.
+- [ ] Once unblocked: design and ship a live-mode per-instrument template (`molecubes_ni_live.yaml` or similar). Source = a folder on the acq machine, not a .tgz on the archive. Different inner structure, possibly DICOM/NIfTI exports.
+
+**Deferred (queued in §3.1 or §3.2):**
+- [ ] **NI XML-aux metadata extractor** — analogous to ParaVision's `paravision_metadata.py` but parsing Molecubes XML (`protocol.xml`, `acqparams.xml`, `recontemplate.xml`) into `discovered.ni_*` fields + a structured `dicom:` sidecar block. Currently the round-8 sidecar `dicom:` block is empty `{}` — honest about what isn't extracted yet.
+- [ ] **MILabs VECTor format check** — when MILabs data appears in our archives, audit its inner structure (it may differ from Molecubes; the platform description says it exports both DICOM and NIfTI).
+- [ ] **User-as-operator permissions** for internal NI — same model gap as internal MRI (§3.1 future work).
 
 ### 4.8 Pass 5: NIfTI (if applicable)
 > Only if Nuclear Imaging platform provides NIfTI. Single file, no archive, limited header metadata.

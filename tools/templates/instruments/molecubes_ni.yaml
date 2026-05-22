@@ -1,0 +1,224 @@
+# Per-instrument template — Molecubes Nuclear Imaging (PET / SPECT / CT / OI).
+# Instrument codes: PET | SPECT | CT (one per .tgz archive — set per case
+# via discovered.modality from the archive name regex). Ecosystem: DICOM
+# (folder-as-primary layout, same as internal MRI).
+#
+# **Archive-mode ingest (round 8, 2026-05-22).** This template targets
+# the **archived** Nuclear Imaging data on `\\cicmgsp02\gnuclear2$\<year>\<PI>\`.
+# Real-time / live-machine ingest will eventually look different
+# (folder source from the acquisition machine, not a .tgz from the
+# archive), and will get its own per-instrument template when that
+# stream lands. See `equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`
+# for the full archive-vs-live design.
+#
+# Source: a directory of EXTRACTED archives under a local staging root.
+# `tools/extract_ni_archives.py` is the companion utility that pulls
+# .tgz files from the SMB archive and extracts them (with
+# --strip-components=6) so each staged folder directly contains the
+# acquisition's files (protocol.xml, recon_<idx>/, etc.). The staged
+# folder name = the archive basename (e.g.
+# `irene_0525_251029_0525_m14_20251029100641_PET`) — that basename is
+# what this template's regex parses to extract user / series_id /
+# date / short_project / short_sample / timestamp / modality.
+#
+# Copy this file to `tools/configs/ni_<batch>.yaml`, edit the marked
+# placeholders, then run.
+#
+# ============================================================================
+# AUTO-DISCOVERED FIELDS AVAILABLE TO THE OPERATOR
+# ============================================================================
+# Every entry below is automatically populated per acquisition (per .tgz
+# archive) by the filename regex below. Referenceable as `discovered.<name>`
+# (bare ref) or `${discovered.<name>}` (interpolation).
+#
+# Archive-basename regex (from filename_parse with `source: name` —
+# the staged folder name IS the archive basename):
+#   discovered.user                    user who acquired the data
+#                                       (e.g. "irene")
+#   discovered.series_id               funded-project id — DIFFERENT from
+#                                       the animal-protocol short_project
+#                                       (e.g. "0525" or "1207")
+#   discovered.acq_date_short          YYMMDD form of the acquisition date
+#                                       (e.g. "251029")
+#   discovered.short_project           animal-protocol short id (4-digit;
+#                                       sometimes matches series_id, often not)
+#   discovered.short_sample            animal id (e.g. "m14", "m17"; OR
+#                                       free-text like "phantom_xyz" for QC)
+#   discovered.acq_datetime_full       full YYYYMMDDhhmmss timestamp of the
+#                                       acquisition (e.g. "20251029100641")
+#   discovered.modality                imaging modality, also used as the
+#                                       instrument code: PET | CT | SPECT | OI
+#
+# Standard auto-discovery (any instrument):
+#   discovered.folder_name             basename of the matched (staged)
+#                                       folder — same as the archive basename
+#                                       (e.g. "irene_0525_251029_0525_m14_20251029100641_PET")
+#
+# NO .dcm-embedded extraction (yet). Molecubes archives contain
+# .bin reconstruction files + XML aux metadata (`protocol.xml`,
+# `acqparams.xml`, `recontemplate.xml`, etc.), not DICOM at the leaf.
+# A future-work extractor could parse those XML files into
+# `discovered.ni_*` fields analogous to ParaVision's
+# `discovered.mri_*`; queued in tasks/tasks.md §3.1 Future work.
+#
+# Resolver also provides these in resolver-evaluated fields below:
+#   ${instrument}              resolved per-case (PET / CT / SPECT)
+#   ${sample_id}               resolved per registry: block
+#   ${session_id}              resolved per registry: block
+#   ${acquisition_datetime}    resolved ISO datetime
+#   ${original_name}           archive basename (e.g.
+#                              "irene_0525_251029_0525_m14_20251029100641_PET")
+#   ${acq_id}                  generated ACQ-ID (e.g. ACQ-20251029-PET-001)
+#   ${acq_date}                YYYYMMDD form of the acquisition date
+#
+# ============================================================================
+# WHAT'S PRE-FILLED (don't touch unless you know why)
+# ============================================================================
+#   - `pattern: "*/"` — matches every staged archive folder (one level
+#     deep under staging_dir; trailing slash matches directories).
+#   - `filename_parse.regex:` — parses the archive basename into 7 fields.
+#     Source defaults to the match basename (the staged folder name).
+#     See archive-name convention in
+#     equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md.
+#   - `instrument: discovered.modality` — PER-CASE instrument code from
+#     the parsed modality field. PET/CT/SPECT are all valid INSTRUMENT
+#     codes mapping to ecosystem DICOM (see config.INSTRUMENT_ECOSYSTEM).
+#   - `acquisition_layout: folder` — folder-as-primary; no zip. Same
+#     model as internal MRI (round 6).
+#   - `data_ecosystem: DICOM` — even though the Molecubes archive
+#     contains .bin files + XML rather than .dcm, the platform sits
+#     in the DICOM ecosystem family. See 03_RAW_STORAGE §4.2 for the
+#     per-ecosystem primary-entity shape table.
+#   - `sample_type: organism` — in-vivo nuclear imaging is on whole
+#     animals (DRAFT REMBI vocab, 06_REGISTRIES §2.4).
+#   - `session_id` — groups all modality acquisitions (PET + CT, etc.)
+#     for the same (animal, date) into one ISA "study". The composite
+#     `<user>_<series_id>_<acq_date_short>_<short_sample>` is stable
+#     across modalities for one session: a PET .tgz and a CT .tgz of
+#     animal m14 on 2025-10-29 both resolve to the same session_id.
+#   - `project_hint: ae-biomegune-${discovered.short_project}` — same
+#     pattern as AxioScan / MRI: the animal-protocol short id becomes
+#     the project short_name. Cross-modality reuse with existing
+#     `proj-ae-biomegune-{0423,0424,0525}` workspaces from rounds 4 + 6
+#     happens automatically when short_project matches.
+#   - `auto_create_project:` — owner = NI-platform (no dedicated
+#     technician; researchers run the equipment).
+#   - `link_filename:` — `<modality>_<short_sample>_<acq_date>_<acq_datetime_full>`.
+#     Example: `PET_m14_20251029_20251029100641`. Unique per .tgz.
+#
+# ============================================================================
+# WHAT YOU MUST EDIT PER BATCH
+# ============================================================================
+#   - `auto_discover.staging_dir`         <-- local staging dir where
+#                                              extract_ni_archives.py
+#                                              wrote the extracted folders
+#   - `registry.instrument_model`         <-- "Molecubes" or "MILabs VECTor"
+#                                              depending on which platform
+#                                              produced this batch
+#   - `registry.notes`                    <-- short batch description
+#
+# What you may want to change per batch (rarely):
+#   - `ingest.delete_source_after_ingest` (default false — keep the
+#     extracted staged copies for re-runs unless disk pressure forces
+#     cleanup)
+#   - `ingest.auto_create_projects` (default true — NI projects auto-
+#     created from short_project, reuse across modalities)
+#
+# Extends the universal starter at tools/templates/ingest_template.yaml.
+# Structural reference: tools/templates/instruments/mri_bruker.yaml
+# (folder-as-primary + modality-as-instrument).
+#
+# --------------------------------------------------------------------------
+# ⚠️ ARCHIVE-MODE vs LIVE-MODE
+# --------------------------------------------------------------------------
+# This template is **archive-mode** — sources are pre-extracted .tgz
+# archives from `\\cicmgsp02\gnuclear2$`. The live machine workflow
+# (when we have FTP/SMB credentials and access to the acquisition box
+# directly) will look different — the source will be a folder on the
+# acquisition machine, not a .tgz on the archive. That will eventually
+# get its own per-instrument template (e.g. `molecubes_ni_live.yaml`)
+# alongside this one. Until then, archive-mode is the only NI path.
+# --------------------------------------------------------------------------
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+  acquisition_layout: folder
+
+auto_discover:
+  # EDIT: local staging directory where `tools/extract_ni_archives.py`
+  # has dropped the extracted archive folders. Each subfolder = one
+  # acquisition (one .tgz worth of content, with the 6-level outer
+  # nesting stripped).
+  staging_dir: "D:/projects/Nuke/test_data"
+  pattern: "*/"
+  filename_parse:
+    # Parse the staged folder basename (which equals the archive
+    # basename without .tgz). Source defaults to "name" — the match
+    # basename — which is exactly what we want.
+    # Example matched name:
+    #   irene_0525_251029_0525_m14_20251029100641_PET
+    # The greedy `[a-z]+` user, fixed-width date, and explicit modality
+    # alternation lock the structure tightly.
+    regex: '^(?P<user>[a-z]+)_(?P<series_id>\d+)_(?P<acq_date_short>\d{6})_(?P<short_project>\d+)_(?P<short_sample>[A-Za-z]+\d+|phantom[_a-z0-9]*)_(?P<acq_datetime_full>\d{14})_(?P<modality>PET|CT|SPECT|OI)$'
+
+  # No embedded-metadata extraction yet — Molecubes archives don't
+  # contain DICOM at the leaf, and an XML-aux extractor is queued as
+  # future work. Setting embedded_metadata: false would be more honest
+  # but the default (true) is fine since no extractor is registered for
+  # this folder shape — it just returns nothing.
+
+registry:
+  # PER-CASE instrument code from the parsed modality. The
+  # config.INSTRUMENT_ECOSYSTEM map accepts PET / CT / SPECT / OI here.
+  instrument:           discovered.modality
+  data_ecosystem:       DICOM
+  # EDIT: which platform produced this batch.
+  instrument_model:     "Molecubes (PET/SPECT/CT)"
+  modalities_in_study:  NA
+  # NI has no dedicated technician — researchers run the equipment
+  # themselves. For the registry's operator column we record the
+  # platform group; the actual user is captured via discovered.user
+  # and project ownership.
+  operator:             NI-platform
+  data_source:          internal
+  # sample_id composite: short_sample (animal) + short_project (the
+  # animal-protocol id). Multiple acquisitions per (animal, project)
+  # legitimately share a sample_id by REMBI semantics.
+  sample_id:            "${discovered.short_sample}_${discovered.short_project}"
+  sample_type:          organism
+  # Session groups all modality scans for the same (user, series_id,
+  # date, animal) into one ISA "study" — e.g. a PET .tgz and a CT
+  # .tgz of m14 on 2025-10-29 will share this session_id.
+  session_id:           "${discovered.user}_${discovered.series_id}_${discovered.acq_date_short}_${discovered.short_sample}"
+  # Use the full YYYYMMDDhhmmss timestamp from the archive name for
+  # the registry acquisition_datetime. The resolver's normalize step
+  # will convert plain digits to YYYYMMDD format; for a 14-digit
+  # timestamp the existing path-through behaviour preserves it.
+  # The first 8 chars give us acq_date (YYYYMMDD) for the ACQ-ID.
+  acquisition_datetime: discovered.acq_datetime_full
+  # Same animal-protocol convention as AxioScan + MRI rounds: the
+  # short_project becomes the project short_name. Cross-modality reuse
+  # with existing workspaces happens automatically when short_project
+  # matches (PROJ-0003 = ae-biomegune-0423, PROJ-0004 = ae-biomegune-0424,
+  # PROJ-0005 = ae-biomegune-0525). Some NI batches may have
+  # short_project values that don't yet have a workspace — auto-create
+  # handles those.
+  project_hint:         "ae-biomegune-${discovered.short_project}"
+  notes:                "Archive-mode NI ingest (round 8): ${discovered.modality} of ${discovered.short_sample} (animal protocol ${discovered.short_project}, funded project ${discovered.series_id}); operator ${discovered.user}, acquired ${discovered.acq_datetime_full}"
+
+# First-time project-creation defaults (10_TOOLS §2.1.4). NI projects
+# typically already exist (PROJ-0003..0005 from rounds 4 + 6 via the
+# same ae-biomegune-NNNN short_name); auto-create only fires when a
+# previously-unseen short_project shows up.
+auto_create_project:
+  owner:       "NI-platform"
+  description: "Auto-created during NI archive-mode ingest; animal-protocol short id ${discovered.short_project} (funded project ${discovered.series_id}). PROVISIONAL project_hint — see 05_PROJECTS §9."
+  notes:       "Auto-created on first NI ingest. Edit owner via _project.yaml to record the researcher behind the animal protocol."
+
+# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
+# Unique per .tgz archive (the timestamp + modality combination is
+# globally unique on the acquisition machine). Example resolved:
+#   PET_m14_20251029_20251029100641
+# (the .lnk extension is appended by linker.create_lnk).
+link_filename: "${discovered.modality}_${discovered.short_sample}_${acq_date}_${discovered.acq_datetime_full}"
