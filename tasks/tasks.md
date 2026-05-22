@@ -21,7 +21,7 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 | 5 | Cell Observer (CELL) | **165 acqs across PROJ-0006/0007/0008** (`itziar-colageno`, `itziar-alphasma`, `itziar-colageno-permeabilizado`) — exercised **both filename-focused and path-focused metadata extraction** on real Ainhize/Itziar data | `cell_observer_itziar_alphasma_TEST.yaml`, `cell_observer_itziar_colageno_perm_TEST.yaml` |
 | 6 | Internal MRI (Bruker ParaVision) | 97 acqs across PROJ-0003 (26) + PROJ-0004 (71) — cross-modality reuse with round-4 AxioScan workspaces. **First no-zip folder-as-primary layout**; ParaVision JCAMP-DX metadata in `metadata.json.mri`; new `link_filename:` framework produces unique `MRI_<jrc_id>_<acq_date>_<exam>_<recon>.lnk` shortcut names. | `mri_bruker_20251016_TEST.yaml` |
 | 7 | LSM 900 confocal (LSM9) | 13 acqs in PROJ-0009 (`proj-laura`) — first batch LAURA_UPTAKE_LP-IONP-doxo_MDA. Third .czi-family instrument; reuses czi_metadata.py extractor. New folder-name regex on `<researcher>_<experiment>_<cell_line>` batch convention; filename variable-chunk handling deferred. | `lsm900_laura_uptake_TEST.yaml` |
-| 8 | Nuclear Imaging archive (PET/CT) | **In progress 2026-05-22** — archive-mode ingest of Jesus's 2025 NI archive (`\\cicmgsp02\gnuclear2$\2025\Jesus\` — 84 `.tgz` archives, 42 PET + 42 CT, ~298 GB compressed). Pre-extraction via `tools/extract_ni_archives.py` → D:/projects/Nuke/test_data/, then folder-as-primary ingest. **Live-machine mode still pending Unai's workflow answer** — round 8 is archive-mode only. | `ni_jesus_archive_2025_TEST.yaml` |
+| 8 | Nuclear Imaging archive (PET/CT) | **84 acqs** from Jesus's 2025 NI archive (42 PET + 42 CT). Zero new projects: 48 acqs land in `proj-ae-biomegune-0525`, 36 in `proj-ae-biomegune-0424` — full cross-modality reuse with rounds 4 + 6. **Archive mode only** — live-machine still pending Unai's workflow answer. | `ni_jesus_archive_2025_TEST.yaml` |
 
 Round-5 round-up (Cell Observer) detail trail in §4.6.B.
 
@@ -466,10 +466,10 @@ All from operator `irene` under PI Jesus. All Molecubes (PET + CT modalities; no
 **Execution checklist (round 8 archive-mode):**
 
 - [x] ~~Pilot: 2 archives (m13 PET + m13 CT, series 0525) end-to-end.~~ Done 2026-05-22; both landed in `proj-ae-biomegune-0525` with cross-modality session_id grouping confirmed.
-- [ ] **Full extraction** of all 84 .tgz to D:/projects/Nuke/test_data/ (~70 min estimated; in progress 2026-05-22).
-- [ ] **Full ingest** of all 84 acquisitions to NAS (~70 min estimated; chained behind extraction).
-- [ ] **Verify on NAS:** 84 NI registry rows (42 PET + 42 CT), `proj-ae-biomegune-0525` (round 0525 series) + `proj-ae-biomegune-0424` (1207 series) gain the new shortcuts (cross-modality with round-6 MRI), `metadata.json.dicom` blocks empty (no NI extractor — future work).
-- [ ] **00_INDEX.md** version history entry once complete.
+- [x] ~~Full extraction of all 84 .tgz to D:/projects/Nuke/test_data/.~~ Done 2026-05-22 — 82 extracted + 2 skipped (pilot dedup) in 82 minutes; 374 GB total unpacked.
+- [x] ~~Full ingest of all 84 acquisitions to NAS.~~ Done 2026-05-22 — 82/82 success (+ 2 pilot already there) in ~2 hours.
+- [x] ~~Verify on NAS.~~ 84 NI registry rows (42 PET + 42 CT). proj-ae-biomegune-0525: 48 NI .lnk shortcuts (series 0525 m13–m22 PET+CT + 1207-series animals with `short_project=0525`). proj-ae-biomegune-0424: 36 NI .lnk shortcuts (1207-series animals with `short_project=0424`). All `metadata.json.dicom` blocks empty as designed (no NI XML-aux extractor yet).
+- [x] ~~00_INDEX.md version history entry.~~
 
 **Live-machine workflow follow-up (future, not in scope this round):**
 - [ ] **Ryan:** Resolve the open question with Unai on the naming convention; submit data-workflow documentation + example.
