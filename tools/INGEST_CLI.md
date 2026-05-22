@@ -49,13 +49,15 @@ The script is idempotent: re-running the same config skips acquisitions already 
 
 ## Config schema cheat-sheet
 
-Every config has three top-level blocks. Full spec in [`10_TOOLS.md §2.1`](../mfb-rdm-docs/10_TOOLS.md). Start from the **per-instrument template** at [`tools/templates/instruments/<instrument>.yaml`](templates/instruments/) (currently: `axioscan7.yaml`). For instruments without a per-instrument template, fall back to the universal [`tools/templates/ingest_template.yaml`](templates/ingest_template.yaml) and ask the Data Mgmt Lead before running.
+Every config has up to four top-level blocks (three required + one optional, plus a top-level `link_filename:` string). Full spec in [`10_TOOLS.md §2.1`](../mfb-rdm-docs/10_TOOLS.md). Start from the **per-instrument template** at [`tools/templates/instruments/<instrument>.yaml`](templates/instruments/). For instruments without a per-instrument template, fall back to the universal [`tools/templates/ingest_template.yaml`](templates/ingest_template.yaml) and ask the Data Mgmt Lead before running.
 
-| Block | Purpose |
-|-------|---------|
-| `ingest:` | Pipeline control flags. Not registry columns. Example keys: `delete_source_after_ingest`, `auto_create_projects`. |
-| `auto_discover:` | How to find cases inside `staging_dir` and what variables to extract. Each case's parsed values land in `discovered.<name>`. |
-| `registry:` | Explicit per-column mapping. Values are: literal (`MFB`), bare reference (`discovered.operator`), interpolation (`"${discovered.stain} at ${discovered.czi_objective_mag}x"`), or `NA`. |
+| Block | Required? | Purpose |
+|-------|-----------|---------|
+| `ingest:` | Yes | Pipeline control flags. Not registry columns. Keys: `delete_source_after_ingest`, `auto_create_projects`, `acquisition_layout` (`file` \| `archive` \| `folder`; round-6 added), `reconstructions` (`all` \| int \| list; MRI-specific). |
+| `auto_discover:` | Yes | How to find cases inside `staging_dir` and what variables to extract. Supports `filename_parse:` (positional `separator:` + `fields:` OR named-group `regex:`; optional `source: name \| parent_name`) and `path_parse:` (named path levels between staging_dir and the match). Each case's parsed values land in `discovered.<name>`. |
+| `registry:` | Yes | Explicit per-column mapping. Values: literal (`MFB`), bare reference (`discovered.operator`), interpolation (`"${discovered.stain} at ${discovered.czi_objective_mag}x"`), or `NA`. New DRAFT columns since round 6: `session_id` (ISA "study" grouping) and `primary_kind` (auto, set by pipeline). |
+| `auto_create_project:` | Optional | First-time project-creation metadata (owner / description / notes), resolver-evaluated. First-write-wins. |
+| `link_filename:` (top-level string, NEW 2026-05-22) | Optional | Template for the `.lnk` shortcut name placed under `/projects/<proj>/raw_linked/`. Context = `discovered.*` + resolved registry fields + `${acq_id}` + `${acq_date}`. Per-instrument templates ship recommended defaults. Falls back to `original_name` when unset (backward-compatible with rounds 1-2/4/5). See [10_TOOLS §2.1.5](../mfb-rdm-docs/10_TOOLS.md). |
 
 ### Filename chunks are free-form labels
 
@@ -75,7 +77,27 @@ registry:
 
 ### Auto-populated columns (do NOT list in `registry:`)
 
-The pipeline fills these itself: `acq_id`, `registration_datetime`, `primary_file_name`, `original_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `ingest_config`.
+The pipeline fills these itself: `acq_id`, `registration_datetime`, `primary_kind`, `primary_file_name`, `original_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `ingest_config`.
+
+### `link_filename:` — control the .lnk shortcut name (NEW 2026-05-22)
+
+By default, the `.lnk` shortcut placed under `/projects/<proj>/raw_linked/` is named after `original_name` (e.g. the `.czi` filename or the collaborator zip name). For systematic-naming environments (internal MRI, future internal NI) where the *source* identifier is a folder path + numeric position, the default would collide when multiple sessions land in the same project (e.g. four animals with the same exam number). Set `link_filename:` at the top level of the YAML to override:
+
+```yaml
+# Internal MRI default — unique per (animal, exam, reconstruction):
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
+# Resolved example: MRI_jrc_251016_m17_0424_20251016_29_3
+```
+
+The resolver context includes every `discovered.*` field (see the per-instrument template header for the full reference card per instrument), every resolved registry field (`${sample_id}`, `${instrument}`, etc.), and the computed `${acq_id}` + `${acq_date}` (YYYYMMDD). Unresolved `${X}` references log a WARN and leave the literal in place — better than silently producing a broken name.
+
+### Sister utilities (standalone tools)
+
+| Tool | Purpose |
+|------|---------|
+| [`tools/ftp_mirror.py`](ftp_mirror.py) | SFTP mirror — pulls a remote directory tree from a platform server into a local staging dir. Used for MRI (round 6) and the future NI round. Decoupled from `ingest_raw.py`: fetch first, then run ingest against the local copy. |
+| [`tools/migrate_registry_columns.py`](migrate_registry_columns.py) | One-shot schema migration for `registry_raw.csv` when `REGISTRY_FIELDS` gains new columns. The defensive header check in `registry.append_row` blocks ingests until this runs. Backs up the original to `.bak.<timestamp>` before overwriting. |
+| [`tools/ingest/probe_czi.py`](ingest/probe_czi.py), [`tools/ingest/probe_paravision.py`](ingest/probe_paravision.py) | Read-only embedded-metadata probes for `.czi` and Bruker ParaVision exam folders. Dump parsed metadata + the curated `discovered.<eco>_*` subset to `_probes/` for review before a real ingest. |
 
 ---
 
@@ -103,7 +125,11 @@ tools/configs/
 
 | Instrument | Template | Notes |
 |------------|----------|-------|
-| Zeiss AxioScan 7 (`ZWSI`, `.czi`) | [`tools/templates/instruments/axioscan7.yaml`](templates/instruments/axioscan7.yaml) | MFB filename convention; auto-create projects from filename's `<project>` chunk |
+| Zeiss AxioScan 7 (`ZWSI`, `.czi`) | [`tools/templates/instruments/axioscan7.yaml`](templates/instruments/axioscan7.yaml) | MFB filename convention; auto-create projects from filename's `<project>` chunk; default `link_filename: ${instrument}_${original_name}` |
+| Zeiss Cell Observer cells-mode (`CELL`, `.czi`) | [`tools/templates/instruments/cell_observer_cells.yaml`](templates/instruments/cell_observer_cells.yaml) | Path-and-filename parse for live-cell / cell-assay workflows (Ainhize-acquired); default `link_filename: ${instrument}_${original_name}` |
+| Internal MRI / Bruker ParaVision (`MRI`, folder bundle) | [`tools/templates/instruments/mri_bruker.yaml`](templates/instruments/mri_bruker.yaml) | Folder-as-primary layout, `regex:` extract on the messy FTP folder name, `reconstructions:` flag, default `link_filename: MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}` |
+
+Each template's **header comment block lists every `discovered.*` field** the operator can reference in resolver-evaluated YAML fields — the per-instrument reference card.
 
 ---
 

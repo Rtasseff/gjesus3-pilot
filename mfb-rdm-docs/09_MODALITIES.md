@@ -1,8 +1,8 @@
 # 09 — Supported Modalities
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** ⚠️ Gaps identified  
-**Last Updated:** 2026-05-06
+**Status:** ⚠️ Gaps identified
+**Last Updated:** 2026-05-22 (Internal MRI §1.4 updated for round-6 folder-as-primary layout + `discovered.mri_*` table)
 
 ---
 
@@ -23,9 +23,9 @@ The instruments in scope fall into two categories, and the meaning of "raw" data
 | Category | What goes to gjesus3 | Example |
 |----------|----------------------|---------|
 | **Microscopes** (lab-operated) | Actual instrument output — the native image files | .czi files from Zeiss microscopes |
-| **Platform instruments** (MRI, Nuclear Imaging) | Reconstructed images provided to researchers by the platform | DICOM (stored as compressed archives on gjesus3), possibly NIfTI |
+| **Platform instruments** (MRI, Nuclear Imaging) | Reconstructed images provided to researchers by the platform | DICOM and/or NIfTI; on-disk shape varies by ecosystem (see [03_RAW_STORAGE §4](03_RAW_STORAGE.md)). Internal MRI uses folder-as-primary (no zip) since round 6 (2026-05-20). Collaborator DICOM continues with the legacy zipped-archive shape. |
 
-The platforms manage and archive their own true raw acquisition data (e.g., PET listmode files, raw k-space MRI data). That data is usually not useful to researchers. Our "raw" for platform data is the reconstructed images.
+The platforms manage and archive their own true raw acquisition data (e.g., PET listmode files, raw k-space MRI data). gjesus3 is the **research-facing working layer** — see [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) for the two-tier framing. Our "raw" for platform data is the reconstructed images.
 
 ---
 
@@ -118,7 +118,7 @@ The richer structured form of all the above plus channels/detectors/objective li
 | **Analysis tools** | ZEN, ImageJ/FIJI, QuPath, Napari |
 | **Status** | ✅ Confirmed for pilot |
 
-### 1.4 Reconstructed Biomedical Imaging — MRI Platform
+### 1.4 Reconstructed Biomedical Imaging — Internal MRI Platform
 
 | Attribute | Value |
 |-----------|-------|
@@ -126,16 +126,48 @@ The richer structured form of all the above plus channels/detectors/objective li
 | **Category** | Platform instrument (reconstructed data) |
 | **Code** | `MRI` |
 | **Capabilities** | High-resolution anatomical (2D/3D), ultrafast (EPI, spiral), parallel imaging (GRAPPA, mSENSE), multinuclear spectroscopy (1H, 13C, 19F, 31P) |
-| **Source format** | DICOM (.dcm directories) — provided by MRI platform as expanded directories |
-| **Storage on gjesus3** | Compressed archive (.zip or .tar.gz) — DICOM directories are archived before deposit |
-| **Typical size** | 100 MB - 10 GB per series |
-| **Embedded metadata** | Extensive (DICOM standard) |
-| **Not embedded** | Study context beyond DICOM headers |
-| **Analysis tools** | 3D Slicer, ITK-SNAP, MATLAB, PMOD |
-| **Raw data responsibility** | MRI platform archives true raw data (k-space, FIDs) |
-| **Status** | ✅ Confirmed for pilot |
+| **Source format** | Bruker ParaVision exam folders (with `acqp` / `method` / `visu_pars` JCAMP-DX aux files + `pdata/<idx>/` reconstructions containing `2dseq` binaries + Bruker-exported `.dcm` per frame) |
+| **Storage on gjesus3** | **Folder-as-primary** (since round 6, 2026-05-22) — the acquisition folder IS the unit; no zip. Layout: `<ACQ>/metadata.json` + `<ACQ>/checksums.json` at root, `<ACQ>/acquisition_aux/` for exam-level aux files, `<ACQ>/reconstructions/pdata_<idx>/` per reconstruction kept by the `reconstructions:` YAML flag. Registry's `primary_kind = folder`. See [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
+| **Typical size** | 1-50 MB per acquisition with one reconstruction kept; multiples if `reconstructions: all` |
+| **Embedded metadata** | Extensive (Bruker JCAMP-DX text aux files — the canonical source. DICOM headers also present in `pdata/<idx>/dicom/*.dcm` but currently treated as derivatives). |
+| **Not embedded** | Study context beyond what `subject` already captures (e.g. research question, sample preparation details) |
+| **Analysis tools** | 3D Slicer, ITK-SNAP, FSL, nibabel (most expect NIfTI; round-6 ingest does NOT generate NIfTI — that's a project-level tool, future, see [08_METADATA §1.5a](08_METADATA.md)) |
+| **Raw data responsibility** | MRI platform archives true raw data (k-space, FIDs) — gjesus3 does not replicate that role |
+| **Operator model** | **No dedicated technician** — researchers run the scanner themselves. Permission model for ingest-time `/raw/` writes is future work (see `tasks/tasks.md` §3.3 user-as-operator). |
+| **Status** | ✅ Pilot ingest round 6 complete (97 acqs in quasi-production state, 2026-05-22). Convention + workflow documented in [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md). |
 
-> **📣 INPUT NEEDED:** Do the two MRI systems need separate instrument codes (e.g., `MRI7` and `MRI11`), or is a single `MRI` code sufficient?
+> **📣 INPUT NEEDED:** Do the two MRI systems need separate instrument codes (e.g., `MRI7` and `MRI11`), or is a single `MRI` code sufficient? Round 6 used shared `MRI` for sample data from the 7T system; question carried forward to first 11.7T batch.
+
+#### Auto-discovered fields (`discovered.mri_*`)
+
+These are surfaced from each Bruker ParaVision exam at ingest time by `tools/ingest/paravision_metadata.py`'s `EXPOSED_FIELDS`, parsed out of the JCAMP-DX `subject` (study root) + `acqp` / `method` / `visu_pars` (exam) + per-reconstruction `visu_pars` / `reco` files. Available for reference in any resolver-evaluated YAML field (`registry:`, `auto_create_project:`, `link_filename:`). The Python source is the single source of truth; this table is its mirror.
+
+| Field | Description | JCAMP-DX source |
+|-------|-------------|-----------------|
+| `mri_study_name` | Study name from `subject` (canonical study/session identifier; same as `mri_animal_id` in MFB convention) | `subject.SUBJECT_study_name` |
+| `mri_animal_id` | Subject/animal ID (typically matches study name) | `subject.SUBJECT_id` |
+| `mri_animal_sex` | Animal sex | `subject.SUBJECT_sex` |
+| `mri_animal_weight` | Animal weight (units per platform — typically kg in ParaVision) | `subject.SUBJECT_weight` |
+| `mri_animal_type` | Animal type / category (e.g. `"Quadruped"`) | `subject.SUBJECT_type` |
+| `mri_position` | Animal positioning (e.g. `"SUBJ_POS_Supine"`) | `subject.SUBJECT_position` |
+| `mri_study_datetime` | Study start datetime from `subject` (ParaVision local time) | `subject.SUBJECT_date` |
+| `mri_paravision_version` | ParaVision software version (e.g. `"7.0.0"`) | parsed from any `TITLE` line |
+| `mri_exam_number` | ParaVision Examination Entry number (the exam folder name) | derived from exam path |
+| `mri_acquisition_datetime` | Per-exam creation datetime from `visu_pars` (used in registry's `acquisition_datetime`) | `visu_pars.VisuCreationDate` |
+| `mri_modality` | DICOM-style modality code from `visu_pars` (typically `"MR"`) | `visu_pars.VisuInstanceModality` |
+| `mri_sequence_name` | Bruker method / sequence name (e.g. `"Bruker:IgFLASH"`) | `method.Method` |
+| `mri_pulse_program` | Pulse program file (e.g. `"IgFLASH.ppg"`) | `acqp.PULPROG` |
+| `mri_nucleus` | Primary nucleus (e.g. `"1H"`) | `method.PVM_Nucleus1` |
+| `mri_echo_time_ms` | Echo time TE in ms | `method.PVM_EchoTime` |
+| `mri_repetition_time_ms` | Repetition time TR in ms | `method.PVM_RepetitionTime` |
+| `mri_scan_time_str` | Human-readable scan duration (e.g. `"0h3m17s865ms"`) | `method.PVM_ScanTimeStr` |
+| `mri_matrix` | Acquisition matrix as `"NxM"` (e.g. `"256x128"`) | `method.PVM_Matrix` |
+| `mri_frame_count` | Number of frames in the reconstructed image (slices / cardiac frames / etc.) | `visu_pars.VisuCoreFrameCount` |
+| `mri_recon_indices` | Comma-separated list of `pdata/<idx>/` reconstructions present in the source (e.g. `"1,3"`) | derived from `pdata/` directory listing |
+
+The richer structured form of all the above plus the full parsed JCAMP-DX dump is preserved in the sidecar's `mri:` block — see [08_METADATA §4.3](08_METADATA.md). Library / route choice (manual JCAMP-DX parser via `tools/ingest/jcampdx.py`; no third-party deps) and what's deferred (Enhanced MR / Multi-Frame DICOM evaluation, our-own-DICOM regeneration, project-level NIfTI generation) is tracked in `tasks/tasks.md` §3.1 Future work.
+
+For the systematic naming convention used by the MRI platform (parsable folder-name structure, `jrc` vs `jrc_` PI-initials ambiguity, animal-id composition, terminology distinction from Nuclear Imaging's "project"), see [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) "Systematic naming convention (parsable)" section.
 
 ### 1.5 Reconstructed Biomedical Imaging — Nuclear Imaging Platform
 
@@ -317,4 +349,5 @@ For each confirmed data type, we need a short walkthrough covering:
 | MOD-04 | Complete metadata audit per format | Data Mgmt Lead | ⚠️ Incomplete |
 | MOD-05 | Confirm DICOM as output format from MRI and Nuclear Imaging platforms | Data Mgmt Lead + Platforms | ⚠️ Needs confirmation |
 | ~~MOD-06~~ | ~~Assign instrument codes for Cell Observer and LSM 900~~ | — | ✅ Resolved: `CELL` and `LSM9` |
-| MOD-07 | Confirm Cell Observer and LSM 900 .czi metadata is similar to WSI .czi | Data Mgmt Lead | 📋 Planned |
+| ~~MOD-07~~ | ~~Confirm Cell Observer and LSM 900 .czi metadata is similar to WSI .czi~~ | — | ✅ Resolved (Cell Observer): round-5 ingest 2026-05-15 confirmed `.czi` from Cell Observer surfaces the same 21 curated `discovered.czi_*` fields as AxioScan; `tools/ingest/czi_metadata.py` reused 1:1. LSM 900 confirmation still pending (awaiting Ainhize Urkola Arsuaga's example) but expected to follow the same pattern given shared format + vendor + ZEN software family. |
+| MOD-08 | Internal MRI: `discovered.mri_*` table mirrors `paravision_metadata.EXPOSED_FIELDS` — when the extractor grows fields, update §1.4 in lockstep | Data Mgmt Lead | ✅ Convention documented (CLAUDE.md cross-ref rule); currently in sync as of 2026-05-22 |

@@ -10,7 +10,14 @@ There are two categories of equipment, and the meaning of "raw" data on gjesus3 
 
 **Microscopes (lab-operated):** The actual instrument output (native image files) is deposited directly to gjesus3. This is the true raw acquisition data.
 
-**Institutional imaging platforms (MRI, Nuclear Imaging):** The platforms operate the instruments and manage their own long-term storage of true acquisition data (e.g., PET listmode files, raw k-space MRI data). This truly raw data is usually not useful to end-user researchers. What the platforms provide to researchers are **reconstructed images**, primarily in DICOM format (possibly also NIfTI from Nuclear Imaging). On gjesus3, DICOM data is stored as **compressed archives** (.zip or .tar.gz); these reconstructed images are treated as our "raw" data — the authoritative starting point for the MFB group's analysis and archiving.
+**Institutional imaging platforms (MRI, Nuclear Imaging):** The platforms operate the instruments and manage their own long-term storage of true acquisition data (e.g., PET listmode files, raw k-space MRI data). This truly raw data is usually not useful to end-user researchers. What the platforms provide to researchers are **reconstructed images** — internal MRI as Bruker ParaVision exam folders (with JCAMP-DX aux files + per-frame DICOM); Nuclear Imaging primarily as DICOM (possibly NIfTI from MILabs VECTor).
+
+**On-disk shape on gjesus3 varies per ecosystem** (see [03_RAW_STORAGE §4](../mfb-rdm-docs/03_RAW_STORAGE.md)):
+- **Collaborator DICOM** (legacy, rounds 1-2) = compressed archive (.zip / .tar.gz). 75 acqs deposited 2026-03; not re-shaped.
+- **Internal MRI** (since round 6, 2026-05-22) = **folder-as-primary** (no zip). Acquisition folder contains `acquisition_aux/` + `reconstructions/pdata_<idx>/`. See [`mri-platform/internal_mri_data_handling_workflow_notes.md`](./mri-platform/internal_mri_data_handling_workflow_notes.md) "Systematic naming convention" section.
+- **Internal Nuclear Imaging** (future round) — convention documented in [`nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](./nuclear-imaging/internal_ni_data_handling_workflow_notes.md); on-disk shape TBD when implementation begins.
+
+These reconstructed images are treated as gjesus3's "raw" data — the authoritative starting point for the MFB group's research-facing analysis and archiving. The reframe in [13_GJESUS3_ROLE](../mfb-rdm-docs/13_GJESUS3_ROLE.md) elaborates on the two-tier model: gjesus3 as research-facing working layer, platforms as deep-time raw archive.
 
 ---
 
@@ -107,7 +114,10 @@ The MRI platform has **two** preclinical MRI systems:
 - **True raw data:** Managed and archived by the MRI platform (e.g., k-space data, raw FIDs)
 - **Reference materials** ([`mri-platform/`](./mri-platform/)):
   - Platform description (md) — both BioSpec systems
-  - Data access & ingestion strategy (md) — acquisition machine is NOT directly network-accessible; researchers FTP from acq machine to their workstations. Captures three architectural options (FTP-pull, on-machine push agent, hybrid), recommended pacing, the technical + forward-looking questions to ask the platform manager, and a working email draft. **Pending platform manager input on FTP credentials and folder conventions.**
+  - Data access & ingestion strategy (md) — acquisition machine is NOT directly network-accessible; researchers FTP from acq machine to their workstations. Captures three architectural options (FTP-pull, on-machine push agent, hybrid), recommended pacing, the technical + forward-looking questions to ask the platform manager, and a working email draft. Round-6 (2026-05-22) executed Option A (FTP-from-workstation) using `tools/ftp_mirror.py`.
+  - Data handling workflow notes (md) — full operator walkthrough + **the systematic naming convention** (parsable `<project_folder>/<protocol_number>/pdata/<reconstruction>` structure, `jrc` vs `jrc_` PI-initials ambiguity, `<short sample id>` shape, animal-id composition, MRI "project" vs NI funded-project-id terminology distinction). The reference for what `discovered.*` fields the MRI per-instrument template can expose.
+
+**Round 6 outcome (2026-05-22):** 97 ParaVision exam acquisitions ingested in quasi-production state across PROJ-0003 (26) and PROJ-0004 (71) — cross-modality reuse with round-4 AxioScan project workspaces. No-zip folder-as-primary layout; ParaVision JCAMP-DX metadata in `metadata.json.mri`; unique `MRI_<jrc_id>_<acq_date>_<exam>_<recon>.lnk` shortcut names. Per-instrument template at [`../tools/templates/instruments/mri_bruker.yaml`](../tools/templates/instruments/mri_bruker.yaml).
 
 ### 5. Nuclear Imaging Platform — PET/SPECT/CT/OI
 
@@ -137,6 +147,7 @@ The Nuclear Imaging platform has **two** multimodal imaging systems plus an auto
 - **True raw data:** Managed and archived by the Nuclear Imaging platform (e.g., PET listmode files, raw sinograms)
 - **Reference materials** ([`nuclear-imaging/`](./nuclear-imaging/)):
   - Platform description (md) — covers Molecubes, MILabs VECTor, and autoradiography
+  - Internal NI data-handling workflow notes (md, future-round prep, 2026-05-22) — documents the archive structure on `\\cicmgsp02\gnuclear2$`, the `<archive name>.tgz → .tar → user/series/.../recon_<idx>/frame_<n>iter_30/*.dcm` nested layout, the **funded-project-id** semantics (distinct from MRI's animal-protocol short id), and the proposed `link_filename` pattern for the future NI ingest round. **Not implemented yet** — blocked on Platform Manager Unai answering one outstanding question on the naming convention.
 
 ---
 
