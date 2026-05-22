@@ -1,0 +1,55 @@
+# Round-7 Phase A TEST config — LSM 900 confocal.
+#
+# Scope: LAURA_UPTAKE_LP-IONP-doxo_MDA batch on the LSM 900 confocal
+# microscope. ~14 .czi files (Z-stacks + a few non-Z-stack acquisitions,
+# 6h / 24h / 48h time points + ctrl). Source data lives at
+# K:/gjesus/Ainhize/CONFOCAL LSM 900/LAURA_UPTAKE_LP-IONP-doxo_MDA/
+#
+# This is a TEST INGEST — purge after review. The corresponding
+# production config (notes prefix removed) is
+# lsm900_laura_uptake.yaml (to be created after Phase A passes).
+#
+# Operator: Ainhize Urkola Arsuaga (data) / LAURA (data owner /
+# researcher behind the project).
+# Cell line: MDA. Experiment: UPTAKE of LP-IONP-doxo.
+#
+# The pattern is scoped to the single batch folder for first-pass
+# validation; future round-7 batches widen the pattern to other
+# researchers / experiments under the same K: share.
+#
+# Note: the batch folder contains a `Free doxo/` subfolder with
+# additional .czi files; the non-recursive pattern below intentionally
+# excludes them. Include them in a separate batch config if needed.
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  staging_dir: "K:/gjesus/Ainhize/CONFOCAL LSM 900"
+  pattern: "LAURA_UPTAKE_LP-IONP-doxo_MDA/*.czi"
+  filename_parse:
+    source: parent_name
+    regex: '^(?P<researcher>[^_]+)_(?P<experiment>.+)_(?P<cell_line>[^_]+)$'
+
+registry:
+  instrument:           LSM9
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  operator:             discovered.researcher
+  data_source:          internal
+  sample_id:            "${discovered.cell_line}_${discovered.experiment}"
+  sample_type:          cells
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  project_hint:         "${discovered.researcher}"
+  notes:                "TEST INGEST 2026-05-22 - purge after review (LSM 900 confocal of ${discovered.cell_line} cells; experiment ${discovered.experiment}; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na} ${discovered.czi_acquisition_mode}; ${discovered.czi_size_z}-slice Z-stack)"
+
+auto_create_project:
+  owner:       "${discovered.researcher}"
+  description: "TEST auto-created from LSM 900 round-7 (Phase A) — researcher ${discovered.researcher} (first confocal project workspace). Purge after review. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
+  notes:       "Auto-created on Phase A test ingest 2026-05-22. Will be purged with the rest of the round-7 test artifacts."
+
+# Default microscopy link_filename pattern — modality prefix + source
+# filename. Example resolved: LSM9_Z-stack_LP_IONP-doxo_20x_6h_2.czi
+link_filename: "${instrument}_${original_name}"

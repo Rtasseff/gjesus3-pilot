@@ -1,0 +1,202 @@
+# Per-instrument template — Zeiss LSM 900 confocal microscope.
+# Instrument code: LSM9. Ecosystem: MICROSCOPY.
+#
+# The LSM 900 is the confocal microscope in Room 2.66 (same room and
+# software family as the Cell Observer). It sits on an Axio Observer
+# stage, so the `.czi`-embedded `czi_microscope_name` reports "Axio
+# Observer.Z1 / 7" — same string as Cell Observer. The distinguishing
+# embedded field is `czi_acquisition_mode = "LaserScanningConfocalMicroscopy"`
+# (Cell Observer reports `"WideField"`). Operator + data location are
+# also shared with Cell Observer — the same researchers save their
+# confocal acquisitions to a parallel folder under the same K: share.
+#
+# Like AxioScan 7 and Cell Observer, LSM 900 produces `.czi` files —
+# the same `tools/ingest/czi_metadata.py` extractor surfaces all 21
+# curated `discovered.czi_*` fields verbatim. No new code is needed
+# to ingest this instrument; round 7 (2026-05-22) is a new template
+# + per-batch config + workflow notes only.
+#
+# Copy this file to `tools/configs/lsm900_<researcher>_<experiment>.yaml`
+# (or similar), edit the marked placeholders, then run.
+#
+# ============================================================================
+# AUTO-DISCOVERED FIELDS AVAILABLE TO THE OPERATOR
+# ============================================================================
+# Every entry below is automatically populated per acquisition and may be
+# referenced as `discovered.<name>` (bare ref) or `${discovered.<name>}`
+# (interpolation) in any resolver-evaluated YAML field below.
+#
+# Batch-folder regex (from filename_parse.source: parent_name + regex:
+# applied to the BATCH FOLDER name — see auto_discover below):
+#   discovered.researcher    person who owns the data (e.g. "LAURA")
+#   discovered.experiment    free-form experiment label, may contain
+#                            internal underscores (e.g. "UPTAKE_LP-IONP-doxo")
+#   discovered.cell_line     cell line / sample type (e.g. "MDA")
+#
+# Standard auto-discovery (any instrument):
+#   discovered.filename      full basename incl. .czi extension
+#   (no acquisition_date — LSM 900 batch folders don't carry the date;
+#    the precise timestamp comes from the .czi-embedded value below)
+#
+# .czi-embedded metadata (21 fields, all prefixed `czi_`) — extracted
+# via `czifile` from each file at ingest time. See 09_MODALITIES §1.1
+# for the full per-instrument table. Highlights for LSM 900:
+#   discovered.czi_acquisition_datetime  ISO timestamp (used in registry)
+#   discovered.czi_microscope_name       "Axio Observer.Z1 / 7" (shared
+#                                         stage with Cell Observer — not
+#                                         a reliable distinguisher alone)
+#   discovered.czi_acquisition_mode      "LaserScanningConfocalMicroscopy"
+#                                         (the LSM 900 fingerprint)
+#   discovered.czi_objective_name        objective lens name
+#   discovered.czi_objective_mag         e.g. "20"
+#   discovered.czi_objective_na          numerical aperture
+#   discovered.czi_pixel_size_x_um       µm (and _y_um)
+#   discovered.czi_size_x / _y / _c / _z / _t   image dims
+#                                         (Z-stacks: czi_size_z > 1)
+#   discovered.czi_contrast_method       e.g. "Fluorescence"
+#   discovered.czi_user                  ZEN account
+#   discovered.czi_zen_version           ZEN software version
+#
+# Resolver also provides these in resolver-evaluated fields below:
+#   ${instrument}              "LSM9" after registry resolution
+#   ${sample_id}               resolved per registry: block
+#   ${acquisition_datetime}    resolved ISO datetime
+#   ${original_name}           source filename (the .czi as deposited)
+#   ${acq_id}                  generated ACQ-ID (e.g. ACQ-20240313-LSM9-001)
+#   ${acq_date}                YYYYMMDD form of the acquisition date
+#
+# ============================================================================
+# WHAT'S PRE-FILLED (don't touch unless you know why)
+# ============================================================================
+#   - `pattern: "*/*.czi"` — matches every <batch_folder>/<filename>.czi
+#     under staging_dir, one level deep. Each `.czi` file = one ACQ-ID.
+#     Non-recursive: sub-folders inside a batch (e.g. "Free doxo/")
+#     are NOT picked up — operator can include them via a separate
+#     batch config if needed.
+#   - `filename_parse.source: parent_name` + `regex:` — pulls researcher,
+#     experiment, cell_line out of the batch folder name. Convention:
+#     `<researcher>_<experiment-with-internal-underscores>_<cell_line>`.
+#     Greedy middle group handles underscores inside the experiment
+#     chunk (e.g. "LAURA_UPTAKE_LP-IONP-doxo_MDA" → researcher=LAURA,
+#     experiment=UPTAKE_LP-IONP-doxo, cell_line=MDA).
+#   - `instrument: LSM9`, `data_ecosystem: MICROSCOPY`,
+#     `instrument_model: discovered.czi_microscope_name`.
+#   - `acquisition_datetime: discovered.czi_acquisition_datetime` —
+#     precise timestamp from the .czi (LSM 900 folders don't carry
+#     the date in their names).
+#   - `sample_type: cells` — DRAFT REMBI vocab (06_REGISTRIES §2.4).
+#   - `sample_id: ${cell_line}_${experiment}` — composite
+#     (06_REGISTRIES §2.3); multiple acquisitions per (cell_line,
+#     experiment) legitimately share a sample_id.
+#   - `auto_create_project:` — owner = researcher.
+#   - `link_filename: ${instrument}_${original_name}` — `.lnk`
+#     shortcut prefixed with LSM9_ for clarity in raw_linked/.
+#
+# ============================================================================
+# WHAT YOU MUST EDIT PER BATCH
+# ============================================================================
+#   - `auto_discover.pattern`              <-- scope to the specific
+#                                              batch folder(s) you want
+#                                              to ingest this run, e.g.
+#                                              "LAURA_UPTAKE_LP-IONP-doxo_MDA/*.czi"
+#   - `registry.notes`                     <-- short batch description
+#
+# What you may want to change per batch (rarely):
+#   - `ingest.delete_source_after_ingest` (default false; opt in only
+#     after you've verified a real run for this batch)
+#   - `ingest.auto_create_projects` (default true)
+#
+# Extends the universal starter at tools/templates/ingest_template.yaml.
+# Structural template was Cell Observer cells-mode
+# (`cell_observer_cells.yaml`).
+#
+# --------------------------------------------------------------------------
+# ⚠️ PROVISIONAL PROJECT NAMING — see 05_PROJECTS §9 (PROJ-05)
+# --------------------------------------------------------------------------
+# This template uses `project_hint: ${discovered.researcher}` because
+# LSM 900 confocal batches don't carry a durable project handle the way
+# AxioScan animal-project codes do. The researcher name (lowercased
+# at create-time, e.g. "LAURA" → "laura") becomes the project
+# short_name. This is a STOPGAP — same family of decision as the round-5
+# Cell Observer ${researcher}-${experiment} convention.
+#
+# The right long-term project_hint will come from the group's
+# project-naming consensus conversation (PROJ-05). Until then, the
+# default groups all of one researcher's confocal work into one
+# project workspace, which is at least a reasonable middle ground.
+#
+# Per-batch configs MAY override with a more specific hyphenated string
+# (e.g. project_hint: "laura-uptake-lp-ionp-doxo") if you want batch-
+# granular projects. Mind the validator: `^[a-z0-9][a-z0-9-]*$` —
+# lowercase alphanumeric with hyphens only (NO underscores).
+# --------------------------------------------------------------------------
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  # Absolute path to the LSM 900 share root. Same K: drive + Ainhize
+  # parent folder as Cell Observer; subfolder name is "CONFOCAL LSM 900".
+  staging_dir: "K:/gjesus/Ainhize/CONFOCAL LSM 900"
+
+  # EDIT: scope to the batch folder(s) you're ingesting. One level deep.
+  # Examples:
+  #   pattern: "LAURA_UPTAKE_LP-IONP-doxo_MDA/*.czi"   # one specific batch
+  #   pattern: "LAURA_*/*.czi"                         # all batches by Laura
+  #   pattern: "*/*.czi"                               # everything
+  pattern: "<BATCH-FOLDER>/*.czi"
+
+  filename_parse:
+    # `source: parent_name` targets the batch folder, not the .czi file.
+    # The regex extracts researcher / experiment / cell_line from the
+    # convention `<researcher>_<experiment-w/-internal-underscores>_<cell_line>`.
+    # The greedy `(?P<experiment>.+)` middle group correctly handles
+    # internal underscores in the experiment chunk because the trailing
+    # `_(?P<cell_line>[^_]+)$` anchors cell_line to the last underscore.
+    source: parent_name
+    regex: '^(?P<researcher>[^_]+)_(?P<experiment>.+)_(?P<cell_line>[^_]+)$'
+
+  # Embedded extraction (.czi → discovered.czi_*) populates 21 fields.
+  # Don't turn off unless you know why.
+  # embedded_metadata: true   # default
+
+registry:
+  instrument:           LSM9
+  data_ecosystem:       MICROSCOPY
+  # The microscope-issued name from the .czi keeps configurations
+  # distinguishable in the registry (e.g. multiple LSM 900s at other
+  # sites would each report their own name).
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  # `operator` here records the data OWNER (the researcher whose data
+  # this is). Same model as Cell Observer cells-mode (06_REGISTRIES /
+  # CLAUDE.md note on operator vs data-user). The technician who ran
+  # the scope is implicit in the K: path (Ainhize's folder) and lives
+  # in the sidecar as `discovered.czi_user`.
+  operator:             discovered.researcher
+  data_source:          internal
+  # Composite sample_id. Multiple .czi acquisitions per (cell_line,
+  # experiment) pair legitimately share one sample_id by design —
+  # REMBI biosample semantics (one biosample, many image acquisitions).
+  sample_id:            "${discovered.cell_line}_${discovered.experiment}"
+  # LSM 900 confocal of cells / cell preparations.
+  sample_type:          cells
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  # PROVISIONAL — see warning at top of file (PROJ-05).
+  project_hint:         "${discovered.researcher}"
+  # EDIT: short description of this batch.
+  notes:                "LSM 900 confocal of ${discovered.cell_line} cells; experiment '${discovered.experiment}'; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na} ${discovered.czi_acquisition_mode}; ${discovered.czi_size_z}-slice Z-stack"
+
+# First-time project-creation defaults (10_TOOLS §2.1.4). Read only on
+# initial project creation; ignored otherwise.
+auto_create_project:
+  owner:       "${discovered.researcher}"
+  description: "Auto-created from LSM 900 confocal ingest; researcher ${discovered.researcher} (first project workspace). PROVISIONAL project_hint per 05_PROJECTS §9 — refine when the group settles a real naming convention."
+  notes:       "Auto-created on first ingest. Owner = researcher folder name; rename short_name and update owner via _project.yaml as the project naming convention matures."
+
+# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
+# Resolver-evaluated; see "AUTO-DISCOVERED FIELDS" section above.
+# Default keeps the full informative source filename + an instrument
+# prefix. Example resolved value: LSM9_Z-stack_LP_IONP-doxo_20x_6h_2.czi
+link_filename: "${instrument}_${original_name}"

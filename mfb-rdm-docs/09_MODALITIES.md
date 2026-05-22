@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-05-22 (Internal MRI §1.4 updated for round-6 folder-as-primary layout + `discovered.mri_*` table)
+**Last Updated:** 2026-05-22 (Internal MRI §1.4 updated for round-6 folder-as-primary layout + `discovered.mri_*` table; LSM 900 §1.3 round-7 active with per-instrument template + workflow notes)
 
 ---
 
@@ -100,7 +100,7 @@ The richer structured form of all the above plus channels/detectors/objective li
 
 | Attribute | Value |
 |-----------|-------|
-| **Instrument** | Confocal Microscope 900 (Zeiss LSM 900) |
+| **Instrument** | Confocal Microscope 900 (Zeiss LSM 900) — sits on an Axio Observer.Z1 stage |
 | **Category** | Microscope (direct raw) |
 | **Code** | `LSM9` |
 | **Location** | Room 2.66 |
@@ -108,15 +108,17 @@ The richer structured form of all the above plus channels/detectors/objective li
 | **Software** | ZEN Blue (full license: LSMPlus, Tile & Position, linear unmixing, colocalization, 3D Viewer) |
 | **Excitation** | 405, 488, 561, 640 nm lasers |
 | **Detectors** | 2 PMTs + 1 GaAsP (fluorescence) + ESID (brightfield) |
-| **Primary format** | .czi |
-| **Typical size** | Variable (single images to large tile/z-stack datasets) |
+| **Primary format** | `.czi` — same Zeiss family as AxioScan + Cell Observer; same extractor (`tools/ingest/czi_metadata.py`) handles all three. |
+| **Typical size** | Variable (single images to large tile/Z-stack datasets) |
 | **Scanner resolution** | Up to 6144x6144 px; max 512x512 at 8 fps |
-| **Imaging modes** | Confocal fluorescence (3 simultaneous channels), z-stack, time series, tile, FRAP, FRET |
+| **Imaging modes** | Confocal fluorescence (3 simultaneous channels), Z-stack, time series, tile, FRAP, FRET |
 | **Objectives** | 2.5x-63x (air, water multi-immersion, oil) |
-| **Embedded metadata** | Expected extensive (ZEN-based .czi) |
-| **Not embedded** | Sample information, experimental context |
+| **Embedded metadata** | Extensive (same 21 curated `discovered.czi_*` fields as §1.1 — same extractor). Distinguishing fingerprint vs Cell Observer: `czi_acquisition_mode = "LaserScanningConfocalMicroscopy"` (Cell Observer reports `"WideField"`). `czi_microscope_name` reports `"Axio Observer.Z1 / 7"` — same string as Cell Observer because the LSM 900 sits on an Axio Observer stage, so the name alone isn't a reliable fingerprint. |
+| **Not embedded** | Sample / experimental context — captured via per-instrument template's folder-name regex (researcher / experiment / cell_line) + project-level metadata for finer-grained context. |
 | **Analysis tools** | ZEN, ImageJ/FIJI, QuPath, Napari |
-| **Status** | ✅ Confirmed for pilot |
+| **Status** | 🔶 Round 7 active (2026-05-22). Per-instrument template at [`tools/templates/instruments/lsm900.yaml`](../tools/templates/instruments/lsm900.yaml); first test batch (LAURA_UPTAKE_LP-IONP-doxo_MDA) ingest in progress. |
+
+**Auto-discovered fields** for LSM 900 are the same 21 `discovered.czi_*` fields documented in §1.1 (AxioScan 7), since all three Zeiss instruments share the `.czi` extractor. Per-instrument source convention (batch-folder regex extracting researcher / experiment / cell_line + the variable-chunk filename note) is documented in [`equipment/lsm900/lsm900_data_handling_workflow_notes.md`](../equipment/lsm900/lsm900_data_handling_workflow_notes.md).
 
 ### 1.4 Reconstructed Biomedical Imaging — Internal MRI Platform
 

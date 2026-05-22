@@ -19,29 +19,39 @@ This file consolidates all open and completed tasks. Completed items are kept fo
 | 1–2 | Collaborator DICOM (XMRI) | 75 acqs across PROJ-0001 (LIONS, 42) + PROJ-0002 (HPIC, 33) | `lions_*.yaml`, `hpic_*.yaml` |
 | 4 | AxioScan 7 (ZWSI) | 28 acqs across PROJ-0003/0004/0005 (`ae-biomegune-{0423,0424,0525}`) | `axioscan7_20260506.yaml` (+ TEST) |
 | 5 | Cell Observer (CELL) | **165 acqs across PROJ-0006/0007/0008** (`itziar-colageno`, `itziar-alphasma`, `itziar-colageno-permeabilizado`) — exercised **both filename-focused and path-focused metadata extraction** on real Ainhize/Itziar data | `cell_observer_itziar_alphasma_TEST.yaml`, `cell_observer_itziar_colageno_perm_TEST.yaml` |
+| 6 | Internal MRI (Bruker ParaVision) | 97 acqs across PROJ-0003 (26) + PROJ-0004 (71) — cross-modality reuse with round-4 AxioScan workspaces. **First no-zip folder-as-primary layout**; ParaVision JCAMP-DX metadata in `metadata.json.mri`; new `link_filename:` framework produces unique `MRI_<jrc_id>_<acq_date>_<exam>_<recon>.lnk` shortcut names. | `mri_bruker_20251016_TEST.yaml` |
+| 7 | LSM 900 confocal (LSM9) | **In progress 2026-05-22** — first batch LAURA_UPTAKE_LP-IONP-doxo_MDA (~14 acqs). Third .czi-family instrument; reuses czi_metadata.py extractor. New folder-name regex on `<researcher>_<experiment>_<cell_line>` batch convention; filename variable-chunk handling deferred (captured in workflow notes). | `lsm900_laura_uptake_TEST.yaml` |
 
 Round-5 round-up (Cell Observer) detail trail in §4.6.B.
 
-### Round 6 — **Internal MRI (Bruker ParaVision)** — ACTIVE
+### Round 7 — **LSM 900 confocal (LSM9)** — ACTIVE 2026-05-22
 
-Creds for the MRI server obtained 2026-05-20; sample data manually pulled to `D:\projects\gjesus3\data_test\` (one ParaVision study with ~10–16 numbered exams). Implementation plan locked in [the round-6 plan file](../../../.claude/plans/i-have-the-creds-reactive-candle.md).
+Third Zeiss .czi-family instrument; reuses `tools/ingest/czi_metadata.py` extractor (no new code). New per-instrument template at [`tools/templates/instruments/lsm900.yaml`](../tools/templates/instruments/lsm900.yaml); first batch config at [`tools/configs/lsm900_laura_uptake_TEST.yaml`](../tools/configs/lsm900_laura_uptake_TEST.yaml) targeting `LAURA_UPTAKE_LP-IONP-doxo_MDA` (~14 .czi files). Operator directions + parsable naming convention captured in [`equipment/lsm900/lsm900_data_handling_workflow_notes.md`](../equipment/lsm900/lsm900_data_handling_workflow_notes.md). §4.6.C has the full execution checklist + deferred items.
 
-**Decisions locked for this round:**
-- ACQ unit = examination (assay). One numbered ParaVision exam = one ACQ-ID. ISA terminology adopted: investigation=project, study=session, assay=acquisition.
-- **No zipping.** Folder-as-primary in `/raw/` for internal MRI. Acquisition folder = the unit (with `reconstructions/pdata_<idx>/` + `acquisition_aux/` substructure). New registry column `primary_kind: folder` (DRAFT).
-- **ParaVision JCAMP-DX aux files (`subject`/`acqp`/`method`/`visu_pars`) are canonical metadata source**, not DICOM headers. New `tools/ingest/paravision_metadata.py` mirroring `czi_metadata.py` shape. New `tools/ingest/jcampdx.py` parser.
-- **Reconstruction selection = per-batch YAML flag** (`reconstructions: all | [3] | 3`); no implicit default.
-- **`regex_extract:` option in `filename_parse`** — extracts named groups from messy FTP folder names.
-- **NIfTI generation is a project-level tool**, deferred — NOT a `/raw/` ingest step. Lives in `/projects/<proj>/derived_nifti/`, removed at project close-out.
+**Decisions locked for this round (light — most reused from rounds 5/6):**
+- Folder-name regex extracts `researcher / experiment / cell_line` from the `<researcher>_<experiment-w/-internal-underscores>_<cell_line>` batch convention (greedy-middle pattern, same trick used for MRI's `jrc` regex). Reuses `filename_parse.source: parent_name` + `regex:` from round 6.
+- Filename positional parse **deferred** — real-data chunk count varies (4–6) so positional would skip half the files. Filename context lives in `${discovered.filename}` + the .czi-embedded fields. Future enhancement queued in §4.6.C deferred items.
+- `link_filename: ${instrument}_${original_name}` — same microscopy convention as AxioScan + Cell Observer.
 
-§4.5 has the full execution checklist. Stream A (docs, ✅ committed `17ac781`) and Stream B (extractor + parser + probe, ✅ committed `66887ae`) shipped. Stream C (pipeline + template + config + FTP) ran end-to-end with 97/97 success but surfaced two bugs (sidecar key `dicom`→`mri` + `.lnk` filename collisions). **Stream D** (in progress 2026-05-22): adds the `link_filename:` YAML field framework, exhaustive per-instrument template comments listing `discovered.*` references, systematic-naming-convention docs for MRI + the NI future round, and the user-as-operator / NI-tgz / MRI-naming-ambiguity future tasks. After Stream D the 97 first-ingest acqs get purged and re-ingested with the corrected `.lnk` naming.
+### Round 6 — Internal MRI (Bruker ParaVision) — ✅ COMPLETE (in quasi-production)
 
-**Other waits (not blocking round 6):**
+97 acqs across PROJ-0003/0004; cross-modality demo with round-4 AxioScan workspaces. Commits: `17ac781` (Stream A docs reframe), `66887ae` (Stream B extractor), `943fd3e` (Stream C+D end-to-end), `6883991` (documentation consolidation). §4.5 has the full detail trail.
+
+**Key round-6 deliverables (still in force):**
+- `13_GJESUS3_ROLE.md` reframe (research-facing working layer; two-tier model with platform deep-archive).
+- ISA terminology (investigation/study/assay → project/session/acquisition); DRAFT registry columns `session_id` + `primary_kind`.
+- No-zip folder-as-primary layout (`acquisition_layout: folder`) + selective `reconstructions:` flag.
+- ParaVision JCAMP-DX extractor (`paravision_metadata.py` + `jcampdx.py`) — canonical metadata source for internal MRI; `metadata.json.mri` block via the 3-tuple section-name-override mechanism.
+- `link_filename:` YAML field framework — per-instrument templates ship recommended defaults; operator override per-batch.
+- New systematic-naming-convention docs in `equipment/mri-platform/` and `equipment/nuclear-imaging/`.
+- Future-work items registered: user-as-operator permissions, NI ingest (blocked on Unai), NI tgz-aware staging, MRI naming-ambiguity stakeholder follow-up, project-level NIfTI generation tool.
+
+**Other waits (none blocking round 7):**
 
 | Pass | Section | Blocked on |
 |------|---------|-----------|
-| LSM 900 confocal (`LSM9`) | §4.6.C | Ainhize Urkola Arsuaga to provide a detailed example. Expected source `K:\gjesus\Ainhize\CONFOCAL LSM 900\`. |
 | Nuclear Imaging (`PET`/`SPECT`/`CT`) | §4.7 | Platform Manager **Unai** to answer one outstanding question before we submit the data-workflow documentation + example. |
+| Animal/histology-mode Cell Observer | §4.6.B Deferred | Real example folder of historical histology work; backfill round. |
 
 **If switching between passes**, each per-pass section has a "Pickup context" subsection written to be read cold.
 
@@ -372,22 +382,34 @@ The first round-6 ingest (97/97 success against `D:\projects\gjesus3\data_test\`
 - [ ] **Historical Cell Observer histology backfill** — separate stream from going-forward cells-mode work. Operators used Cell Observer heavily for histology before AxioScan arrived; that data still needs ingest. Different researchers, different conventions per researcher / era. Use the same machinery, one per-batch YAML per historical batch.
 - [ ] LSM 900 (§4.6.C) — should reuse most of the Cell Observer cells-mode template once validated; same instrument family, same data-handling model per the operator.
 
-**4.6.C LSM 900 confocal (`LSM9`) — reuses 4.6.B Cell Observer template:**
+**4.6.C LSM 900 confocal (`LSM9`) — ROUND 7 ACTIVE 2026-05-22:**
 
 > **Pickup context (read first if returning cold):**
-> - LSM 900 is a Zeiss confocal microscope. Same vendor + same `.czi` format as Cell Observer and AxioScan, so `tools/ingest/czi_metadata.py` should reuse 1:1.
-> - Per the operator walkthrough, LSM 900 follows the **same data-handling playbook as Cell Observer** — operator saves files manually to a group-drive folder, no day-folder convention, folder structure carries metadata. Expected source path: `K:\gjesus\Ainhize\CONFOCAL LSM 900\`.
-> - Plan: reuse `cell_observer_cells.yaml` as the starting template; clone to `tools/templates/instruments/lsm900.yaml`, swap `instrument: LSM9`, adjust `path_parse` / `filename_parse` field names if Ainhize's confocal folder convention differs. Likely small delta.
-> - **Blocked on:** Ainhize Urkola Arsuaga to provide a detailed example folder + filename convention. Once one real `.czi` arrives, this pass should be small (mirror round-5 §4.6.B closely).
+> - LSM 900 is a Zeiss confocal microscope (Room 2.66). Third .czi-family instrument; `tools/ingest/czi_metadata.py` reuses 1:1 (no new code needed). Confirmed by probe: 21 `discovered.czi_*` fields populate.
+> - Same operator (Ainhize Urkola Arsuaga) + same K: share + same `Ainhize/` parent folder as Cell Observer. Subfolder: `CONFOCAL LSM 900/`.
+> - Distinguishing fingerprint vs Cell Observer: `czi_acquisition_mode = "LaserScanningConfocalMicroscopy"` (Cell Observer = `"WideField"`). `czi_microscope_name` reports `"Axio Observer.Z1 / 7"` — same as Cell Observer (the LSM 900 sits on an Axio Observer stage), so the name alone isn't a reliable distinguisher.
+> - Per-instrument template at `tools/templates/instruments/lsm900.yaml` ships with a folder-name regex extracting `researcher / experiment / cell_line` from the batch folder convention `<researcher>_<experiment-w/-internal-underscores>_<cell_line>`. Filename positional parse is **deferred** (real-data chunk count varies 4–6; would skip too many files).
+> - First batch: `LAURA_UPTAKE_LP-IONP-doxo_MDA` (~14 .czi files). Operator directions + parsable naming convention captured in `equipment/lsm900/lsm900_data_handling_workflow_notes.md`.
 
-**Prerequisites (need before starting):**
-- [ ] **Ainhize:** Provide one detailed `.czi` example from the LSM 900, ideally with the typical folder layout intact. Expected location once provided: `K:\gjesus\Ainhize\CONFOCAL LSM 900\<researcher>\...`.
-- [ ] **Ryan:** Copy locally for probing once Ainhize confirms the path.
+**Prerequisites (done 2026-05-22):**
+- [x] ~~**Ainhize:** Provide one detailed `.czi` example from the LSM 900.~~ Received: `LAURA_UPTAKE_LP-IONP-doxo_MDA` batch on K: share.
+- [x] ~~**Ryan:** Probe one .czi via `probe_czi.py`.~~ 21 `discovered.czi_*` fields populated; LSM 900 fingerprint confirmed.
 
-**Execution (mirrors §4.6.B Cell Observer):**
-- [ ] Read-only probe with `tools/ingest/probe_czi.py` — confirm similarity to Cell Observer / AxioScan (MOD-07 follow-up).
-- [ ] Create `tools/templates/instruments/lsm900.yaml` (clone of `cell_observer_cells.yaml`, adjusted).
-- [ ] Author the first per-batch config + dry-run + real test ingest (quasi-production).
+**Execution (round 7):**
+- [x] ~~Create `tools/templates/instruments/lsm900.yaml`~~ — done 2026-05-22.
+- [x] ~~Author the first per-batch TEST config (`tools/configs/lsm900_laura_uptake_TEST.yaml`)~~ — done 2026-05-22.
+- [x] ~~Capture operator directions + parsable naming convention in `equipment/lsm900/lsm900_data_handling_workflow_notes.md`~~ — done 2026-05-22.
+- [ ] Dry-run + real ingest of the LAURA_UPTAKE batch.
+- [ ] Verify NAS state: 14 acquisitions, `proj-laura` auto-created, 14 `LSM9_*.lnk` shortcuts, sidecar `microscopy:` block populated.
+
+**Documentation (during / after the pass):**
+- [x] ~~`mfb-rdm-docs/09_MODALITIES.md` §1.3 LSM 900 — round-7 status update, cross-ref workflow notes~~ — done 2026-05-22.
+- [ ] `mfb-rdm-docs/00_INDEX.md` — version history (after ingest).
+
+**Deferred from this pass (queued for later):**
+- [ ] **Filename positional parse for LSM 900.** Real-data chunk count varies (4–6); a positional spec would skip half the files. The .czi-embedded metadata + the folder regex give us most of what we need at registry level; filename-only fields (condition / timepoint / replicate) can land in project-level metadata via the `/projects/<proj>/metadata/<acq_id>.json` flow. A future enhancement (per-component `source:` for `filename_parse` so the regex can target `parent_name` while a separate positional spec targets the filename) is the cleanest path when an operator asks for filename-chunk metadata at registry-row level.
+- [ ] **Other LSM 900 batches** (Claudia, IFF, IRENE, ITZIAR, MARINA, Lysotracker, etc.) on the K: share. Each gets its own per-batch config; the template stays stable. Add as the operators request them.
+- [ ] **`Free doxo/` subfolder inside LAURA_UPTAKE_LP-IONP-doxo_MDA.** Excluded from round 7 (non-recursive pattern). Include via a separate batch config if needed.
 
 **4.6.D Lightweight mode for microscopy:**
 - [ ] Test `--lightweight` mode on one `.czi` file (sets `extended_metadata_present=N`, no sidecar)
