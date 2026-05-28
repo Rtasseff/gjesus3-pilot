@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-05-22 (Internal MRI §1.4 updated for round-6 folder-as-primary layout + `discovered.mri_*` table; LSM 900 §1.3 round-7 active with per-instrument template + workflow notes; Nuclear Imaging §1.5 round-8 active in archive mode)
+**Last Updated:** 2026-05-27 (Round-6 v2 MRI redo: §1.4 reworked for `<ACQ-ID>.data/` flat-DICOM layout, per-DICOM UIDs in sidecar, no-DICOM acquisition handling)
 
 ---
 
@@ -128,15 +128,16 @@ The richer structured form of all the above plus channels/detectors/objective li
 | **Category** | Platform instrument (reconstructed data) |
 | **Code** | `MRI` |
 | **Capabilities** | High-resolution anatomical (2D/3D), ultrafast (EPI, spiral), parallel imaging (GRAPPA, mSENSE), multinuclear spectroscopy (1H, 13C, 19F, 31P) |
-| **Source format** | Bruker ParaVision exam folders (with `acqp` / `method` / `visu_pars` JCAMP-DX aux files + `pdata/<idx>/` reconstructions containing `2dseq` binaries + Bruker-exported `.dcm` per frame) |
-| **Storage on gjesus3** | **Folder-as-primary** (since round 6, 2026-05-22) — the acquisition folder IS the unit; no zip. Layout: `<ACQ>/metadata.json` + `<ACQ>/checksums.json` at root, `<ACQ>/acquisition_aux/` for exam-level aux files, `<ACQ>/reconstructions/pdata_<idx>/` per reconstruction kept by the `reconstructions:` YAML flag. Registry's `primary_kind = folder`. See [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
-| **Typical size** | 1-50 MB per acquisition with one reconstruction kept; multiples if `reconstructions: all` |
-| **Embedded metadata** | Extensive (Bruker JCAMP-DX text aux files — the canonical source. DICOM headers also present in `pdata/<idx>/dicom/*.dcm` but currently treated as derivatives). |
+| **Source format (Bruker ParaVision exam)** | Bruker ParaVision exam folders containing `acqp`/`method`/`visu_pars`/`subject` (JCAMP-DX text aux), raw `fid` (~12 MB k-space signal), `pdata/<idx>/` per-reconstruction subfolders each with `2dseq` (binary image), `visu_pars` (recon params), `reco`, and `dicom/MRIm<NN>.dcm` (per-frame DICOM export when the user has run Bruker's exporter). |
+| **What lands on gjesus3 (round-6 v2 2026-05-27)** | **DICOMs only, flat in `<ACQ-ID>.data/`** ([03_RAW_STORAGE §4.4](03_RAW_STORAGE.md), [13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md)). The acquisition folder contains `metadata.json`, `checksums.json`, `README.txt`, and a `<ACQ-ID>.data/` subfolder holding renamed per-frame DICOMs: `recon<idx>_frame<NN>.dcm` (typically ~15 frames per recon × number of recons kept). NO aux files on disk — `acqp`/`method`/`visu_pars`/`subject`/`fid`/`2dseq`/`reco` all stay on the platform; their parsed content is in `metadata.json.mri._raw_metadata`. Multi-recon studies have all selected `pdata/<idx>/` recons in the same flat folder (e.g. `recon1_frame01.dcm`...`recon1_frame15.dcm` + `recon3_frame01.dcm`...`recon3_frame15.dcm`). |
+| **No-DICOM acquisitions** | When a researcher hasn't run Bruker's DICOM exporter (~3 of 7 source projects in round 6), the ingest still registers the exam: `metadata.json.mri:` is fully populated from parsed JCAMP-DX, but `<ACQ-ID>.data/` is created empty and `mri.reconstruction.by_index.<idx>.dicoms[]` is `[]`. Idempotent re-run after the student converts will skip the placeholder + ingest the freshly-available DICOMs. Future-work FID→DICOM regeneration capability (tracked in `tasks/tasks.md §3.1`) would close this gap automatically. |
+| **Typical size on gjesus3** | A few MB per acquisition (DICOMs only — ~200 KB × ~15-frame × N_recon, plus the few-KB sidecar). KB-scale for no-DICOM acquisitions. |
+| **Embedded metadata** | Extensive. `tools/ingest/paravision_metadata.py` parses the JCAMP-DX aux files (`subject`/`acqp`/`method`/`visu_pars`/per-recon `visu_pars`+`reco`) — canonical source — plus the DICOM headers of every kept per-frame `.dcm`. Surfaces ~20 `discovered.mri_*` fields + a structured `mri:` sidecar block (subject/acquisition/geometry/reconstruction buckets + per-DICOM headers with `StudyInstanceUID`/`SeriesInstanceUID`/`SOPInstanceUID` first + lossless `_raw_metadata`). See `discovered.mri_*` table below + [08_METADATA §4.3](08_METADATA.md) `mri:` block shape. |
 | **Not embedded** | Study context beyond what `subject` already captures (e.g. research question, sample preparation details) |
-| **Analysis tools** | 3D Slicer, ITK-SNAP, FSL, nibabel (most expect NIfTI; round-6 ingest does NOT generate NIfTI — that's a project-level tool, future, see [08_METADATA §1.5a](08_METADATA.md)) |
-| **Raw data responsibility** | MRI platform archives true raw data (k-space, FIDs) — gjesus3 does not replicate that role |
+| **Analysis tools** | 3D Slicer, ITK-SNAP, FSL, nibabel, PMOD, pydicom (most expect NIfTI for analysis; ingest does NOT generate NIfTI — that's a project-level tool, future, see [08_METADATA §1.5a](08_METADATA.md)). The kept DICOMs work directly in any DICOM-aware viewer. |
+| **Raw data responsibility** | MRI platform archives the originals on the acquisition machines (`/opt/PV-7.0.0/data/nmr/` + FTP mirror). **Medium trust** ([13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md) — generally reliable, no formal byte-lock guarantee) — gjesus3 keeps the analysis-ready DICOMs; the raw `fid` (k-space) and platform-internal files stay only on the platform. |
 | **Operator model** | **No dedicated technician** — researchers run the scanner themselves. Permission model for ingest-time `/raw/` writes is future work (see `tasks/tasks.md` §3.3 user-as-operator). |
-| **Status** | ✅ Pilot ingest round 6 complete (97 acqs in quasi-production state, 2026-05-22). Convention + workflow documented in [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md). |
+| **Status** | ✅ Round-6 ingest **v2 landed 2026-05-27** with `<ACQ-ID>.data/` flat-DICOM layout (mirrors NI v2.1), parsed JCAMP-DX content in sidecar (no aux files duplicated to disk), DICOM UIDs first in curated headers, no-DICOM acquisition handling. v1 (2026-05-22) preceded — full purge + re-ingest history in `tasks/tasks.md §4.5` + equipment workflow notes "Round-6 v2 reshape" section. Convention + workflow documented in [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md). |
 
 > **📣 INPUT NEEDED:** Do the two MRI systems need separate instrument codes (e.g., `MRI7` and `MRI11`), or is a single `MRI` code sufficient? Round 6 used shared `MRI` for sample data from the 7T system; question carried forward to first 11.7T batch.
 
@@ -181,34 +182,56 @@ For the systematic naming convention used by the MRI platform (parsable folder-n
 | **Category** | Platform instrument (reconstructed data) |
 | **Codes** | `PET`, `SPECT`, `CT` (one per archive — set per case via `discovered.modality` from the archive-name regex) |
 | **Workstations** | 3 dedicated workstations with PMOD and Imalytics |
-| **Source format (archive mode, observed 2026-05-22)** | Molecubes-native `.bin` reconstruction binaries + XML aux files (`protocol.xml`, `acqparams.xml`, `recontemplate.xml`, etc.) — NOT DICOM at the leaf despite the "DICOM ecosystem" assignment. MILabs VECTor format **not yet observed** in our archives. **Earlier doc draft was wrong** about DICOM `.dcm` files at the deepest level — round-8 archive inspection corrected this. |
-| **Storage on gjesus3 (round 8, 2026-05-22)** | **Folder-as-primary** (same model as internal MRI round 6 — no zip). Pre-extracted from the SMB archive via `tools/extract_ni_archives.py` to a local staging dir, then ingested as a folder bundle under `/raw/DICOM/<year>/<year-month>/ACQ-<date>-<modality>-NNN/`. Registry `primary_kind = folder`. See [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
-| **Typical size** | 1-15 GB per acquisition (unpacked). PET ~3-6 GB, CT ~6-12 GB. |
-| **Embedded metadata** | Per-acquisition XML aux files (`protocol.xml`, `acqparams.xml`, `recontemplate.xml`) — NOT extracted by the round-8 ingest. The archive-name regex captures the essentials (user, series_id, short_project, short_sample, timestamp, modality); a future-work XML-aux extractor (analogous to ParaVision's `discovered.mri_*`) could surface richer fields. |
+| **Source format (Molecubes archive)** | Molecubes archive on `\\cicmgsp02\gnuclear2$` contains BOTH the analysis-ready DICOMs AND the raw event/calibration data. Per-acquisition layout: `protocol.txt` + XML aux at acq root (`protocol.xml`, `acqparams.xml`, `recontemplate.xml`), plus `recon_<idx>/<basename>.dcm` (CT, multiple recons) or `recon_<idx>/frame_<n>/iter_30/<basename>.dcm` (PET/SPECT, possibly multiple frames). MILabs VECTor format **not yet observed** in our archives. |
+| **What lands on gjesus3 (round-8 v2.1 2026-05-27)** | **DICOMs only, flat in `<ACQ-ID>.data/`** ([03_RAW_STORAGE §4.3](03_RAW_STORAGE.md), [13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md)). The acquisition folder contains `metadata.json`, `checksums.json`, `README.txt`, and a `<ACQ-ID>.data/` subfolder holding the renamed DICOMs: `recon<X>.dcm` for CT (one per recon), `recon<X>_frame<Y>.dcm` for PET/SPECT (one per time frame), `recon<X>_frameMULTI.dcm` for the platform-generated bundled-all-frames DICOM (present only for dynamic PET/SPECT studies, kept alongside the per-frame DICOMs). NO aux files on disk — their parsed content is in `metadata.json.ni._raw_metadata`. |
+| **Typical size on gjesus3** | Few MB per acquisition (DICOMs + small aux). Source archive is 1-15 GB unpacked; the slim shape lives ~MB-scale. |
+| **Embedded metadata** | Rich. `tools/ingest/ni_metadata.py` parses `protocol.txt` (key-value text) + the three XML aux files + DICOM headers of one representative `.dcm` per recon. Surfaces ~15 `discovered.ni_*` fields for YAML reference + a structured `ni:` sidecar block (study / subject / acquisition / reconstruction buckets + lossless `_raw_metadata`). See `discovered.ni_*` table below + [08_METADATA §4.3](08_METADATA.md) `ni:` block shape. |
 | **Not embedded** | Study context (research question, sample preparation) — captured at project level. |
-| **Analysis tools** | PMOD, Imalytics, 3D Slicer, ITK-SNAP, MATLAB |
-| **Raw data responsibility** | Nuclear Imaging platform archives true raw data (listmode, sinograms) |
+| **Analysis tools** | PMOD, Imalytics, 3D Slicer, ITK-SNAP, MATLAB, pydicom |
+| **Raw data responsibility** | Nuclear Imaging platform archives true raw data (listmode, sinograms, event lists) on `\\cicmgsp02\gnuclear2$` indefinitely — **trusted as the long-term archive**. The 1% case of "we need the raw event data" routes back through the platform. See [13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md) per-platform reliability table. |
 | **Operator model** | **No dedicated technician** — researchers run the equipment themselves. Permission model for ingest-time `/raw/` writes is future work (see `tasks/tasks.md` §3.3 user-as-operator). |
-| **Status** | 🔶 Round 8 active in **archive mode** (2026-05-22). Live-machine workflow still pending Platform Manager Unai's answer on the workflow + access model — see `tasks/tasks.md §4.7`. Round 8 pulls `.tgz` archives from `\\cicmgsp02\gnuclear2$\<year>\<PI>\` per the convention documented in [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md). |
+| **Status** | ✅ Round-8 ingest **v2.1 landed 2026-05-27** with `<ACQ-ID>.data/` flat-DICOM layout (renamed flat: `recon<X>.dcm` / `recon<X>_frame<Y>.dcm` / `recon<X>_frameMULTI.dcm`), parsed protocol.txt + XML aux content in sidecar (no aux files duplicated to disk), DICOM UIDs first in curated headers. Multi-frame DICOMs kept alongside per-frame for dynamic PET/SPECT studies. v1 (2026-05-26) and v2 (initial 2026-05-27) preceded — full purge + re-ingest history in `tasks/tasks.md §4.7` + equipment workflow notes "Round-8" section. Live-machine workflow still pending Platform Manager Unai's answer. |
 
 > **⚠️ GAP:** MILabs VECTor exports both DICOM and NIfTI. Need to confirm which format(s) the platform provides to researchers, and whether NIfTI should be an accepted format on gjesus3.
 
-#### Auto-discovered fields (`discovered.<key>`)
+#### Auto-discovered fields — archive-basename regex
 
-Round-8 archive-mode ingest exposes these per-acquisition fields via the archive-basename regex (`tools/templates/instruments/molecubes_ni.yaml`). No `.dcm`/XML-aux extractor is registered yet — these are parsed from the archive basename only.
+These come from the archive-basename regex (`tools/templates/instruments/molecubes_ni.yaml`), parsed from the `.tgz` name `<user>_<series_id>_<YYMMDD>_<short_project>_<short_sample>_<YYYYMMDDhhmmss>_<modality>`.
 
-| Field | Description | Source (in archive basename `<user>_<series_id>_<YYMMDD>_<short_project>_<short_sample>_<YYYYMMDDhhmmss>_<modality>.tgz`) |
-|-------|-------------|----|
-| `user` | NI user (e.g. `irene`) | first underscore-delimited chunk |
-| `series_id` | **Funded-project id** (e.g. `0525`, `1207`). Different from MRI's animal-protocol short id; see workflow notes for the distinction. | second chunk |
-| `acq_date_short` | YYMMDD form of the acquisition date (e.g. `251029`) | third chunk |
-| `short_project` | **Animal-protocol short id** (e.g. `0525`, `0424`). Drives `project_hint` (cross-modality reuse with rounds 4 + 6 `ae-biomegune-NNNN` workspaces). | fourth chunk |
-| `short_sample` | Sample identifier — `<animal type><number>` for animals (e.g. `m13`) or `phantom_*` free-text for QC | fifth chunk |
-| `acq_datetime_full` | Full YYYYMMDDhhmmss timestamp (e.g. `20251029100641`) — drives the registry `acquisition_datetime`. Round-8 extended `resolver.normalize_acquisition_datetime` to handle this 14-digit form. | sixth chunk |
-| `modality` | `PET` / `CT` / `SPECT` / `OI` — drives the per-case `registry.instrument` | seventh chunk |
-| `folder_name` | Standard auto-discovery — equals the archive basename | derived |
+| Field | Description |
+|-------|-------------|
+| `user` | NI user (e.g. `irene`) |
+| `series_id` | **Funded-project id** (e.g. `0525`, `1207`). Different from MRI's animal-protocol short id; see workflow notes for the distinction. |
+| `acq_date_short` | YYMMDD form of the acquisition date (e.g. `251029`) |
+| `short_project` | **Animal-protocol short id** (e.g. `0525`, `0424`). Drives `project_hint` (cross-modality reuse with rounds 4 + 6 `ae-biomegune-NNNN` workspaces). |
+| `short_sample` | Sample identifier — `<animal type><number>` for animals (e.g. `m13`) or `phantom_*` free-text for QC |
+| `acq_datetime_full` | Full YYYYMMDDhhmmss timestamp (e.g. `20251029100641`) — drives the registry `acquisition_datetime`. Round-8 extended `resolver.normalize_acquisition_datetime` to handle this 14-digit form. |
+| `modality` | `PET` / `CT` / `SPECT` / `OI` — drives the per-case `registry.instrument` |
+| `folder_name` | Standard auto-discovery — equals the archive basename |
 
-Round-8 ingest config: [`tools/configs/ni_jesus_archive_2025_TEST.yaml`](../tools/configs/ni_jesus_archive_2025_TEST.yaml). Workflow notes (archive-mode + live-mode preview): [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md).
+#### Auto-discovered fields (`discovered.ni_*`) — embedded extractor
+
+These come from `tools/ingest/ni_metadata.py::EXPOSED_FIELDS`, parsed out of `protocol.txt` (the primary key-value text source) + the XML aux files + DICOM headers from one representative `.dcm` per reconstruction. The Python source is the single source of truth; this table is its mirror (per CLAUDE.md cross-ref rule).
+
+| Field | Description | Source |
+|-------|-------------|--------|
+| `ni_study_name` | Study name from `protocol.txt` (typically the funded-project id, e.g. `0525`) | `protocol.txt: Study name` |
+| `ni_series_name` | Series name from `protocol.txt` (typically the acquisition-date short form) | `protocol.txt: Series name` |
+| `ni_pi` | Principal investigator from `protocol.txt` (often the operator's username — Molecubes labelling, not strictly the lab PI) | `protocol.txt: Principal Investigator` |
+| `ni_modality` | Modality reported by the platform: `PET` / `CT` / `SPECT` / `OI` | `protocol.txt: Modality` |
+| `ni_acquisition_datetime` | Per-acquisition datetime from `protocol.txt` (machine-issued) | `protocol.txt: Date/time` |
+| `ni_animal_id` | Subject/animal ID (e.g. `0525_m13` — combines short_project + short_sample) | `protocol.txt: Animal ID` |
+| `ni_animal_weight_g` | Animal weight in grams (often `0` if not entered by operator) | `protocol.txt: Animal weight (g)` |
+| `ni_scan_protocol` | Scan protocol name (e.g. `spiral high-resolution`) | `protocol.txt: Scan protocol` |
+| `ni_bed_from` | Scan bed start position (mm) | `protocol.txt: Scan bed position from <X> to <Y>` (first capture) |
+| `ni_bed_to` | Scan bed end position (mm) | `protocol.txt: Scan bed position from <X> to <Y>` (second capture) |
+| `ni_isotope` | Radioisotope used (PET/SPECT only — empty for CT, e.g. `F-18`) | `protocol.txt: Isotope` |
+| `ni_activity_mbq` | Injected activity in MBq (PET/SPECT only) | `protocol.txt: Activity` |
+| `ni_n_frames` | Number of time frames (PET only; static = 1) | `protocol.txt: Number of frames` |
+| `ni_scan_duration_s` | Scan duration in seconds (PET only) | `protocol.txt: Scan duration` |
+| `ni_recons_present` | Comma-separated list of `recon_<idx>` subfolders kept on gjesus3 (e.g. `0,1,2` for CT, `0` for PET) | derived from `reconstructions/recon_*/` directory listing |
+
+The structured form of all the above plus DICOM header summaries + parsed XML aux files + verbatim `protocol.txt` is in the sidecar's `ni:` block — see [08_METADATA §4.3](08_METADATA.md). Round-8 ingest config: [`tools/configs/ni_jesus_archive_2025_TEST.yaml`](../tools/configs/ni_jesus_archive_2025_TEST.yaml). Per-batch convention + per-recon detail: [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md).
 
 ---
 

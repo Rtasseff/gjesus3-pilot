@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-05-20 (MRI ParaVision sidecar `mri:` block shape; project-level NIfTI generation tool added to the project-tool family)
+**Last Updated:** 2026-05-27 (Round-6 v2 MRI redo: `mri:` block rewritten with per-DICOM `dicoms[]` list + UIDs first, mirroring NI v2.1; no-DICOM acquisition handling documented)
 
 ---
 
@@ -199,9 +199,9 @@ This separation keeps preservation and interpretation as distinct concerns.
 |---------------------|-----------|--------------|------------------------|-------------------------------------------|
 | Zeiss .czi (ZWSI / CELL / LSM9) | Yes — extensive | ✅ Audited 2026-05-06 | 21 curated `discovered.czi_*` fields + 5 structured buckets (geometry, instrument, acquisition, mosaic, document_info) + full XML in `_raw_metadata`. See [09_MODALITIES §1.1](09_MODALITIES.md#11-whole-slide-imaging--zeiss-axio-scan-7) for the field list. | Sample info, experimental context, biological/specimen attributes |
 | Histology .tif (if used) | Partial | 📋 Planned (may be deferred — mostly used for converted exports) | None yet | Most context |
-| Bruker ParaVision (internal MRI) | Yes — extensive (JCAMP-DX aux files) | 🔶 In progress (round 6, 2026-05-20) | ~15 curated `discovered.mri_*` fields + 4 structured buckets (`subject`, `acquisition`, `geometry`, `reconstruction`) + full JCAMP-DX dump in `_raw_metadata`. Implementation in `tools/ingest/paravision_metadata.py` (mirrors `czi_metadata.py` shape). See §4.3 below + 09_MODALITIES MRI section. **ParaVision aux files are canonical** (acqp / method / visu_pars / subject); pure-DICOM-header extraction stays deferred. | Sample/experimental context beyond what `subject` already captures |
+| Bruker ParaVision (internal MRI) | Yes — extensive (JCAMP-DX aux files + per-DICOM headers) | ✅ Audited 2026-05-27 (round-6 v2 redo) | ~20 curated `discovered.mri_*` fields + 4 structured buckets (`subject`, `acquisition`, `geometry`, `reconstruction`) + per-DICOM curated headers with UIDs first (`StudyInstanceUID`, `SeriesInstanceUID`, `SOPInstanceUID` + MRI-specific tags `MagneticFieldStrength`, `EchoTime`, `RepetitionTime`, `FlipAngle`, `ScanningSequence`, `SequenceVariant`) + parsed JCAMP-DX dump in `_raw_metadata.{subject, acqp, method, visu_pars, pdata.<idx>.{visu_pars, reco}}`. Implementation in `tools/ingest/paravision_metadata.py` (mirrors `ni_metadata.py` shape). **ParaVision aux files are canonical** (acqp / method / visu_pars / subject); per-frame DICOM headers complement them with UIDs needed for downstream tooling. **No-DICOM case**: when students don't run Bruker's exporter, the JCAMP-DX-derived buckets + `_raw_metadata` are still populated; per-DICOM `dicoms[]` lists are empty. See §4.3 below + 09_MODALITIES MRI section. | Sample/experimental context beyond what `subject` already captures |
 | Collaborator DICOM (XMRI / XCT / XPET / XSPECT) | Yes — embedded DICOM headers | ⚠️ Pending (§3.1 deferred item) | None yet — extractor will mirror the `.czi` pattern (`discovered.dicom_*` + sidecar `dicom._raw_metadata`). Independent of the ParaVision work above. | Study context varies; sample/experimental info |
-| Internal PET / SPECT / CT | TBD per platform | 📋 Planned (round 7, blocked on Unai answering naming-convention question) | None yet | TBD |
+| Internal PET / SPECT / CT (Molecubes archive) | Yes — protocol.txt + XML aux + DICOM headers | ✅ Audited 2026-05-26 (round-8 redo) | ~15 curated `discovered.ni_*` fields + 4 structured buckets (`study`, `subject`, `acquisition`, `reconstruction`) + verbatim `protocol.txt` + parsed XMLs in `_raw_metadata`. Implementation in `tools/ingest/ni_metadata.py` (mirrors `paravision_metadata.py` shape). See §4.3 below + 09_MODALITIES NI section. **MILabs VECTor format not yet observed** in our archives; extractor adds when sample data arrives. | Study context (research question, sample prep) — captured at project level |
 | EM (.tif / .dm3 / .dm4) | Varies by source | ⚠️ Pending (and SEM/TEM scope itself is `EVALUATING`) | None yet | Most context |
 
 ### 4.2 Extraction Possibility
@@ -235,42 +235,164 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 
 **Per-column registry mapping is in YAML, not Python.** The Python `SPECIAL_FIELDS` promotion mechanism (used briefly in early 2026-05) is gone — adding or renaming a column promotion is a YAML-only edit (see [10_TOOLS §2.1](10_TOOLS.md) for schema, validation rules, and template).
 
-#### `mri:` block shape (new 2026-05-20)
+#### `mri:` block shape (round-6 v2 2026-05-27)
 
-For an internal MRI acquisition (Bruker ParaVision), the sidecar's `mri:` block parses the JCAMP-DX aux files from the exam:
+For an internal MRI acquisition (Bruker ParaVision), the sidecar's `mri:` block aggregates the parsed JCAMP-DX aux files from the exam + the curated DICOM headers of every kept per-frame DICOM. Mirrors the `ni:` v2.1 shape — curated buckets + per-DICOM `dicoms[]` list with UIDs first + lossless `_raw_metadata`. **No source aux files are copied to disk under `/raw/`** (the parsed form here IS the gjesus3 preservation surface; the original files stay on the platform acquisition machine).
 
 ```json
 "mri": {
   "subject": {
-    "animal_id", "name", "study_name", "sex", "weight_g", "date",
-    "position", "referring_operator"
+    "id", "name", "study_name", "type", "sex",
+    "birth_date", "weight", "position", "entry",
+    "study_datetime", "referral", "instance_uid"
   },
   "acquisition": {
-    "sequence_name", "pulse_program", "datetime", "duration_s",
-    "TR_ms", "TE_ms", "flip_angle_deg", "nucleus", "frequency_MHz",
-    "gating_used", "BPM_used", "respiration_rate_used"
+    "method", "pulse_program", "creation_datetime",
+    "echo_time_ms", "repetition_time_ms",
+    "averages", "repetitions", "scan_time_str", "scan_time_ms",
+    "nucleus", "frequency_mhz", "receiver_gain",
+    "frame_count", "frame_group_desc"
   },
   "geometry": {
-    "matrix", "FOV_mm", "slice_thickness_mm", "slice_count",
-    "orientation", "position"
+    "spatial_dim", "matrix", "fov",
+    "slice_thickness", "core_dim", "core_size",
+    "core_extent", "core_units", "orientation", "position"
   },
   "reconstruction": {
     "indices_present": ["1", "3"],
-    "methods": { "1": "auto", "3": "user-controlled" },
-    "intensity_ranges": { "3": {"min": ..., "max": ...} },
-    "frame_labels": { "3": ["Cardiac Frame 1", ...] }
+    "by_index": {
+      "1": {
+        "reco_mode", "fov", "size", "frame_count",
+        "data_min", "data_max", "frame_type", "frame_group_elem_desc",
+        "dicoms": [
+          {
+            "dst_basename": "recon1_frame01.dcm",
+            "src_relpath":  "pdata/1/dicom/MRIm01.dcm",
+            "headers": {
+              "StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID",
+              "Modality", "Manufacturer", "ManufacturerModelName",
+              "SeriesDescription", "StudyDescription",
+              "StudyDate", "StudyTime", "AcquisitionDate", "AcquisitionTime",
+              "SeriesDate", "SeriesTime",
+              "ImageType", "Rows", "Columns", "NumberOfFrames",
+              "PixelSpacing", "SliceThickness", "SpacingBetweenSlices",
+              "InstanceNumber",
+              "PatientID", "PatientName", "PatientSex", "PatientWeight",
+              "MagneticFieldStrength", "EchoTime", "RepetitionTime",
+              "FlipAngle", "ScanningSequence", "SequenceVariant"
+            }
+          }
+        ]
+      },
+      "3": {
+        "...same shape...",
+        "dicoms": [ "...one entry per recon3_frame<NN>.dcm..." ]
+      }
+    }
   },
   "_raw_metadata": {
-    "subject": { ...full JCAMP-DX dump of study-root subject file... },
-    "acqp":    { ...full dump... },
-    "method":  { ...full dump... },
-    "visu_pars": { ...full dump... },
-    "pdata_3": { "visu_pars": {...}, "reco": {...} }
+    "subject":   { ...parsed JCAMP-DX dump of study-root subject file... },
+    "acqp":      { ...parsed dump... },
+    "method":    { ...parsed dump... },
+    "visu_pars": { ...parsed dump... },
+    "pdata": {
+      "1": { "visu_pars": {...}, "reco": {...} },
+      "3": { "visu_pars": {...}, "reco": {...} }
+    }
   }
 }
 ```
 
-Buckets are best-effort summaries; if a field is missed today, it's still recoverable from `_raw_metadata` without re-reading the raw aux files. Curated `discovered.mri_*` subset (surfaced for YAML reference) is documented in `tools/ingest/paravision_metadata.py::EXPOSED_FIELDS` and mirrored in [09_MODALITIES](09_MODALITIES.md) per the CLAUDE.md cross-reference rule.
+Notes:
+- **DICOM UIDs** (`StudyInstanceUID` / `SeriesInstanceUID` / `SOPInstanceUID`) are first in the curated headers — required for any DICOM-aware tool (XNAT, PACS, OMERO) that joins data on UIDs. All per-frame DICOMs from one pdata/recon share `SeriesInstanceUID`; the parent ParaVision exam corresponds to one `StudyInstanceUID`.
+- **MRI-specific curated tags** (`MagneticFieldStrength`, `EchoTime`, `RepetitionTime`, `FlipAngle`, `ScanningSequence`, `SequenceVariant`) — beyond the standard tags NI captures, these are populated by Bruker's DICOM exporter and useful for distinguishing sequences.
+- **Each kept DICOM gets a `dicoms[]` entry** under its recon: `dst_basename` (what it's named on gjesus3 under `<ACQ-ID>.data/`), `src_relpath` (original path inside the upstream ParaVision exam), and curated headers.
+- **`_raw_metadata`** carries the parsed JCAMP-DX dicts for every aux file. The verbatim originals stay on the platform acquisition machine — the parsed dicts here are the gjesus3 preservation surface.
+- **For no-DICOM acquisitions** (students who didn't run Bruker's exporter): all curated buckets and `_raw_metadata` are still populated from the JCAMP-DX. Each recon's `dicoms[]` list is empty. The `<ACQ-ID>.data/` folder is created empty.
+- Buckets are best-effort summaries; if a field is missed, it's still recoverable from `_raw_metadata` without re-reading the source.
+- Curated `discovered.mri_*` subset (surfaced for YAML reference) is documented in `tools/ingest/paravision_metadata.py::EXPOSED_FIELDS` and mirrored in [09_MODALITIES](09_MODALITIES.md) per the CLAUDE.md cross-reference rule.
+
+#### `ni:` block shape (round-8 v2 2026-05-27)
+
+For an internal NI acquisition (Molecubes archive-mode), the sidecar's `ni:` block aggregates content from the per-acquisition `protocol.txt`, the three XML aux files (`protocol.xml`, `acqparams.xml`, `recontemplate.xml`), and the DICOM headers of **every** `.dcm` kept on gjesus3 (one per reconstruction for CT, one per frame for PET/SPECT). Mirrors the `mri:` block design — curated buckets + lossless `_raw_metadata`. **No source aux files are copied to disk under `/raw/`** (the parsed form here IS the gjesus3 preservation surface; the original files live on the Molecubes platform archive).
+
+```json
+"ni": {
+  "study": {
+    "study_name", "series_name", "principal_investigator", "modality",
+    "datetime", "datetime_raw"
+  },
+  "subject": {
+    "animal_id", "weight_g"
+  },
+  "acquisition": {
+    "scan_protocol", "bed_position_from", "bed_position_to",
+    "record_respiratory", "record_cardiac",
+    "isotope", "activity_MBq", "activity_calibrated_at",
+    "remaining_activity_MBq", "remaining_activity_calibrated_at",
+    "injected_at",
+    "n_frames", "scan_duration_s",
+    "dose"
+  },
+  "reconstruction": {
+    "recons_present": ["0", "1", "2"],
+    "by_index": {
+      "0": {
+        "algorithm", "iterations", "voxel_size", "energy_peak",
+        "energy_win", "gatingtype",
+        "dicoms": [
+          {
+            "dst_basename": "recon0.dcm",              // CT or PET static
+            "src_relpath": "recon_0/<original_filename>.dcm",
+            "headers": {
+              "StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID",
+              "Modality", "Manufacturer", "ManufacturerModelName",
+              "SeriesDescription", "StudyDescription",
+              "StudyDate", "StudyTime", "AcquisitionDate", "AcquisitionTime",
+              "SeriesDate", "SeriesTime",
+              "ImageType", "Rows", "Columns", "NumberOfFrames",
+              "PixelSpacing", "SliceThickness", "SpacingBetweenSlices",
+              "ReconstructionDiameter", "Units",
+              "PatientID", "PatientName", "PatientSex", "PatientWeight",
+              "RadiopharmaceuticalInformationSequence"
+            }
+          },
+          {
+            "dst_basename": "recon0_frame1.dcm",       // PET/SPECT dynamic — per-frame
+            "src_relpath": "recon_0/frame_1/iter_30/<original>.dcm",
+            "headers": { ... ImageType ends 'VOLUME', NumberOfFrames = z-slices ... }
+          },
+          {
+            "dst_basename": "recon0_frameMULTI.dcm",   // PET/SPECT dynamic — bundled all-frames
+            "src_relpath": "recon_0/<original>_frameMULTI_iter30.dcm",
+            "headers": { ... ImageType ends 'DYNAMIC', NumberOfFrames = z-slices × n_frames ... }
+          }
+        ]
+      }
+    }
+  },
+  "_raw_metadata": {
+    "protocol_txt":      { "Study name": "0525", "Series name": "251029", ... },  // parsed dict
+    "protocol_xml":      { ...nested parsed XML... },
+    "acqparams_xml":     { "Acquisition/FOV_width": "37.4", ... },                 // flat key:value
+    "recontemplate_xml": { "ReconstructionTemplate/algorithm": "ISRA", ... },      // flat key:value
+    "reconparams_by_idx": {
+      "0": { "Acquisition/...": "..." },                                           // per-recon flat key:value
+      "1": { ... },
+      "2": { ... }
+    }
+  }
+}
+```
+
+Notes:
+- **DICOM UIDs** (`StudyInstanceUID` / `SeriesInstanceUID` / `SOPInstanceUID`) are first in the curated headers — required for any DICOM-aware tool (XNAT, PACS, OMERO) that joins data on UIDs. PET/SPECT acquisitions of the same animal session share `StudyInstanceUID` across modalities (note: NOT shared with the corresponding CT, which is a separate study acquisition on the Molecubes platform — verify per case).
+- **`protocol_txt` is a parsed dict** (verbatim keys from the source file like `"Study name"`, `"Date/time"`, `"Animal weight (g)"`). Every non-empty line is parsed (no allowlist) plus the special `"Scan bed position from X to Y"` line which has no colon — split into `"Scan bed position from"` and `"Scan bed position to"`. Was a verbatim string in the v1 round-8 design; the dict form makes the sidecar machine-queryable without re-parsing.
+- **Each kept DICOM gets a `dicoms[]` entry** with its new flat filename (`dst_basename` — what it's named on gjesus3 under `<ACQ-ID>.data/`), its original source path inside the upstream archive (`src_relpath`), and its curated headers. CT acquisitions have one entry per recon; PET/SPECT have one per frame.
+- **Multi-frame DICOMs are KEPT** (v2.1, 2026-05-27 update) — platform-generated bundled DICOMs (`frameMULTI` in the source filename) for dynamic PET/SPECT studies land on gjesus3 as `recon<X>_frameMULTI.dcm` alongside the per-frame DICOMs, appearing in the same `dicoms[]` list. Distinguishable by `ImageType` containing `'DYNAMIC'` (per-frame have `'VOLUME'`) and `NumberOfFrames` equal to the per-frame value × number of frames. Researchers and downstream tools can pick either representation. See [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md) and equipment workflow notes for the v2 → v2.1 history.
+- **`_raw_metadata`** carries the parsed forms of all 4 source aux files + each per-recon `reconparams.xml`. The verbatim originals stay on the platform archive — the parsed dicts here are the gjesus3 preservation surface.
+- Per-modality acquisition fields are populated when present (e.g. `isotope`/`activity_MBq` for PET; empty for CT — the bucket handles missing fields gracefully by emitting `""`).
+- Curated `discovered.ni_*` subset (surfaced for YAML reference) is documented in `tools/ingest/ni_metadata.py::EXPOSED_FIELDS` and mirrored in [09_MODALITIES](09_MODALITIES.md) NI section per the CLAUDE.md cross-reference rule.
 
 ---
 

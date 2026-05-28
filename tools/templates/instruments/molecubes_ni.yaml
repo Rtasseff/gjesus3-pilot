@@ -28,8 +28,10 @@
 # AUTO-DISCOVERED FIELDS AVAILABLE TO THE OPERATOR
 # ============================================================================
 # Every entry below is automatically populated per acquisition (per .tgz
-# archive) by the filename regex below. Referenceable as `discovered.<name>`
-# (bare ref) or `${discovered.<name>}` (interpolation).
+# archive) by either the filename regex below OR by the
+# ni_metadata.py embedded extractor (round-8 redo 2026-05-26).
+# Referenceable as `discovered.<name>` (bare ref) or
+# `${discovered.<name>}` (interpolation).
 #
 # Archive-basename regex (from filename_parse with `source: name` —
 # the staged folder name IS the archive basename):
@@ -54,12 +56,35 @@
 #                                       folder — same as the archive basename
 #                                       (e.g. "irene_0525_251029_0525_m14_20251029100641_PET")
 #
-# NO .dcm-embedded extraction (yet). Molecubes archives contain
-# .bin reconstruction files + XML aux metadata (`protocol.xml`,
-# `acqparams.xml`, `recontemplate.xml`, etc.), not DICOM at the leaf.
-# A future-work extractor could parse those XML files into
-# `discovered.ni_*` fields analogous to ParaVision's
-# `discovered.mri_*`; queued in tasks/tasks.md §3.1 Future work.
+# Embedded NI extractor (tools/ingest/ni_metadata.py, round-8 redo):
+#   discovered.ni_study_name           Study name from protocol.txt
+#                                       (typically the funded-project id, e.g. "0525")
+#   discovered.ni_series_name          Series name from protocol.txt
+#                                       (typically the acquisition-date short, e.g. "251029")
+#   discovered.ni_pi                   PI from protocol.txt (often the
+#                                       operator username, e.g. "irene")
+#   discovered.ni_modality             PET | CT | SPECT | OI (from protocol.txt)
+#   discovered.ni_acquisition_datetime ISO datetime from protocol.txt
+#                                       (e.g. "2025-10-29T10:15:58")
+#   discovered.ni_animal_id            Animal ID from protocol.txt
+#                                       (e.g. "0525_m13")
+#   discovered.ni_animal_weight_g      Animal weight in grams (often "0")
+#   discovered.ni_scan_protocol        Scan protocol name
+#                                       (e.g. "spiral high-resolution")
+#   discovered.ni_bed_from             Scan bed start position
+#   discovered.ni_bed_to               Scan bed end position
+#   discovered.ni_isotope              Radioisotope (PET/SPECT; empty for CT)
+#   discovered.ni_activity_mbq         Injected activity in MBq (PET/SPECT)
+#   discovered.ni_n_frames             Number of time frames (PET; static = "1")
+#   discovered.ni_scan_duration_s      Scan duration in seconds (PET)
+#   discovered.ni_recons_present       Comma-separated recon_<idx> indices
+#                                       found in the source (e.g. "0,1,2" for CT,
+#                                       "0" for PET)
+#
+# The full structured `ni:` block (study / subject / acquisition /
+# reconstruction buckets + parsed XMLs + verbatim protocol.txt +
+# curated DICOM headers per recon) lands in metadata.json.ni — see
+# 08_METADATA §4.3 `ni:` block shape.
 #
 # Resolver also provides these in resolver-evaluated fields below:
 #   ${instrument}              resolved per-case (PET / CT / SPECT)
@@ -85,6 +110,13 @@
 #     codes mapping to ecosystem DICOM (see config.INSTRUMENT_ECOSYSTEM).
 #   - `acquisition_layout: folder` — folder-as-primary; no zip. Same
 #     model as internal MRI (round 6).
+#   - `copy_strategy: ni_molecubes` — selects the NI selective-copy
+#     function in `ingest_raw.py::copy_ni_acquisition`. Keeps only the
+#     researcher-essential files (DICOMs + small XML/text aux),
+#     drops raw event data + calibration + operational logs (those
+#     stay on the Molecubes platform archive). See 13_GJESUS3_ROLE §5.6.
+#     NOT the same strategy as MRI (`paravision_exam`) — they handle
+#     different source structures (recon_<idx>/ vs pdata/<idx>/).
 #   - `data_ecosystem: DICOM` — even though the Molecubes archive
 #     contains .bin files + XML rather than .dcm, the platform sits
 #     in the DICOM ecosystem family. See 03_RAW_STORAGE §4.2 for the
@@ -144,6 +176,7 @@ ingest:
   delete_source_after_ingest: false
   auto_create_projects: true
   acquisition_layout: folder
+  copy_strategy: ni_molecubes
 
 auto_discover:
   # EDIT: local staging directory where `tools/extract_ni_archives.py`
@@ -162,11 +195,11 @@ auto_discover:
     # alternation lock the structure tightly.
     regex: '^(?P<user>[a-z]+)_(?P<series_id>\d+)_(?P<acq_date_short>\d{6})_(?P<short_project>\d+)_(?P<short_sample>[A-Za-z]+\d+|phantom[_a-z0-9]*)_(?P<acq_datetime_full>\d{14})_(?P<modality>PET|CT|SPECT|OI)$'
 
-  # No embedded-metadata extraction yet — Molecubes archives don't
-  # contain DICOM at the leaf, and an XML-aux extractor is queued as
-  # future work. Setting embedded_metadata: false would be more honest
-  # but the default (true) is fine since no extractor is registered for
-  # this folder shape — it just returns nothing.
+  # Embedded-metadata extraction ON (default). Wires
+  # `tools/ingest/ni_metadata.py` via `config._extract_dicom_embedded`
+  # (content-detected — folder needs protocol.txt + recon_<idx>/).
+  # Populates the 15 `discovered.ni_*` fields documented at the top of
+  # this file and the structured `ni:` sidecar block.
 
 registry:
   # PER-CASE instrument code from the parsed modality. The

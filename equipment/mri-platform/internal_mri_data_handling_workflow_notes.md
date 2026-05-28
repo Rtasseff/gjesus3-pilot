@@ -299,6 +299,43 @@ The round-6 ingest config exposes these `discovered.*` fields per acquisition (f
 
 ---
 
+## Round-6 v2 reshape (2026-05-27)
+
+Following round-6 v1 (2026-05-22) and the NI v2/v2.1 work, the on-disk MRI layout was reshaped to mirror NI's slim convention. The v1 design had the same problems v1 NI did: aux files duplicated to disk under `acquisition_aux/`, DICOMs buried in `reconstructions/pdata_<idx>/dicom/MRIm<NN>.dcm`, and the default `reconstructions: [3]` silently dropped image data for exams that lacked pdata/3.
+
+### What changed in v2
+
+| Aspect | v1 (2026-05-22) | v2 (2026-05-27) |
+|---|---|---|
+| Aux file storage | `acquisition_aux/{acqp, method, visu_pars, fid, pulseprogram, specpar, uxnmr.*}` on disk | Parsed JCAMP-DX content lives only in `metadata.json.mri._raw_metadata`; source files stay on the platform acquisition machine |
+| Per-recon non-DICOM | `reconstructions/pdata_<idx>/{2dseq, visu_pars, reco}` on disk | Parsed `visu_pars` + `reco` content in `metadata.json.mri._raw_metadata.pdata.<idx>`; `2dseq` (binary image) NOT copied (DICOMs derive from it; the platform retains the binary) |
+| Data folder name | `reconstructions/pdata_<idx>/dicom/` | `<ACQ-ID>.data/` (flat — mirrors NI's `<ACQ-ID>.data/` and microscopy's `<ACQ-ID>.czi`) |
+| DICOM names | Source `MRIm01.dcm`...`MRIm15.dcm` per pdata/<idx>/dicom/ | Renamed flat across recons: `recon<idx>_frame<NN>.dcm` (e.g. `recon1_frame01.dcm` ... `recon3_frame15.dcm`) |
+| Default `reconstructions:` | `[3]` (user-trusted cardiac-flow recon) | `all` — DICOMs are tiny under v2; preserve everything by default. Operator can override to `[3]` for cardiac-flow workflows |
+| DICOM UIDs in sidecar | Not captured | `StudyInstanceUID` / `SeriesInstanceUID` / `SOPInstanceUID` first in per-DICOM `headers` (critical for XNAT/PACS interop) |
+| .lnk shortcut target | The ACQ folder itself | The `<ACQ-ID>.data/` subfolder — Explorer opens directly to the DICOMs, matching the microscopy `.lnk → .czi` semantics |
+| Sidecar `reconstruction.by_index.<idx>` | High-level summary (`methods`, `frame_labels`) | Per-DICOM `dicoms[]` list with `dst_basename` + `src_relpath` + full curated headers (UIDs + MRI-specific tags `MagneticFieldStrength`/`EchoTime`/`RepetitionTime`/`FlipAngle`) |
+
+### No-DICOM acquisition handling
+
+A real-world gap surfaced during the v2 source-data inventory: **3 of 7 round-6 source projects had ZERO DICOMs** because their researchers (students working under Jesús) hadn't run Bruker's ParaVision DICOM exporter before the data was FTP'd off. The raw `fid` files and `2dseq` binaries were present, but the per-frame `.dcm` files in `pdata/<idx>/dicom/` were missing entirely.
+
+**Round-6 v2 decision:** ingest these acquisitions anyway, with empty `<ACQ-ID>.data/` folders. The `metadata.json.mri:` block is fully populated from the parsed JCAMP-DX (subject, acquisition parameters, geometry, per-recon `visu_pars`/`reco`) — researchers can still query the acquisition metadata. The `mri.reconstruction.by_index.<idx>.dicoms[]` list is empty.
+
+**Recovery path:** the operator (Data Mgmt Lead) flags the no-DICOM acquisitions in the round-6 report and either (a) asks the originating researcher to re-run Bruker's exporter, then re-runs the ingest (idempotency dedup means only the freshly-available DICOMs get copied; placeholder gets converted in place), or (b) waits for the future FID→DICOM regeneration capability (tracked in `tasks/tasks.md §3.1`).
+
+**Why not skip the exam outright?** The acquisition is still real — the animal was scanned, the parameters were captured. Registering it preserves the audit trail and lets a later DICOM conversion fill in the image data without needing to re-acquire registry information. Empty `.data/` is honest about the gap.
+
+**Detection in the ingest pipeline:** `copy_mri_paravision` enumerates `pdata/<idx>/dicom/*.dcm` for each selected recon. If no `.dcm` files are found anywhere across all selected recons, the function emits a clear log line ("no DICOMs — student didn't run Bruker exporter") and proceeds with the empty-`.data/` placeholder.
+
+### FID→DICOM regeneration future-work
+
+Bruker's GUI-based ParaVision DICOM exporter is closed-source; there is currently no open-source Python library that converts raw `fid` (k-space) data directly to DICOM. (Tools like `bruker2nifti` and `brkraw` go to NIfTI, not DICOM. `dcm2niix` runs the opposite direction.) The future-work item in `tasks/tasks.md §3.1` is a 2-4 week research project: read the binary `fid` format, perform Fourier reconstruction, build DICOM headers from the JCAMP-DX aux files, serialize using pydicom. Until that lands, no-DICOM acquisitions remain placeholders requiring researcher action.
+
+The architecture supports this transition with no further changes — when the FID→DICOM capability ships, it would write `recon<X>_frame<NN>.dcm` files into the existing empty `.data/` folder; re-run the ingest to pick them up via idempotent dedup.
+
+---
+
 ## Documented workflow vs. observed workflow
 
 ### Documented platform expectations (from protocol + email reminders + walkthrough)

@@ -1,8 +1,8 @@
 # 13 — The Role of gjesus3 (vs. Platform Archives)
 
 **Parent:** [Documentation Index](00_INDEX.md)
-**Status:** 🔶 Draft (reframe captured 2026-05-20)
-**Last Updated:** 2026-05-20
+**Status:** 🔶 Draft (reframe captured 2026-05-20; §5.6/§5.7 added 2026-05-26 after round-8 NI redo)
+**Last Updated:** 2026-05-26
 
 ---
 
@@ -145,6 +145,53 @@ Because the platform deep-freeze exists, gjesus3 does not need to anxiously hoar
 - The 1% case of "wait, we need `/1` for QC" routes back through the platform manager
 
 This is not a license to be lossy without reason — it's permission to be opinionated when the user's actual workflow says certain artifacts are noise.
+
+### 5.6 What we keep, by acquisition class
+
+**gjesus3 is NOT the long-term archive of original instrument bytes — the platforms are.** The original group ambition was to make gjesus3 both the long-term archive AND the active project workspace; this was abandoned (NAS too slow for many concurrent users, no remote access, no need to duplicate platform archives). What remains is the **research-facing surface**: the small set of files that researchers actually open during analysis, sharing, and publishing.
+
+Per-platform reliability of the upstream archive (drives how much we lean on it as a fallback):
+
+| Platform | Long-term raw archive | Confidence level | Implication for gjesus3 |
+|---|---|---|---|
+| **Nuclear Imaging** (Molecubes / MILabs) | Original `.tgz` archives kept indefinitely on `\\cicmgsp02\gnuclear2$`, never altered after acquisition | **High** — trusted to be byte-perfect originals | We can be aggressive about dropping raw event data; the 1% case routes back to the platform easily |
+| **MRI** (Bruker ParaVision) | Originals retained by the platform but not byte-locked; alterations possible in principle | **Medium** — generally reliable, no formal guarantee | Lean on the platform for forensic recovery, but with eyes open |
+| **Optical microscopy** (Zeiss .czi) | Operator-managed on instrument-local PCs / group drives; no platform-level guarantee | **Low** — the platform doesn't centrally archive | The `.czi` we ingest IS effectively the long-term copy. We can't drop fidelity. |
+
+**What we keep on gjesus3, by acquisition class:**
+
+| Class | What lives at `/raw/<ACQ-ID>/` | What stays only on the platform |
+|---|---|---|
+| **Biomedical imaging (NI, MRI — "DICOM ecosystem")** | The reconstructed DICOM files (the analysis-ready images) + a curated `metadata.json` sidecar pulling key acquisition / subject / reconstruction context from instrument aux files | Raw detector data (event lists, k-space, sinograms, attenuation maps, calibration logs). Useless to 99% of analysis; voluminous; the platform owns this. |
+| **Optical microscopy (.czi)** | The `.czi` container as-deposited (one acquisition = one file natively) + `metadata.json` sidecar | (nothing — gjesus3 IS the primary copy for microscopy) |
+
+For biomedical, the **DICOM + sidecar pair gives a researcher ~99% of their value** (open in 3D Slicer / PMOD / ITK-SNAP / pydicom; metadata browsable without opening a viewer). The remaining 1% (raw event detection, hyper-detailed instrument logs) routes back through the platform — slower, messier, with some loss of control, but the platform is the right owner.
+
+**Implications for ingest design:**
+- Folder-as-primary acquisitions for biomedical imaging use **selective inclusion** — explicit allowlists of what to copy, not "copy everything." Cf. internal NI `copy_ni_acquisition` and internal MRI `copy_paravision_exam`.
+- Curated metadata extraction (parsing instrument-specific aux files: ParaVision JCAMP-DX, Molecubes `protocol.txt` + XMLs, DICOM headers) goes into the sidecar's `<ecosystem>:` block at the level of richness a researcher would actually browse.
+- We do not hoard the raw bytes "just in case" — when the platform archive is trustworthy, the cost of preserving its contents twice is real (storage, NAS-write time, scanability) and the benefit is essentially zero.
+
+The XNAT-future framing (§4) directly captures this principle: XNAT works with DICOM + metadata, not raw detector outputs; OMERO works with vendor image files, not raw camera streams. gjesus3 is shaped the same way today, knowing one of those systems may absorb it eventually.
+
+### 5.7 Acquisition file-shape paradigms (biomedical vs. optical)
+
+The instruments in scope fall into two structurally distinct paradigms — visible in dir structure, filename discipline, and where metadata lives. The pilot's per-ecosystem layout choices follow from this distinction.
+
+| Paradigm | Optical microscopy (Zeiss `.czi`) | Biomedical imaging (DICOM family — MRI, NI) |
+|---|---|---|
+| **Directory structure** | Loose; sometimes meaningful (researcher/cell-line/experiment), sometimes not; varies per operator | Well-defined, instrument-imposed: study / exam / reconstruction / frame / iteration |
+| **Filename discipline** | Use-case-specific or operator-arbitrary (`Z-stack_LP_IONP-doxo_20x_6h_2.czi`) — the `.czi` is the deliverable, the name is a label | Instrument-imposed (`20251029100311_PET_OSEM_0.dcm`, ParaVision `2dseq` per pdata index) — the filename carries machine-issued identifiers |
+| **Where metadata lives** | **Inside the single `.czi` container** — every image, channel, timepoint, mosaic tile, Z-slice, thumbnail, plus the full instrument-state XML, in one file | **Across many small files** — one DICOM per image (a 1990s standard choice, not a conceptual mismatch), aux files at each level (`acqp` / `method` / `visu_pars` for MRI; `protocol.txt` / `acqparams.xml` for NI) |
+| **One acquisition =** | One `.czi` file | A folder bundle (many `.dcm` + small aux files) |
+| **gjesus3 primary entity shape** | `primary_kind: file` — `<ACQ-ID>.czi` | `primary_kind: folder` — selective inclusion of DICOMs + curated aux metadata |
+| **Sidecar shape** | One `microscopy:` block (the `.czi` metadata is already concentrated in one place) | Per-bucket structured block (`mri:` subject/acquisition/geometry/reconstruction; `ni:` study/subject/acquisition/reconstruction) that aggregates across the source aux files |
+
+**Why this matters for ingest:**
+- Microscopy ingest is trivially clean: one file in, one file out. The complexity is in the metadata extraction (XML parsing inside the `.czi`).
+- Biomedical ingest needs selective folder copy + multi-source metadata aggregation. The `mri:` and `ni:` sidecar blocks effectively re-concentrate metadata that the instrument scattered.
+
+This is also the reason internal MRI and NI on gjesus3 use folder-as-primary (no zip): the per-frame-DICOM packaging is a legacy 1990s format choice (one image per file), not a fundamental limit. A modern Enhanced MR / Multi-Frame DICOM could collapse that back to one file (tracked as future work in `tasks/tasks.md §3.1`). Until then, the folder bundle IS the unit and the sidecar carries the aggregated metadata.
 
 ---
 

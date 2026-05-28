@@ -11,6 +11,7 @@ from . import (
     dicom_utils,
     microscopy_utils,
     filename_parser,
+    ni_metadata,
     paravision_metadata,
     registry,
     resolver,
@@ -40,22 +41,33 @@ def _is_paravision_exam(path):
 def _extract_dicom_embedded(path):
     """Embedded-metadata dispatcher for the DICOM ecosystem.
 
-    Detects ParaVision exam folders by content and dispatches to
-    `paravision_metadata.extract`. For everything else under DICOM
-    (collaborator XMRI zips, future PET/SPECT/CT), returns empty —
-    pure-DICOM-header extraction is queued as deferred work.
+    Detects source shape by content and dispatches to the right
+    extractor:
+      - Bruker ParaVision exam folder (`acqp` + `method` present) →
+        `paravision_metadata.extract` → section name "mri".
+      - Molecubes NI acquisition folder (`protocol.txt` + `recon_<idx>/`
+        present) → `ni_metadata.extract` → section name "ni".
+      - Everything else under DICOM (collaborator XMRI zips, future
+        general DICOM) → empty; pure-DICOM-header extraction is queued
+        as deferred work.
 
     Returns either a 2-tuple `(discovered, section_dict)` or a 3-tuple
     `(discovered, section_dict, section_name)`. The 3-tuple form lets
-    the dispatcher override the sidecar section name — e.g. ParaVision
-    data lives under `metadata.json.mri` even though the ecosystem is
-    DICOM, because the contents are ParaVision-specific (not generic
-    DICOM headers, which will eventually populate a separate
-    `metadata.json.dicom` block when that extractor ships).
+    the dispatcher override the sidecar section name when the contents
+    are platform-specific rather than generic DICOM headers (a
+    `metadata.json.dicom` block is reserved for the eventual
+    pure-DICOM-header extractor).
     """
     if _is_paravision_exam(path):
-        disc, section = paravision_metadata.extract(path)
-        return disc, section, "mri"
+        # paravision_metadata.extract returns a 3-tuple
+        # (discovered, mri_section, "mri") so the dispatcher can pass
+        # it straight through. The optional `reconstructions=` arg is
+        # NOT passed here — full per-DICOM header read happens at
+        # expand_batch time; copy-time recon selection still gates which
+        # files actually land on disk.
+        return paravision_metadata.extract(path)
+    if ni_metadata.is_ni_acquisition(path):
+        return ni_metadata.extract(path)
     return ({}, {})
 
 
@@ -154,6 +166,16 @@ def _build_dedupe_index(registry_path):
     Skipped if the registry doesn't exist yet. Uses date prefix from
     acquisition_datetime (YYYYMMDD), and falls back to "" when missing.
     Empty-string original_name rows are skipped (legacy data).
+
+    The dedup key relies on original_name being unique within an
+    acquisition date. expand_batch sets original_name to the relative
+    path from staging_dir — basename-only for patterns like `*.czi` /
+    `*/`, parent-and-basename for `*/*`. The previous "name alone"
+    safety fallback was removed (2026-05-27, round-6 v2 MRI redo):
+    it caused false-positive dedups when the same exam-number basename
+    appeared across acquisition dates (e.g. ParaVision exam `12`
+    repeats across animal sessions). With unique original_name, the
+    (date, original_name) key is sufficient.
     """
     rows = registry.read_registry(registry_path) if registry_path else []
     keys = set()
@@ -164,7 +186,6 @@ def _build_dedupe_index(registry_path):
         adt = (r.get("acquisition_datetime") or "").strip()
         date_key = adt[:10].replace("-", "") if adt else ""
         keys.add((date_key, oname))
-        keys.add(("", oname))  # also match by name alone for safety
     return keys
 
 
@@ -329,7 +350,20 @@ def expand_batch(cfg, nas_root=None):
             for level_name, component in zip(path_levels, path_parts):
                 discovered[level_name] = component
 
-        case["original_name"] = match_basename
+        # original_name needs to be unique within the staging_dir so that
+        # the (acq_date, original_name) dedup key actually identifies a
+        # unique acquisition. Just the match basename isn't enough for
+        # patterns like `*/*` where matches come from different parent
+        # folders but the basename is the same (e.g. MRI exam numbers
+        # `12`, `13`, ... repeat across animal-session study folders,
+        # AND can repeat across acquisition dates because Bruker's
+        # examination numbering is per-platform-user-account, not
+        # per-study). The relpath form is basename-only when pattern is
+        # `*.czi` / `*/` (no parent), and `<parent>/<basename>` when
+        # pattern is `*/*` (one parent) — so microscopy / NI / XMRI
+        # behaviour is unchanged; MRI gets the disambiguator it needs.
+        rel_match = os.path.relpath(match_path, staging_dir).replace(os.sep, "/")
+        case["original_name"] = rel_match
         if is_file:
             discovered["filename"] = match_basename
         else:
@@ -458,12 +492,14 @@ def expand_batch(cfg, nas_root=None):
             print(f"[expand_batch] SKIP {match_basename}: {e}")
             continue
 
-        # Idempotency: skip if already ingested. Use the resolved
-        # acquisition_datetime (date prefix only) if available.
+        # Idempotency: skip if already ingested. Key is (acq_date,
+        # original_name) where original_name is the relpath set above.
+        # No more "name alone" fallback (see _build_dedupe_index for
+        # the rationale).
         adt = (case.get("acquisition_datetime") or "")[:10].replace("-", "")
-        if (adt, match_basename) in existing_keys or ("", match_basename) in existing_keys:
+        if (adt, rel_match) in existing_keys:
             print(
-                f"[expand_batch] SKIP {match_basename}: "
+                f"[expand_batch] SKIP {rel_match}: "
                 f"already in registry (idempotent re-run)"
             )
             continue

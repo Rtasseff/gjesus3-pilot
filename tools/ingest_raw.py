@@ -103,6 +103,251 @@ def _normalize_reconstructions(value):
     return None
 
 
+def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn):
+    """Folder-as-primary copy for a Molecubes Nuclear Imaging acquisition.
+
+    SLIM copy (round-8 v2, 2026-05-27): only the reconstructed DICOMs
+    land on gjesus3, in a flat `<ACQ-ID>.data/` subfolder. All other
+    files — raw event data, calibration, operational logs, AND the
+    acquisition-level aux files (protocol.txt / XML / acquisition.log) —
+    stay on the Molecubes platform archive (`\\\\cicmgsp02\\gnuclear2$`).
+    The parsed contents of the aux files are preserved in
+    `metadata.json.ni._raw_metadata`, so nothing meaningful is lost;
+    the on-disk acq folder mirrors microscopy's one-file-per-acquisition
+    convention (`<ACQ-ID>.czi`) as closely as a multi-DICOM
+    reconstruction allows.
+
+    Destination layout:
+
+      <dest_dir>/                          (e.g. ACQ-20251029-CT-001/)
+        metadata.json                       (written by caller after this)
+        checksums.json                      (written by caller after this)
+        README.txt                          (written by caller after this)
+        <ACQ-ID>.data/                      (THIS function creates + populates)
+          recon0.dcm                          (CT, no frame subdirs)
+          recon1.dcm
+          recon2.dcm
+          recon0_frame0.dcm                   (PET/SPECT static)
+          recon0_frame1.dcm, recon0_frame2.dcm  (PET dynamic)
+
+    File-name mapping (computed by ni_metadata._plan_dcm_target):
+      - Direct under recon_<X>/<basename>.dcm  → recon<X>.dcm  (CT path)
+      - Under recon_<X>/frame_<Y>/iter_<N>/<basename>.dcm → recon<X>_frame<Y>.dcm
+      - Filename contains "frameMULTI" → SKIPPED (platform-generated
+        bundled DICOM whose metadata is not yet validated; per-frame
+        DICOMs are used instead; existence is recorded in the sidecar
+        under ni.reconstruction.by_index.<idx>.multi_frame_dicoms_on_platform).
+
+    Everything else from the source is dropped (NOT copied to gjesus3):
+      acq-root: protocol.txt/xml, acqparams.xml, recontemplate.xml,
+        acquisition.log, data.raw, bright.raw, dark.raw, badpixels.map,
+        attmap.amap, eventdata_*, singles.stat, spectrum.bin,
+        monitoring.csv, sequence.csv, xrayserver.log, ACQSTATUS,
+        DOWNLOADED, REMIDOWNLOADED, calibrationParameters.xml,
+        reconstructionParameters*.xml, registration.matrix, recon.ini
+      per-recon: .img, RECONSTATUS, preview.res, *.bin, *.stat,
+        reconparams.txt/xml (parsed contents already in metadata.json),
+        reconstruction.log, recon.ini, ATTMAP variants, scatter binaries
+
+    Returns a dict mapping `<dst_relative_path> -> sha256` for the
+    checksums.json file. Raises RuntimeError on hash mismatch or empty plan.
+    """
+    from ingest import ni_metadata
+
+    src = Path(source_path)
+    md = ni_metadata.load_ni_acquisition(src)
+    data_dirname = f"{acq_id_str}.data"
+
+    # Build the (src_file, dst_relpath) plan from the load_ni_acquisition
+    # result. Each .dcm has its already-planned dst_basename; everything
+    # else is dropped.
+    plan = []
+    recon_indices = []
+    n_skipped_multi = 0
+    n_unrecognized = 0
+    for idx in sorted(
+        md.get("recons", {}).keys(),
+        key=lambda x: int(x) if x.isdigit() else x,
+    ):
+        recon_indices.append(idx)
+        r = md["recons"][idx]
+        for d in r.get("dicoms") or []:
+            src_file = src / d["src_relpath"]
+            dst_rel = os.path.join(data_dirname, d["dst_basename"])
+            plan.append((src_file, dst_rel))
+        n_skipped_multi += len(r.get("multi_frame_dicoms") or [])
+        n_unrecognized += len(r.get("unrecognized_dicoms") or [])
+
+    if not recon_indices:
+        raise RuntimeError(
+            f"No recon_<idx>/ subfolders found in {source_path} — "
+            f"is this a Molecubes NI acquisition?"
+        )
+    log_fn(f"NI slim copy: recons={recon_indices}, dicoms_to_copy={len(plan)}")
+    if n_skipped_multi:
+        log_fn(
+            f"  Skipping {n_skipped_multi} multi-frame (frameMULTI) DICOM(s); "
+            f"per-frame DICOMs are used instead. Existence recorded in sidecar."
+        )
+    if n_unrecognized:
+        log_fn(
+            f"  WARN: {n_unrecognized} DICOM(s) at unexpected paths skipped "
+            f"(see sidecar's unrecognized_dicom_paths).",
+            "WARN",
+        )
+
+    if not plan:
+        raise RuntimeError(
+            f"NI slim copy plan is empty for {source_path}. Expected at "
+            f"least one per-frame or direct .dcm under recon_<idx>/."
+        )
+
+    iterator = tqdm(plan, desc="Copying", unit="file") if HAS_TQDM else plan
+    checksums = {}
+    for src_file, dst_rel in iterator:
+        dst_abs = os.path.join(dest_dir, dst_rel)
+        os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
+        shutil.copy2(src_file, dst_abs)
+        src_hash = checksum.sha256_file(src_file)
+        dst_hash = checksum.sha256_file(dst_abs)
+        if src_hash != dst_hash:
+            raise RuntimeError(
+                f"Checksum mismatch on copy:\n"
+                f"  src: {src_file} ({src_hash[:12]})\n"
+                f"  dst: {dst_abs} ({dst_hash[:12]})"
+            )
+        checksums[dst_rel.replace(os.sep, "/")] = dst_hash
+    log_fn(f"NI slim copy complete: {len(plan)} DICOM(s) under {data_dirname}/")
+    return checksums
+
+
+def copy_mri_paravision(source_path, dest_dir, acq_id_str, reconstructions, log_fn):
+    """Folder-as-primary copy for a Bruker ParaVision MRI exam — v2 slim shape.
+
+    SLIM copy (round-6 v2, 2026-05-27): only the reconstructed per-frame
+    DICOMs land on gjesus3, in a flat `<ACQ-ID>.data/` subfolder. All
+    other files — JCAMP-DX aux (acqp/method/visu_pars/subject), raw fid,
+    per-recon non-DICOM (2dseq/visu_pars/reco), pulseprogram/specpar/
+    uxnmr.* — stay on the platform acquisition machine. The parsed
+    contents of the JCAMP-DX aux files are preserved in
+    `metadata.json.mri._raw_metadata`, so nothing meaningful is lost;
+    the on-disk acq folder mirrors microscopy's one-file-per-acquisition
+    convention (`<ACQ-ID>.czi`) and NI's `<ACQ-ID>.data/` shape.
+
+    Destination layout:
+
+      <dest_dir>/                          (e.g. ACQ-20251016-MRI-029/)
+        metadata.json                       (written by caller after this)
+        checksums.json                      (written by caller after this)
+        README.txt                          (written by caller after this)
+        <ACQ-ID>.data/                      (THIS function creates + populates)
+          recon1_frame01.dcm                  (Bruker MRIm01.dcm from pdata/1/dicom/)
+          recon1_frame02.dcm
+          ...
+          recon3_frame01.dcm                  (Bruker MRIm01.dcm from pdata/3/dicom/)
+          recon3_frame02.dcm
+          ...
+
+    File-name mapping (computed by paravision_metadata._plan_dcm_target):
+      - Source `pdata/<idx>/dicom/MRIm<NN>.dcm` → `recon<idx>_frame<NN>.dcm`.
+      - Non-`MRIm`-prefixed DICOMs (rare): fallback to `recon<idx>_<basename>`
+        + WARN.
+
+    Reconstruction selection (`reconstructions:` YAML flag):
+      None / 'all' → every pdata/<idx>/ present in the source.
+      int (e.g. 3) → only that index.
+      list (e.g. [1, 3]) → only those.
+      Unselected indices' JCAMP-DX (visu_pars, reco) still lands in
+      `_raw_metadata.pdata.<idx>` for forensic completeness, but their
+      DICOMs are NOT copied.
+
+    No-DICOM acquisition handling: if the source has NO `pdata/<idx>/
+    dicom/*.dcm` files anywhere in the selected recons (the student
+    didn't run Bruker's DICOM exporter), this function creates an
+    empty `<ACQ-ID>.data/` folder and returns an empty checksums dict.
+    Caller writes empty checksums.json + populated sidecar; the
+    placeholder is filled in by an idempotent re-run after the student
+    converts (or by the future FID→DICOM regeneration capability).
+
+    Everything else from the source is dropped (NOT copied to gjesus3):
+      acqp, method, visu_pars (exam-level JCAMP-DX), subject (study-level),
+      fid (raw k-space ~12 MB/exam), pulseprogram, specpar, uxnmr.info,
+      uxnmr.par, configscan, AdjStatePerScan,
+      per-recon: 2dseq (binary image), visu_pars (parsed in sidecar),
+      reco (parsed in sidecar), id, procs, methreco.
+
+    Returns a dict mapping `<dst_relative_path> -> sha256` for the
+    checksums.json file (possibly empty for no-DICOM acquisitions).
+    Raises RuntimeError on hash mismatch.
+    """
+    from ingest import paravision_metadata
+
+    src = Path(source_path)
+    md = paravision_metadata.load_paravision_exam(src, reconstructions=reconstructions)
+    data_dirname = f"{acq_id_str}.data"
+
+    # Always create the .data subfolder (even when empty — placeholder
+    # for no-DICOM acquisitions).
+    data_dir_abs = os.path.join(dest_dir, data_dirname)
+    os.makedirs(data_dir_abs, exist_ok=True)
+
+    plan = []
+    recon_summary = []
+    n_unrecognized = 0
+    for idx in sorted(
+        md.get("pdata", {}).keys(),
+        key=lambda x: int(x) if x.isdigit() else x,
+    ):
+        p = md["pdata"][idx]
+        if not p.get("selected"):
+            recon_summary.append(f"pdata/{idx} (skipped — not in selection)")
+            continue
+        dcms = p.get("dicoms") or []
+        recon_summary.append(f"pdata/{idx} ({len(dcms)} dcm)")
+        for d in dcms:
+            src_file = src / d["src_relpath"]
+            dst_rel = os.path.join(data_dirname, d["dst_basename"])
+            plan.append((src_file, dst_rel))
+        n_unrecognized += len(p.get("unrecognized_dicoms") or [])
+
+    log_fn(f"MRI slim copy: {', '.join(recon_summary) if recon_summary else 'no pdata/ subfolders found'}")
+    if n_unrecognized:
+        log_fn(
+            f"  WARN: {n_unrecognized} non-MRIm-prefixed DICOM(s) found — "
+            f"copying with fallback names; see sidecar unrecognized_dicom_paths.",
+            "WARN",
+        )
+
+    if not plan:
+        log_fn(
+            "  No DICOMs to copy — likely the researcher didn't run Bruker's "
+            "DICOM exporter (no pdata/<idx>/dicom/*.dcm in selected recons). "
+            "Creating empty .data/ placeholder; sidecar will carry the "
+            "parsed JCAMP-DX. Re-run after conversion is run to fill in the "
+            "DICOMs (idempotent).",
+            "WARN",
+        )
+        return {}
+
+    iterator = tqdm(plan, desc="Copying", unit="file") if HAS_TQDM else plan
+    checksums = {}
+    for src_file, dst_rel in iterator:
+        dst_abs = os.path.join(dest_dir, dst_rel)
+        os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
+        shutil.copy2(src_file, dst_abs)
+        src_hash = checksum.sha256_file(src_file)
+        dst_hash = checksum.sha256_file(dst_abs)
+        if src_hash != dst_hash:
+            raise RuntimeError(
+                f"Checksum mismatch on copy:\n"
+                f"  src: {src_file} ({src_hash[:12]})\n"
+                f"  dst: {dst_abs} ({dst_hash[:12]})"
+            )
+        checksums[dst_rel.replace(os.sep, "/")] = dst_hash
+    log_fn(f"MRI slim copy complete: {len(plan)} DICOM(s) under {data_dirname}/")
+    return checksums
+
+
 def copy_paravision_exam(source_path, dest_dir, reconstructions, log_fn):
     """Folder-as-primary copy for a Bruker ParaVision exam.
 
@@ -315,11 +560,19 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     acquisition_layout = (ingest_block.get("acquisition_layout") or "").lower()
 
     if data_ecosystem == "DICOM" and acquisition_layout == "folder":
-        # NEW 2026-05-20: folder-as-primary (internal MRI ParaVision).
-        # No zip, no series/ wrapper. The acquisition folder IS the unit.
-        # Selective copy honours `reconstructions:` flag (see Steps 6-8).
+        # Folder-as-primary (internal MRI ParaVision round-6; internal
+        # NI round-8). No zip. The acquisition folder is the deliverable;
+        # inside it lives a `<ACQ-ID>.data/` folder (NI v2 2026-05-27) or
+        # the as-found exam tree (MRI). For the registry's
+        # primary_file_name, NI records the .data folder (analogue of
+        # microscopy's <ACQ-ID>.czi); MRI still records the ACQ-ID itself
+        # (legacy — to be aligned in the MRI redo round).
         copy_dest = dest_dir
-        cfg_single["primary_file_name"] = acq_id_str
+        copy_strategy_preview = (ingest_block.get("copy_strategy") or "").lower()
+        if copy_strategy_preview in ("ni_molecubes", "mri_paravision_v2"):
+            cfg_single["primary_file_name"] = f"{acq_id_str}.data"
+        else:
+            cfg_single["primary_file_name"] = acq_id_str
         cfg_single["primary_kind"] = "folder"
         cfg_single["file_format"] = ""
     elif data_ecosystem == "DICOM":
@@ -366,16 +619,37 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     os.makedirs(copy_dest, exist_ok=True)
 
     if data_ecosystem == "DICOM" and acquisition_layout == "folder":
-        # NEW 2026-05-20: ParaVision folder-as-primary copy.
-        # Selective: only the reconstructions listed in `reconstructions:`
-        # are kept; everything at the exam root lands in acquisition_aux/.
-        # Per-file source/dest hash verification raises on mismatch.
-        reconstructions = ingest_block.get("reconstructions")
-        log(f"Folder-as-primary copy (reconstructions: {reconstructions!r})")
+        # Folder-as-primary copy — per-instrument strategy selected by
+        # `copy_strategy:` in the ingest: block. Default `paravision_exam`
+        # for back-compat (round-6 MRI). NI uses `ni_molecubes` (round-8
+        # redo 2026-05-26). See per-instrument templates for which
+        # strategy to set.
+        copy_strategy = (ingest_block.get("copy_strategy") or "paravision_exam").lower()
+        log(f"Folder-as-primary copy (strategy: {copy_strategy})")
         try:
-            dest_checksums = copy_paravision_exam(
-                source_path, dest_dir, reconstructions, log,
-            )
+            if copy_strategy == "ni_molecubes":
+                dest_checksums = copy_ni_acquisition(
+                    source_path, dest_dir, acq_id_str, log,
+                )
+            elif copy_strategy == "mri_paravision_v2":
+                reconstructions = ingest_block.get("reconstructions")
+                log(f"  reconstructions: {reconstructions!r}")
+                dest_checksums = copy_mri_paravision(
+                    source_path, dest_dir, acq_id_str, reconstructions, log,
+                )
+            elif copy_strategy == "paravision_exam":
+                reconstructions = ingest_block.get("reconstructions")
+                log(f"  reconstructions: {reconstructions!r}")
+                dest_checksums = copy_paravision_exam(
+                    source_path, dest_dir, reconstructions, log,
+                )
+            else:
+                log(
+                    f"Unknown copy_strategy: {copy_strategy!r}. "
+                    f"Valid: 'paravision_exam', 'mri_paravision_v2', 'ni_molecubes'.",
+                    "ERROR",
+                )
+                return acq_id_str, False
         except RuntimeError as e:
             log(str(e), "ERROR")
             return acq_id_str, False
@@ -622,18 +896,25 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     os.path.join(nas_root, project_folder_rel.lstrip("/"))
                 )
                 folder_unc = linker.canonical_to_unc(canonical_path, nas_unc)
-                # Prefer targeting the primary archive (correct icon, opens
-                # the zip directly). Fall back to the folder if primary
-                # isn't a single file (e.g. uncompressed series/ or the
-                # folder-as-primary MRI layout).
+                # Choose what the shortcut targets, based on primary_kind
+                # and whether primary_file_name names something nested
+                # inside the acq folder (NI v2: <ACQ-ID>.data) or IS the
+                # acq folder itself (legacy MRI folder layout).
                 primary = cfg_single.get("primary_file_name", "")
                 primary_kind = cfg_single.get("primary_kind", "")
-                if primary and primary_kind == "folder":
-                    # MRI folder layout: primary IS the acquisition folder
-                    # itself. Target the folder UNC; double-clicking opens
-                    # Explorer at the acq directory.
+                if primary and primary_kind == "folder" and primary != acq_id_str:
+                    # NI v2 (and similar): primary is an internal data
+                    # bundle named like ACQ-XXX.data. Target points
+                    # directly at it — double-click opens straight to
+                    # the DICOMs, mirroring microscopy's <ACQ-ID>.czi
+                    # link semantics.
+                    target_unc = f"{folder_unc}\\{primary}\\"
+                elif primary and primary_kind == "folder":
+                    # Legacy MRI folder layout: primary_file_name equals
+                    # acq_id_str — target the acq folder itself.
                     target_unc = folder_unc + "\\"
                 elif primary and not primary.endswith("/"):
+                    # Single-file primary (microscopy .czi, collaborator zip).
                     target_unc = f"{folder_unc}\\{primary}"
                 else:
                     target_unc = folder_unc + "\\"

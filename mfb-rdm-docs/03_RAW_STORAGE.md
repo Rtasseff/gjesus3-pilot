@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-20 (per-ecosystem layouts: internal MRI folder-as-primary; one-file rule generalised — see §4)
+**Last Updated:** 2026-05-27 (Round-6 v2 MRI redo: §4.4 rewritten for `<ACQ-ID>.data/` flat layout + no-DICOM handling; §4.2 MRI row updated; §4.5/§4.6 numbering fix)
 
 ---
 
@@ -244,37 +244,86 @@ The **primary entity** is:
 |---|---|---|---|
 | **Microscopy** (Zeiss `.czi`) | Single file `<ACQ-ID>.czi` | `.czi` is a modern container; one acquisition = one file natively | `file` |
 | **Collaborator DICOM** (XMRI/XCT/XPET/XSPECT) | Compressed archive `<ACQ-ID>.zip` | LEGACY shape — many `.dcm` per session, zipped on deposit; existing 75 acqs (rounds 1-2) follow this pattern. Not the recommended shape going forward but stays for already-deposited data. | `archive` |
-| **Internal MRI** (Bruker ParaVision) | Folder bundle `<ACQ-ID>/` (no zip, no synthetic single file) | Many `.dcm` per acquisition (per-frame DICOM is a 1990s-era format choice, not a conceptual mismatch — see [13_GJESUS3_ROLE §5.2](13_GJESUS3_ROLE.md)). No-zip per the research-facing reframe. Folder is directly viewable without extraction. | `folder` |
-| **Internal PET/SPECT/CT** (planned) | TBD when those rounds are scoped — likely folder bundle following the MRI precedent | Same DICOM packaging problem as internal MRI | — |
+| **Internal MRI** (Bruker ParaVision) | Folder `<ACQ-ID>/` containing a `<ACQ-ID>.data/` data bundle (per-frame DICOMs only, renamed flat: `recon<idx>_frame<NN>.dcm`) + `metadata.json` carrying the parsed JCAMP-DX content. Round-6 v2 2026-05-27 (mirrors NI v2.1). | Bruker exports per-frame DICOMs (15-ish per recon, a 1990s-era one-image-per-file choice, not a conceptual mismatch — see [13_GJESUS3_ROLE §5.2](13_GJESUS3_ROLE.md)). The `.data/` subfolder mirrors microscopy's `<ACQ-ID>.czi` and NI's `<ACQ-ID>.data/` conventions; parsed `metadata.json.mri._raw_metadata` preserves what would otherwise live in scattered JCAMP-DX aux files. The raw `fid` (k-space signal) stays only on the platform acquisition machine — see §4.4. | `folder` (primary_file_name = `<ACQ-ID>.data`) |
+| **Internal PET/SPECT/CT** (Molecubes / MILabs) | Folder `<ACQ-ID>/` containing a `<ACQ-ID>.data/` data bundle (DICOMs only, renamed flat: `recon<X>.dcm` for CT, `recon<X>_frame<Y>.dcm` for PET/SPECT) + `metadata.json` carrying the parsed aux content. Round-8 v2 2026-05-27. | Source archives contain a mix of analysis-ready DICOMs and raw detector data the platform owns long-term ([13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md)). The `.data` subfolder mirrors microscopy's `<ACQ-ID>.czi` single-file convention; the parsed `metadata.json.ni._raw_metadata` preserves what would otherwise live in scattered aux files. | `folder` (primary_file_name = `<ACQ-ID>.data`) |
 | **EM** (planned) | Single file `<ACQ-ID>.<ext>` | One acquisition = one file natively for SEM/TEM | `file` |
 
-### 4.3 Internal MRI folder bundle — detail
+### 4.3 Internal Nuclear Imaging folder bundle — detail (round-8 v2 2026-05-27)
 
-For internal MRI (ParaVision), the acquisition folder contains:
+For internal NI (Molecubes archive-mode), the acquisition folder mirrors microscopy's one-file-per-acquisition convention as closely as a multi-DICOM reconstruction allows: a single `<ACQ-ID>.data/` subfolder holds the DICOMs (renamed flat — `recon<X>.dcm` for CT, `recon<X>_frame<Y>.dcm` for PET/SPECT). Everything else from the upstream Molecubes archive — raw detector data, calibration, operational logs, AND the acquisition aux text/XML files — stays on the platform archive (`\\cicmgsp02\gnuclear2$`). The aux file *contents* are preserved in parsed form inside `metadata.json.ni._raw_metadata`, so no meaningful information is lost from the gjesus3 surface.
+
+```
+ACQ-<YYYYMMDD>-<MODALITY>-NNN/        (MODALITY = PET / CT / SPECT)
+  metadata.json                       <-- rich ni: block: parsed protocol.txt + 3 XMLs + DICOM headers (incl. UIDs)
+  checksums.json
+  README.txt                          (optional)
+  <ACQ-ID>.data/                      <-- the data bundle (parallels microscopy <ACQ-ID>.czi)
+    recon0.dcm                          (CT, no frame subdirs)
+    recon1.dcm
+    recon2.dcm
+    recon0_frame0.dcm                   (PET/SPECT static — one frame)
+    recon0_frame1.dcm, recon0_frame2.dcm  (PET dynamic — per-frame)
+    recon0_frameMULTI.dcm               (PET dynamic — bundled all-frames DICOM, kept alongside)
+```
+
+**Per-modality DICOM naming:**
+
+| Modality | Source structure | gjesus3 DICOM name(s) | Recons per acq |
+|---|---|---|---|
+| **CT** | `recon_<X>/<basename>.dcm` direct | `recon<X>.dcm` | Multiple (typical 3 — ISRA standard, ISRA variant, ATTMAP for PET attenuation correction); all kept — different recons answer different analysis questions |
+| **PET / SPECT static** | `recon_0/frame_0/iter_30/<basename>.dcm` | `recon0_frame0.dcm` | Typically 1 |
+| **PET / SPECT dynamic** | `recon_0/frame_<Y>/iter_30/<basename>.dcm` per time-frame, plus a single multi-frame DICOM at recon root (`<basename>_frameMULTI_iter30.dcm`) | `recon0_frame<Y>.dcm` per frame **plus** `recon0_frameMULTI.dcm` for the bundled-all-frames file | Typically 1 recon with multiple frames + 1 multi-frame DICOM |
+
+The iteration count (typically `30` in current Molecubes setup) is dropped from the gjesus3 filename — it's preserved verbatim in `metadata.json.ni._raw_metadata.reconparams_by_idx.<X>.ReconstructionTemplate/iterations`. If iteration count ever varies across recons of the same acquisition, the filename convention will need extension.
+
+**Platform-generated multi-frame DICOMs** (filename contains `frameMULTI`) are observed in some dynamic PET acquisitions — the platform bundles all frames into one DICOM file at the recon root (e.g. `recon_0/<basename>_frameMULTI_iter30.dcm`). gjesus3 keeps these alongside the per-frame DICOMs, naming them `recon<X>_frameMULTI.dcm` under `<ACQ-ID>.data/`. They appear in the regular `metadata.json.ni.reconstruction.by_index.<idx>.dicoms[]` list (distinguishable by `ImageType` containing `'DYNAMIC'` instead of `'VOLUME'`). See `equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md` "Multi-frame DICOM" section for the rationale and future-work (potential migration to multi-frame as the canonical single primary file once its advanced metadata is validated).
+
+**What's explicitly NOT copied** (lives only on `\\cicmgsp02\gnuclear2$`):
+- Acquisition root files (all of them): `protocol.txt`, `protocol.xml`, `acqparams.xml`, `recontemplate.xml`, `acquisition.log` (parsed forms in sidecar), `data.raw` (6+ GB CT raw detector), `bright.raw`/`dark.raw`/`badpixels.map` (calibration), `attmap.amap`, `eventdata_*.list/.dt/.header` (PET event lists), `singles.stat`, `spectrum.bin`, `monitoring.csv`, `sequence.csv`, `xrayserver.log`, `calibrationParameters.xml`, `recon.ini` at acq root, `ACQSTATUS`, `DOWNLOADED`, `REMIDOWNLOADED`, `registration.matrix`, `reconstructionParameters*.xml`
+- Per recon (all non-DICOM): `.img` (binary mirror of the DICOM), `RECONSTATUS`, `preview.res`, `.bin` files, `bed0_counts.stat`, `atten_*.bin`, `reconparams.txt`/`reconparams.xml` (parsed forms in sidecar), `reconstruction.log`, `recon.ini`
+- (v2.1: multi-frame DICOMs are NOT dropped — kept alongside per-frame as `recon<X>_frameMULTI.dcm`)
+
+Per-acquisition size on gjesus3 is ~MB-scale (DICOMs only — CT ~94 MB across 3 recons, PET static ~28 MB, PET dynamic ~55 MB across 2 frames). Total NI footprint on gjesus3 ~6.5 GB across all 84 acqs in the round-8 cohort — vs ~358 GB if we'd copied the upstream archives verbatim.
+
+The microscopy structural parallel: a microscopy acquisition has `<ACQ-ID>.czi` (single file primary) inside its `<ACQ-ID>/` folder; an NI acquisition has `<ACQ-ID>.data/` (folder primary) inside its `<ACQ-ID>/` folder. The registry's `primary_kind` records which shape (`file` vs `folder`); `primary_file_name` names the thing.
+
+See [13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md) for the framing this implements, [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md) for the source-side archive structure + multi-frame DICOM details, and [08_METADATA §4.3](08_METADATA.md) for the `ni:` sidecar block shape (parsed protocol.txt + XMLs + per-DICOM headers with UIDs).
+
+### 4.4 Internal MRI folder bundle — detail (round-6 v2 2026-05-27)
+
+For internal MRI (Bruker ParaVision), the acquisition folder mirrors the NI v2.1 convention: a single `<ACQ-ID>.data/` subfolder holds the per-frame DICOMs (renamed flat — `recon<idx>_frame<NN>.dcm`). Everything else from the upstream ParaVision exam — the JCAMP-DX aux files (`acqp`, `method`, `visu_pars`, `subject`), the raw `fid`, per-recon `2dseq`/`visu_pars`/`reco`, miscellaneous platform files — stays on the platform archive (the acquisition machine's `/opt/PV-7.0.0/data/nmr/` and its mirrored FTP path). The aux file *contents* are preserved in parsed form inside `metadata.json.mri._raw_metadata`, so nothing meaningful is lost from the gjesus3 surface.
 
 ```
 ACQ-<YYYYMMDD>-MRI-<exam>/
-  metadata.json                    <-- rich mri: block from ParaVision JCAMP-DX
+  metadata.json                       <-- rich mri: block: parsed subject/acqp/method/visu_pars + per-DICOM headers (incl. UIDs)
   checksums.json
-  README.txt                       (optional)
-  reconstructions/
-    pdata_<idx>/                   <-- one subfolder per reconstruction index kept
-      2dseq                            (per the `reconstructions:` config flag;
-      visu_pars                        defaults are per-instrument-template)
-      reco
-      dicom/
-        MRIm01.dcm
-        ...
-  acquisition_aux/
-    acqp
-    method
-    visu_pars
-    (specpar, uxnmr.par, ...)
+  README.txt                          (optional)
+  <ACQ-ID>.data/                      <-- the data bundle (parallels NI's <ACQ-ID>.data and microscopy's <ACQ-ID>.czi)
+    recon1_frame01.dcm                  (Bruker MRIm01.dcm from pdata/1/dicom/)
+    recon1_frame02.dcm
+    ... (per-frame DICOMs from pdata/1)
+    recon3_frame01.dcm                  (Bruker MRIm01.dcm from pdata/3/dicom/)
+    recon3_frame02.dcm
+    ... (per-frame DICOMs from pdata/3)
 ```
 
-The folder IS the unit. Researchers can open `metadata.json` to discover what's there; they can navigate `reconstructions/pdata_3/dicom/` to load the DICOM series into a viewer; they can read the JCAMP-DX aux files directly if they need sequence parameters.
+**DICOM naming**: Bruker exports per-frame DICOMs `MRIm01.dcm` ... `MRIm15.dcm` (typically 15 per reconstruction). Flat-renamed to `recon<idx>_frame<NN>.dcm` preserving Bruker's zero-padded NN. Multiple reconstructions (per `reconstructions:` YAML selection) live side-by-side in the same flat folder; the `recon<idx>` prefix distinguishes them.
 
-### 4.4 Supporting vs. primary
+**Reconstruction selection** (`reconstructions:` YAML flag in `mri_bruker.yaml`): operator picks `all` (default — DICOMs are tiny under this layout), `<int>` (e.g. `3`), or `[<int>, ...]` (e.g. `[1, 3]`). Indices not listed stay on the platform deep-archive. The original cardiac-flow workflow convention (`[3]` = user-trusted reconstruction) is still appropriate when an operator wants to minimise storage — but `all` is the safer default.
+
+**No-DICOM acquisitions** (students who didn't run Bruker's DICOM exporter): the ingest still registers the acquisition. The `<ACQ-ID>.data/` folder is created empty; `metadata.json.mri:` is fully populated from the parsed JCAMP-DX (subject, acquisition parameters, geometry, per-recon parameters); `metadata.json.mri.reconstruction.by_index.<idx>.dicoms[]` is empty. Idempotent re-run after the student converts will skip the placeholder and ingest the freshly-available DICOMs. See [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) "No-DICOM acquisition handling" section. The future-work FID→DICOM regeneration capability (tracked in `tasks/tasks.md §3.1`) would close this gap.
+
+**What's explicitly NOT copied** (lives only on the platform acquisition machine):
+- Exam-root JCAMP-DX aux: `acqp`, `method`, `visu_pars`, `subject`, `pulseprogram`, `specpar`, `uxnmr.info`, `uxnmr.par`, `configscan`, `AdjStatePerScan` (parsed content in sidecar)
+- Raw signal: `fid` (~12 MB per exam) — the actual k-space data; gjesus3 does not duplicate this. Future-work FID→DICOM regeneration would read this file as input.
+- Per-recon non-DICOM: `2dseq` (binary image — DICOMs derive from it), `visu_pars`, `reco`, `id`, `procs`, `methreco` (parsed content in `_raw_metadata.pdata.<idx>` for `visu_pars` + `reco`)
+- Reconstruction indices not listed in the operator's `reconstructions:` selection
+
+Per-acquisition size on gjesus3 is ~MB-scale (DICOMs only; ~200 KB × 15-frame × N_recon). Acquisitions with no DICOMs are KB-scale (just `metadata.json` + `checksums.json` + `README.txt`).
+
+See [13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md) for the framing this implements, [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) for the source-side structure + reconstruction discipline (`/1` auto, `/2` duplicate, `/3` user-trusted), and [08_METADATA §4.3](08_METADATA.md) for the `mri:` sidecar block shape (parsed JCAMP-DX + per-DICOM headers with UIDs).
+
+### 4.5 Supporting vs. primary
 
 | File Type | Classification | Notes |
 |-----------|----------------|-------|
@@ -287,7 +336,7 @@ The folder IS the unit. Researchers can open `metadata.json` to discover what's 
 | README.txt | Supporting | Human notes |
 | `checksums.json` | Supporting | Integrity manifest |
 
-### 4.5 Edge cases — guidance
+### 4.6 Edge cases — guidance
 
 | Pattern | Example | Handling |
 |---------|---------|----------|

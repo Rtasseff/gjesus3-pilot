@@ -1,22 +1,28 @@
-# Round-6 Phase A TEST config — Internal MRI (Bruker ParaVision).
+# Round-6 v2 TEST config — Internal MRI (Bruker ParaVision).
+#
+# v2 REDO 2026-05-27 (was v1 2026-05-22): slim-folder layout mirroring
+# NI v2.1. DICOMs land flat under `<ACQ-ID>.data/`; JCAMP-DX aux files
+# stay on the platform (parsed content in metadata.json.mri._raw_metadata);
+# DICOM UIDs in the curated headers; no-DICOM acquisitions registered
+# with empty .data/ placeholder. See `equipment/mri-platform/
+# internal_mri_data_handling_workflow_notes.md` "Round-6 v2 reshape"
+# section for the v1 → v2 change history.
 #
 # Scope: 7 study folders manually pulled from the 7T MRI server
 # (`/opt/PV-7.0.0/data/nmr/`) to local staging at D:\projects\gjesus3\data_test\.
 # Studies span 2025-10 through 2026-03; animal protocols 0423 and 0424.
+# 3 of 7 projects (m13/m14 protocol 0423 + m29 protocol 0423) have ZERO
+# DICOMs — students hadn't run Bruker's exporter; those get registered
+# with empty .data/ placeholder folders.
 #
-# This is a TEST INGEST — purge after review. The corresponding
-# production config (notes prefix removed) is
-# mri_bruker_<batch>.yaml (to be created after Phase A passes).
-#
-# Reconstruction selection: [3] — keep only the user-trusted
-# reconstruction per the cardiac flow workflow convention. /1 (auto)
-# and any other indices stay only on the platform's deep-archive.
+# This is a TEST INGEST — purge after review (quasi-production lifecycle).
 
 ingest:
   delete_source_after_ingest: false
   auto_create_projects: true
   acquisition_layout: folder
-  reconstructions: [3]
+  copy_strategy: mri_paravision_v2
+  reconstructions: all
 
 auto_discover:
   staging_dir: "D:/projects/gjesus3/data_test"
@@ -37,12 +43,12 @@ registry:
   session_id:           "${discovered.jrc_id}"
   acquisition_datetime: discovered.mri_acquisition_datetime
   project_hint:         "ae-biomegune-${discovered.project_code}"
-  notes:                "TEST INGEST 2026-05-21 - purge after review (internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, animal m${discovered.animal_num}, recon ${discovered.mri_recon_indices})"
+  notes:                "TEST INGEST 2026-05-27 v2 REDO - purge after team exhibition (internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, animal m${discovered.animal_num}, recon ${discovered.mri_recon_indices})"
 
 auto_create_project:
   owner:       "NMR-platform"
-  description: "TEST auto-created from internal MRI round-6 (Phase A) — animal-protocol code ${discovered.project_code}. Purge after review. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
-  notes:       "Auto-created on Phase A test ingest 2026-05-21. Will be purged with the rest of the round-6 test artifacts."
+  description: "TEST auto-created from internal MRI round-6 v2 — animal-protocol code ${discovered.project_code}. Purge after team exhibition. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
+  notes:       "Auto-created during round-6 v2 ingest 2026-05-27. Will be purged with the rest of the quasi-production data after the team exhibition."
 
 # .lnk shortcut name (resolver-evaluated at link-creation time).
 # Inherits the MRI default pattern from the per-instrument template:

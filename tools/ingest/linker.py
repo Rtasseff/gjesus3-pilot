@@ -80,12 +80,30 @@ def canonical_to_unc(canonical_path, nas_unc_root):
     """Convert a NAS-relative POSIX path to a UNC Windows path.
 
     canonical_path: e.g. "/raw/DICOM/2021/2021-10/ACQ-20211022-XMRI-001/"
-    nas_unc_root:   e.g. "\\\\GJESUS3\\gjesus3"
+    nas_unc_root:   e.g. "\\\\GJESUS3\\gjesus3" (also accepted: "//GJESUS3/gjesus3"
+                    with forward slashes — defensively normalized below)
     Returns:        "\\\\GJESUS3\\gjesus3\\raw\\DICOM\\2021\\2021-10\\ACQ-20211022-XMRI-001"
+
+    Defensive normalization (2026-05-27 fix): the input nas_unc_root is
+    normalized to all-backslash form regardless of how it was passed.
+    Windows UNCs MUST be all-backslash for `WScript.Shell.CreateShortcut`
+    to produce a valid .lnk binary — mixed slashes (e.g.
+    "//GJESUS3/gjesus3" from a --nas-unc passed with POSIX-style slashes)
+    silently produce a stub .lnk file that Windows Explorer can't
+    resolve. See `feedback_unc_root_normalization` memory + the round-8
+    `.lnk` regeneration episode for the cautionary tale.
     """
     rel = canonical_path.lstrip("/").rstrip("/").replace("/", "\\")
-    root = nas_unc_root.rstrip("\\")
-    return f"{root}\\{rel}"
+    # Normalize the root to all-backslash form. Strip leading/trailing
+    # separators of any kind, then re-add the canonical leading "\\".
+    root = nas_unc_root.replace("/", "\\").strip("\\")
+    if not root:
+        raise ValueError(
+            "nas_unc_root resolves to empty after normalization "
+            f"(input was {nas_unc_root!r}); expected something like "
+            r"'\\GJESUS3\gjesus3' or '//GJESUS3/gjesus3'."
+        )
+    return f"\\\\{root}\\{rel}"
 
 
 def create_lnk(

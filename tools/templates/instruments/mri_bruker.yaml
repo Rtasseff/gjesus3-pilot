@@ -135,24 +135,49 @@
 #               cardiac flow work — manual heart-rate-matched recon)
 #   pdata/4/, /5/, ... — alternate trials, occasionally used
 #
-# `reconstructions: [3]` is the convention for the documented cardiac
-# flow workflow. Use `all` to preserve everything (larger acquisitions
-# on the NAS). Discarded indices stay only on the platform's deep-
-# archive — gjesus3 doesn't replicate the platform's role. See
-# 13_GJESUS3_ROLE.md §5.5.
+# Round-6 v2 default: `all` — DICOMs are tiny under the slim
+# `<ACQ-ID>.data/` layout (a few MB per recon × ~15 frames), so keep
+# everything by default. `[3]` is still the recommended override for
+# the cardiac-flow workflow when an operator wants to mirror the
+# user-trusted reconstruction discipline exactly. Discarded indices
+# stay only on the platform's deep-archive — gjesus3 doesn't replicate
+# the platform's role. See 13_GJESUS3_ROLE.md §5.5/§5.6.
+#
+# Unselected indices' JCAMP-DX (visu_pars + reco) is STILL parsed and
+# preserved in `metadata.json.mri._raw_metadata.pdata.<idx>` — only
+# their DICOMs are skipped at copy time.
+#
+# --- No-DICOM acquisition handling ---
+# When the researcher hasn't run Bruker's GUI DICOM exporter (a real-
+# world gap: 3 of 7 round-6 source projects), the source has no
+# `pdata/<idx>/dicom/*.dcm` files. The ingest still registers the
+# acquisition: `<ACQ-ID>.data/` is created empty and `metadata.json.mri:`
+# is fully populated from the parsed JCAMP-DX. Idempotent re-run after
+# the student converts will fill in the DICOMs.
 # --------------------------------------------------------------------------
 
 ingest:
   delete_source_after_ingest: false
   auto_create_projects: true
-  acquisition_layout: folder      # no-zip folder-as-primary (round 6)
+  acquisition_layout: folder        # no-zip folder-as-primary
+  copy_strategy: mri_paravision_v2  # round-6 v2 slim shape: DICOMs only,
+                                     # flat in <ACQ-ID>.data/. The legacy
+                                     # `paravision_exam` value is preserved
+                                     # for any historical use but should
+                                     # not be selected for new batches.
+                                     # See 03_RAW_STORAGE §4.4 + equipment
+                                     # workflow notes "Round-6 v2 reshape"
+                                     # section.
   # EDIT: per-batch reconstruction selection.
   # Examples:
-  #   reconstructions: [3]        # only the user-trusted reconstruction
-  #   reconstructions: all        # everything ParaVision produced
+  #   reconstructions: all        # everything ParaVision produced (default; cheap under v2 slim layout)
+  #   reconstructions: [3]        # only the user-trusted cardiac-flow reconstruction
   #   reconstructions: 3          # equivalent to [3]
-  #   reconstructions: [1, 3]     # /1 + /3 (e.g. if /1 was actually used)
-  reconstructions: [3]
+  #   reconstructions: [1, 3]     # /1 + /3
+  # Unselected recons' JCAMP-DX (visu_pars, reco) STILL lands in
+  # `metadata.json.mri._raw_metadata.pdata.<idx>` for forensic
+  # completeness — their DICOMs just don't get copied.
+  reconstructions: all
 
 auto_discover:
   # EDIT: absolute path to the batch root — the directory containing
