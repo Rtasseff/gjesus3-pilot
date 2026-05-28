@@ -30,7 +30,7 @@ The MFB group's imaging data sits in **two distinct storage tiers**, each with a
 
 **What it's bad for:** Active project work. Cross-cohort search. Reuse. Anything time-sensitive. Anyone who isn't the person who originally produced the data.
 
-This tier exists, it works (poorly but reliably), and **gjesus3 does not aim to replace it**.
+This tier exists, it works (clear limitations but reliably), and **gjesus3 does not aim to replace it**.
 
 ### Tier 2 — gjesus3 (the research-facing working layer)
 
