@@ -20,13 +20,13 @@ The MFB group's imaging data sits in **two distinct storage tiers**, each with a
 
 ### Tier 1 — Platform archives (the deep freeze)
 
-**Owned by:** The instrument platforms (MRI, Nuclear Imaging, optical microscopy facilities).
+**Owned by:** The instrument platforms (MRI, Nuclear Imaging, optical microscopy - moving in this direction).
 
-**What they store:** Raw original acquisition data, mostly as the instrument wrote it, often zipped and rolled up into larger annual archives. After ~5 years a study typically moves to external hard-drive cold storage.
+**What they store:** Raw original acquisition data, mostly as the instrument wrote it, often zipped and orginized into larger annual archives. After ~5 years a study typically moves to external hard-drive cold storage.
 
-**How researchers access it:** Awkwardly. FTP-only in the MRI case; through the platform manager for the older external drives. No registry. No standardised metadata. No project / publication structure. No search.
+**How researchers access it:** Awkwardly. FTP-only in the MRI case; through the platform manager only for the older external drives. No registry. Minimal standards on metadata/file-naming. No project, no publication structure. No optimized search.
 
-**What it's good for:** Long-term preservation. If you know exactly what study you need and you're willing to fish for it, the platform can produce the bytes.
+**What it's good for:** Long-term preservation of original raw data. If you know exactly what study you need and someone is willing to fish for it, the platform can produce the bytes.
 
 **What it's bad for:** Active project work. Cross-cohort search. Reuse. Anything time-sensitive. Anyone who isn't the person who originally produced the data.
 
