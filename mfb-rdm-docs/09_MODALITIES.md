@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-05-27 (Round-6 v2 MRI redo: §1.4 reworked for `<ACQ-ID>.data/` flat-DICOM layout, per-DICOM UIDs in sidecar, no-DICOM acquisition handling)
+**Last Updated:** 2026-05-29 (per-instrument subject-metadata requirement added — required for `sample_type ∈ {organism, tissue}`; see [08_METADATA §4.4](08_METADATA.md))
 
 ---
 
@@ -27,6 +27,17 @@ The instruments in scope fall into two categories, and the meaning of "raw" data
 
 The platforms manage and archive their own true raw acquisition data (e.g., PET listmode files, raw k-space MRI data). gjesus3 is the **research-facing working layer** — see [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) for the two-tier framing. Our "raw" for platform data is the reconstructed images.
 
+### Cross-modality requirement: subject metadata for preclinical acquisitions
+
+> **🔶 DRAFT 2026-05-29.** For any acquisition with `sample_type ∈ {organism, tissue}` (see [06_REGISTRIES §2.4](06_REGISTRIES.md)), a populated `subject:` block in `metadata.json` is required: `species` / `strain` / `sex` / `age_at_acquisition` (the four ARRIVE-aligned required fields, DECIDED) + optional `genotype` / `weight_at_acquisition_g` / `facility_animal_id` / `cohort_id`. Full schema in [08_METADATA §4.4](08_METADATA.md).
+>
+> **Applicability per instrument in current scope:**
+> - Internal MRI (§1.4) and Nuclear Imaging (§1.5) — **always required** (sample is always an organism).
+> - AxioScan 7 (§1.1), Cell Observer (§1.2), LSM 900 (§1.3) — **required when the sample is animal-derived** (the typical case; tissue sections, ex-vivo slides, animal-origin cell preps).
+> - Not required for non-biological `material` / `phantom` samples.
+>
+> **Source hierarchy:** animal-facility-DB (authoritative, blocked on IT for programmatic access — `tasks/tasks.md §3.2`) > study-level YAML at `/projects/<proj>/metadata/subjects.yaml` (operator-entered) > instrument auto-extracts (often partial; ParaVision SUBJECT_* / Molecubes protocol.txt animal fields).
+
 ---
 
 ### 1.1 Whole-Slide Imaging — Zeiss Axio Scan 7
@@ -42,6 +53,7 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 | **Typical size** | 0.5-10 GB per slide |
 | **Imaging modes** | Brightfield WSI, fluorescence WSI, tile-stitching |
 | **Embedded metadata** | Extensive (objective, camera settings, stage coordinates, acquisition time, calibration) |
+| **Subject metadata** (DRAFT 2026-05-29) | 🔶 **Required when animal-derived** (typical case: H&E / IHC tissue sections from mouse organs → `sample_type = tissue`). Sidecar `subject:` block: species / strain / sex / age_at_acquisition. Not required for `material` (e.g. nanoparticle slides) or `phantom`. See [08_METADATA §4.4](08_METADATA.md). |
 | **Not embedded** | Sample information, experimental context |
 | **Analysis tools** | ZEN, QuPath, ImageJ/FIJI, Bio-Formats compatible tools |
 | **Status** | ✅ Confirmed for pilot, end-to-end ingest tested 2026-05-06 |
@@ -92,6 +104,7 @@ The richer structured form of all the above plus channels/detectors/objective li
 | **Imaging modes** | Epifluorescence, brightfield, phase contrast, DIC; time lapse, z-stack, large-area tiling |
 | **Objectives** | 5x-100x (air and oil immersion) |
 | **Embedded metadata** | Expected extensive (ZEN-based .czi) |
+| **Subject metadata** (DRAFT 2026-05-29) | 🔶 **Required when animal-derived** — typical for tissue sections; for `sample_type = cells` (cultured / isolated) required only when the cell line is animal-origin (most are; immortalized human lines `MDA`/`HeLa`/etc. are still animal-origin in the broader sense — operator judgement until vocab clarifies). See [08_METADATA §4.4](08_METADATA.md). |
 | **Not embedded** | Sample information, experimental context |
 | **Analysis tools** | ZEN, ImageJ/FIJI, QuPath |
 | **Status** | ✅ Confirmed for pilot |
@@ -114,6 +127,7 @@ The richer structured form of all the above plus channels/detectors/objective li
 | **Imaging modes** | Confocal fluorescence (3 simultaneous channels), Z-stack, time series, tile, FRAP, FRET |
 | **Objectives** | 2.5x-63x (air, water multi-immersion, oil) |
 | **Embedded metadata** | Extensive (same 21 curated `discovered.czi_*` fields as §1.1 — same extractor). Distinguishing fingerprint vs Cell Observer: `czi_acquisition_mode = "LaserScanningConfocalMicroscopy"` (Cell Observer reports `"WideField"`). `czi_microscope_name` reports `"Axio Observer.Z1 / 7"` — same string as Cell Observer because the LSM 900 sits on an Axio Observer stage, so the name alone isn't a reliable fingerprint. |
+| **Subject metadata** (DRAFT 2026-05-29) | 🔶 **Required when animal-derived** — same rule as Cell Observer (§1.2); commonly `sample_type = cells` for the round-7 batch (cultured MDA line on coverslips). See [08_METADATA §4.4](08_METADATA.md). |
 | **Not embedded** | Sample / experimental context — captured via per-instrument template's folder-name regex (researcher / experiment / cell_line) + project-level metadata for finer-grained context. |
 | **Analysis tools** | ZEN, ImageJ/FIJI, QuPath, Napari |
 | **Status** | 🔶 Round 7 active (2026-05-22). Per-instrument template at [`tools/templates/instruments/lsm900.yaml`](../tools/templates/instruments/lsm900.yaml); first test batch (LAURA_UPTAKE_LP-IONP-doxo_MDA) ingest in progress. |
@@ -133,6 +147,7 @@ The richer structured form of all the above plus channels/detectors/objective li
 | **No-DICOM acquisitions** | When a researcher hasn't run Bruker's DICOM exporter (~3 of 7 source projects in round 6), the ingest still registers the exam: `metadata.json.mri:` is fully populated from parsed JCAMP-DX, but `<ACQ-ID>.data/` is created empty and `mri.reconstruction.by_index.<idx>.dicoms[]` is `[]`. Idempotent re-run after the student converts will skip the placeholder + ingest the freshly-available DICOMs. Future-work FID→DICOM regeneration capability (tracked in `tasks/tasks.md §3.1`) would close this gap automatically. |
 | **Typical size on gjesus3** | A few MB per acquisition (DICOMs only — ~200 KB × ~15-frame × N_recon, plus the few-KB sidecar). KB-scale for no-DICOM acquisitions. |
 | **Embedded metadata** | Extensive. `tools/ingest/paravision_metadata.py` parses the JCAMP-DX aux files (`subject`/`acqp`/`method`/`visu_pars`/per-recon `visu_pars`+`reco`) — canonical source — plus the DICOM headers of every kept per-frame `.dcm`. Surfaces ~20 `discovered.mri_*` fields + a structured `mri:` sidecar block (subject/acquisition/geometry/reconstruction buckets + per-DICOM headers with `StudyInstanceUID`/`SeriesInstanceUID`/`SOPInstanceUID` first + lossless `_raw_metadata`). See `discovered.mri_*` table below + [08_METADATA §4.3](08_METADATA.md) `mri:` block shape. |
+| **Subject metadata** (DRAFT 2026-05-29) | ✅ **Required** — `sample_type = organism`. Sidecar `subject:` block must carry species / strain / sex / age_at_acquisition (the four DECIDED required fields, ARRIVE-aligned). Today the ParaVision `subject` file (`mri._raw_metadata.subject.SUBJECT_*`) is the only auto-source and is typically partial (sex/weight present; species/strain/age usually empty). Animal-facility-DB integration will fill the gap — see [08_METADATA §4.4](08_METADATA.md) + `tasks/tasks.md §3.2`. |
 | **Not embedded** | Study context beyond what `subject` already captures (e.g. research question, sample preparation details) |
 | **Analysis tools** | 3D Slicer, ITK-SNAP, FSL, nibabel, PMOD, pydicom (most expect NIfTI for analysis; ingest does NOT generate NIfTI — that's a project-level tool, future, see [08_METADATA §1.5a](08_METADATA.md)). The kept DICOMs work directly in any DICOM-aware viewer. |
 | **Raw data responsibility** | MRI platform archives the originals on the acquisition machines (`/opt/PV-7.0.0/data/nmr/` + FTP mirror). **Medium trust** ([13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md) — generally reliable, no formal byte-lock guarantee) — gjesus3 keeps the analysis-ready DICOMs; the raw `fid` (k-space) and platform-internal files stay only on the platform. |
@@ -186,6 +201,7 @@ For the systematic naming convention used by the MRI platform (parsable folder-n
 | **What lands on gjesus3 (round-8 v2.1 2026-05-27)** | **DICOMs only, flat in `<ACQ-ID>.data/`** ([03_RAW_STORAGE §4.3](03_RAW_STORAGE.md), [13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md)). The acquisition folder contains `metadata.json`, `checksums.json`, `README.txt`, and a `<ACQ-ID>.data/` subfolder holding the renamed DICOMs: `recon<X>.dcm` for CT (one per recon), `recon<X>_frame<Y>.dcm` for PET/SPECT (one per time frame), `recon<X>_frameMULTI.dcm` for the platform-generated bundled-all-frames DICOM (present only for dynamic PET/SPECT studies, kept alongside the per-frame DICOMs). NO aux files on disk — their parsed content is in `metadata.json.ni._raw_metadata`. |
 | **Typical size on gjesus3** | Few MB per acquisition (DICOMs + small aux). Source archive is 1-15 GB unpacked; the slim shape lives ~MB-scale. |
 | **Embedded metadata** | Rich. `tools/ingest/ni_metadata.py` parses `protocol.txt` (key-value text) + the three XML aux files + DICOM headers of one representative `.dcm` per recon. Surfaces ~15 `discovered.ni_*` fields for YAML reference + a structured `ni:` sidecar block (study / subject / acquisition / reconstruction buckets + lossless `_raw_metadata`). See `discovered.ni_*` table below + [08_METADATA §4.3](08_METADATA.md) `ni:` block shape. |
+| **Subject metadata** (DRAFT 2026-05-29) | ✅ **Required** — `sample_type = organism`. Sidecar `subject:` block must carry species / strain / sex / age_at_acquisition (the four DECIDED required fields, ARRIVE-aligned). Molecubes' `protocol.txt` carries only `Animal ID` + `Animal weight (g)` — no species/strain/sex/age. Animal-facility-DB integration is the bridge — see [08_METADATA §4.4](08_METADATA.md) + `tasks/tasks.md §3.2`. |
 | **Not embedded** | Study context (research question, sample preparation) — captured at project level. |
 | **Analysis tools** | PMOD, Imalytics, 3D Slicer, ITK-SNAP, MATLAB, pydicom |
 | **Raw data responsibility** | Nuclear Imaging platform archives true raw data (listmode, sinograms, event lists) on `\\cicmgsp02\gnuclear2$` indefinitely — **trusted as the long-term archive**. The 1% case of "we need the raw event data" routes back through the platform. See [13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md) per-platform reliability table. |

@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-05-27 (Round-6 v2 MRI redo: `mri:` block rewritten with per-DICOM `dicoms[]` list + UIDs first, mirroring NI v2.1; no-DICOM acquisition handling documented)
+**Last Updated:** 2026-05-29 (DRAFT `subject:` block — preclinical subject metadata required for `sample_type ∈ {organism, tissue}`; 4 required fields DECIDED, optional fields + `source:` tag DRAFT pending animal-facility-DB integration — see §4.4)
 
 ---
 
@@ -223,6 +223,7 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
   "generator": "ingest_raw.py",
   "user_supplied": { "operator", "data_source", "instrument", "sample_id", "sample_type", "original_name", "notes" },
   "discovered":    { "<field>": "<value>", ... },
+  "subject":       { ... },                       // when sample_type ∈ {organism, tissue} — see §4.4
   "<ecosystem_section>": { ... }
 }
 ```
@@ -231,6 +232,7 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 |---------|--------|
 | `user_supplied` | The resolved values from the YAML `registry:` block (literal text, `discovered.<x>` references, or `${...}` interpolation — see [10_TOOLS §2.1](10_TOOLS.md)). |
 | `discovered` | Everything `auto_discover` surfaced for the case: filename-parser output, parent-folder date, `folder_name` / `filename`, and embedded extracts (`discovered.czi_*` for microscopy, `discovered.mri_*` for ParaVision). |
+| `subject` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29. Preclinical subject metadata: species / strain / sex / age_at_acquisition (required) + optional genotype / weight / facility_animal_id / cohort_id. Source hierarchy: animal-facility-DB > study-level YAML at `/projects/<proj>/metadata/subjects.yaml` > instrument auto-extracts. Frozen snapshot at ingest; refreshed at project close-out. See §4.4. |
 | `<ecosystem_section>` | The structured embedded-metadata block keyed by ecosystem subfield: `microscopy` (for .czi), `mri` (for Bruker ParaVision — new 2026-05-20). Each has curated buckets at the top for human skimming + a `_raw_metadata` dump for forensic preservation. |
 
 **Per-column registry mapping is in YAML, not Python.** The Python `SPECIAL_FIELDS` promotion mechanism (used briefly in early 2026-05) is gone — adding or renaming a column promotion is a YAML-only edit (see [10_TOOLS §2.1](10_TOOLS.md) for schema, validation rules, and template).
@@ -394,6 +396,70 @@ Notes:
 - Per-modality acquisition fields are populated when present (e.g. `isotope`/`activity_MBq` for PET; empty for CT — the bucket handles missing fields gracefully by emitting `""`).
 - Curated `discovered.ni_*` subset (surfaced for YAML reference) is documented in `tools/ingest/ni_metadata.py::EXPOSED_FIELDS` and mirrored in [09_MODALITIES](09_MODALITIES.md) NI section per the CLAUDE.md cross-reference rule.
 
+### 4.4 `subject:` Block — Preclinical Subject Metadata (DRAFT 2026-05-29)
+
+> **🔶 DRAFT (2026-05-29).** New top-level `subject:` block in `metadata.json` for acquisitions whose subject is an organism or organism-derived tissue. The **four required fields** (`species` / `strain` / `sex` / `age_at_acquisition`) are **✅ DECIDED** — they are universal preclinical reporting standards (ARRIVE 2.0, EU Directive 2010/63/EU, NIH Sex-As-Biological-Variable policy). Optional fields and the `source:` provenance tag are DRAFT until the animal-facility-DB integration (`tasks/tasks.md §3.2`) locks the exact field names.
+
+#### 4.4.1 When this block is required
+
+Whenever `registry_raw.csv` has `sample_type ∈ {organism, tissue}` (see [06_REGISTRIES §2.4](06_REGISTRIES.md)). In current scope:
+
+- **Always required** for internal MRI and Nuclear Imaging (sample_type = `organism`).
+- **Required when applicable** for AxioScan 7 / Cell Observer / LSM 900 microscopy — i.e. whenever the imaged tissue or cell preparation originated from an animal (the typical case in this group). Not required for non-biological samples (`material`, `phantom`) or non-animal-derived `cells`.
+
+#### 4.4.2 Schema
+
+```json
+"subject": {
+  "species":                  "Mus musculus",       // REQUIRED — scientific binomial (recommend NCBI Taxonomy alignment)
+  "strain":                   "C57BL/6J",           // REQUIRED — strain or genetic background
+  "sex":                      "F",                  // REQUIRED — M | F | unknown
+  "age_at_acquisition":       "P12W",               // REQUIRED — ISO-8601 duration preferred (P12W = 12 weeks postnatal); plain "12 weeks" / "P21" accepted at draft stage
+  "genotype":                 "WT",                 // optional but recommended (WT | KO:<gene> | TG:<construct> | Cre:<driver> | ...)
+  "weight_at_acquisition_g":  24.3,                 // optional — numeric grams
+  "facility_animal_id":       "MFB-2025-0420-m17",  // optional — cross-reference key into the animal-facility DB
+  "cohort_id":                "AE-0424-cohort-A",   // optional — experimental cohort grouping
+  "source":                   "animal-facility-db"  // DRAFT — provenance: animal-facility-db | operator-entered | bruker-auto-extracted | molecubes-auto-extracted
+}
+```
+
+#### 4.4.3 Source hierarchy
+
+When the sidecar is built, `subject:` is populated from the highest-confidence source available:
+
+1. **Animal facility DB** — authoritative, once programmatic access lands (`tasks/tasks.md §3.2`). Set `source: "animal-facility-db"`.
+2. **Study-level metadata** at `/projects/<proj>/metadata/subjects.yaml`, keyed by `sample_id` (operator-entered via the Excel importer when it ships). Set `source: "operator-entered"`.
+3. **Instrument auto-extracts** — last-resort fallback from the existing `_raw_metadata` extracts:
+   - ParaVision: `mri._raw_metadata.subject.SUBJECT_sex` / `SUBJECT_weight` / `SUBJECT_type` / `SUBJECT_id` (often partially populated; species/strain/age typically empty unless the user entered them in ParaVision's subject form).
+   - Molecubes: `ni._raw_metadata.protocol_txt["Animal ID"]` / `"Animal weight (g)"` (no species/strain/sex/age fields in the Molecubes form).
+   - Set `source: "bruker-auto-extracted"` or `"molecubes-auto-extracted"`.
+
+The sidecar holds a **frozen snapshot** at ingest time, refreshed at project close-out before the `/projects/<proj>/` folder is deleted (see [§1.3](#13-permanent-vs-ephemeral-storage)). The mutable source-of-truth during the project's life lives at `/projects/<proj>/metadata/subjects.yaml`; the sidecar copy is what survives close-out into `/raw/`.
+
+#### 4.4.4 Why these four required fields
+
+The four required fields are the minimum reporting standard for any publishable preclinical imaging work:
+
+| Standard | Requirement |
+|---|---|
+| **ARRIVE 2.0** (Animal Research: Reporting of In Vivo Experiments) | Species, strain/sub-strain, sex, age/developmental stage are mandatory in the "Essential 10" reporting items. Required by most biomedical journals. |
+| **EU Directive 2010/63/EU** | Species + strain/stock, sex, age at procedure are mandatory record-keeping fields. |
+| **NIH Sex As a Biological Variable** policy (2016+) | Sex is non-negotiable for NIH-funded preclinical work. |
+
+Capturing these four fields at ingest time — rather than recovering them later from researchers' notebooks — is the single highest-leverage metadata investment for preclinical data on gjesus3.
+
+#### 4.4.5 Status & implementation
+
+| Aspect | Status |
+|---|---|
+| Required-fields schema (species / strain / sex / age) | ✅ DECIDED (2026-05-29) |
+| Optional fields + `source:` tag | 🔶 DRAFT until animal-facility-DB integration locks exact field names |
+| `subject:` writer in `tools/ingest/metadata_sidecar.py` | ⚠️ Not yet implemented — `tasks/tasks.md §3.2` Phase 3 |
+| Animal-facility-DB fetcher (`tools/animal_db.py`) | ⚠️ Blocked on IT for programmatic DB access — `tasks/tasks.md §3.2` Phase 1 |
+| Backfill of existing 97 MRI + 84 NI acqs + animal-derived microscopy | ⚠️ Queued — `tasks/tasks.md §3.2` Phase 4 |
+
+Until the animal-DB integration lands, operators may set `subject:` manually via study-level YAML (once the Excel importer ships) or fall back to whatever the instrument auto-extracted into `_raw_metadata`.
+
 ---
 
 ## 5. Nanomaterial Imaging Considerations
@@ -426,3 +492,4 @@ For SEM/TEM imaging of nanomaterials (if included):
 | META-02 | Audit embedded metadata per instrument | Data Mgmt Lead | ⚠️ Open |
 | ~~META-03~~ | ~~Develop metadata extraction scripts~~ | — | ✅ Resolved: integrated into full-mode ingest; see [10_TOOLS](10_TOOLS.md). Implementation pending. |
 | META-04 | ISA-TAB-Nano for nanomaterials? | Data Mgmt Lead | ❓ If SEM/TEM included |
+| META-05 | Animal-facility-DB programmatic access + auto-populate `subject:` block (§4.4) | Data Mgmt Lead + IT | ⚠️ Phase 1 blocked on IT for DB API access; 4-phase plan in `tasks/tasks.md §3.2` |

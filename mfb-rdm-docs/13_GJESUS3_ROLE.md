@@ -162,10 +162,12 @@ Per-platform reliability of the upstream archive (drives how much we lean on it 
 
 | Class | What lives at `/raw/<ACQ-ID>/` | What stays only on the platform |
 |---|---|---|
-| **Biomedical imaging (NI, MRI — "DICOM ecosystem")** | The reconstructed DICOM files (the analysis-ready images) + a curated `metadata.json` sidecar pulling key acquisition / subject / reconstruction context from instrument aux files | Raw detector data (event lists, k-space, sinograms, attenuation maps, calibration logs). Useless to 99% of analysis; voluminous; the platform owns this. |
-| **Optical microscopy (.czi)** | The `.czi` container as-deposited (one acquisition = one file natively) + `metadata.json` sidecar | (nothing — gjesus3 IS the primary copy for microscopy) |
+| **Biomedical imaging (NI, MRI — "DICOM ecosystem")** | The reconstructed DICOM files (the analysis-ready images) + a curated `metadata.json` sidecar pulling key acquisition / reconstruction / instrument-side subject context from aux files; plus (DRAFT 2026-05-29) a top-level `subject:` block carrying the ARRIVE-required preclinical fields (species / strain / sex / age) — see [08_METADATA §4.4](08_METADATA.md). | Raw detector data (event lists, k-space, sinograms, attenuation maps, calibration logs). Useless to 99% of analysis; voluminous; the platform owns this. |
+| **Optical microscopy (.czi)** | The `.czi` container as-deposited (one acquisition = one file natively) + `metadata.json` sidecar; for animal-derived samples (the typical case), the same `subject:` block as above. | (nothing — gjesus3 IS the primary copy for microscopy) |
 
 For biomedical, the **DICOM + sidecar pair gives a researcher ~99% of their value** (open in 3D Slicer / PMOD / ITK-SNAP / pydicom; metadata browsable without opening a viewer). The remaining 1% (raw event detection, hyper-detailed instrument logs) routes back through the platform — slower, messier, with some loss of control, but the platform is the right owner.
+
+**Subject metadata as a reliability axis (independent of platform archive trust):** the per-platform archive reliability above describes the *upstream* fallback. Separately, an acquisition's *captured-on-gjesus3* value depends heavily on whether its `subject:` block is populated. ARRIVE-grade subject metadata (species/strain/sex/age) turns a `.dcm` blob from "some MRI of some mouse" into "the cardiac scan of female C57BL/6J P12W animal MFB-2025-0420-m17" — searchable, reusable, publishable. Until the animal-facility-DB integration lands (`tasks/tasks.md §3.2`), this is the most consequential metadata gap on gjesus3.
 
 **Implications for ingest design:**
 - Folder-as-primary acquisitions for biomedical imaging use **selective inclusion** — explicit allowlists of what to copy, not "copy everything." Cf. internal NI `copy_ni_acquisition` and internal MRI `copy_paravision_exam`.

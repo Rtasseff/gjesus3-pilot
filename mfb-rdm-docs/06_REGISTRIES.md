@@ -147,6 +147,8 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 - Species/anatomy details that today appear as freeform `"mouse lung section"`-style strings in pre-cutover example rows should migrate to dedicated columns once REG-07 closes (proposed `sample_organism` + `anatomical_entity`; tracked in `tasks/tasks.md` §3.1).
 - For batches where every acquisition shares the same type, set the value at the YAML template level rather than per-row. The AxioScan 7 per-instrument template pre-fills `sample_type: tissue` for this reason.
 
+> **🔶 Linked requirement (DRAFT 2026-05-29):** For `sample_type ∈ {organism, tissue}`, the per-acquisition `metadata.json` MUST include a populated `subject:` block — species / strain / sex / age_at_acquisition (the four ARRIVE-aligned required fields, DECIDED) + optional genotype / weight / facility_animal_id / cohort_id. Always required for internal MRI + Nuclear Imaging (sample is always an organism); required for microscopy when the sample is animal-derived (typical case). Schema and source hierarchy in [08_METADATA §4.4](08_METADATA.md). Auto-population via animal-facility-DB integration is queued in `tasks/tasks.md §3.2`.
+
 ### 2.5 Example
 
 > **Note:** The CSV example below shows the schema **including** the DRAFT `session_id` and `primary_kind` columns. Production registry rows pre-2026-05-20 do not have these columns; the schema grows column-by-column with a defensive header check (see [10_TOOLS](10_TOOLS.md)) preventing silent shift.
