@@ -328,11 +328,15 @@ A real-world gap surfaced during the v2 source-data inventory: **3 of 7 round-6 
 
 **Detection in the ingest pipeline:** `copy_mri_paravision` enumerates `pdata/<idx>/dicom/*.dcm` for each selected recon. If no `.dcm` files are found anywhere across all selected recons, the function emits a clear log line ("no DICOMs — student didn't run Bruker exporter") and proceeds with the empty-`.data/` placeholder.
 
-### FID→DICOM regeneration future-work
+### ParaVision → DICOM regeneration future-work (UPDATED 2026-05-29)
 
-Bruker's GUI-based ParaVision DICOM exporter is closed-source; there is currently no open-source Python library that converts raw `fid` (k-space) data directly to DICOM. (Tools like `bruker2nifti` and `brkraw` go to NIfTI, not DICOM. `dcm2niix` runs the opposite direction.) The future-work item in `tasks/tasks.md §3.1` is a 2-4 week research project: read the binary `fid` format, perform Fourier reconstruction, build DICOM headers from the JCAMP-DX aux files, serialize using pydicom. Until that lands, no-DICOM acquisitions remain placeholders requiring researcher action.
+**Lead candidate: [Dicomifier](https://github.com/lamyj/dicomifier)** (open-source, IADI lab — Inserm/Université de Lorraine). Python + C++ core, available via conda-forge (`conda install -c conda-forge dicomifier`). Its `bruker2dicom` tool reads ParaVision exam folders (acqp/method/visu_pars/subject + 2dseq) and emits conformant DICOM aligned with the DICOM dictionary. Field-tested by upstream on ParaVision 4/5/6; our PV 7.0.0 requires empirical validation — pilot in progress 2026-05-29, tracked in `tasks/tasks.md §3.1`.
 
-The architecture supports this transition with no further changes — when the FID→DICOM capability ships, it would write `recon<X>_frame<NN>.dcm` files into the existing empty `.data/` folder; re-run the ingest to pick them up via idempotent dedup.
+**Earlier assessment was wrong.** The previous note here ("no open-source Python library exists, 2-4 week build-from-scratch") missed Dicomifier. The corrected estimate (assuming PV 7 validates) is ~1-2 weeks total: pilot validation (~1 day), integration module (~2-3 days), wire into ingest dispatch (~1-2 days), validation against the 3 round-6 no-DICOM acquisitions + idempotent re-ingest (~2-3 days). If PV 7 needs upstream fixes, contributing back is far cheaper than building from scratch.
+
+**Other tools surveyed (still not the right fit, but worth knowing):** `bruker2nifti` and `brkraw` go to NIfTI not DICOM; `dcm2niix` runs the opposite direction (DICOM → NIfTI); Bruker's own GUI exporter is closed-source.
+
+The architecture supports this transition with no further changes — when the regeneration capability ships, it would write `recon<X>_frame<NN>.dcm` files into the existing empty `.data/` folder; re-run the ingest to pick them up via idempotent dedup. Until then, the recovery path stays: ask the originating researcher to re-run Bruker's exporter, then re-run the ingest.
 
 ---
 
