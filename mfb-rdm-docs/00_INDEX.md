@@ -3,7 +3,7 @@
 **System Purpose:** Research-facing working layer for MFB group imaging data in the 5-year active window — organised, searchable, directly viewable. Complements (does not replace) the platforms' own deep-archive of raw bytes. See [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) for the two-tier framing.
 **Infrastructure:** QNAP TS-864eU NAS (6 × 20 TB, RAID 5, ~100 TB system / ~63 TB user-available after snapshot reservation)
 **Status:** Pilot development
-**Last Updated:** 2026-05-29 (Preclinical subject metadata: new `subject:` block spec in the sidecar — 4 required fields DECIDED, optional fields DRAFT, animal-facility-DB integration queued)
+**Last Updated:** 2026-05-29 (Dicomifier 2.5.3 pilot validated ParaVision-7 → DICOM regeneration; preclinical subject metadata `subject:` block spec landed; tasks.md round-6/round-8 status caught up to LANDED/COMPLETE)
 
 ---
 
@@ -151,10 +151,10 @@ A **research-facing working layer** for MFB group imaging data — organised, se
 - [ ] Script versioning/distribution approach undefined
 
 ### Operations (see [11_OPERATIONS](11_OPERATIONS.md))
-- [ ] Who can promote staging → raw (intake roles)
-- [ ] Permissions model details
+- [ ] Who can promote staging → raw (intake roles) — partial resolution via the User / Operator / Data Mgmt Lead role split (DECIDED 2026-05-12); concrete per-instrument "who" assignments still open.
+- [ ] **NAS group permissions** — ⏳ ACTIVE 2026-05-29. Plan handed to IT: two QNAP groups (`pilot-users` R + RW-on-projects/publications/staging; `pilot-operators` R + RW-on-raw/registries). Blocked on IT for QNAP web-admin group setup + server-side ACL application. See `tasks/tasks.md §6`.
 - [x] ~~Quick Start guide not written~~ — **Resolved (2026-05-12):** researcher-facing daily flow in [11_OPERATIONS §3.2](11_OPERATIONS.md); CLI reference with flags + config cheat-sheet at [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md)
-- [ ] Pilot review cadence not scheduled
+- [ ] Pilot review cadence not scheduled — effectively continuous via the per-round ingest cycle; formal cadence on hold until post-exhibition true-production restart.
 
 ### Projects (see [05_PROJECTS](05_PROJECTS.md))
 - [ ] **Project naming convention requires group consensus** (PROJ-05). Project `short_name` should map to a durable, meaning-bearing unit (funded project name, animal-project approval ID, or explicit internal name). Experiments ≠ projects. Provisional patterns now in use: `ae-biomegune-NNNN` (AxioScan, reasonable interim) and `${researcher}-${experiment}` (Cell Observer cells-mode, stopgap only). Project-lead users must converge on a real convention before the pilot scales out. See [05_PROJECTS §9](05_PROJECTS.md).

@@ -170,7 +170,7 @@ For biomedical, the **DICOM + sidecar pair gives a researcher ~99% of their valu
 **Subject metadata as a reliability axis (independent of platform archive trust):** the per-platform archive reliability above describes the *upstream* fallback. Separately, an acquisition's *captured-on-gjesus3* value depends heavily on whether its `subject:` block is populated. ARRIVE-grade subject metadata (species/strain/sex/age) turns a `.dcm` blob from "some MRI of some mouse" into "the cardiac scan of female C57BL/6J P12W animal MFB-2025-0420-m17" — searchable, reusable, publishable. Until the animal-facility-DB integration lands (`tasks/tasks.md §3.2`), this is the most consequential metadata gap on gjesus3.
 
 **Implications for ingest design:**
-- Folder-as-primary acquisitions for biomedical imaging use **selective inclusion** — explicit allowlists of what to copy, not "copy everything." Cf. internal NI `copy_ni_acquisition` and internal MRI `copy_paravision_exam`.
+- Folder-as-primary acquisitions for biomedical imaging use **selective inclusion** — explicit allowlists of what to copy, not "copy everything." Cf. internal NI `copy_ni_acquisition` and internal MRI `copy_mri_paravision` (v2 slim-folder; the v1 `copy_paravision_exam` was retired 2026-05-27).
 - Curated metadata extraction (parsing instrument-specific aux files: ParaVision JCAMP-DX, Molecubes `protocol.txt` + XMLs, DICOM headers) goes into the sidecar's `<ecosystem>:` block at the level of richness a researcher would actually browse.
 - We do not hoard the raw bytes "just in case" — when the platform archive is trustworthy, the cost of preserving its contents twice is real (storage, NAS-write time, scanability) and the benefit is essentially zero.
 
