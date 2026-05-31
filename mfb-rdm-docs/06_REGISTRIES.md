@@ -393,3 +393,5 @@ Generation: Next available number within each type.
 | REG-05 | Curated datasets registry: finalize schema after pilot experience | Data Mgmt Lead | ❓ Evaluating |
 | REG-06 | Track DICOM instance count (.dcm files) in registry or only in extended metadata? | Data Mgmt Lead | 🔶 Draft |
 | REG-07 | Sample type controlled vocabulary (`tissue`/`organism`/`cells`/`material`/`phantom`) DRAFT in §2.4; PI sign-off + first round of cross-instrument application pending. Future split of species/anatomy into dedicated columns. | Users / PI | 🔶 Draft |
+| REG-08 | DRAFT `session_id` column (§2.2) — groups acquisitions that share an ISA "study" (one animal session, one MR study, etc.). For MRI typically the JRC study identifier; for microscopy may be empty/NA. | Users / PI | 🔶 Draft — pending PI sign-off |
+| REG-09 | DRAFT ISA terminology mapping (§2.3a) — Investigation=Project / Study=Session / Assay=Acquisition. Adopting ISA vocabulary improves REMBI compatibility + future XNAT/OMERO portability. | Users / PI | 🔶 Draft — pending PI sign-off |
