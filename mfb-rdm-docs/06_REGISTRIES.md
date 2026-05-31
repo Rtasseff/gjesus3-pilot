@@ -147,7 +147,13 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 - Species/anatomy details that today appear as freeform `"mouse lung section"`-style strings in pre-cutover example rows should migrate to dedicated columns once REG-07 closes (proposed `sample_organism` + `anatomical_entity`; tracked in `tasks/tasks.md` §3.1).
 - For batches where every acquisition shares the same type, set the value at the YAML template level rather than per-row. The AxioScan 7 per-instrument template pre-fills `sample_type: tissue` for this reason.
 
-> **🔶 Linked requirement (DRAFT 2026-05-29):** For `sample_type ∈ {organism, tissue}`, the per-acquisition `metadata.json` MUST include a populated `subject:` block — species / strain / sex / age_at_acquisition (the four ARRIVE-aligned required fields, DECIDED) + optional genotype / weight / facility_animal_id / cohort_id. Always required for internal MRI + Nuclear Imaging (sample is always an organism); required for microscopy when the sample is animal-derived (typical case). Schema and source hierarchy in [08_METADATA §4.4](08_METADATA.md). Auto-population via animal-facility-DB integration is queued in `tasks/tasks.md §3.2`.
+> **🔶 Linked requirements (DRAFT 2026-05-29):** For `sample_type ∈ {organism, tissue}`, the per-acquisition `metadata.json` MUST include two blocks:
+>
+> **`subject:` block** — species / strain / sex / age_at_acquisition (the four ARRIVE-aligned required fields, DECIDED) + optional genotype / weight / facility_animal_id / cohort_id. Schema in [08_METADATA §4.4](08_METADATA.md). Auto-population via animal-facility-DB integration queued in `tasks/tasks.md §3.2`.
+>
+> **`condition:` block** — `is_control` (**DECIDED-required strict boolean** — the enforceable healthy-vs-case flag) + DRAFT-required `disease_model` + `disease_state` free-text + optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. Schema in [08_METADATA §4.5](08_METADATA.md). Operator-entered only (no auto-source — disease state is a property of study design, not the animal). The `is_control` boolean is the primary cohort-builder filter for "all healthy controls" / "all cases" queries.
+>
+> Both blocks always required for internal MRI + Nuclear Imaging (sample is always an organism); required for microscopy when the sample is animal-derived (typical case).
 
 ### 2.5 Example
 

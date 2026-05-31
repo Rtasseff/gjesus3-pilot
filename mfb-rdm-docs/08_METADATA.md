@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-05-29 (DRAFT `subject:` block — preclinical subject metadata required for `sample_type ∈ {organism, tissue}`; 4 required fields DECIDED, optional fields + `source:` tag DRAFT pending animal-facility-DB integration — see §4.4)
+**Last Updated:** 2026-05-29 (DRAFT `subject:` block §4.4 + DRAFT `condition:` block §4.5 — preclinical subject + disease/control metadata required for `sample_type ∈ {organism, tissue}`; `is_control` DECIDED-required as the enforceable healthy-vs-case boolean; disease_model + disease_state DRAFT-required free-text)
 
 ---
 
@@ -224,6 +224,7 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
   "user_supplied": { "operator", "data_source", "instrument", "sample_id", "sample_type", "original_name", "notes" },
   "discovered":    { "<field>": "<value>", ... },
   "subject":       { ... },                       // when sample_type ∈ {organism, tissue} — see §4.4
+  "condition":     { ... },                       // when sample_type ∈ {organism, tissue} — see §4.5 (is_control REQUIRED)
   "<ecosystem_section>": { ... }
 }
 ```
@@ -232,7 +233,8 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 |---------|--------|
 | `user_supplied` | The resolved values from the YAML `registry:` block (literal text, `discovered.<x>` references, or `${...}` interpolation — see [10_TOOLS §2.1](10_TOOLS.md)). |
 | `discovered` | Everything `auto_discover` surfaced for the case: filename-parser output, parent-folder date, `folder_name` / `filename`, and embedded extracts (`discovered.czi_*` for microscopy, `discovered.mri_*` for ParaVision). |
-| `subject` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29. Preclinical subject metadata: species / strain / sex / age_at_acquisition (required) + optional genotype / weight / facility_animal_id / cohort_id. Source hierarchy: animal-facility-DB > study-level YAML at `/projects/<proj>/metadata/subjects.yaml` > instrument auto-extracts. Frozen snapshot at ingest; refreshed at project close-out. See §4.4. |
+| `subject` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29. Preclinical subject metadata: species / strain / sex / age_at_acquisition (required) + optional genotype / weight / facility_animal_id / cohort_id. **Per-subject, fixed.** Source hierarchy: animal-facility-DB > study-level YAML at `/projects/<proj>/metadata/subjects.yaml` > instrument auto-extracts. Frozen snapshot at ingest; refreshed at project close-out. See §4.4. |
+| `condition` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29. Disease state + experimental role: `is_control` (**DECIDED-required** boolean — the enforceable healthy-vs-case flag), `disease_model` + `disease_state` (DRAFT-required free-text) + optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. **Per-acquisition, varies** (same animal can be baseline + post-MI). Source: operator-entered via per-batch YAML or `/projects/<proj>/metadata/`; not derivable from animal-facility-DB. See §4.5. |
 | `<ecosystem_section>` | The structured embedded-metadata block keyed by ecosystem subfield: `microscopy` (for .czi), `mri` (for Bruker ParaVision — new 2026-05-20). Each has curated buckets at the top for human skimming + a `_raw_metadata` dump for forensic preservation. |
 
 **Per-column registry mapping is in YAML, not Python.** The Python `SPECIAL_FIELDS` promotion mechanism (used briefly in early 2026-05) is gone — adding or renaming a column promotion is a YAML-only edit (see [10_TOOLS §2.1](10_TOOLS.md) for schema, validation rules, and template).
@@ -460,6 +462,85 @@ Capturing these four fields at ingest time — rather than recovering them later
 
 Until the animal-DB integration lands, operators may set `subject:` manually via study-level YAML (once the Excel importer ships) or fall back to whatever the instrument auto-extracted into `_raw_metadata`.
 
+### 4.5 `condition:` Block — Disease State and Experimental Role (DRAFT 2026-05-29)
+
+> **🔶 DRAFT (2026-05-29).** New top-level `condition:` block in `metadata.json` capturing the disease/control state of each acquisition. Sister block to §4.4 `subject:`; same trigger condition (`sample_type ∈ {organism, tissue}`).
+>
+> **Decided/Draft split:**
+> - **✅ `is_control` is DECIDED-required** — a strict boolean. The sidecar writer (Phase 3, `tasks/tasks.md §3.2`) refuses to write the sidecar if `is_control` is missing for an organism/tissue acquisition.
+> - **🔶 `disease_model` and `disease_state` are DRAFT-required** — free-text, the writer logs a WARN if missing but does not block. The pilot can tighten to DECIDED-required once a working operator habit is established.
+> - **🔶 Optional fields** (`control_type` / `treatment` / `timepoint_days` / `study_arm`) — write-through, no validation.
+
+#### 4.5.1 Why this is its own block (not folded into `subject:`)
+
+| | `subject:` | `condition:` |
+|---|---|---|
+| **What it answers** | "Who is this animal?" | "What study state is this acquisition?" |
+| **Variation** | Per-subject, fixed | Per-acquisition, varies (same animal at baseline + post-treatment) |
+| **Source** | Animal-facility-DB (auto, when integration lands) > study YAML > instrument extracts | Operator-entered via per-batch YAML or `/projects/<proj>/metadata/`; DB does not know this |
+| **Required for** | `sample_type ∈ {organism, tissue}` | `sample_type ∈ {organism, tissue}` |
+
+Folding into `subject:` would conflate two different source pipelines (DB-auto vs. operator-only) and obscure the per-acquisition semantics.
+
+#### 4.5.2 Schema
+
+```json
+"condition": {
+  "disease_model":     "wild_type",            // DRAFT-REQUIRED — constitutive disease/model classification, OR "wild_type" / "non_transgenic" for naive animals
+  "disease_state":     "baseline",              // DRAFT-REQUIRED — state at scan time. Free-text. Examples: "baseline", "day_7_post_MI", "endpoint", "6mo_AD_phenotype", "MPTP_day_21", "post_treatment_day_3"
+  "is_control":        true,                    // DECIDED-REQUIRED — strict boolean: true if this acquisition serves as a control reference, false if case/disease
+  "control_type":      "naive",                 // optional (only meaningful when is_control=true): "naive" / "sham" / "vehicle" / "littermate" / "untreated_baseline"
+  "treatment":         null,                    // optional free-text: e.g. "vehicle", "drug_X_5mg/kg_IP_day_0", "MI_LAD_ligation"
+  "timepoint_days":    0,                       // optional numeric — days from study start or from intervention
+  "study_arm":         "control_naive",         // optional — explicit experimental-arm label for cohort grouping
+  "source":            "operator-entered"       // DRAFT — provenance: "operator-entered" / "study-yaml" / "imported-from-excel"
+}
+```
+
+#### 4.5.3 Query patterns this enables
+
+| Query | Filter |
+|---|---|
+| All healthy controls | `condition.is_control == true` |
+| All disease X scans | `condition.disease_model` contains `"X"` |
+| Wild-type baseline | `disease_model == "wild_type" AND disease_state == "baseline"` |
+| Post-MI day 7 cases | `disease_state contains "day_7" AND is_control == false` |
+| All vehicle controls | `is_control == true AND control_type == "vehicle"` |
+
+The `is_control` boolean is the primary "needle in a haystack" filter — strict boolean means no ambiguity for cohort-builder scripts or for future XNAT/OMERO migration.
+
+#### 4.5.4 Source: operator-entered, not auto-derivable
+
+Unlike `subject:` (which the animal-facility-DB will eventually populate), `condition:` cannot be auto-derived. The disease/control state is a property of the **study design**, not the animal — same animal can be a baseline-scan control on day 0 and a post-MI case on day 7. Operators set it via:
+
+1. **Per-batch YAML** (registry block) for batches where every acquisition shares the same condition. Example:
+   ```yaml
+   registry:
+     # ... other fields ...
+   condition:
+     disease_model: "wild_type"
+     disease_state: "baseline"
+     is_control: true
+   ```
+2. **Per-acquisition YAML** in `/projects/<proj>/metadata/<acq_id>.json` for batches that mix conditions (e.g., a single MRI session that scans baseline + post-MI animals back-to-back).
+3. **Excel → study-metadata importer** (when it ships — `tasks/tasks.md §3.2`) for researcher-driven population from a per-project Excel.
+
+The sidecar holds a **frozen snapshot at ingest time**, refreshed at project close-out before `/projects/<proj>/` deletion. Same lifecycle as `subject:`.
+
+#### 4.5.5 Status & implementation
+
+| Aspect | Status |
+|---|---|
+| `is_control` required field (boolean) | ✅ DECIDED (2026-05-29) — writer refuses sidecar if missing |
+| `disease_model` + `disease_state` required (free-text) | 🔶 DRAFT — writer WARNs but proceeds; tighten to DECIDED post-pilot |
+| Optional fields (`control_type` / `treatment` / `timepoint_days` / `study_arm`) | 🔶 DRAFT, write-through |
+| Controlled vocabulary for `disease_model` / `disease_state` | ❓ Deferred — preclinical model vocabularies are too domain-specific to fully control. Future enhancement: per-PI vocabularies in `/projects/<proj>/metadata/vocab.yaml`. |
+| Writer in `tools/ingest/metadata_sidecar.py` | ⚠️ Not yet implemented — same Phase 3 work as `subject:` writer (`tasks/tasks.md §3.2`) |
+| YAML-level `condition:` block support in per-batch configs | ⚠️ Not yet implemented — additive to existing `registry:` block; same loader |
+| Backfill of existing 97 MRI + 84 NI + animal-derived microscopy | ⚠️ Queued — Phase 4 of `tasks/tasks.md §3.2`; operators will need to recall the condition info from study notes when backfilling |
+
+Until the writer ships, operators may include a `condition:` block in YAML configs as forward-compatible documentation; the loader will pick it up once Phase 3 lands.
+
 ---
 
 ## 5. Nanomaterial Imaging Considerations
@@ -493,3 +574,4 @@ For SEM/TEM imaging of nanomaterials (if included):
 | ~~META-03~~ | ~~Develop metadata extraction scripts~~ | — | ✅ Resolved: integrated into full-mode ingest; see [10_TOOLS](10_TOOLS.md). Implementation pending. |
 | META-04 | ISA-TAB-Nano for nanomaterials? | Data Mgmt Lead | ❓ If SEM/TEM included |
 | META-05 | Animal-facility-DB programmatic access + auto-populate `subject:` block (§4.4) | Data Mgmt Lead + IT | ⚠️ Phase 1 blocked on IT for DB API access; 4-phase plan in `tasks/tasks.md §3.2` |
+| META-06 | Tighten `disease_model` + `disease_state` from DRAFT-required to DECIDED-required after pilot operator-habit is established (§4.5) | Data Mgmt Lead | 🔶 Open — revisit after Phase 3 writer lands + a few real batches use the `condition:` block; `is_control` already DECIDED |
