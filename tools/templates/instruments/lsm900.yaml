@@ -200,3 +200,40 @@ auto_create_project:
 # Default keeps the full informative source filename + an instrument
 # prefix. Example resolved value: LSM9_Z-stack_LP_IONP-doxo_20x_6h_2.czi
 link_filename: "${instrument}_${original_name}"
+
+# ============================================================================
+# PRECLINICAL METADATA — subject: + condition: blocks
+# (FORWARD-COMPATIBLE SCAFFOLDING; writer ships in Phase 3 of tasks.md §3.2)
+# ============================================================================
+# Until the Phase 3 sidecar writer lands, anything in these blocks is IGNORED
+# by the ingest pipeline. Uncomment + fill once the writer is live.
+#
+# CONDITIONAL: required when the cell line is animal-origin (the typical case
+# for LSM 900 work — nanoparticle uptake into cultured lines like MDA-MB-231,
+# HeLa, primary mouse cells, etc.). Spec [08_METADATA §4.4 + §4.5]. For purely
+# synthetic / cell-free imaging leave both blocks out.
+#
+# For LSM 900 confocal work, "condition" typically describes the well-level
+# treatment: nanoparticle exposure dose + duration, vehicle-control wells, etc.
+
+# subject:
+#   species:                 "Homo sapiens"         # DECIDED-REQUIRED — source organism of the cell line (Mus musculus / Homo sapiens / Rattus norvegicus / ...)
+#   strain:                  "MDA-MB-231"           # DECIDED-REQUIRED — for cell lines, the line identifier serves as the genetic-background identifier
+#   sex:                     "F"                    # DECIDED-REQUIRED — sex of the cell line's source donor (MDA-MB-231 = female); "unknown" if not characterised
+#   age_at_acquisition:      "unknown"              # DECIDED-REQUIRED — for established cell lines, donor age is rarely known; use "unknown" with notes entry
+#   genotype:                "WT"                   # optional — cell line genotype (knockouts, reporters, transgenics)
+#   facility_animal_id:      null                   # n/a for established cell lines
+#   source:                  "operator-entered"     # provenance
+
+# condition:
+#   disease_model:           "MDA-MB-231_breast_cancer"  # DRAFT-REQUIRED — cell line's pathology context
+#   disease_state:           "post_uptake_6h"       # DRAFT-REQUIRED — state at image time: "untreated_baseline" / "post_uptake_${duration}"
+#   is_control:              false                  # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue/animal-origin cells)
+#   control_type:            null                   # optional when is_control=true: "vehicle" / "untreated_well"
+#   treatment:               "LP-IONP-doxo_${discovered.experiment}"  # optional free-text — nanoparticle + dose info, often derivable from the experiment/condition chunks
+#   timepoint_days:          null                   # optional numeric — fractional days OK for sub-day timepoints (e.g. 0.25 for 6h)
+#   study_arm:               null                   # optional — explicit experimental-arm label
+#   source:                  "operator-entered"     # provenance
+#
+# For SYNTHETIC / CELL-FREE imaging (sample_type = material / phantom):
+# both blocks are NOT required — comment out or leave absent.

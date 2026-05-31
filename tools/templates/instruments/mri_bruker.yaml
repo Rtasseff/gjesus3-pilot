@@ -262,3 +262,45 @@ auto_create_project:
 #   MRI_jrc_251016_m17_0424_20251016_29_3
 #   (.lnk extension appended automatically by linker.create_lnk)
 link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
+
+# ============================================================================
+# PRECLINICAL METADATA — subject: + condition: blocks
+# (FORWARD-COMPATIBLE SCAFFOLDING; writer ships in Phase 3 of tasks.md §3.2)
+# ============================================================================
+# Until the Phase 3 sidecar writer lands, anything in these blocks is IGNORED
+# by the ingest pipeline. Uncomment + fill once the writer is live. Required
+# when sample_type ∈ {organism, tissue} — ALWAYS the case for internal MRI.
+#
+# Spec: [08_METADATA §4.4 (subject:) + §4.5 (condition:)].
+#
+# Two distinct source pipelines:
+#   subject:    per-subject, fixed (species / strain / sex / age). Auto from
+#               animal-facility-DB once integration lands (`tasks.md §3.2`
+#               Phase 1, blocked on IT); until then operator-entered here.
+#   condition:  per-acquisition, varies (same animal can be baseline-control +
+#               post-MI-case). Operator-entered only — the DB does NOT know
+#               disease/control state, it's a study-design property.
+#               For MIXED-CONDITION batches (e.g. baseline + post-treatment
+#               scans in the same session), use per-acquisition overrides at
+#               /projects/<proj>/metadata/<acq_id>.json instead of the
+#               batch-level block here.
+
+# subject:
+#   species:                 "Mus musculus"         # DECIDED-REQUIRED — NCBI Taxonomy aligned
+#   strain:                  "C57BL/6J"             # DECIDED-REQUIRED — strain or genetic background
+#   sex:                     "F"                    # DECIDED-REQUIRED — "M" | "F" | "unknown"
+#   age_at_acquisition:      "P12W"                 # DECIDED-REQUIRED — ISO-8601 duration preferred (P12W = 12 weeks postnatal)
+#   genotype:                "WT"                   # optional but recommended
+#   weight_at_acquisition_g: 24.3                   # optional — numeric grams (NB: ParaVision's SUBJECT_weight is in kg)
+#   facility_animal_id:      "${discovered.jrc_id}" # optional — animal-facility-DB lookup key
+#   source:                  "operator-entered"     # "animal-facility-db" | "operator-entered" | "bruker-auto-extracted"
+
+# condition:
+#   disease_model:           "wild_type"            # DRAFT-REQUIRED — model classification OR "wild_type" / "non_transgenic". Common preclinical-MRI examples: "MI_LAD_ligation" / "APP/PS1_AD" / "MPTP_PD" / "TAC_pressure_overload"
+#   disease_state:           "baseline"             # DRAFT-REQUIRED — state at scan time: "baseline" / "day_7_post_MI" / "endpoint" / "6mo_AD_phenotype"
+#   is_control:              true                   # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue acquisitions)
+#   control_type:            "naive"                # optional when is_control=true: "naive" / "sham" / "vehicle" / "littermate"
+#   treatment:               null                   # optional free-text: e.g. "vehicle", "drug_X_5mg/kg_IP_day_0", "MI_LAD_ligation"
+#   timepoint_days:          0                      # optional numeric — days from study start or from intervention
+#   study_arm:               "control_naive"        # optional — explicit experimental-arm label for cohort grouping
+#   source:                  "operator-entered"     # "operator-entered" | "study-yaml" | "imported-from-excel"

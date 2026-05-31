@@ -133,3 +133,49 @@ auto_create_project:
 # instrument prefix so MRI / EM / etc. shortcuts coexist cleanly.
 # Example resolved value: ZWSI_MFB_MBC_0423_ID13B_WGA_10x.czi
 link_filename: "${instrument}_${original_name}"
+
+# ============================================================================
+# PRECLINICAL METADATA — subject: + condition: blocks
+# (FORWARD-COMPATIBLE SCAFFOLDING; writer ships in Phase 3 of tasks.md §3.2)
+# ============================================================================
+# Until the Phase 3 sidecar writer lands, anything in these blocks is IGNORED
+# by the ingest pipeline. Uncomment + fill once the writer is live.
+#
+# Required when sample_type ∈ {organism, tissue} — for MFB AxioScan work, this
+# is the typical case (H&E / IHC / fluorescence sections from mouse organs →
+# sample_type = tissue, defaulted by this template). NOT required when scanning
+# non-biological samples (sample_type = material / phantom).
+#
+# Spec: [08_METADATA §4.4 (subject:) + §4.5 (condition:)].
+#
+# Source pipelines:
+#   subject:    per-subject, fixed. For tissue sections, "subject" = the
+#               animal the tissue came from. Auto from animal-facility-DB
+#               once integration lands; until then operator-entered. The
+#               facility_animal_id ties the slide back to its source animal.
+#   condition:  per-acquisition, varies. For a batch of slides from a mixed
+#               cohort (some WT, some disease-model), condition: needs to be
+#               per-acquisition — set via /projects/<proj>/metadata/<acq_id>.json
+#               instead of the batch-level block here.
+
+# subject:
+#   species:                 "Mus musculus"         # DECIDED-REQUIRED
+#   strain:                  "C57BL/6J"             # DECIDED-REQUIRED — strain of the source animal
+#   sex:                     "F"                    # DECIDED-REQUIRED — "M" | "F" | "unknown"
+#   age_at_acquisition:      "P12W"                 # DECIDED-REQUIRED — age of source animal at the time of euthanasia (not the section date)
+#   genotype:                "WT"                   # optional but recommended
+#   facility_animal_id:      "MFB-2024-${discovered.project}-m${discovered.sample_short}"  # optional — animal-facility-DB lookup key (illustrative composition)
+#   source:                  "operator-entered"     # "animal-facility-db" | "operator-entered"
+
+# condition:
+#   disease_model:           "wild_type"            # DRAFT-REQUIRED — model classification OR "wild_type" / "non_transgenic"
+#   disease_state:           "endpoint"             # DRAFT-REQUIRED — for ex-vivo tissue: typically "endpoint" / "post_mortem_<context>" / "<intervention>_day_N"
+#   is_control:              true                   # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue)
+#   control_type:            "naive"                # optional when is_control=true: "naive" / "sham" / "vehicle" / "littermate"
+#   treatment:               null                   # optional free-text
+#   timepoint_days:          null                   # optional numeric
+#   study_arm:               "control_naive"        # optional — explicit experimental-arm label
+#   source:                  "operator-entered"     # provenance
+#
+# For NON-BIOLOGICAL samples (sample_type = material / phantom):
+# both blocks are NOT required — comment out or leave absent.

@@ -255,3 +255,46 @@ auto_create_project:
 #   PET_m14_20251029_20251029100641
 # (the .lnk extension is appended by linker.create_lnk).
 link_filename: "${discovered.modality}_${discovered.short_sample}_${acq_date}_${discovered.acq_datetime_full}"
+
+# ============================================================================
+# PRECLINICAL METADATA — subject: + condition: blocks
+# (FORWARD-COMPATIBLE SCAFFOLDING; writer ships in Phase 3 of tasks.md §3.2)
+# ============================================================================
+# Until the Phase 3 sidecar writer lands, anything in these blocks is IGNORED
+# by the ingest pipeline. Uncomment + fill once the writer is live. Required
+# when sample_type ∈ {organism, tissue} — ALWAYS the case for internal NI.
+#
+# Spec: [08_METADATA §4.4 (subject:) + §4.5 (condition:)].
+#
+# Two distinct source pipelines:
+#   subject:    per-subject, fixed (species / strain / sex / age). Auto from
+#               animal-facility-DB once integration lands (`tasks.md §3.2`
+#               Phase 1, blocked on IT); until then operator-entered here.
+#               NB: Molecubes protocol.txt only carries Animal ID + weight —
+#               species/strain/sex/age MUST come from DB or operator entry.
+#   condition:  per-acquisition, varies (same animal at baseline + post-tracer-
+#               injection, multi-timepoint dynamic PET, etc.). Operator-entered
+#               only — the DB does NOT know disease/control state, it's a
+#               study-design property. For batches that mix conditions across
+#               .tgz archives, use per-acquisition overrides at
+#               /projects/<proj>/metadata/<acq_id>.json.
+
+# subject:
+#   species:                 "Mus musculus"           # DECIDED-REQUIRED — NCBI Taxonomy aligned
+#   strain:                  "C57BL/6J"               # DECIDED-REQUIRED — strain or genetic background
+#   sex:                     "F"                      # DECIDED-REQUIRED — "M" | "F" | "unknown"
+#   age_at_acquisition:      "P12W"                   # DECIDED-REQUIRED — ISO-8601 duration preferred (P12W = 12 weeks postnatal)
+#   genotype:                "WT"                     # optional but recommended
+#   weight_at_acquisition_g: 24.3                     # optional — numeric grams (NB: protocol.txt's Animal weight (g) is already in grams)
+#   facility_animal_id:      "${discovered.short_sample}_${discovered.short_project}"  # optional — animal-facility-DB lookup key
+#   source:                  "operator-entered"       # "animal-facility-db" | "operator-entered" | "molecubes-auto-extracted"
+
+# condition:
+#   disease_model:           "wild_type"              # DRAFT-REQUIRED — model classification OR "wild_type". Common preclinical-NI examples: tumour xenograft models ("MDA-MB-231_orthotopic_breast" / "U87_glioma"), neurological models ("APP/PS1_AD" / "MPTP_PD"), inflammation/atherosclerosis models.
+#   disease_state:           "baseline"               # DRAFT-REQUIRED — state at scan time: "baseline" / "post_tracer_15min" / "endpoint" / "treatment_day_3"
+#   is_control:              true                     # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue acquisitions)
+#   control_type:            "naive"                  # optional when is_control=true: "naive" / "sham" / "vehicle" / "littermate"
+#   treatment:               null                     # optional free-text: e.g. "vehicle", "drug_X_5mg/kg_IP_day_0". For PET also useful to record tracer-related context here even though protocol.txt captures isotope/activity.
+#   timepoint_days:          0                        # optional numeric — days from study start / from intervention
+#   study_arm:               "control_naive"          # optional — explicit experimental-arm label
+#   source:                  "operator-entered"       # "operator-entered" | "study-yaml" | "imported-from-excel"

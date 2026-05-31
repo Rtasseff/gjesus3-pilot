@@ -196,3 +196,42 @@ auto_create_project:
 # Default keeps the full informative source filename + an instrument
 # prefix. Example resolved value: CELL_HLF_alphasma_10x_CC-miR-29a_1.czi
 link_filename: "${instrument}_${original_name}"
+
+# ============================================================================
+# PRECLINICAL METADATA — subject: + condition: blocks
+# (FORWARD-COMPATIBLE SCAFFOLDING; writer ships in Phase 3 of tasks.md §3.2)
+# ============================================================================
+# Until the Phase 3 sidecar writer lands, anything in these blocks is IGNORED
+# by the ingest pipeline. Uncomment + fill once the writer is live.
+#
+# CONDITIONAL: required when the cell line is animal-origin (the typical case;
+# most cultured lines trace back to a species — mouse, human, etc.). The spec
+# trigger is sample_type ∈ {organism, tissue}, but for cells: operator judges
+# whether the underlying organism context warrants the blocks. Spec [08_METADATA
+# §4.4 + §4.5]. For purely synthetic / cell-free assays leave both blocks out.
+#
+# For cell-line work, "subject" maps to the cell line's source organism (the
+# strain/genetic context of the line), not a specific animal. "condition" maps
+# to the experimental treatment / well condition.
+
+# subject:
+#   species:                 "Mus musculus"         # DECIDED-REQUIRED — source organism of the cell line
+#   strain:                  "C57BL/6J"             # DECIDED-REQUIRED — genetic background (or human donor population for human cell lines)
+#   sex:                     "F"                    # DECIDED-REQUIRED — sex of the cell line's source organism / donor; "unknown" if not characterised
+#   age_at_acquisition:      "P12W"                 # DECIDED-REQUIRED — for cell lines this is somewhat artificial; record the donor age if known, otherwise "unknown" with a notes entry
+#   genotype:                "WT"                   # optional — the cell line's genotype (knockouts, reporters, etc.)
+#   facility_animal_id:      null                   # n/a for established cell lines; populate for primary cultures derived from a specific animal
+#   source:                  "operator-entered"     # provenance
+
+# condition:
+#   disease_model:           "MDA-MB-231_breast_cancer"  # DRAFT-REQUIRED — for cell-line work, the model = the cell line's pathology context
+#   disease_state:           "untreated_baseline"   # DRAFT-REQUIRED — state at image time: "untreated_baseline" / "${treatment}_${timepoint}" / "post_uptake_${dose}"
+#   is_control:              true                   # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue/animal-origin cells)
+#   control_type:            "vehicle"              # optional when is_control=true: "naive" / "vehicle" / "untreated_well"
+#   treatment:               null                   # optional free-text: e.g. "LP-IONP_doxo_25ug/mL_6h" / "vehicle_DMSO_0.1%"
+#   timepoint_days:          0                      # optional numeric — days from treatment start
+#   study_arm:               "control_untreated"    # optional — explicit experimental-arm label
+#   source:                  "operator-entered"     # provenance
+#
+# For SYNTHETIC / CELL-FREE samples (sample_type = material / phantom):
+# both blocks are NOT required — comment out or leave absent.
