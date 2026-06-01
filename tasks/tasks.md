@@ -262,13 +262,15 @@ All round-6 framework items below shipped across commits `17ac781` → `66887ae`
 
   **Conclusion:** Dicomifier works on ParaVision 7.0.0 for content (UIDs round-trip identically; geometry/sequence params/patient info all match). **One real bug confirmed: PixelSpacing axis-order swap producing visible distortion.** Phase 2 proceeds with a workaround built in.
 
-  **Next step (Phase 2 plan, ready for go-ahead):** write `tools/ingest/paravision_regen.py` as a Dicomifier subprocess wrapper with:
-  - **PixelSpacing-swap post-processing step** — open each generated DICOM with pydicom, verify whether row/col are swapped (geometry consistency check), swap if needed, re-save. Validates the workaround is necessary across more exams than just the cardiac CINE before locking it in.
-  - Subprocess call: `dicomifier to-dicom --layout flat <source> <work_dir>`.
-  - `SeriesDescription`/`ProtocolName` dual-read in `_DICOM_CURATED_TAGS` extractor (cosmetic fix).
-  - Wire into ingest via config flag (`auto_regenerate_dicom: true` in MRI YAML).
-  - Apply to the 3 round-6 no-DICOM acquisitions via idempotent re-ingest.
-  - File the upstream Dicomifier issue alongside (reproduction case = m17 exam 29 pdata/3 from `D:\projects\gjesus3\data_test\`).
+  **Phase 2 status (2026-06-01):**
+
+  - [x] **`tools/ingest/paravision_regen.py` module** — commit `0e9d61b`. Standalone Dicomifier subprocess wrapper + per-file workarounds (PixelSpacing swap + Window-tag fix) + flat→pdata mapping via SeriesNumber encoding (`(exam << 16) | pdata_idx`). Offline tested on m13 exam 10 + 13. Standalone CLI works: `python tools/ingest/paravision_regen.py <exam> <out>`.
+  - [x] **Wire into `copy_mri_paravision` + dispatch** — commit `5b02ef2`. New optional kwarg `auto_regenerate_dicom`; YAML flag `ingest.auto_regenerate_dicom: true` plumbs through. Falls through to empty-`.data/` placeholder if Dicomifier missing or regen fails (no abort). Scratch virtual exam auto-cleaned via `TemporaryDirectory` + `ExitStack`. End-to-end tested offline against m13 exam 13: 12 DICOMs regenerated → workarounds applied → slim copy → checksums.
+  - [x] **`ProtocolName` added to `_DICOM_CURATED_TAGS`** — commit `5b02ef2`. Cosmetic fix for finding 2 (Bruker GUI / Dicomifier transpose `SeriesDescription` ↔ `ProtocolName`). Sidecars now carry both fields.
+  - [x] **MRI template updated** with documentation for the flag — commit `5b02ef2`. `mri_bruker.yaml` has the commented opt-in block.
+  - [x] **`mri_bruker_20251016_TEST.yaml`** updated with `auto_regenerate_dicom: true` — commit `5b02ef2`. Ready for re-ingest.
+  - [ ] **Run the re-ingest against `/raw/` to fill the 3 empty `.data/` placeholders.** Requires explicit user approval per shared-infra-write policy. Steps: (a) activate dicomifier-pilot conda env in WSL; (b) dry-run the existing config to confirm only the 3 no-DICOM exams will be touched (the 94 already-populated exams should dedupe-skip); (c) real re-ingest; (d) verify via `tools/validate_dicomifier_pixelspacing.py` against the 3 newly-populated ACQ-IDs (which should now show PixelSpacing in Bruker order = `[row, col]`).
+  - [ ] **File the upstream issues at github.com/lamyj/dicomifier** — text drafted in `memory/dicomifier_pixelspacing_upstream_issue.md` (PixelSpacing + Window-tag bugs as two issues). User-action, when convenient.
 
   **When this lands:** backfills empty-`.data/` placeholders via idempotent re-ingest with no other code changes. The `subject:` block work (§3.2) is independent — both can land in either order.
 - [ ] **Enhanced MR / Multi-Frame DICOM evaluation.** The classic per-frame `.dcm` layout is why an MR acquisition lands as N files. The modern DICOM standard (Enhanced MR / Multi-Frame DICOM) puts all frames in one file — if we adopt it, we get back to one-primary-file-per-ACQ even for DICOM. Evaluate in connection with the previous future-task.

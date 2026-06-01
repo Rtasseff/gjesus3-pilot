@@ -328,15 +328,39 @@ A real-world gap surfaced during the v2 source-data inventory: **3 of 7 round-6 
 
 **Detection in the ingest pipeline:** `copy_mri_paravision` enumerates `pdata/<idx>/dicom/*.dcm` for each selected recon. If no `.dcm` files are found anywhere across all selected recons, the function emits a clear log line ("no DICOMs — student didn't run Bruker exporter") and proceeds with the empty-`.data/` placeholder.
 
-### ParaVision → DICOM regeneration future-work (UPDATED 2026-05-29)
+### ParaVision → DICOM regeneration via Dicomifier (Phase 2 — module + wiring complete 2026-06-01)
 
-**Lead candidate: [Dicomifier](https://github.com/lamyj/dicomifier)** (open-source, IADI lab — Inserm/Université de Lorraine). Python + C++ core, available via conda-forge (`conda install -c conda-forge dicomifier`). Its `bruker2dicom` tool reads ParaVision exam folders (acqp/method/visu_pars/subject + 2dseq) and emits conformant DICOM aligned with the DICOM dictionary. Field-tested by upstream on ParaVision 4/5/6; our PV 7.0.0 requires empirical validation — pilot in progress 2026-05-29, tracked in `tasks/tasks.md §3.1`.
+**Implementation:** [Dicomifier 2.5.3](https://github.com/lamyj/dicomifier) (open-source, IADI lab — Inserm/Université de Lorraine), invoked via subprocess from `tools/ingest/paravision_regen.py`. Two confirmed PV-7 bugs are worked around per-file:
 
-**Earlier assessment was wrong.** The previous note here ("no open-source Python library exists, 2-4 week build-from-scratch") missed Dicomifier. The corrected estimate (assuming PV 7 validates) is ~1-2 weeks total: pilot validation (~1 day), integration module (~2-3 days), wire into ingest dispatch (~1-2 days), validation against the 3 round-6 no-DICOM acquisitions + idempotent re-ingest (~2-3 days). If PV 7 needs upstream fixes, contributing back is far cheaper than building from scratch.
+1. **PixelSpacing axis-order** — Dicomifier emits `[col, row]` instead of DICOM Part 3's `[row, col]`. Workaround: swap. Verified across 16 m17 anisotropic series (cardiac CINE / Localizer / Planning / T1_FLASH / T2_TurboRARE).
+2. **Invalid Window tags** — Dicomifier emits `WindowWidth=0` (invalid; viewers produce a gray cast). Workaround: delete bogus `WindowCenter`/`WindowWidth`; add `SmallestImagePixelValue` + `LargestImagePixelValue` from the pixel array's min/max. Restores high-contrast B&W matching Bruker GUI behaviour.
+
+**Visual verification 2026-06-01:** B-v2 set (both workarounds applied) renders identically to Bruker GUI export (m17 exam 29 / pdata/3 cardiac CINE on `J:\raw\DICOM\2025\2025-10\ACQ-20251016-MRI-018\`).
+
+**Earlier assessment was wrong.** A previous version of this section said "no open-source Python library exists, 2-4 week build-from-scratch." That missed Dicomifier entirely. Revised actual effort: pilot validation (1 day) + module (1 day) + wiring (1 day) + backfill (pending user approval). Both upstream bugs documented with reproduction text at `memory/dicomifier_pixelspacing_upstream_issue.md`.
+
+**Operator usage** (when the conda env is available on the workstation):
+
+```bash
+# One-time setup
+conda install -c conda-forge dicomifier pydicom
+
+# Per-ingest (Bash from WSL or any shell that has conda on PATH)
+conda activate dicomifier-pilot
+python tools/ingest_raw.py --config tools/configs/mri_bruker_<batch>.yaml --nas-root /mnt/gjesus3
+```
+
+In the YAML config, set `ingest.auto_regenerate_dicom: true` to opt in to regeneration. Default is false; ingests of normally-Bruker-GUI-exported source data don't need the flag at all.
+
+**No-DICOM exam behaviour when the flag is enabled:**
+- Source has no `pdata/<idx>/dicom/*.dcm` → ingest detects this and calls `paravision_regen.prepare_virtual_exam` to build a complete virtual exam under a `TemporaryDirectory` (aux files + 2dseq + regenerated DICOMs with workarounds).
+- Normal slim copy then proceeds from the virtual exam; DICOMs land in `<ACQ-ID>.data/` with the standard `recon<X>_frame<NN>.dcm` naming.
+- Scratch is auto-cleaned on function return.
+- If Dicomifier is unavailable (`dicomifier` not on PATH) OR regen fails, the ingest logs a clear WARN and falls through to the existing empty-`.data/` placeholder behaviour — no batch abort.
 
 **Other tools surveyed (still not the right fit, but worth knowing):** `bruker2nifti` and `brkraw` go to NIfTI not DICOM; `dcm2niix` runs the opposite direction (DICOM → NIfTI); Bruker's own GUI exporter is closed-source.
 
-The architecture supports this transition with no further changes — when the regeneration capability ships, it would write `recon<X>_frame<NN>.dcm` files into the existing empty `.data/` folder; re-run the ingest to pick them up via idempotent dedup. Until then, the recovery path stays: ask the originating researcher to re-run Bruker's exporter, then re-run the ingest.
+The 3 currently-empty `.data/` placeholders from round-6 v2 (m13/m14 protocol 0423 + m29 protocol 0423) will be filled in by idempotent re-ingest after user approval — see `tasks/tasks.md §3.1`.
 
 ---
 
