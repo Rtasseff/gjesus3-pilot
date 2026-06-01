@@ -221,7 +221,10 @@ def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn):
     return checksums
 
 
-def copy_mri_paravision(source_path, dest_dir, acq_id_str, reconstructions, log_fn):
+def copy_mri_paravision(
+    source_path, dest_dir, acq_id_str, reconstructions, log_fn,
+    auto_regenerate_dicom=False,
+):
     """Folder-as-primary copy for a Bruker ParaVision MRI exam — v2 slim shape.
 
     SLIM copy (round-6 v2, 2026-05-27): only the reconstructed per-frame
@@ -233,6 +236,16 @@ def copy_mri_paravision(source_path, dest_dir, acq_id_str, reconstructions, log_
     `metadata.json.mri._raw_metadata`, so nothing meaningful is lost;
     the on-disk acq folder mirrors microscopy's one-file-per-acquisition
     convention (`<ACQ-ID>.czi`) and NI's `<ACQ-ID>.data/` shape.
+
+    auto_regenerate_dicom (Phase 2 of tasks.md §3.1, 2026-06-01):
+    When True AND the source has no DICOMs in any selected pdata recon
+    (the researcher didn't run Bruker's GUI DICOM exporter), invoke
+    `paravision_regen.prepare_virtual_exam` to generate DICOMs via
+    Dicomifier 2.5.3 + apply the PV-7 workarounds (PixelSpacing swap,
+    Window-tag fix). Requires the `dicomifier-pilot` conda env on PATH;
+    if unavailable, logs a clear error and falls through to the empty-
+    placeholder behaviour. Default False — opt-in to keep the
+    Dicomifier dependency optional for operators who don't need it.
 
     Destination layout:
 
@@ -291,61 +304,117 @@ def copy_mri_paravision(source_path, dest_dir, acq_id_str, reconstructions, log_
     data_dir_abs = os.path.join(dest_dir, data_dirname)
     os.makedirs(data_dir_abs, exist_ok=True)
 
-    plan = []
-    recon_summary = []
-    n_unrecognized = 0
-    for idx in sorted(
-        md.get("pdata", {}).keys(),
-        key=lambda x: int(x) if x.isdigit() else x,
-    ):
-        p = md["pdata"][idx]
-        if not p.get("selected"):
-            recon_summary.append(f"pdata/{idx} (skipped — not in selection)")
-            continue
-        dcms = p.get("dicoms") or []
-        recon_summary.append(f"pdata/{idx} ({len(dcms)} dcm)")
-        for d in dcms:
-            src_file = src / d["src_relpath"]
-            dst_rel = os.path.join(data_dirname, d["dst_basename"])
-            plan.append((src_file, dst_rel))
-        n_unrecognized += len(p.get("unrecognized_dicoms") or [])
-
-    log_fn(f"MRI slim copy: {', '.join(recon_summary) if recon_summary else 'no pdata/ subfolders found'}")
-    if n_unrecognized:
-        log_fn(
-            f"  WARN: {n_unrecognized} non-MRIm-prefixed DICOM(s) found — "
-            f"copying with fallback names; see sidecar unrecognized_dicom_paths.",
-            "WARN",
+    # Detect "no DICOMs in any selected recon" — the trigger for
+    # auto-regeneration when the operator has opted in via the
+    # `auto_regenerate_dicom: true` YAML flag.
+    def _has_any_dicoms(md_):
+        return any(
+            p.get("selected") and p.get("dicoms")
+            for p in md_.get("pdata", {}).values()
         )
 
-    if not plan:
-        log_fn(
-            "  No DICOMs to copy — likely the researcher didn't run Bruker's "
-            "DICOM exporter (no pdata/<idx>/dicom/*.dcm in selected recons). "
-            "Creating empty .data/ placeholder; sidecar will carry the "
-            "parsed JCAMP-DX. Re-run after conversion is run to fill in the "
-            "DICOMs (idempotent).",
-            "WARN",
-        )
-        return {}
+    # Use a TemporaryDirectory for the virtual exam so it's auto-cleaned
+    # after we finish copying. We hold the regen_ctx open across the
+    # whole copy loop below — the virtual exam files must exist during
+    # the per-file copy + checksum.
+    import contextlib
+    import tempfile as _tempfile
 
-    iterator = tqdm(plan, desc="Copying", unit="file") if HAS_TQDM else plan
-    checksums = {}
-    for src_file, dst_rel in iterator:
-        dst_abs = os.path.join(dest_dir, dst_rel)
-        os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
-        shutil.copy2(src_file, dst_abs)
-        src_hash = checksum.sha256_file(src_file)
-        dst_hash = checksum.sha256_file(dst_abs)
-        if src_hash != dst_hash:
-            raise RuntimeError(
-                f"Checksum mismatch on copy:\n"
-                f"  src: {src_file} ({src_hash[:12]})\n"
-                f"  dst: {dst_abs} ({dst_hash[:12]})"
+    regen_ctx = contextlib.ExitStack()
+    try:
+        if not _has_any_dicoms(md) and auto_regenerate_dicom:
+            from ingest import paravision_regen
+
+            log_fn(
+                "  No DICOMs in source — auto_regenerate_dicom is true; "
+                "invoking Dicomifier (`tools/ingest/paravision_regen.py`) "
+                "to regenerate DICOMs from the 2dseq + JCAMP-DX aux files."
             )
-        checksums[dst_rel.replace(os.sep, "/")] = dst_hash
-    log_fn(f"MRI slim copy complete: {len(plan)} DICOM(s) under {data_dirname}/")
-    return checksums
+            tmpdir = regen_ctx.enter_context(
+                _tempfile.TemporaryDirectory(prefix=f"regen_{acq_id_str}_")
+            )
+            virtual_exam = Path(tmpdir) / src.name
+            try:
+                paravision_regen.prepare_virtual_exam(src, virtual_exam, log_fn)
+            except RuntimeError as e:
+                log_fn(
+                    f"  Regeneration failed: {e}. "
+                    f"Falling through to empty-.data/ placeholder.",
+                    "WARN",
+                )
+                # regen_ctx will clean tmpdir on exit; md stays empty
+            else:
+                # Reload using the virtual exam as the new source
+                md = paravision_metadata.load_paravision_exam(
+                    virtual_exam, reconstructions=reconstructions,
+                )
+                src = virtual_exam
+                if _has_any_dicoms(md):
+                    log_fn("  Regeneration produced DICOMs; proceeding with normal copy.")
+                else:
+                    log_fn(
+                        "  Regeneration produced no DICOMs — falling through "
+                        "to empty-.data/ placeholder.", "WARN",
+                    )
+
+        plan = []
+        recon_summary = []
+        n_unrecognized = 0
+        for idx in sorted(
+            md.get("pdata", {}).keys(),
+            key=lambda x: int(x) if x.isdigit() else x,
+        ):
+            p = md["pdata"][idx]
+            if not p.get("selected"):
+                recon_summary.append(f"pdata/{idx} (skipped — not in selection)")
+                continue
+            dcms = p.get("dicoms") or []
+            recon_summary.append(f"pdata/{idx} ({len(dcms)} dcm)")
+            for d in dcms:
+                src_file = src / d["src_relpath"]
+                dst_rel = os.path.join(data_dirname, d["dst_basename"])
+                plan.append((src_file, dst_rel))
+            n_unrecognized += len(p.get("unrecognized_dicoms") or [])
+
+        log_fn(f"MRI slim copy: {', '.join(recon_summary) if recon_summary else 'no pdata/ subfolders found'}")
+        if n_unrecognized:
+            log_fn(
+                f"  WARN: {n_unrecognized} non-MRIm-prefixed DICOM(s) found — "
+                f"copying with fallback names; see sidecar unrecognized_dicom_paths.",
+                "WARN",
+            )
+
+        if not plan:
+            log_fn(
+                "  No DICOMs to copy — likely the researcher didn't run Bruker's "
+                "DICOM exporter (no pdata/<idx>/dicom/*.dcm in selected recons). "
+                "Creating empty .data/ placeholder; sidecar will carry the "
+                "parsed JCAMP-DX. Re-run after conversion is run to fill in the "
+                "DICOMs (idempotent). To auto-regenerate via Dicomifier at "
+                "ingest-time, set `ingest.auto_regenerate_dicom: true` in the YAML.",
+                "WARN",
+            )
+            return {}
+
+        iterator = tqdm(plan, desc="Copying", unit="file") if HAS_TQDM else plan
+        checksums = {}
+        for src_file, dst_rel in iterator:
+            dst_abs = os.path.join(dest_dir, dst_rel)
+            os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
+            shutil.copy2(src_file, dst_abs)
+            src_hash = checksum.sha256_file(src_file)
+            dst_hash = checksum.sha256_file(dst_abs)
+            if src_hash != dst_hash:
+                raise RuntimeError(
+                    f"Checksum mismatch on copy:\n"
+                    f"  src: {src_file} ({src_hash[:12]})\n"
+                    f"  dst: {dst_abs} ({dst_hash[:12]})"
+                )
+            checksums[dst_rel.replace(os.sep, "/")] = dst_hash
+        log_fn(f"MRI slim copy complete: {len(plan)} DICOM(s) under {data_dirname}/")
+        return checksums
+    finally:
+        regen_ctx.close()
 
 
 def copy_paravision_exam(source_path, dest_dir, reconstructions, log_fn):
@@ -633,9 +702,16 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 )
             elif copy_strategy == "mri_paravision_v2":
                 reconstructions = ingest_block.get("reconstructions")
+                auto_regenerate_dicom = bool(ingest_block.get("auto_regenerate_dicom", False))
                 log(f"  reconstructions: {reconstructions!r}")
+                if auto_regenerate_dicom:
+                    log(
+                        "  auto_regenerate_dicom: true (no-DICOM exams will be "
+                        "regenerated via Dicomifier — requires `dicomifier` on PATH)"
+                    )
                 dest_checksums = copy_mri_paravision(
                     source_path, dest_dir, acq_id_str, reconstructions, log,
+                    auto_regenerate_dicom=auto_regenerate_dicom,
                 )
             elif copy_strategy == "paravision_exam":
                 reconstructions = ingest_block.get("reconstructions")

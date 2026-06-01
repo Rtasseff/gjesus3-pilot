@@ -23,6 +23,13 @@ ingest:
   acquisition_layout: folder
   copy_strategy: mri_paravision_v2
   reconstructions: all
+  # Phase 2 of tasks.md §3.1 (2026-06-01): regenerate DICOMs via
+  # Dicomifier for no-DICOM exams (3 of 7 source projects had this
+  # state at the original round-6 v2 ingest). When this config is
+  # re-run with the flag below, those exams get filled in via
+  # idempotent re-ingest. Requires `dicomifier` on PATH (activate
+  # the conda env: `conda activate dicomifier-pilot`).
+  auto_regenerate_dicom: true
 
 auto_discover:
   staging_dir: "D:/projects/gjesus3/data_test"

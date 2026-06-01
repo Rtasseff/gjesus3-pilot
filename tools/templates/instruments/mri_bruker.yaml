@@ -179,6 +179,32 @@ ingest:
   # completeness — their DICOMs just don't get copied.
   reconstructions: all
 
+  # --------------------------------------------------------------------
+  # auto_regenerate_dicom (Phase 2 of tasks.md §3.1, 2026-06-01)
+  # --------------------------------------------------------------------
+  # OPTIONAL: when true, exams whose source has NO `pdata/<idx>/dicom/`
+  # subfolders (i.e. the researcher didn't run Bruker's GUI DICOM
+  # exporter) get their DICOMs regenerated AT INGEST TIME via
+  # Dicomifier 2.5.3 + the PV-7 workarounds (PixelSpacing axis-swap +
+  # Window-tag fix). Output is equivalent to Bruker GUI export.
+  #
+  # Default: false. Opt-in to keep Dicomifier dependency optional.
+  #
+  # REQUIREMENTS when set to true:
+  #   - `dicomifier` must be on PATH at ingest time. Easiest path is
+  #     to activate the conda env before running ingest:
+  #         conda activate dicomifier-pilot
+  #     (env created via:
+  #         conda install -c conda-forge dicomifier pydicom)
+  #   - If `dicomifier` is not found, the ingest logs a clear error
+  #     and falls through to the empty-.data/ placeholder behaviour
+  #     (existing default path) — does NOT abort the batch.
+  #
+  # The 3 no-DICOM source projects from round-6 v2 (m13/m14/m29
+  # protocol 0423) are the immediate targets. Set true to fill in
+  # their currently-empty .data/ placeholders via idempotent re-ingest.
+  # auto_regenerate_dicom: false
+
 auto_discover:
   # EDIT: absolute path to the batch root — the directory containing
   # the FTP-pulled study folders (one per animal session).

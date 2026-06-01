@@ -61,7 +61,12 @@ _DICOM_CURATED_TAGS = [
     "StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID",
     # --- Instrument / acquisition ---
     "Modality", "Manufacturer", "ManufacturerModelName",
-    "SeriesDescription", "StudyDescription",
+    "SeriesDescription", "ProtocolName", "StudyDescription",
+    # NB: Bruker GUI export sets SeriesDescription = per-recon descriptive
+    # (e.g. "Cine_slice_1_12") and ProtocolName = method name
+    # (e.g. "Cine_IG_FLASH"). Dicomifier 2.5.3 swaps them. Carrying both
+    # in the sidecar lets downstream consumers pick whichever convention
+    # they expect. See tasks/tasks.md §3.1 findings (2).
     "StudyDate", "StudyTime", "AcquisitionDate", "AcquisitionTime",
     "SeriesDate", "SeriesTime",
     # --- Image shape ---
