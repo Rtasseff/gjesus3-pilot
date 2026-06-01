@@ -234,7 +234,7 @@ All round-6 framework items below shipped across commits `17ac781` → `66887ae`
   | Validation against the 3 no-DICOM round-6 acquisitions + idempotent re-ingest | 2-3 days |
   | **Total** | **~1-2 weeks** (was 2-4 weeks for build-from-scratch) |
 
-  **Pilot test — ✅ GREEN (executed 2026-05-29; user confirmation pending Monday):**
+  **Pilot test — ✅ GREEN with one confirmed bug (executed 2026-05-29; user visual review 2026-06-01):**
 
   Setup: Dicomifier 2.5.3 installed via miniforge3 in WSL Ubuntu (`conda create -n dicomifier-pilot -c conda-forge dicomifier pydicom`). Source data at `/mnt/d/projects/gjesus3/data_test/` (preserved from round-6 v2).
 
@@ -249,16 +249,22 @@ All round-6 framework items below shipped across commits `17ac781` → `66887ae`
   - **Geometry parity:** Rows (128), Columns (256), SliceThickness (0.8mm), MRAcquisitionType (2D), `Modality`, `Manufacturer` — all EXACT.
   - **Acquisition parameters:** TE / TR / B0 / FlipAngle / NumberOfAverages — match to floating-point precision (Dicomifier preserves more decimal places; physically identical values).
   - **Patient info parity:** PatientID / PatientName / PatientSex / PatientBirthDate / PatientWeight — all EXACT or string-formatting-only diff.
-  - **Findings worth flagging (none are blockers):**
-    1. `SeriesDescription` and `ProtocolName` are *transposed* between Bruker GUI and Dicomifier (Bruker uses `Cine_slice_1_12` for SeriesDescription and `Cine_IG_FLASH` for ProtocolName; Dicomifier swaps them). Both fields populated correctly, just labelled differently. Easy to handle in our `_DICOM_CURATED_TAGS` extractor — fall back across both fields.
-    2. `PixelSpacing` is *ordering-swapped*: Bruker `[0.1953125, 0.09765625]` (row, column) vs Dicomifier `[0.09765625, 0.1953125]`. For 128 rows × 256 columns, the Bruker ordering matches DICOM Part 3 convention (`[row spacing, column spacing]`). **Potentially a real Dicomifier bug** — would cause viewers strictly reading PixelSpacing to render the image axis-flipped. Worth confirming with a quick load into 3D Slicer / ITK-SNAP before integrating; if confirmed, file upstream issue. Workaround: swap in our extractor pre-ingest if needed.
+  - **Findings:**
+    1. **PixelSpacing axis-order — ✅ CONFIRMED BUG on PV 7 (visual review 2026-06-01).** Bruker `[0.1953125, 0.09765625]` (row, column — DICOM Part 3 convention for 128 rows × 256 columns) vs Dicomifier `[0.09765625, 0.1953125]` (swapped). User loaded both in viewer side-by-side: **Dicomifier output is visibly stretched horizontally and squished vertically** — the swap produces real geometric distortion. **Systematic validation 2026-06-01** via `tools/validate_dicomifier_pixelspacing.py`: **16-of-16 anisotropic m17 series confirmed swapped** vs Bruker GUI on NAS (cardiac CINE + Localizer + Planning + T1_FLASH + T2_TurboRARE across 128×256 / 256×128 / 320×320 matrices); 3 square 128×128 series no-op. **Workaround is "always swap PixelSpacing[0] and PixelSpacing[1]"** — safe blanket fix, deterministic across every anisotropic acquisition tested, no-op for square images. **Phase 2 integration MUST apply the swap** in `tools/ingest/paravision_regen.py` before files land in `/raw/`. **Upstream issue text drafted** at `memory/dicomifier_pixelspacing_upstream_issue.md` for user to paste at github.com/lamyj/dicomifier.
+    2. `SeriesDescription` and `ProtocolName` are *transposed* between Bruker GUI and Dicomifier (Bruker uses `Cine_slice_1_12` for SeriesDescription and `Cine_IG_FLASH` for ProtocolName; Dicomifier swaps them). Both fields populated correctly, just labelled differently. Easy to handle in our `_DICOM_CURATED_TAGS` extractor — fall back across both fields. Cosmetic, not a blocker.
     3. `SequenceVariant`: Bruker "SP" (Spoiled gradient), Dicomifier "NONE" — minor metadata gap, not blocking.
     4. `StudyDescription` is missing from Bruker but Dicomifier provides `"jrc_251016_m17_0424"` — Dicomifier WINS.
     5. `ImageType`: Bruker `[ORIGINAL, PRIMARY, OTHER]` vs Dicomifier `[ORIGINAL, PRIMARY, '', MAGNITUDE_IMAGE]` — Dicomifier provides the semantic MAGNITUDE_IMAGE tag, slightly more informative.
 
-  **Conclusion:** Dicomifier works on ParaVision 7.0.0. UIDs round-trip identically through ParaVision's canonical UID assignment, so regenerated DICOMs are interoperable with the platform-archive originals. Two minor findings (PixelSpacing axis order + ProtocolName/SeriesDescription transpose) need quick visual verification in an imaging viewer, but neither blocks integration.
+  **Conclusion:** Dicomifier works on ParaVision 7.0.0 for content (UIDs round-trip identically; geometry/sequence params/patient info all match). **One real bug confirmed: PixelSpacing axis-order swap producing visible distortion.** Phase 2 proceeds with a workaround built in.
 
-  **Next step (pending user confirmation Monday):** proceed to Phase 2 — write `tools/ingest/paravision_regen.py` calling Dicomifier as a subprocess; wire into ingest via a config flag (e.g. `auto_regenerate_dicom: true` in MRI YAML); apply to the 3 round-6 no-DICOM acquisitions via idempotent re-ingest. Verify PixelSpacing orientation in 3D Slicer before locking the integration design.
+  **Next step (Phase 2 plan, ready for go-ahead):** write `tools/ingest/paravision_regen.py` as a Dicomifier subprocess wrapper with:
+  - **PixelSpacing-swap post-processing step** — open each generated DICOM with pydicom, verify whether row/col are swapped (geometry consistency check), swap if needed, re-save. Validates the workaround is necessary across more exams than just the cardiac CINE before locking it in.
+  - Subprocess call: `dicomifier to-dicom --layout flat <source> <work_dir>`.
+  - `SeriesDescription`/`ProtocolName` dual-read in `_DICOM_CURATED_TAGS` extractor (cosmetic fix).
+  - Wire into ingest via config flag (`auto_regenerate_dicom: true` in MRI YAML).
+  - Apply to the 3 round-6 no-DICOM acquisitions via idempotent re-ingest.
+  - File the upstream Dicomifier issue alongside (reproduction case = m17 exam 29 pdata/3 from `D:\projects\gjesus3\data_test\`).
 
   **When this lands:** backfills empty-`.data/` placeholders via idempotent re-ingest with no other code changes. The `subject:` block work (§3.2) is independent — both can land in either order.
 - [ ] **Enhanced MR / Multi-Frame DICOM evaluation.** The classic per-frame `.dcm` layout is why an MR acquisition lands as N files. The modern DICOM standard (Enhanced MR / Multi-Frame DICOM) puts all frames in one file — if we adopt it, we get back to one-primary-file-per-ACQ even for DICOM. Evaluate in connection with the previous future-task.
