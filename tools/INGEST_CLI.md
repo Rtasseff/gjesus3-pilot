@@ -53,7 +53,7 @@ Every config has up to four top-level blocks (three required + one optional, plu
 
 | Block | Required? | Purpose |
 |-------|-----------|---------|
-| `ingest:` | Yes | Pipeline control flags. Not registry columns. Keys: `delete_source_after_ingest`, `auto_create_projects`, `acquisition_layout` (`file` \| `archive` \| `folder`; round-6 added), `reconstructions` (`all` \| int \| list; MRI-specific). |
+| `ingest:` | Yes | Pipeline control flags. Not registry columns. Keys: `delete_source_after_ingest`, `auto_create_projects`, `acquisition_layout` (`file` \| `archive` \| `folder`; round-6 added), `reconstructions` (`all` \| int \| list; MRI-specific), `copy_strategy` (`mri_paravision_v2` \| `ni_molecubes` \| legacy `paravision_exam`; round-6 v2 added), `auto_regenerate_dicom` (`true` \| `false`, MRI-specific Phase 2 2026-06-01 — see [Dicomifier opt-in](#dicomifier-opt-in-for-no-dicom-mri-exams) below). |
 | `auto_discover:` | Yes | How to find cases inside `staging_dir` and what variables to extract. Supports `filename_parse:` (positional `separator:` + `fields:` OR named-group `regex:`; optional `source: name \| parent_name`) and `path_parse:` (named path levels between staging_dir and the match). Each case's parsed values land in `discovered.<name>`. |
 | `registry:` | Yes | Explicit per-column mapping. Values: literal (`MFB`), bare reference (`discovered.operator`), interpolation (`"${discovered.stain} at ${discovered.czi_objective_mag}x"`), or `NA`. New DRAFT columns since round 6: `session_id` (ISA "study" grouping) and `primary_kind` (auto, set by pipeline). |
 | `auto_create_project:` | Optional | First-time project-creation metadata (owner / description / notes), resolver-evaluated. First-write-wins. |
@@ -130,6 +130,53 @@ tools/configs/
 | Internal MRI / Bruker ParaVision (`MRI`, folder bundle) | [`tools/templates/instruments/mri_bruker.yaml`](templates/instruments/mri_bruker.yaml) | Folder-as-primary layout, `regex:` extract on the messy FTP folder name, `reconstructions:` flag, default `link_filename: MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}` |
 
 Each template's **header comment block lists every `discovered.*` field** the operator can reference in resolver-evaluated YAML fields — the per-instrument reference card.
+
+---
+
+## Dicomifier opt-in for no-DICOM MRI exams
+
+**When:** internal MRI ingests where some source exams have **no `pdata/<idx>/dicom/` subfolders** because the researcher didn't run Bruker's GUI DICOM exporter. Round-6 v2 (2026-05-27) had 3 of 7 source projects in this state (m13/m14/m29 protocol 0423) — they currently sit on `/raw/` as empty `<ACQ-ID>.data/` placeholders + populated JCAMP-DX sidecars. With this opt-in, ingest auto-regenerates the missing DICOMs via Dicomifier 2.5.3 (and applies two confirmed PV-7 workarounds — see [`tasks/tasks.md §3.1`](../tasks/tasks.md)).
+
+**Pre-flight (one-time setup on the workstation):**
+
+```bash
+# WSL Ubuntu (or any shell where conda + miniforge are on PATH)
+conda install -c conda-forge dicomifier pydicom
+conda activate dicomifier-pilot
+dicomifier --version    # should print 2.5.3 or later
+```
+
+**Enable in the YAML config:**
+
+```yaml
+ingest:
+  # ... existing flags ...
+  copy_strategy: mri_paravision_v2   # required (legacy paravision_exam doesn't support regen)
+  auto_regenerate_dicom: true
+```
+
+**Per-batch runtime:** activate the env BEFORE running `ingest_raw.py` (the script invokes `dicomifier` via subprocess, so it needs to be on PATH at exec time):
+
+```bash
+conda activate dicomifier-pilot
+python tools/ingest_raw.py --config tools/configs/<batch>.yaml --nas-root /mnt/gjesus3 --dry-run
+# review, then real run
+python tools/ingest_raw.py --config tools/configs/<batch>.yaml --nas-root /mnt/gjesus3
+```
+
+**Fall-through behaviour:**
+
+- If `dicomifier` is **not on PATH** → ingest logs a clear ERROR and falls through to the existing empty-`.data/` placeholder behaviour. **Does NOT abort the batch.** Other exams in the same batch continue normally.
+- If Dicomifier **fails on a specific exam** (malformed source, unsupported sequence) → same fall-through: WARN + empty placeholder.
+- If the source **already has DICOMs** → flag is a no-op; normal slim copy proceeds as if the flag weren't set.
+
+**Verification after a re-ingest:**
+
+```bash
+python tools/validate_dicomifier_pixelspacing.py
+```
+
+Walks the m13 + m17 staged source against the newly-populated `/raw/` and confirms the PixelSpacing-swap workaround is producing Bruker-equivalent output. Run after any Dicomifier-backed ingest or after a Dicomifier upgrade.
 
 ---
 
