@@ -1,0 +1,71 @@
+# AxioScan 7 — 2026-05-22 day folder ingest (MFB group data)
+#
+# Source: S:\goptical\GOpticalUsers data\AxioScan\20260522 (left in place —
+# delete_source_after_ingest: false). The day folder holds several users'
+# files; this config ingests only the MFB group's via `filter: group_code: MFB`
+# (the JL-HBN-*, ShutterTest, and ROIS HIF1A/* files have a different first
+# chunk / too few chunks and are skipped automatically).
+#
+# Naming convention (2026-05-22 batch) — 7 underscore chunks, ONE more than the
+# round-4 (2026-05-06) batch because of an explicit <section> field:
+#   MFB_<operator>_<project>_<sample_short>_<section>_<stain>_<magnification>.czi
+#   e.g. MFB_AUA_1022_ID58T_1_Hif1A_10x.czi
+#        group_code=MFB operator=AUA project=1022 sample_short=ID58T
+#        section=1 stain=Hif1A magnification=10x
+# One file carries an extra trailing scene suffix
+# (MFB_AUA_1022_ID58T_1_Hif1A_10x_2-1.czi, ~1.4 MB); the parser drops the extra
+# chunk, so it ingests as its own acquisition (likely a partial / region
+# re-export — review if undesired).
+#
+# discovered.* available for the registry mapping + link_filename:
+#   discovered.group_code / operator / project / sample_short / section /
+#   stain / magnification        — from the filename positional parse
+#   discovered.acquisition_date  — from the parent folder name (20260522)
+#   discovered.czi_*             — embedded .czi metadata (microscope name,
+#                                  acquisition datetime, objective mag/NA, …),
+#                                  same extractor as every .czi instrument
+#
+# Project: project_hint AE-biomeGUNE-1022 auto-creates proj-ae-biomegune-1022
+# on the first file (short_name reused after), same animal-protocol convention
+# as round 4 (0423/0424/0525).
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  staging_dir: "S:/goptical/GOpticalUsers data/AxioScan/20260522"
+  pattern: "*.czi"
+  filename_parse:
+    separator: "_"
+    fields: [group_code, operator, project, sample_short, section, stain, magnification]
+  filter:
+    group_code: MFB
+  acquisition_date_from: parent_folder_name
+
+registry:
+  instrument:           ZWSI
+  data_ecosystem:       MICROSCOPY
+  # Microscope-issued name from the .czi keeps Axioscan units distinguishable.
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  operator:             discovered.operator
+  data_source:          internal
+  # Composite sample_id (06_REGISTRIES §2.3 DRAFT): biological sample =
+  # <project>_<sample_short> (e.g. 1022_ID58T). The section / stain that
+  # distinguish individual scans stay in the per-acquisition discovered block
+  # + the original filename / project link name.
+  sample_id:            "${discovered.project}_${discovered.sample_short}"
+  sample_type:          NA
+  # Precise timestamp from the .czi; parent-folder date (20260522) is the
+  # fallback via acquisition_date_from above.
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  # Full animal-project code; first file for a given <project> chunk
+  # auto-creates short_name = "ae-biomegune-<project>" (lowercased at create).
+  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  notes:                "MFB AxioScan 7 WSI batch 2026-05-22 (${discovered.stain} stain, section ${discovered.section}, ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
+
+# Project link name (hard link, no extension — 10_TOOLS §2.1.1). Instrument
+# prefix keeps it clear in raw_linked/ alongside other modalities.
+# Example resolved: ZWSI_MFB_AUA_1022_ID58T_1_Hif1A_10x.czi
+link_filename: "${instrument}_${original_name}"
