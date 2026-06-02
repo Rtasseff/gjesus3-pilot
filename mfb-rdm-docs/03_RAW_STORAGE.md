@@ -455,7 +455,7 @@ This ensures metadata is captured while fresh and prevents accumulation of unreg
 | After registration | Folder set to read-only for all users |
 | Corrections needed | Admin temporarily unlocks; changes logged |
 
-**Implementation:** File system permissions (chmod or ACL). Admin role required for changes.
+**Implementation (APPLIED 2026-06-02 on `J:\gjesus3-data\`):** NTFS/SMB ACLs via the existing `CICBIOMAGUNE\GJesus` group (no custom QNAP groups — IT will not create them). The "write during deposit, read-only after" rule is realised with a **write-but-not-modify** grant for operator accounts on `raw\`: "create files/folders" scoped to *folders only* + read-only on *files*, so operators can deposit new acquisitions but cannot modify or delete existing raw files. Superusers (Data Mgmt Lead + PI) retain Full for corrections / project close-out merges. **Caveat:** this fine-grained NTFS semantics may not map cleanly to the QNAP filesystem over SMB — pending verification with a real operator account (`tasks/tasks.md §4.3`); fallback is a tool-applied read-only lock at end-of-ingest. Traceability is backstopped by per-acquisition `checksums.json` (detects any change) and `@Recently-Snapshot` (recovery). Full applied model: [11_OPERATIONS §2.1.1](11_OPERATIONS.md).
 
 ---
 

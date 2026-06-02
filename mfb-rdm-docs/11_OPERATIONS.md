@@ -57,9 +57,27 @@ The **Operator vs User** distinction is the writeability boundary on `/raw/` and
 | `/projects/<own>/` (incl. `metadata/`) | Read/Write | Read | Read/Write | — |
 | `/projects/<other>/` | Read/Write | Read | Read (if granted) | — |
 | `/publications/<own>/` | Read/Write | Read/Write | Read/Write | Read (if granted) |
-| Registries | Read/Write | Read | Read | — |
+| Registries | Read/Write | **Read/Write** (append rows on ingest) | Read | — |
 
 > ¹ NAS `staging/` is a **secondary convenience dump**. The recommended ingest path uses fast local or network storage as the primary source (see [03_RAW_STORAGE](03_RAW_STORAGE.md) Section 5.2).
+>
+> **Registries change (2026-06-02):** operators were previously Read-only on registries; since operators run the ingest (which appends rows to `registry_raw.csv` / `ingest_manifest.csv` / `registry_projects.csv`), they now need Read/Write there. Registries are the mutable metadata ledger — not the protected raw *data*; raw immutability + per-acquisition `checksums.json` are what guarantee data traceability.
+
+#### 2.1.1 Applied implementation — `J:\gjesus3-data\` (DECIDED + APPLIED 2026-06-02)
+
+The conceptual model above is now applied on the live container. **IT will not create custom groups**, so the model uses the pre-existing `CICBIOMAGUNE\GJesus` group (which contains the lab — researchers, operators, PI) instead of the originally-planned `pilot-users` / `pilot-operators` groups:
+
+| Principal | `raw\` | `registries\` | `projects\`, `publications\`, `staging\`, `curated_datasets\` |
+|---|---|---|---|
+| `GJesus` group (everyone) | **Read** (inherited from top) | Read | Read everywhere; **Modify** on projects/publications/staging |
+| Operators (individual accounts) | **write-but-not-modify** ("create files" scoped to folders only + read-only on files → can deposit new acqs, cannot edit/delete existing) | Modify (append) | (Modify via the group) |
+| Superusers (rtasseff = Lead, jruizcabello = PI) | Full | Full | Full |
+
+- **Read baseline:** `GJesus` = Read at the top of `gjesus3-data`, inherited down — no per-folder read work.
+- **Build UP with grants only — NEVER DENY.** Windows ALLOW grants are cumulative (union); a group-Read floor does NOT cap a member's individual Full. A DENY would override everyone in the group (operators + superusers are all in `GJesus`) and is sticky enough to block its own cleanup — so deny is forbidden here.
+- **Raw is writable only by superusers + operator-create.** Careless users cannot modify a raw file directly (read-only) nor through a project hard link (the link shares raw's single ACL — proven; a RW projects folder does not leak write onto the linked file). This closes the silent-untraceable-edit hole.
+- **Defense in depth:** ACL (prevent) + per-acq `checksums.json` (detect any raw change) + `@Recently-Snapshot` (recover).
+- **Operator immutability is a future-verify item** — see §2.3 and `tasks/tasks.md §4.3`. The fine-grained "create-but-not-modify" must be tested with a real operator account on the QNAP filesystem; superusers can't test it (their Full masks the restriction). If it doesn't translate over SMB, fall back to a tool-applied read-only lock at end-of-ingest, or an operator drop-box → superuser-move path. Filesystem (ext4 vs ZFS) still unconfirmed; ZFS/NFSv4-ACL honors the fine grain better than ext4/POSIX-ACL.
 
 **Key consequences of this model:**
 
@@ -83,9 +101,10 @@ The **Operator vs User** distinction is the writeability boundary on `/raw/` and
 
 | Mechanism | Description | Status |
 |-----------|-------------|--------|
-| NAS user groups | QNAP user/group permissions | 📋 Configure |
-| Post-deposit lockdown | chmod or ACL to read-only | 📋 Script or manual |
-| Registry protection | Only admin writes to registry files | 📋 Configure |
+| NAS user groups | Existing `CICBIOMAGUNE\GJesus` group = Read baseline; per-operator + superuser grants layered on (no custom groups — IT won't create them) | ✅ Applied 2026-06-02 on `gjesus3-data` (§2.1.1) |
+| Post-deposit lockdown | Operators get "create files (folders-scope) + read-only on files" on `raw\` → write-but-not-modify | ✅ Applied via ACL; ⏳ **fine-grain translation over SMB pending verification with a real operator account** (superusers can't test it) — `tasks/tasks.md §4.3` |
+| Registry protection | Operators Read/Write (append on ingest); structure guarded by `registry.append_row` defensive header check; `rebuild_baseline/` snapshot for recovery | ✅ Applied |
+| Defense in depth | ACL (prevent) + `checksums.json` (detect) + `@Recently-Snapshot` (recover) | ✅ In place |
 
 ---
 
