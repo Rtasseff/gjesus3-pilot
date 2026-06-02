@@ -1,0 +1,71 @@
+# REBUILD config — Collaborator/external MRI (XMRI), LIONS cohort.
+#
+# Authored 2026-06-01 for the gjesus3-data container rebuild. The original
+# 75 collaborator DICOM acquisitions (LIONS 42 + HPIC 33) were ingested
+# INTERACTIVELY in round 1-2 with no saved config (empty ingest_config in
+# the registry). The tasks.md rounds table always expected `lions_*` /
+# `hpic_*` configs; this file is the LIONS half, now config-driven.
+#
+# Source: the off-NAS collaborator copy at C:\Users\rtasseff\temp\LIONS_42cases\
+# (LEONE_1.NN.zip archives), extracted by tools/extract_xmri_archives.py into
+# per-case directories on fast local staging (off-NAS, like every other batch's
+# staging_dir). Each case dir is a full DICOM tree (DICOMDIR + S####/I##
+# instance files, extensionless). The ingest copies into the NAS /raw/ tree.
+#
+# discovered.* fields available for this batch (folder-as-case, pattern "*/"):
+#   discovered.folder_name  — the extracted case dir name (= sample_id, e.g. "LEONE_1.01")
+#
+# acquisition_datetime: NA -> ingest_raw.py derives the ACQ-ID date prefix
+#   and the registry date from the DICOM StudyDate (read by the summarizer).
+# modalities_in_study: NA -> falls back to the auto-detected DICOM Modality
+#   per case (MR for most; the few presentation-state series read as PR).
+# instrument_model omitted -> blank. The original per-case Philips model
+#   strings (Ingenia Elition X / Ingenuity / IntelliSpace Portal for HPIC)
+#   are preserved in rebuild_baseline/registry_raw.csv + the old metadata.json
+#   sidecars; per-case model would come from the deferred DICOM extractor
+#   (tasks.md §3.1), out of scope for this rebuild.
+#
+# On-disk shape: `acquisition_layout: archive` stores the original source
+# archive renamed to `<ACQ-ID>.zip` (primary_kind=archive, file_format=.zip,
+# file_count = the extracted DICOM instance count). This restores the original
+# one-zip-per-acquisition shape AND copies as a single fast SMB transfer per
+# case (~10s) instead of ~20k loose-file copies (~9 min). ACQ-IDs are
+# re-assigned fresh; verify by acquisition count (42), not byte-parity.
+#
+# This is a TEST INGEST — purge after the team exhibition (quasi-production).
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+  # Archive-as-primary: store the ORIGINAL .zip per case (one fast SMB
+  # transfer) rather than copying ~20k extracted DICOM files each. Metadata
+  # is still read from the extracted dirs in staging_dir; the archive to
+  # store is found in archive_primary_from by matching the case folder name.
+  acquisition_layout: archive
+  archive_primary_from: "C:/Users/rtasseff/temp/LIONS_42cases"
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/xmri_staging/LIONS_42cases_extracted"
+  pattern: "*/"
+
+registry:
+  instrument:           XMRI
+  data_ecosystem:       DICOM
+  modalities_in_study:  NA
+  operator:             RT
+  data_source:          collaborator:LIONS
+  sample_id:            "${discovered.folder_name}"
+  sample_type:          "cardiac MRI study"
+  acquisition_datetime: NA
+  project_hint:         PROJ-0001
+  notes:                "TEST INGEST 2026-06-01 rebuild - collaborator LIONS cardiac MRI, re-ingested from config (originally interactive round 1-2). Purge after team exhibition."
+
+auto_create_project:
+  owner:       "RT"
+  description: "Collaborator LIONS cardiac MRI study (external DICOM). Re-created during the gjesus3-data container rebuild 2026-06-01. Purge after team exhibition."
+  notes:       "Auto-created on XMRI re-ingest 2026-06-01. PROJ-0001 in the original registry."
+
+# .lnk shortcut name (resolver-evaluated at link-creation time).
+# acq_date is the DICOM-derived YYYYMMDD; sample_id is the case name.
+# Example resolved value: XMRI_LEONE_1.01_20211022
+link_filename: "XMRI_${sample_id}_${acq_date}"

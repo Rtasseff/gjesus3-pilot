@@ -103,6 +103,35 @@ def _normalize_reconstructions(value):
     return None
 
 
+def _resolve_archive_primary(cfg_single, ingest_block):
+    """Locate the source archive file to store as an `acquisition_layout: archive` primary.
+
+    `ingest.archive_primary_from` is the directory holding the original
+    collaborator archives; the case's `discovered.folder_name` (falling back
+    to the source basename) plus any archive extension identifies the file
+    (e.g. case "LEONE_1.01" -> "<dir>/LEONE_1.01.zip"; "HPIC02" ->
+    "<dir>/HPIC02.rar"). Raises RuntimeError if the directory is unset or no
+    matching archive is found.
+    """
+    src_dir = ingest_block.get("archive_primary_from")
+    if not src_dir:
+        raise RuntimeError(
+            "acquisition_layout: archive requires ingest.archive_primary_from "
+            "(directory holding the source archive files)."
+        )
+    discovered = cfg_single.get("discovered") or {}
+    case = discovered.get("folder_name") or Path(cfg_single["source_path"]).name
+    archive_exts = (".zip", ".rar", ".7z", ".tgz", ".tar", ".gz")
+    for fname in sorted(os.listdir(src_dir)):
+        stem, ext = os.path.splitext(fname)
+        if stem == case and ext.lower() in archive_exts:
+            return os.path.join(src_dir, fname)
+    raise RuntimeError(
+        f"No source archive found for case {case!r} under {src_dir!r} "
+        f"(looked for {case}.<{'/'.join(e.lstrip('.') for e in archive_exts)}>)."
+    )
+
+
 def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn):
     """Folder-as-primary copy for a Molecubes Nuclear Imaging acquisition.
 
@@ -603,13 +632,37 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     if acq_dt_iso and len(acq_dt_iso) >= 10:
         acq_date = acq_dt_iso[:10].replace("-", "")
     else:
-        acq_date = datetime.now(timezone.utc).strftime("%Y%m%d")
-        log(
-            f"acquisition_datetime not provided; using today ({acq_date}) "
-            f"as ACQ-ID prefix. Backfill the registry acquisition_datetime "
-            f"when known.",
-            "WARN",
-        )
+        # No acquisition_datetime supplied by the config. Before defaulting
+        # to today, fall back to the DICOM StudyDate the summarizer read
+        # from the headers — collaborator / external DICOM carries the real
+        # acquisition date in the data, not the filename (so the config can
+        # legitimately set `acquisition_datetime: NA`). We also backfill
+        # cfg_single["acquisition_datetime"] so the registry column and the
+        # metadata sidecar reflect the real date instead of being left
+        # blank. Caveat: a config that relies on this fallback keys its
+        # registry rows off the discovered StudyDate while expand_batch's
+        # idempotency check keys off the (empty) config value — so a re-run
+        # won't dedupe these rows. That's acceptable for one-time external
+        # DICOM deposits; supply an explicit acquisition_datetime to keep
+        # strict idempotency.
+        study_date = (summary.get("study_date") or "").strip()
+        if len(study_date) == 8 and study_date.isdigit():
+            acq_date = study_date
+            cfg_single["acquisition_datetime"] = (
+                f"{study_date[:4]}-{study_date[4:6]}-{study_date[6:8]}"
+            )
+            log(
+                f"acquisition_datetime not provided; using DICOM StudyDate "
+                f"({acq_date}) as ACQ-ID prefix and registry date."
+            )
+        else:
+            acq_date = datetime.now(timezone.utc).strftime("%Y%m%d")
+            log(
+                f"acquisition_datetime not provided and no usable DICOM "
+                f"StudyDate; using today ({acq_date}) as ACQ-ID prefix. "
+                f"Backfill the registry acquisition_datetime when known.",
+                "WARN",
+            )
 
     # --- Step 4: Generate ACQ-ID ---
     registry_path = os.path.join(nas_root, "registries", "registry_raw.csv")
@@ -644,10 +697,31 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             cfg_single["primary_file_name"] = acq_id_str
         cfg_single["primary_kind"] = "folder"
         cfg_single["file_format"] = ""
+    elif data_ecosystem == "DICOM" and acquisition_layout == "archive":
+        # Archive-as-primary (collaborator / external DICOM): store the
+        # ORIGINAL source archive file (.zip/.rar) as the acquisition's
+        # primary, copied as a single large file over SMB. This is far
+        # faster than walking the extracted tree (~20k loose DICOM files
+        # per case = brutal small-file SMB latency) and restores the
+        # compact one-archive-per-acquisition on-disk shape. Metadata
+        # (date / modality / instance count) still comes from the extracted
+        # `source_path` the summarizer read above; the archive to store is
+        # located via `ingest.archive_primary_from` + the case name. The
+        # primary is renamed to <ACQ-ID><ext> (keeps the source extension).
+        archive_src = _resolve_archive_primary(cfg_single, ingest_block)
+        archive_ext = os.path.splitext(archive_src)[1].lower()
+        copy_dest = dest_dir
+        cfg_single["primary_file_name"] = f"{acq_id_str}{archive_ext}"
+        cfg_single["primary_kind"] = "archive"
+        cfg_single["file_format"] = archive_ext
+        cfg_single["archive_src"] = archive_src
+        # original_name reflects the true source archive (e.g. LEONE_1.01.zip)
+        cfg_single["original_name"] = os.path.basename(archive_src)
     elif data_ecosystem == "DICOM":
         # Legacy collaborator DICOM: files copied into a series/ subfolder.
         # (compress-on-ingest is queued in §3.1; today the series/ tree
-        # stands in for the eventual zip.)
+        # stands in for the eventual zip. Prefer acquisition_layout: archive
+        # above for collaborator deposits that arrive as archives.)
         copy_dest = os.path.join(dest_dir, "series")
         cfg_single["primary_file_name"] = "series/"
         cfg_single["primary_kind"] = "archive"
@@ -756,6 +830,37 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             f"Registry will record file_count={summary['file_count']} (.dcm), "
             f"size={summary['total_size_mb']} MB (deposited)"
         )
+    elif data_ecosystem == "DICOM" and acquisition_layout == "archive":
+        # Archive-as-primary copy: a single large source archive (.zip/.rar)
+        # transferred to the NAS as <ACQ-ID><ext> — one sequential SMB copy
+        # instead of ~20k loose-file copies. Mirrors the microscopy
+        # single-file path (compute source hash, copy, verify dest hash).
+        archive_src = cfg_single["archive_src"]
+        primary_name = cfg_single["primary_file_name"]
+        dst_file = os.path.join(copy_dest, primary_name)
+        archive_mb = round(os.path.getsize(archive_src) / 1_000_000, 1)
+        log(f"Computing source archive checksum ({archive_mb} MB)...")
+        src_hash = checksum.sha256_file(archive_src)
+        log(f"Copying archive -> {primary_name}")
+        shutil.copy2(archive_src, dst_file)
+        log("Verifying copy integrity...")
+        dst_hash = checksum.sha256_file(dst_file)
+        if dst_hash != src_hash:
+            log(
+                f"Verification FAILED — source/dest hashes differ "
+                f"({src_hash[:12]} vs {dst_hash[:12]})",
+                "ERROR",
+            )
+            return acq_id_str, False
+        log("Verification PASSED")
+        checksum.write_checksums(
+            {primary_name: dst_hash},
+            os.path.join(dest_dir, "checksums.json"),
+        )
+        log("Wrote checksums.json (1 file)")
+        # Registry size reflects the stored (compressed) archive; file_count
+        # stays the extracted DICOM instance count from the summarizer.
+        summary["total_size_mb"] = archive_mb
     elif data_ecosystem == "MICROSCOPY":
         # Single-file copy with rename. Source must be a file.
         if not os.path.isfile(source_path):
