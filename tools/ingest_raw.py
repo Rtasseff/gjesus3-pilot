@@ -1050,111 +1050,108 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     manifest_path = os.path.join(nas_root, "registries", "ingest_manifest.csv")
     linker.create_manifest_entry(manifest_path, acq_id_str, original_name, canonical_path)
 
-    # --- Step 12: Project .lnk shortcut (if project_hint set) ---
+    # --- Step 12: Project hard link (if project_hint set) ---
+    # Replaces the legacy .lnk shortcut (2026-06-02): the project copy is a
+    # real file identical to the raw primary — same inode, zero extra storage,
+    # and it carries raw's single security descriptor (a read-only raw file
+    # stays read-only through the link). Hard links use LOCAL paths on the NAS
+    # volume, so --nas-unc is no longer needed for linking.
     project_hint = cfg_single.get("project_hint", "").strip()
     if project_hint:
-        if not nas_unc:
+        projects_registry = os.path.join(
+            nas_root, "registries", "registry_projects.csv"
+        )
+        project_folder_rel = linker.lookup_project_folder(
+            projects_registry, project_hint
+        )
+        if not project_folder_rel:
             log(
-                f"project_hint={project_hint} but --nas-unc not provided; "
-                f"skipping .lnk creation",
+                f"project_hint={project_hint} not found in "
+                f"registry_projects.csv; skipping hard-link creation",
                 "WARN",
             )
         else:
-            projects_registry = os.path.join(
-                nas_root, "registries", "registry_projects.csv"
+            project_folder_abs = os.path.normpath(
+                os.path.join(nas_root, project_folder_rel.lstrip("/"))
             )
-            project_folder_rel = linker.lookup_project_folder(
-                projects_registry, project_hint
+            # Local path to the acquisition folder on the NAS volume.
+            raw_acq_dir = os.path.normpath(
+                os.path.join(nas_root, canonical_path.lstrip("/"))
             )
-            if not project_folder_rel:
-                log(
-                    f"project_hint={project_hint} not found in "
-                    f"registry_projects.csv; skipping .lnk creation",
-                    "WARN",
-                )
+            # Resolve which raw primary the link points at, based on
+            # primary_kind and whether primary_file_name names something
+            # nested inside the acq folder (NI/MRI v2: <ACQ-ID>.data) or IS
+            # the acq folder itself (legacy MRI folder layout). A folder
+            # primary becomes a real folder of per-file hard links; a file
+            # primary becomes a single hard link (see linker.create_hardlink).
+            primary = cfg_single.get("primary_file_name", "")
+            primary_kind = cfg_single.get("primary_kind", "")
+            if primary and primary_kind == "folder" and primary != acq_id_str:
+                # NI/MRI v2: primary is an internal data bundle (<ACQ-ID>.data).
+                raw_primary_abs = os.path.join(raw_acq_dir, primary)
+            elif primary and primary_kind == "folder":
+                # Legacy MRI folder layout: primary_file_name == acq_id_str.
+                raw_primary_abs = raw_acq_dir
+            elif primary and not primary.endswith("/"):
+                # Single-file primary (microscopy .czi, collaborator zip/rar).
+                raw_primary_abs = os.path.join(raw_acq_dir, primary)
             else:
-                project_folder_abs = os.path.normpath(
-                    os.path.join(nas_root, project_folder_rel.lstrip("/"))
+                raw_primary_abs = raw_acq_dir
+            # Link name = resolved `link_filename:` (operator-controlled top-
+            # level YAML field), falling back to original_name. This is the
+            # same name the legacy .lnk used, minus the `.lnk` suffix.
+            link_template = cfg_single.get("link_filename") or ""
+            link_name = None
+            if link_template:
+                link_name = resolver.resolve_link_filename(
+                    link_template, cfg_single, acq_id_str, acq_date,
                 )
-                folder_unc = linker.canonical_to_unc(canonical_path, nas_unc)
-                # Choose what the shortcut targets, based on primary_kind
-                # and whether primary_file_name names something nested
-                # inside the acq folder (NI v2: <ACQ-ID>.data) or IS the
-                # acq folder itself (legacy MRI folder layout).
-                primary = cfg_single.get("primary_file_name", "")
-                primary_kind = cfg_single.get("primary_kind", "")
-                if primary and primary_kind == "folder" and primary != acq_id_str:
-                    # NI v2 (and similar): primary is an internal data
-                    # bundle named like ACQ-XXX.data. Target points
-                    # directly at it — double-click opens straight to
-                    # the DICOMs, mirroring microscopy's <ACQ-ID>.czi
-                    # link semantics.
-                    target_unc = f"{folder_unc}\\{primary}\\"
-                elif primary and primary_kind == "folder":
-                    # Legacy MRI folder layout: primary_file_name equals
-                    # acq_id_str — target the acq folder itself.
-                    target_unc = folder_unc + "\\"
-                elif primary and not primary.endswith("/"):
-                    # Single-file primary (microscopy .czi, collaborator zip).
-                    target_unc = f"{folder_unc}\\{primary}"
-                else:
-                    target_unc = folder_unc + "\\"
-                # The .lnk filename is operator-controlled via the new
-                # `link_filename:` top-level YAML field (see
-                # resolver.resolve_link_filename). Per-instrument templates
-                # set a meaningful default; per-batch configs may override.
-                # Falls back to `original_name` when the field is unset —
-                # preserves backward compatibility with rounds 1-2 / 4 / 5.
-                link_template = cfg_single.get("link_filename") or ""
-                lnk_name = None
-                if link_template:
-                    lnk_name = resolver.resolve_link_filename(
-                        link_template, cfg_single, acq_id_str, acq_date,
-                    )
-                    if lnk_name:
-                        # Trailing slash is allowed in the template as a
-                        # visual hint ("this links to a folder") but the
-                        # `.lnk` extension is appended by linker.create_lnk
-                        # so we strip the slash here.
-                        lnk_name = lnk_name.rstrip("/").rstrip("\\")
-                if not lnk_name:
-                    lnk_name = original_name
-                try:
-                    lnk_path = linker.create_lnk(
-                        project_folder_abs,
-                        lnk_name,
-                        target_unc,
-                        description=f"{acq_id_str} ({original_name})",
-                        dry_run=False,
-                    )
-                    log(f"Created shortcut: {lnk_path} -> {target_unc}")
-                    # Provenance log entry for the .lnk just created.
-                    # Idempotent on output_path: skips silently if the
-                    # project's provenance.csv already has a row for
-                    # this shortcut (self-heals if the .lnk existed but
-                    # the entry was missing).
-                    prov_path = os.path.join(project_folder_abs, "provenance.csv")
-                    lnk_filename = f"{lnk_name}.lnk"
-                    entry = {
-                        "output_path":         f"raw_linked/{lnk_filename}",
-                        "output_name":         lnk_filename,
-                        "file_type":           ".lnk",
-                        "date_created":        datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                        "creator":             cfg_single.get("operator", "") or "",
-                        "input_refs":          acq_id_str,
-                        "process_description": "Auto-created during ingest: Windows .lnk shortcut to raw acquisition",
-                        "software_version":   provenance.software_version_string("ingest_raw.py"),
-                        "parameters_ref":      cfg_single.get("ingest_config", "") or "",
-                        "lab_notebook_ref":    "",
-                        "notes":               "Auto-generated entry from ingest",
-                    }
-                    fid = provenance.append_entry(prov_path, entry)
-                    if fid:
-                        log(f"Appended provenance entry {fid} to {prov_path}")
-                except RuntimeError as e:
-                    log(f"Could not create .lnk: {e}", "WARN")
-                except Exception as e:
-                    log(f"Unexpected error creating .lnk: {e}", "WARN")
+                if link_name:
+                    # Trailing slash allowed in the template as a "links to a
+                    # folder" hint; strip it so the name is filesystem-clean.
+                    link_name = link_name.rstrip("/").rstrip("\\")
+            if not link_name:
+                link_name = original_name
+            try:
+                link_path = linker.create_hardlink(
+                    project_folder_abs,
+                    link_name,
+                    raw_primary_abs,
+                    dry_run=False,
+                )
+                is_dir_link = os.path.isdir(link_path)
+                kind = "folder of per-file hard links" if is_dir_link else "hard link"
+                log(f"Created {kind}: {link_path} -> {raw_primary_abs}")
+                # Provenance log entry for the link just created. Idempotent
+                # on output_path: skips silently if the project's
+                # provenance.csv already has a row for this link (self-heals
+                # if the link existed but the entry was missing).
+                prov_path = os.path.join(project_folder_abs, "provenance.csv")
+                entry = {
+                    "output_path":         f"raw_linked/{link_name}",
+                    "output_name":         link_name,
+                    "file_type":           "hardlink-folder" if is_dir_link else "hardlink",
+                    "date_created":        datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "creator":             cfg_single.get("operator", "") or "",
+                    "input_refs":          acq_id_str,
+                    "process_description": (
+                        "Auto-created during ingest: folder of per-file hard "
+                        "links to raw acquisition"
+                        if is_dir_link else
+                        "Auto-created during ingest: hard link to raw acquisition"
+                    ),
+                    "software_version":   provenance.software_version_string("ingest_raw.py"),
+                    "parameters_ref":      cfg_single.get("ingest_config", "") or "",
+                    "lab_notebook_ref":    "",
+                    "notes":               "Auto-generated entry from ingest",
+                }
+                fid = provenance.append_entry(prov_path, entry)
+                if fid:
+                    log(f"Appended provenance entry {fid} to {prov_path}")
+            except OSError as e:
+                log(f"Could not create hard link: {e}", "WARN")
+            except Exception as e:
+                log(f"Unexpected error creating hard link: {e}", "WARN")
 
     log(f"DONE: {acq_id_str}")
     return acq_id_str, True
@@ -1321,7 +1318,9 @@ def main():
         parser.error("Must specify --config or --interactive")
 
     nas_root = args.nas_root
-    nas_unc = args.nas_unc or None  # empty string -> disable .lnk creation
+    # nas_unc is retained for the legacy .lnk porting seam but is NOT used by
+    # the current hard-link linker (hard links use local NAS-volume paths).
+    nas_unc = args.nas_unc or None
     log(f"NAS root: {nas_root}")
 
     # Fail fast if nas_root doesn't look like a real NAS root. Without this
@@ -1343,10 +1342,10 @@ def main():
             "ERROR",
         )
         sys.exit(2)
+    # Project links are now hard links (local NAS-volume paths); they are
+    # created whenever a row's project_hint resolves, independent of nas_unc.
     if nas_unc:
-        log(f"NAS UNC:  {nas_unc} (used for .lnk shortcut targets)")
-    else:
-        log(".lnk shortcut creation disabled (--nas-unc empty)")
+        log(f"NAS UNC:  {nas_unc} (legacy .lnk seam only; unused by hard-link linker)")
 
     if args.dry_run:
         log("*** DRY RUN MODE — no changes will be made ***")

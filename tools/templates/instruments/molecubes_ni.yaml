@@ -249,11 +249,13 @@ auto_create_project:
   description: "Auto-created during NI archive-mode ingest; animal-protocol short id ${discovered.short_project} (funded project ${discovered.series_id}). PROVISIONAL project_hint — see 05_PROJECTS §9."
   notes:       "Auto-created on first NI ingest. Edit owner via _project.yaml to record the researcher behind the animal protocol."
 
-# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
-# Unique per .tgz archive (the timestamp + modality combination is
-# globally unique on the acquisition machine). Example resolved:
-#   PET_m14_20251029_20251029100641
-# (the .lnk extension is appended by linker.create_lnk).
+# Name of the project hard link placed under /projects/<proj>/raw_linked/.
+# (Hard link since 2026-06-02 — resolved value used verbatim, no extension;
+# was a .lnk shortcut before. See 10_TOOLS §2.1.1.) For a folder-primary
+# acquisition (<ACQ-ID>.data) the link is a real folder of per-file hard
+# links carrying this name. Unique per .tgz archive (the timestamp +
+# modality combination is globally unique on the acquisition machine).
+# Example resolved: PET_m14_20251029_20251029100641
 link_filename: "${discovered.modality}_${discovered.short_sample}_${acq_date}_${discovered.acq_datetime_full}"
 
 # ============================================================================

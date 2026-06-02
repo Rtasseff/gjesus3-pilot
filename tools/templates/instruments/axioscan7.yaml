@@ -69,7 +69,7 @@
 #     10_TOOLS §2.1.4.
 #   - `link_filename:` — `${instrument}_${original_name}` keeps the full
 #     informative filename + a clear instrument prefix in the project's
-#     raw_linked/ folder. Resolver-evaluated at .lnk creation time.
+#     raw_linked/ folder. Resolver-evaluated at link-creation time.
 #
 # ============================================================================
 # WHAT YOU MUST EDIT PER BATCH
@@ -127,10 +127,12 @@ auto_create_project:
   description: "Auto-created from AxioScan 7 ingest; animal-project chunk ${discovered.project}."
   notes:       "Auto-created on first ingest. Owner = filename operator chunk; edit _project.yaml to reassign."
 
-# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
+# Name of the project hard link placed under /projects/<proj>/raw_linked/.
+# (Hard link since 2026-06-02 — resolved value used verbatim, no extension;
+# was a .lnk shortcut before. See 10_TOOLS §2.1.1.)
 # Resolver-evaluated; see the "AUTO-DISCOVERED FIELDS" section above.
 # Default keeps the full informative source filename and adds an
-# instrument prefix so MRI / EM / etc. shortcuts coexist cleanly.
+# instrument prefix so MRI / EM / etc. links coexist cleanly.
 # Example resolved value: ZWSI_MFB_MBC_0423_ID13B_WGA_10x.czi
 link_filename: "${instrument}_${original_name}"
 

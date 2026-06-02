@@ -55,6 +55,6 @@ auto_create_project:
   description: "Collaborator HPIC cardiac MRI study (external DICOM). Re-created during the gjesus3-data container rebuild 2026-06-01. Purge after team exhibition."
   notes:       "Auto-created on XMRI re-ingest 2026-06-01. PROJ-0002 in the original registry."
 
-# .lnk shortcut name (resolver-evaluated at link-creation time).
+# Project hard-link name (resolver-evaluated at link-creation time; no extension).
 # Example resolved value: XMRI_HPIC02_20211022
 link_filename: "XMRI_${sample_id}_${acq_date}"

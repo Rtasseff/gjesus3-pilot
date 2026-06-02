@@ -191,7 +191,9 @@ auto_create_project:
   description: "Auto-created from Cell Observer cells-mode ingest; experiment chunk '${discovered.experiment}', cell line ${discovered.cell_line}. PROVISIONAL project_hint — see 05_PROJECTS §9."
   notes:       "Auto-created on first ingest. Owner = researcher folder name; rename short_name and update owner via _project.yaml as project naming convention matures."
 
-# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
+# Name of the project hard link placed under /projects/<proj>/raw_linked/.
+# (Hard link since 2026-06-02 — resolved value used verbatim, no extension;
+# was a .lnk shortcut before. See 10_TOOLS §2.1.1.)
 # Resolver-evaluated; see the "AUTO-DISCOVERED FIELDS" section above.
 # Default keeps the full informative source filename + an instrument
 # prefix. Example resolved value: CELL_HLF_alphasma_10x_CC-miR-29a_1.czi

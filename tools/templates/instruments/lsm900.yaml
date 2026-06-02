@@ -89,8 +89,8 @@
 #     (06_REGISTRIES §2.3); multiple acquisitions per (cell_line,
 #     experiment) legitimately share a sample_id.
 #   - `auto_create_project:` — owner = researcher.
-#   - `link_filename: ${instrument}_${original_name}` — `.lnk`
-#     shortcut prefixed with LSM9_ for clarity in raw_linked/.
+#   - `link_filename: ${instrument}_${original_name}` — hard link
+#     prefixed with LSM9_ for clarity in raw_linked/.
 #
 # ============================================================================
 # WHAT YOU MUST EDIT PER BATCH
@@ -195,7 +195,9 @@ auto_create_project:
   description: "Auto-created from LSM 900 confocal ingest; researcher ${discovered.researcher} (first project workspace). PROVISIONAL project_hint per 05_PROJECTS §9 — refine when the group settles a real naming convention."
   notes:       "Auto-created on first ingest. Owner = researcher folder name; rename short_name and update owner via _project.yaml as the project naming convention matures."
 
-# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
+# Name of the project hard link placed under /projects/<proj>/raw_linked/.
+# (Hard link since 2026-06-02 — resolved value used verbatim, no extension;
+# was a .lnk shortcut before. See 10_TOOLS §2.1.1.)
 # Resolver-evaluated; see "AUTO-DISCOVERED FIELDS" section above.
 # Default keeps the full informative source filename + an instrument
 # prefix. Example resolved value: LSM9_Z-stack_LP_IONP-doxo_20x_6h_2.czi

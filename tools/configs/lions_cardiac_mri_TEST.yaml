@@ -65,7 +65,7 @@ auto_create_project:
   description: "Collaborator LIONS cardiac MRI study (external DICOM). Re-created during the gjesus3-data container rebuild 2026-06-01. Purge after team exhibition."
   notes:       "Auto-created on XMRI re-ingest 2026-06-01. PROJ-0001 in the original registry."
 
-# .lnk shortcut name (resolver-evaluated at link-creation time).
+# Project hard-link name (resolver-evaluated at link-creation time; no extension).
 # acq_date is the DICOM-derived YYYYMMDD; sample_id is the case name.
 # Example resolved value: XMRI_LEONE_1.01_20211022
 link_filename: "XMRI_${sample_id}_${acq_date}"

@@ -1,12 +1,20 @@
 """Create links / manifests for project folder references.
 
-Two outputs:
+Outputs:
 - manifest: append-only CSV mapping original names to ACQ-IDs and canonical paths.
-- lnk: Windows .lnk shortcut placed in <project>/raw_linked/ named with the
-  original archive name, targeting the acquisition's primary file (or folder)
-  via UNC path. Created by shelling out to PowerShell's WScript.Shell COM
-  object so the output is a fully Explorer-compatible shortcut (correct
-  icon resolution, double-click open, etc.). Windows-only.
+- hardlink (CURRENT, 2026-06-02): NTFS/SMB hard link placed in
+  <project>/raw_linked/ named like the acquisition's chosen link name (the
+  resolved `link_filename:`, no extension). The project copy IS a real file
+  identical to the raw primary — same inode, zero extra storage, and it
+  carries raw's single security descriptor (set raw read-only and the link is
+  read-only too). For folder-primary acquisitions (`<ACQ-ID>.data/` for
+  internal MRI + NI) directories cannot be hard-linked on Windows, so the
+  link is a REAL folder filled with one hard link per file. See
+  `create_hardlink` and tasks.md §3.1 for the decision record.
+- lnk (LEGACY, superseded): Windows .lnk shortcut targeting the primary via
+  UNC path, created via PowerShell WScript.Shell. Kept for reference / the
+  porting seam; `create_hardlink` is the path used by ingest. Researchers
+  adopt the real-file hard links better than shortcuts.
 """
 
 import csv
@@ -106,6 +114,84 @@ def canonical_to_unc(canonical_path, nas_unc_root):
     return f"\\\\{root}\\{rel}"
 
 
+def create_hardlink(project_folder_abs, link_name, raw_primary_abs, dry_run=False):
+    """Create a hard link (or folder of hard links) in <project>/raw_linked/.
+
+    This is the CURRENT project-linking mechanism (replaces `create_lnk`,
+    2026-06-02). The project copy is a real file identical to the raw primary
+    — same inode, zero extra storage — and it shares raw's single security
+    descriptor, so a read-only raw file stays read-only through the project
+    link even inside a read/write `projects` folder (validated on the live
+    QNAP SMB share; see `hardlink_project_links` memory + tasks.md §3.1).
+
+    Dispatch on what the raw primary is:
+
+    - **File primary** (microscopy `.czi`, collaborator `.zip`/`.rar`):
+      one hard link at `raw_linked/<link_name>` -> the raw file.
+    - **Folder primary** (`<ACQ-ID>.data/` for internal MRI + NI): NTFS/SMB
+      forbids hard-linking a directory, so we create a REAL folder
+      `raw_linked/<link_name>/` and fill it with one hard link per file from
+      the raw `.data/` tree (sub-directories are recreated; files are
+      hard-linked). The flat `.data` layout means this is normally a single
+      level of DICOMs, but the walk handles nesting defensively.
+
+    Args:
+        project_folder_abs: Absolute local path to the project folder on the
+            machine running the script (e.g. ``J:\\gjesus3-data\\projects\\proj-x``).
+        link_name: Destination name with NO extension — what the legacy `.lnk`
+            shortcut was called, minus ``.lnk`` (the resolved ``link_filename:``;
+            any trailing slash already stripped by the caller).
+        raw_primary_abs: Absolute local path to the acquisition's primary —
+            either a single file or the ``<ACQ-ID>.data`` folder. MUST be on
+            the same NAS volume as ``project_folder_abs`` (hard links cannot
+            cross volumes).
+        dry_run: If True, return the would-be destination without creating it.
+
+    Returns:
+        Absolute path to the created (or would-be) link / folder.
+
+    Raises:
+        RuntimeError: If ``raw_primary_abs`` does not exist.
+        OSError: If the hard link cannot be created (e.g. cross-volume, or the
+            filesystem does not support hard links).
+
+    Idempotent: an existing file link, or an already-present file inside the
+    folder-of-links, is left untouched — so a partially-created folder is
+    completed on a re-run.
+    """
+    raw_linked_dir = os.path.join(project_folder_abs, "raw_linked")
+    dest = os.path.join(raw_linked_dir, link_name)
+
+    if dry_run:
+        return dest
+
+    if not os.path.exists(raw_primary_abs):
+        raise RuntimeError(
+            f"raw primary not found, cannot hard-link: {raw_primary_abs!r}"
+        )
+
+    os.makedirs(raw_linked_dir, exist_ok=True)
+
+    if os.path.isdir(raw_primary_abs):
+        # Folder primary -> real folder of per-file hard links.
+        os.makedirs(dest, exist_ok=True)
+        for root, _dirs, files in os.walk(raw_primary_abs):
+            rel = os.path.relpath(root, raw_primary_abs)
+            target_dir = dest if rel == "." else os.path.join(dest, rel)
+            os.makedirs(target_dir, exist_ok=True)
+            for fn in files:
+                src_f = os.path.join(root, fn)
+                dst_f = os.path.join(target_dir, fn)
+                if not os.path.exists(dst_f):
+                    os.link(src_f, dst_f)
+        return dest
+
+    # File primary -> single hard link.
+    if not os.path.exists(dest):
+        os.link(raw_primary_abs, dest)
+    return dest
+
+
 def create_lnk(
     project_folder_abs,
     original_name,
@@ -115,6 +201,9 @@ def create_lnk(
     working_dir_unc=None,
 ):
     """Create a Windows .lnk shortcut in <project>/raw_linked/.
+
+    LEGACY / superseded by `create_hardlink` (2026-06-02). Retained for the
+    porting seam and historical reference; ingest no longer calls this.
 
     Uses PowerShell's WScript.Shell COM object so the resulting shortcut
     is fully Explorer-compatible (correct icon, double-click open, etc.).

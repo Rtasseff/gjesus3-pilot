@@ -50,7 +50,7 @@ tools/
 │   ├── filename_parser.py   # Positional filename → {field: value}
 │   ├── metadata_sidecar.py  # metadata.json writer (cross-format; discovered + user_supplied)
 │   ├── probe_czi.py         # Standalone read-only .czi metadata probe (utility)
-│   └── linker.py            # Create Windows .lnk shortcut + manifest CSV (see §2.1.1)
+│   └── linker.py            # Create project hard link (file / folder-of-links) + manifest CSV (see §2.1.1)
 ├── configs/                 # Committed ingest configs, one per batch / day folder
 │   ├── axioscan7_20260422.yaml
 │   └── axioscan7_20260506.yaml
@@ -63,44 +63,59 @@ tools/
 └── requirements.txt         # pydicom, pyyaml, tqdm, czifile
 ```
 
-### 2.1.1 Project Linking — Windows-First Design Decision
+### 2.1.1 Project Linking — Hard Links (current) over `.lnk` shortcuts
 
-> **✅ DECIDED — Windows-first, deliberately:** Project links are created as **Windows `.lnk` shell shortcuts** by shelling out to PowerShell's `WScript.Shell` COM object. This is the right choice for the **gjesus3 pilot specifically** and is **not** the recommended default for future RDM deployments. The linker module is structured as the obvious porting seam — see "Porting to other systems" below.
+> **✅ DECIDED + IMPLEMENTED 2026-06-02 — NTFS/SMB hard links.** Project links are **hard links** to the raw primary, created by `linker.create_hardlink` via `os.link`. The project copy is a **real file identical to the raw primary** — same inode, **zero extra storage**, and it shares raw's single security descriptor, so a read-only raw file stays read-only through the project link even inside a read/write `projects` folder. This **supersedes** the original Windows `.lnk` shortcut mechanism (kept as `linker.create_lnk` for the porting seam; see "History" below). The driver is adoption: change-averse researchers trust a project copy that looks and behaves like a normal file far more than a shortcut.
 
-When `ingest_raw.py` is run with `--project <PROJ-ID>` (or `project_hint` set in the YAML config), Step 12 of full-mode ingest creates a shortcut at:
+When `ingest_raw.py` is run with `--project <PROJ-ID>` (or `project_hint` set in the YAML config), Step 12 of full-mode ingest creates the link at:
 
 ```
-/projects/<project_folder>/raw_linked/<original_archive_name>.lnk
+/projects/<project_folder>/raw_linked/<link_name>
 ```
 
-…targeting the primary archive on the NAS via UNC path (e.g. `\\GJESUS3\gjesus3\raw\DICOM\YYYY\YYYY-MM\ACQ-...\ACQ-....zip`). The shortcut filename preserves the **original** name from staging (e.g. `LEONE_1.01.zip.lnk`), so users browsing a project folder see familiar names; the shortcut's target points at the canonical renamed archive. Shortcuts are idempotent — re-running ingest skips any shortcut that already exists.
+…where `<link_name>` is the resolved `link_filename:` (§2.1.5), with **no extension** (the legacy `.lnk` suffix is gone). Links are idempotent — re-running skips any link that already exists.
 
-#### Why Windows-first for gjesus3
+#### File-primary vs folder-primary
 
-| Constraint | Effect on the choice |
-|------------|----------------------|
-| **MFB user base is Windows** | Researchers access the NAS via mapped SMB drives in Windows Explorer. Project links must look and behave like ordinary files they can double-click. `.lnk` shortcuts render with the right icon, support double-click, and "Open file location" works. |
-| **WSL → SMB symlink path didn't work cleanly** | Creating filesystem-level symbolic links against the QNAP SMB share from WSL ran into problems we couldn't work around in reasonable time. |
-| **SSH-into-NAS was blocked** | The robust alternative — creating server-side POSIX symlinks via SSH on the QNAP itself — was attempted but IT could not provide working SSH access to the appliance. We chose to stop pushing on that front and adopt a method that works within the access we already had. |
-| **`.lnk` shortcuts work without server cooperation** | Pure client-side artifacts. The NAS doesn't need to understand them; they just sit on the share like any other file. |
+NTFS/SMB allows hard-linking **files** but forbids hard-linking **directories**. Dispatch follows `primary_kind`:
+
+| Primary shape | Examples | What `raw_linked/<link_name>` is |
+|---|---|---|
+| **File** | microscopy `.czi`, collaborator `.zip`/`.rar` | One hard link to the raw file — same inode, opens identically. |
+| **Folder** (`<ACQ-ID>.data/`) | internal MRI + NI flat-DICOM bundles | A **real folder** filled with one hard link per file from the raw `.data/` tree (sub-dirs recreated, files hard-linked). A real flat folder of real DICOMs, zero extra storage, each file carrying raw's read-only lock. |
+
+This unified model gives "real files" across every instrument and removes the directory-can't-be-hard-linked blocker. Validated on the live QNAP SMB share: identical Windows File IDs (same inode), zero data duplication (only directory-entry metadata), and identical ACLs (raw vs link).
+
+#### Why hard links work here
+
+| Property | Effect |
+|---|---|
+| **Same volume requirement** | `raw/` and `projects/` both live under the single `gjesus3-data` container on one NAS volume, so `os.link` (local paths) always succeeds — no cross-volume issue. |
+| **Shared security descriptor** | A hard link and its raw file share ONE ACL. Linking into a read/write `projects` folder does **not** leak that folder's perms onto the file (tested with an `Everyone:(M)` marker — absent on the link). Set raw read-only → the project link is read-only too. This is the raw-immutability behaviour we want (see [11_OPERATIONS](11_OPERATIONS.md)). |
+| **No server cooperation** | Pure filesystem operation over SMB; the NAS needs no symlink/SSH support. |
 
 #### Tradeoffs we accepted
 
-- **Creation is Windows-only.** The linker shells out to `powershell.exe`. Ingest must run on a Windows machine (or a machine with PowerShell 7+ on Linux, untested here). *Reading* shortcuts works fine from any OS — WSL/Linux can list, inspect, and copy `.lnk` files; only creation is restricted.
-- **Links are file-level pointers, not filesystem-level links.** They survive being browsed over SMB but are opaque to scripts that walk the filesystem and don't recognize `.lnk` as a follow-able pointer. The CSV manifest at `registries/ingest_manifest.csv` is the script-friendly equivalent and is always written.
+- **Same-volume only.** Hard links cannot cross volumes; this is fine inside the container but means the linker is not a general cross-filesystem reference. The CSV manifest at `registries/ingest_manifest.csv` remains the volume-independent, script-friendly record and is always written.
+- **`st_nlink` reads 1 over SMB** — a cosmetic QNAP-SMB quirk; the link is a true shared-inode hard link (proven via `fsutil file queryfileid`). Don't rely on `st_nlink` to detect links over this share.
+- **Deleting one name doesn't free space** until all hard links to the inode are gone — expected hard-link semantics; the raw copy and every project link must be removed before the bytes are reclaimed.
 
-#### Porting to other systems
+#### Migration of existing links
 
-This pilot is intentionally scoped as a test case for larger MFB-area RDM efforts. Future deployments will not share gjesus3's combination of Windows-only users + locked-down QNAP, and the linker module is the seam designed to be swapped:
+`tools/relink_projects.py` converts pre-existing `.lnk` shortcuts to hard links in place **without re-ingesting** — it maps each `.lnk` to its acquisition via the project `provenance.csv` + `registry_raw.csv`, creates the hard link (file or folder-of-links), verifies it, removes the `.lnk`, and logs a provenance row. Idempotent; supports `--dry-run`, `--keep-lnk`, and `--project`.
+
+#### History / porting seam
+
+The pilot originally used **Windows `.lnk` shell shortcuts** (`linker.create_lnk`, PowerShell `WScript.Shell`) — chosen because WSL→SMB symlinks didn't work cleanly and IT couldn't provide SSH for server-side POSIX symlinks. That mechanism is retained as the porting seam for future deployments that can't use hard links (e.g. links that must cross volumes, or a non-Windows browse experience):
 
 | Target environment | Likely method | Implementation note |
 |--------------------|---------------|---------------------|
-| Linux/macOS user base, ext4/ZFS NAS | POSIX **symlinks** | Replace the body of `linker.create_lnk()` with `os.symlink(target, lnk_path)`. Drop `.lnk` extension from the filename. |
-| Mixed user base, NAS supports SSH | Server-side POSIX symlinks via SSH | `ln -s` runs on the NAS itself; resulting symlinks are visible to every client filesystem-canonically. |
-| Constrained / mixed-OS / no link support | Manifest-only | The CSV manifest at `registries/ingest_manifest.csv` is the portable, link-free reference and is already always written. Just don't call `create_lnk`. |
-| Cross-platform desperate compromise | Both `.lnk` *and* a symlink | Possible but creates two artifacts per acquisition; usually not worth it. |
+| Same-volume container, Windows | **Hard links** (current) | `linker.create_hardlink` — `os.link` for files, folder-of-links for `.data`. |
+| Links must cross volumes / shares | `.lnk` shortcut **or** POSIX symlink | Hard links can't cross volumes; fall back to `linker.create_lnk` (Windows) or `os.symlink` (POSIX, ext4/ZFS NAS). |
+| Mixed user base, NAS supports SSH | Server-side POSIX symlinks via SSH | `ln -s` on the NAS; visible filesystem-canonically to every client. |
+| Constrained / no link support | Manifest-only | The always-written CSV manifest is the portable, link-free reference. |
 
-The choice should be made consciously at the start of any future deployment — it affects what users can browse, how durable links are across renames, and which OSes can run the ingest pipeline.
+The choice should be made consciously at the start of any future deployment — it affects what users browse, link durability across renames/volumes, and which OSes can run the pipeline.
 
 ### 2.1.2 Microscopy metadata extraction — library choice and deferred work
 
@@ -231,9 +246,9 @@ When `auto_create_projects: false` (the default) or when the project already exi
 
 ### 2.1.5 `link_filename:` field (round 6, 2026-05-22)
 
-> **✅ DECIDED:** The `.lnk` shortcut name placed under `/projects/<proj>/raw_linked/` is operator-controlled via a new top-level YAML field `link_filename:`. Each per-instrument template ships a meaningful default; per-batch configs may override. Resolver-evaluated at link-creation time.
+> **✅ DECIDED:** The project link name placed under `/projects/<proj>/raw_linked/` is operator-controlled via a top-level YAML field `link_filename:`. Each per-instrument template ships a meaningful default; per-batch configs may override. Resolver-evaluated at link-creation time. (Since 2026-06-02 the link is a **hard link** with no extension — §2.1.1; the resolved value is used verbatim as the link name, where the legacy `.lnk` form appended `.lnk`.)
 
-Why this exists: round 6 (internal MRI) exposed a real failure mode of the previous default (`.lnk` named after `original_name`). For one-file-per-acquisition formats (`.czi`, collaborator zips) the original filename is already long and unique enough to avoid collisions inside a project. For systematic-naming environments (internal MRI, future internal NI) the *source* identifier is a folder path + numeric position — and naming the `.lnk` after the position alone collides when multiple sessions land in the same project (e.g. four animals under `proj-ae-biomegune-0424` all having an exam `27`). The first-ingest of round 6 silently lost 35 of 97 shortcuts to such collisions. `link_filename:` lets the per-instrument template specify a name pattern that's both human-meaningful AND globally unique.
+Why this exists: round 6 (internal MRI) exposed a real failure mode of the previous default (link named after `original_name`). For one-file-per-acquisition formats (`.czi`, collaborator zips) the original filename is already long and unique enough to avoid collisions inside a project. For systematic-naming environments (internal MRI, future internal NI) the *source* identifier is a folder path + numeric position — and naming the link after the position alone collides when multiple sessions land in the same project (e.g. four animals under `proj-ae-biomegune-0424` all having an exam `27`). The first-ingest of round 6 silently lost 35 of 97 links to such collisions. `link_filename:` lets the per-instrument template specify a name pattern that's both human-meaningful AND globally unique.
 
 **Syntax:** top-level field, sibling of `ingest:` / `auto_discover:` / `registry:` / `auto_create_project:`. Value is a string template with `${X}` references.
 
@@ -259,7 +274,7 @@ link_filename: "${instrument}_${original_name}"
 - Empty / missing `link_filename:` → fall back to `original_name` (current behaviour for rounds 1-2, 4, 5 — backward compatible).
 - Unresolved `${X}` (key not in context dict) → log WARN, leave the literal `${X}` in the output. Safer than silently producing a half-formed name; the operator sees the broken-template indicator and fixes it.
 - Resolved-to-empty substitutions go through quietly — operator's choice if they reference a key that may be empty (e.g. `${discovered.mri_recon_indices}` could be empty for an exam where no reconstructions were kept).
-- Trailing `/` in the resolved value is stripped (operator may use it as a visual "this links to a folder" hint; the `.lnk` extension is appended by `linker.create_lnk`).
+- Trailing `/` in the resolved value is stripped (operator may use it as a visual "this links to a folder" hint; the resolved name is used verbatim as the hard-link name by `linker.create_hardlink` — no extension is appended).
 - No Windows-unsafe-character sanitisation is applied — the documented `discovered.*` fields don't contain unsafe characters in practice. Add a sanitisation pass later if a real case requires it.
 
 **Per-instrument defaults (recommended patterns):**
@@ -291,7 +306,7 @@ See each per-instrument template under `tools/templates/instruments/` for the in
 9. Verify copy — recompute checksums on destination, compare
 10. Generate `README.txt`
 11. Append row to `registry_raw.csv` (all fields populated, including `original_name`)
-12. Append entry to `registries/ingest_manifest.csv` (always); if `--project` is set, also create a Windows `.lnk` shortcut in `<project>/raw_linked/` pointing at the canonical archive (see §2.1.1)
+12. Append entry to `registries/ingest_manifest.csv` (always); if `--project` is set (or `project_hint` resolves), also create a hard link in `<project>/raw_linked/` to the raw primary — a single hard link for a file primary, or a real folder of per-file hard links for a `<ACQ-ID>.data` folder primary (see §2.1.1)
 13. Report summary
 
 **Lightweight Mode (`--lightweight`) — per acquisition:**
@@ -475,7 +490,7 @@ python tools/ingest_raw.py --interactive --lightweight             # lightweight
 - Copy verification: SHA-256 source→dest comparison
 - **Idempotent re-runs**: `expand_batch` checks the registry by `(acquisition_date, original_name)` and skips already-ingested files
 - `--delete-source` flag removes the source file/folder after a successful verify (cross-instrument; default OFF; never touches the parent of `source_path`)
-- Project link creation: `.lnk` shortcut placed in `<project>/raw_linked/` when `--project` is set (Windows-only — see §2.1.1)
+- Project link creation: hard link (file) or folder-of-hard-links (`<ACQ-ID>.data`) placed in `<project>/raw_linked/` when `--project` is set (same-volume; see §2.1.1)
 - `--dry-run` mode for previewing without changes
 - Batch auto-discovery for processing many cases at once (file or directory globs)
 

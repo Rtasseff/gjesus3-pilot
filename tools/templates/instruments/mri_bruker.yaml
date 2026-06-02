@@ -101,7 +101,7 @@
 #   - `auto_create_project:` — owner = `NMR-platform` since there's no
 #     dedicated technician. Edit _project.yaml after creation.
 #   - `link_filename:` — `MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`.
-#     Example: `MRI_jrc_251016_m17_0424_20251016_29_3`. Each .lnk is
+#     Example: `MRI_jrc_251016_m17_0424_20251016_29_3`. Each link is
 #     unique within a project even when multiple animals (m17/m18/m19)
 #     share exam numbers — the round-6 collision bug fix.
 #
@@ -272,21 +272,24 @@ auto_create_project:
   description: "Auto-created from internal MRI ingest; animal-protocol code ${discovered.project_code}. PROVISIONAL project_hint — see 05_PROJECTS §9."
   notes:       "Auto-created on first ingest. Edit owner via _project.yaml to record the researcher behind the animal protocol."
 
-# Name of the .lnk shortcut placed under /projects/<proj>/raw_linked/.
+# Name of the project hard link placed under /projects/<proj>/raw_linked/.
+# (Hard link since 2026-06-02 — resolved value used verbatim, no extension;
+# was a .lnk shortcut before. See 10_TOOLS §2.1.1.) For a folder-primary
+# acquisition (<ACQ-ID>.data) the link is a real folder of per-file hard
+# links carrying this name.
 # Resolver-evaluated; see "AUTO-DISCOVERED FIELDS" section above for
 # every placeholder available.
 #
 # Default pattern uniquely identifies each acquisition within the project
 # even when multiple animals from the same protocol land in the same
 # project (e.g. m17/m18/m19/m20 all under proj-ae-biomegune-0424). The
-# round-6 first ingest exposed a collision bug when .lnk names were just
-# the exam number — the four animals each had exam 27, so `27.lnk` clashed
+# round-6 first ingest exposed a collision bug when link names were just
+# the exam number — the four animals each had exam 27, so `27` clashed
 # and only one survived. The new pattern includes sample_id, date, exam,
 # and reconstruction → guaranteed unique per (animal, exam, recon).
 #
 # Example resolved value:
 #   MRI_jrc_251016_m17_0424_20251016_29_3
-#   (.lnk extension appended automatically by linker.create_lnk)
 link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
 
 # ============================================================================

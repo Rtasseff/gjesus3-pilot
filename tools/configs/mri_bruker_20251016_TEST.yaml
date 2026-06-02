@@ -57,7 +57,8 @@ auto_create_project:
   description: "TEST auto-created from internal MRI round-6 v2 — animal-protocol code ${discovered.project_code}. Purge after team exhibition. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
   notes:       "Auto-created during round-6 v2 ingest 2026-05-27. Will be purged with the rest of the quasi-production data after the team exhibition."
 
-# .lnk shortcut name (resolver-evaluated at link-creation time).
+# Project hard-link name (resolver-evaluated at link-creation time; no extension).
+# Folder-primary acq (<ACQ-ID>.data) -> real folder of per-file hard links.
 # Inherits the MRI default pattern from the per-instrument template:
 # unique per (sample, date, exam, recon) — fixes the round-6 first-ingest
 # collision bug where exam-number-only names clashed across animals.

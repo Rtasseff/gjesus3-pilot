@@ -41,7 +41,7 @@ The script is idempotent: re-running the same config skips acquisitions already 
 | `--interactive` | `-i` | off | Single-case mode; tool prompts for each field. |
 | `--dry-run` | `-n` | off | Log what would happen; touch nothing on NAS. **Use first.** |
 | `--nas-root <path>` | — | `$GJESUS3_ROOT` or `/mnt/gjesus3` | NAS mount point on this host. |
-| `--nas-unc <unc>` | — | `$GJESUS3_UNC` or `\\GJESUS3\gjesus3` | UNC path used as the target for project `.lnk` shortcuts. Pass `""` to disable `.lnk` creation. |
+| `--nas-unc <unc>` | — | `$GJESUS3_UNC` or `\\GJESUS3\gjesus3` | Legacy `.lnk` porting-seam only — **not used by the current hard-link linker** (hard links use local NAS-volume paths). Retained for backward compatibility; safe to omit. |
 | `--project <PROJ-NNNN>` | — | — | Project ID stamped on every row this run; recorded as `project_hint`. Overrides any value the YAML sets. |
 | `--delete-source` | — | off | Remove the source file/folder after copy + verify succeed. Parent day folder is never touched. Default OFF for safety; opt in per batch. |
 
@@ -57,7 +57,7 @@ Every config has up to four top-level blocks (three required + one optional, plu
 | `auto_discover:` | Yes | How to find cases inside `staging_dir` and what variables to extract. Supports `filename_parse:` (positional `separator:` + `fields:` OR named-group `regex:`; optional `source: name \| parent_name`) and `path_parse:` (named path levels between staging_dir and the match). Each case's parsed values land in `discovered.<name>`. |
 | `registry:` | Yes | Explicit per-column mapping. Values: literal (`MFB`), bare reference (`discovered.operator`), interpolation (`"${discovered.stain} at ${discovered.czi_objective_mag}x"`), or `NA`. New DRAFT columns since round 6: `session_id` (ISA "study" grouping) and `primary_kind` (auto, set by pipeline). |
 | `auto_create_project:` | Optional | First-time project-creation metadata (owner / description / notes), resolver-evaluated. First-write-wins. |
-| `link_filename:` (top-level string, NEW 2026-05-22) | Optional | Template for the `.lnk` shortcut name placed under `/projects/<proj>/raw_linked/`. Context = `discovered.*` + resolved registry fields + `${acq_id}` + `${acq_date}`. Per-instrument templates ship recommended defaults. Falls back to `original_name` when unset (backward-compatible with rounds 1-2/4/5). See [10_TOOLS §2.1.5](../mfb-rdm-docs/10_TOOLS.md). |
+| `link_filename:` (top-level string, NEW 2026-05-22) | Optional | Template for the project link name placed under `/projects/<proj>/raw_linked/` (a hard link since 2026-06-02 — used verbatim, no extension). Context = `discovered.*` + resolved registry fields + `${acq_id}` + `${acq_date}`. Per-instrument templates ship recommended defaults. Falls back to `original_name` when unset (backward-compatible with rounds 1-2/4/5). See [10_TOOLS §2.1.5](../mfb-rdm-docs/10_TOOLS.md). |
 
 ### Filename chunks are free-form labels
 
@@ -79,9 +79,9 @@ registry:
 
 The pipeline fills these itself: `acq_id`, `registration_datetime`, `primary_kind`, `primary_file_name`, `original_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `ingest_config`.
 
-### `link_filename:` — control the .lnk shortcut name (NEW 2026-05-22)
+### `link_filename:` — control the project link name (NEW 2026-05-22)
 
-By default, the `.lnk` shortcut placed under `/projects/<proj>/raw_linked/` is named after `original_name` (e.g. the `.czi` filename or the collaborator zip name). For systematic-naming environments (internal MRI, future internal NI) where the *source* identifier is a folder path + numeric position, the default would collide when multiple sessions land in the same project (e.g. four animals with the same exam number). Set `link_filename:` at the top level of the YAML to override:
+By default, the project link placed under `/projects/<proj>/raw_linked/` is named after `original_name` (e.g. the `.czi` filename or the collaborator zip name). For systematic-naming environments (internal MRI, future internal NI) where the *source* identifier is a folder path + numeric position, the default would collide when multiple sessions land in the same project (e.g. four animals with the same exam number). Set `link_filename:` at the top level of the YAML to override. (The link is a hard link since 2026-06-02 — the resolved value is the link name verbatim, with no extension; see [10_TOOLS §2.1.1](../mfb-rdm-docs/10_TOOLS.md).)
 
 ```yaml
 # Internal MRI default — unique per (animal, exam, reconstruction):
