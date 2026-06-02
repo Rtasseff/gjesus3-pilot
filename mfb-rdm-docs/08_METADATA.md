@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-05-29 (DRAFT `subject:` block §4.4 + DRAFT `condition:` block §4.5 — preclinical subject + disease/control metadata required for `sample_type ∈ {organism, tissue}`; `is_control` DECIDED-required as the enforceable healthy-vs-case boolean; disease_model + disease_state DRAFT-required free-text)
+**Last Updated:** 2026-06-02 (animal-facility-DB access obtained → `subject:` block extended §4.4: `date_of_birth` REQUIRED + `age_at_acquisition` now derived from it, `procedures` free-text optional + EVALUATING `procedure_tags` §4.4.7, and the deferred-recovery pending-list + superuser retro-update mechanism §4.4.6 for ingest-time DB miss / no-credentials. Prior: 2026-05-29 DRAFT `subject:` §4.4 + DRAFT `condition:` §4.5)
 
 ---
 
@@ -233,7 +233,7 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 |---------|--------|
 | `user_supplied` | The resolved values from the YAML `registry:` block (literal text, `discovered.<x>` references, or `${...}` interpolation — see [10_TOOLS §2.1](10_TOOLS.md)). |
 | `discovered` | Everything `auto_discover` surfaced for the case: filename-parser output, parent-folder date, `folder_name` / `filename`, and embedded extracts (`discovered.czi_*` for microscopy, `discovered.mri_*` for ParaVision). |
-| `subject` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29. Preclinical subject metadata: species / strain / sex / age_at_acquisition (required) + optional genotype / weight / facility_animal_id / cohort_id. **Per-subject, fixed.** Source hierarchy: animal-facility-DB > study-level YAML at `/projects/<proj>/metadata/subjects.yaml` > instrument auto-extracts. Frozen snapshot at ingest; refreshed at project close-out. See §4.4. |
+| `subject` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29, extended 2026-06-02. Preclinical subject metadata: species / strain / sex / date_of_birth → derived age_at_acquisition (required) + optional genotype / weight / facility_animal_id / cohort_id / procedures (+ EVALUATING procedure_tags). **Per-subject, fixed.** Source hierarchy: animal-facility-DB > study-level YAML at `/projects/<proj>/metadata/subjects.yaml` > instrument auto-extracts. On ingest-time DB miss / no-credentials, written as `source: "pending-db"` and queued for superuser recovery (§4.4.6). Frozen snapshot at ingest; refreshed at project close-out. See §4.4. |
 | `condition` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29. Disease state + experimental role: `is_control` (**DECIDED-required** boolean — the enforceable healthy-vs-case flag), `disease_model` + `disease_state` (DRAFT-required free-text) + optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. **Per-acquisition, varies** (same animal can be baseline + post-MI). Source: operator-entered via per-batch YAML or `/projects/<proj>/metadata/`; not derivable from animal-facility-DB. See §4.5. |
 | `<ecosystem_section>` | The structured embedded-metadata block keyed by ecosystem subfield: `microscopy` (for .czi), `mri` (for Bruker ParaVision — new 2026-05-20). Each has curated buckets at the top for human skimming + a `_raw_metadata` dump for forensic preservation. |
 
@@ -400,7 +400,7 @@ Notes:
 
 ### 4.4 `subject:` Block — Preclinical Subject Metadata (DRAFT 2026-05-29)
 
-> **🔶 DRAFT (2026-05-29).** New top-level `subject:` block in `metadata.json` for acquisitions whose subject is an organism or organism-derived tissue. The **four required fields** (`species` / `strain` / `sex` / `age_at_acquisition`) are **✅ DECIDED** — they are universal preclinical reporting standards (ARRIVE 2.0, EU Directive 2010/63/EU, NIH Sex-As-Biological-Variable policy). Optional fields and the `source:` provenance tag are DRAFT until the animal-facility-DB integration (`tasks/tasks.md §3.2`) locks the exact field names.
+> **🔶 DRAFT (2026-05-29; extended 2026-06-02 after animal-facility-DB access).** New top-level `subject:` block in `metadata.json` for acquisitions whose subject is an organism or organism-derived tissue. The **required fields** (`species` / `strain` / `sex` / `date_of_birth` → derived `age_at_acquisition`) are **✅ DECIDED** — universal preclinical reporting standards (ARRIVE 2.0, EU Directive 2010/63/EU, NIH Sex-As-Biological-Variable policy). They are sourced from the **animal-facility DB** (access obtained 2026-06-02). Optional fields, the `procedures` free-text + `procedure_tags` (§4.4.7), and the `source:` provenance tag remain DRAFT until DB exploration locks the exact field names. **Required-eventually, not at-ingest:** because the DB may lag the acquisition or credentials may be absent, a DB miss WARNs and queues the acquisition for superuser recovery rather than failing the ingest — the deferred-recovery mechanism is §4.4.6.
 
 #### 4.4.1 When this block is required
 
@@ -416,20 +416,25 @@ Whenever `registry_raw.csv` has `sample_type ∈ {organism, tissue}` (see [06_RE
   "species":                  "Mus musculus",       // REQUIRED — scientific binomial (recommend NCBI Taxonomy alignment)
   "strain":                   "C57BL/6J",           // REQUIRED — strain or genetic background
   "sex":                      "F",                  // REQUIRED — M | F | unknown
-  "age_at_acquisition":       "P12W",               // REQUIRED — ISO-8601 duration preferred (P12W = 12 weeks postnatal); plain "12 weeks" / "P21" accepted at draft stage
+  "date_of_birth":            "2025-01-18",         // REQUIRED — ISO-8601 date; the animal-facility DB's authoritative birth date (NEW 2026-06-02)
+  "age_at_acquisition":       "P12W",               // REQUIRED — DERIVED by the writer = acquisition_datetime − date_of_birth, emitted as ISO-8601 duration (P12W). Free-text "12 weeks" accepted only when date_of_birth is unavailable.
   "genotype":                 "WT",                 // optional but recommended (WT | KO:<gene> | TG:<construct> | Cre:<driver> | ...)
   "weight_at_acquisition_g":  24.3,                 // optional — numeric grams
-  "facility_animal_id":       "MFB-2025-0420-m17",  // optional — cross-reference key into the animal-facility DB
+  "facility_animal_id":       "MFB-2025-0420-m17",  // cross-reference key into the animal-facility DB. Optional in general, but REQUIRED-in-practice when source = animal-facility-db (it is the lookup key).
   "cohort_id":                "AE-0424-cohort-A",   // optional — experimental cohort grouping
+  "procedures":               "tail-vein injection, perfusion-fixed at endpoint",  // optional — free-text procedures log from the animal-facility DB (NEW 2026-06-02). See §4.4.7 on systematic tagging.
+  "procedure_tags":           [],                   // ❓ EVALUATING — optional structured tags derived from `procedures` free-text. Not a systematic instrument code; populated manually or via an LLM-assisted parse skill. See §4.4.7.
   "source":                   "animal-facility-db"  // DRAFT — provenance: animal-facility-db | operator-entered | bruker-auto-extracted | molecubes-auto-extracted
 }
 ```
+
+> **Required-eventually, not required-at-ingest.** Unlike `condition.is_control` (§4.5, hard-blocks the sidecar write if missing), the DB-sourced `subject:` required fields are **required-to-eventually-be-present** rather than required-at-ingest. The animal-facility DB may not yet hold the animal at acquisition time (see §4.4.6 on the timing delay), and the operator's machine may lack DB credentials — failing the ingest in either case is operationally unacceptable (data must land when it is acquired). Instead the ingest WARNs, writes a placeholder `subject:` block (`source: "pending-db"`), and logs the acquisition to a pending list for a superuser to recover later. The deferred-recovery mechanism is §4.4.6.
 
 #### 4.4.3 Source hierarchy
 
 When the sidecar is built, `subject:` is populated from the highest-confidence source available:
 
-1. **Animal facility DB** — authoritative, once programmatic access lands (`tasks/tasks.md §3.2`). Set `source: "animal-facility-db"`.
+1. **Animal facility DB** — authoritative. **DB access obtained 2026-06-02** (Phase 1 unblocked; system/schema exploration in progress — `tasks/tasks.md §3.2`). Set `source: "animal-facility-db"`. When the DB lookup at ingest fails (animal not yet in the DB, or no credentials on the operator's machine), fall through to the deferred-recovery path (§4.4.6) — write `source: "pending-db"` and queue for superuser recovery, rather than dropping straight to the lower-confidence sources below.
 2. **Study-level metadata** at `/projects/<proj>/metadata/subjects.yaml`, keyed by `sample_id` (operator-entered via the Excel importer when it ships). Set `source: "operator-entered"`.
 3. **Instrument auto-extracts** — last-resort fallback from the existing `_raw_metadata` extracts:
    - ParaVision: `mri._raw_metadata.subject.SUBJECT_sex` / `SUBJECT_weight` / `SUBJECT_type` / `SUBJECT_id` (often partially populated; species/strain/age typically empty unless the user entered them in ParaVision's subject form).
@@ -438,9 +443,9 @@ When the sidecar is built, `subject:` is populated from the highest-confidence s
 
 The sidecar holds a **frozen snapshot** at ingest time, refreshed at project close-out before the `/projects/<proj>/` folder is deleted (see [§1.3](#13-permanent-vs-ephemeral-storage)). The mutable source-of-truth during the project's life lives at `/projects/<proj>/metadata/subjects.yaml`; the sidecar copy is what survives close-out into `/raw/`.
 
-#### 4.4.4 Why these four required fields
+#### 4.4.4 Why these required fields
 
-The four required fields are the minimum reporting standard for any publishable preclinical imaging work:
+The required fields (species / strain / sex / date_of_birth → derived age_at_acquisition) are the minimum reporting standard for any publishable preclinical imaging work. Capturing **`date_of_birth`** rather than a hand-typed age means age is computed and verifiable (acquisition_datetime − DOB) instead of transcribed:
 
 | Standard | Requirement |
 |---|---|
@@ -455,12 +460,91 @@ Capturing these four fields at ingest time — rather than recovering them later
 | Aspect | Status |
 |---|---|
 | Required-fields schema (species / strain / sex / age) | ✅ DECIDED (2026-05-29) |
-| Optional fields + `source:` tag | 🔶 DRAFT until animal-facility-DB integration locks exact field names |
+| `date_of_birth` required + `age_at_acquisition` derived from it | ✅ DECIDED (2026-06-02) — exact DB field name/format pending exploration |
+| `procedures` free-text (optional) | ✅ DECIDED optional (2026-06-02) — captured verbatim from the DB |
+| `procedure_tags` structured tags from the free-text | ❓ EVALUATING — manual vs LLM-assisted-skill parse. See §4.4.7 |
+| Optional fields + `source:` tag | 🔶 DRAFT until animal-facility-DB exploration locks exact field names |
 | `subject:` writer in `tools/ingest/metadata_sidecar.py` | ⚠️ Not yet implemented — `tasks/tasks.md §3.2` Phase 3 |
-| Animal-facility-DB fetcher (`tools/animal_db.py`) | ⚠️ Blocked on IT for programmatic DB access — `tasks/tasks.md §3.2` Phase 1 |
+| Animal-facility-DB fetcher (`tools/animal_db.py`) | 🔶 Phase 1 unblocked — **DB access obtained 2026-06-02**; schema/auth exploration in progress, then write the fetcher (`tasks/tasks.md §3.2` Phase 1→2) |
+| Deferred-recovery pending list + superuser retro-update | 🔶 DRAFT (2026-06-02) — design in §4.4.6; tooling in `tasks/tasks.md §3.2` |
 | Backfill of existing 97 MRI + 84 NI acqs + animal-derived microscopy | ⚠️ Queued — `tasks/tasks.md §3.2` Phase 4 |
 
 Until the animal-DB integration lands, operators may set `subject:` manually via study-level YAML (once the Excel importer ships) or fall back to whatever the instrument auto-extracted into `_raw_metadata`.
+
+### 4.4.6 Deferred recovery — ingest-time DB miss + superuser retro-update (DRAFT 2026-06-02)
+
+> **🔶 DRAFT (2026-06-02).** The animal-facility DB is authoritative for the `subject:` required fields, but it is not always queryable *at the moment of ingest*. Two failure modes must not block an ingest, yet must not silently lose the metadata either. This section specifies the catch-and-recover mechanism.
+
+#### 4.4.6.1 The two ingest-time failure modes
+
+| Mode | Cause | Why it happens |
+|---|---|---|
+| **DB-miss (timing delay)** | The animal (or some of its fields) is not yet in the DB when the data is ingested. | Going forward, researchers ingest **right after acquisition**, which can precede the animal-facility staff updating the DB for that animal/procedure. (The current archival/historical backfills don't hit this — the DB is already fully populated for past studies — but live ingests will.) |
+| **No-credentials** | The operator's machine has no DB credentials. | DB access is credential-gated; not every operator workstation will hold them. |
+
+In **both** cases the ingest must **WARN, not fail** — the acquisition still lands in `/raw/` with a placeholder `subject:` block (`source: "pending-db"`, required fields blank or best-effort from instrument auto-extracts) — and the acquisition is appended to a pending list for later recovery.
+
+#### 4.4.6.2 The pending list
+
+**Location:** `registries/pending_subject_metadata.csv` (on the NAS, under the container `gjesus3-data/registries/`).
+
+**Why `registries/` and not `raw/`:** under the applied permission model ([11_OPERATIONS §2.1.1](11_OPERATIONS.md)), operators have **Modify on `registries/`** (the ingest already appends rows to `registry_raw.csv` there) but only **write-but-not-modify on `raw/`**. The pending list is written by the operator's ingest at acquisition time, so it has to live where the operator can append — `registries/` is the only such place. (This is the same reason the *recovery* step must be a superuser — see §4.4.6.4.)
+
+**Proposed columns** (DRAFT — finalize alongside the writer):
+
+| Column | Meaning |
+|---|---|
+| `acq_id` | The acquisition needing recovery |
+| `sidecar_path` | Canonical path to the `/raw/.../metadata.json` to be updated |
+| `facility_animal_id` | The DB lookup key (may be blank if even that wasn't known at ingest) |
+| `reason` | `db-miss` \| `no-credentials` |
+| `logged_at` | ISO-8601 UTC timestamp of the ingest that logged the gap |
+| `status` | `pending` \| `recovered` \| `unresolvable` (set by the recovery tool) |
+| `recovered_at` | ISO-8601 UTC timestamp when a superuser resolved it (blank until then) |
+
+Entries are idempotent on `acq_id` — re-ingesting the same acquisition updates the existing row rather than duplicating it.
+
+#### 4.4.6.3 What the operator sees
+
+A clear WARN at ingest, e.g.:
+
+```
+WARN  ACQ-20260602-MRI-014: subject metadata not recovered from animal-facility DB
+      reason=db-miss (animal MFB-2025-0420-m17 not found)
+      → logged to registries/pending_subject_metadata.csv for superuser recovery
+      → acquisition ingested with placeholder subject: block (source=pending-db)
+```
+
+The ingest exit status stays success. Nothing about the gap is hidden — the pending list is the running, human-readable record of every acquisition still owing subject metadata.
+
+#### 4.4.6.4 Superuser retro-update
+
+A separate tool (superuser-run; tracked in `tasks/tasks.md §3.2`) walks `registries/pending_subject_metadata.csv`, and for each `status: pending` row:
+
+1. Looks up `facility_animal_id` in the animal-facility DB (now populated / now with credentials).
+2. If found, **modifies the `/raw/.../metadata.json` sidecar in place** — fills the `subject:` required fields, sets `source: "animal-facility-db"`, recomputes `age_at_acquisition` from `date_of_birth` + the acquisition datetime.
+3. Marks the row `recovered` with `recovered_at`; leaves still-missing animals as `pending` (or `unresolvable` after a human decision).
+
+**This step requires a superuser** because it **modifies an existing file under `/raw/`**, which the permission model forbids to operators and ordinary users (they are write-once / read-only on `raw/`; only superusers hold Full). It is the same controlled-write-to-`/raw/` pattern as the project close-out merge (§1.5a) and shares its safeguards (verify-after-write; never overwrite acquisition-level fields that were already correct).
+
+This is a forward-only mechanism: the historical/archival backfills in progress now do **not** generate pending entries (the DB is already complete for past studies), but every live post-acquisition ingest is covered the day it starts.
+
+### 4.4.7 `procedures` free-text and optional systematic tagging (DRAFT 2026-06-02)
+
+> **🔶 DRAFT (2026-06-02).** The animal-facility DB carries, per animal, a **free-text procedures log** (what was done to the animal — injections, surgeries, fixation, etc.). It is captured verbatim into `subject.procedures`. Unlike species/strain/sex/DOB it has **no systematic code** behind it, so it cannot be promoted to required structured fields the way the others are.
+
+**What is decided:**
+- `subject.procedures` (free-text, **optional**) is captured verbatim from the DB. Always safe to store; lossless.
+
+**What is EVALUATING — `procedure_tags`:** we may layer an *optional* structured `procedure_tags` field on top of the free text, populated by a small pre-identified vocabulary (e.g. `injection:tail-vein`, `fixation:perfusion`, `surgery:LAD-ligation`). Because there is no systematic source code, tags would be produced one of three ways:
+
+| Option | How tags get filled | Trade-off |
+|---|---|---|
+| **Leave free-text only** | No tags; consumers read `procedures` directly. | Zero effort; not queryable. |
+| **Manual tagging** | Operator/researcher selects from the pre-identified vocab when filling study metadata. | Queryable; relies on human diligence. |
+| **LLM-assisted parse skill** | A skill reads `procedures` free-text and proposes `procedure_tags` from the vocab for human confirmation. | Scales to backlog; needs a vocab + a human-in-the-loop confirm step; never auto-commits without review. |
+
+**Decision deferred until after DB exploration** — we need to see real `procedures` strings across animals before fixing a tag vocabulary or committing to the LLM-skill route. Whatever we choose, `procedure_tags` stays **optional** and the verbatim `procedures` text remains canonical (same preserve-then-interpret principle as the REMBI projection deferral, §3.5).
 
 ### 4.5 `condition:` Block — Disease State and Experimental Role (DRAFT 2026-05-29)
 
@@ -573,5 +657,6 @@ For SEM/TEM imaging of nanomaterials (if included):
 | META-02 | Audit embedded metadata per instrument | Data Mgmt Lead | ⚠️ Open |
 | ~~META-03~~ | ~~Develop metadata extraction scripts~~ | — | ✅ Resolved: integrated into full-mode ingest; see [10_TOOLS](10_TOOLS.md). Implementation pending. |
 | META-04 | ISA-TAB-Nano for nanomaterials? | Data Mgmt Lead | ❓ If SEM/TEM included |
-| META-05 | Animal-facility-DB programmatic access + auto-populate `subject:` block (§4.4) | Data Mgmt Lead + IT | ⚠️ Phase 1 blocked on IT for DB API access; 4-phase plan in `tasks/tasks.md §3.2` |
+| META-05 | Animal-facility-DB programmatic access + auto-populate `subject:` block (§4.4) | Data Mgmt Lead + IT | 🔶 **Access obtained 2026-06-02** — Phase 1 exploration (schema/auth/field mapping) in progress; then fetcher + deferred-recovery tooling. 4-phase plan in `tasks/tasks.md §3.2` |
 | META-06 | Tighten `disease_model` + `disease_state` from DRAFT-required to DECIDED-required after pilot operator-habit is established (§4.5) | Data Mgmt Lead | 🔶 Open — revisit after Phase 3 writer lands + a few real batches use the `condition:` block; `is_control` already DECIDED |
+| META-07 | How to fill optional `procedure_tags` from the `procedures` free-text — leave free-text / manual vocab / LLM-assisted parse skill (§4.4.7) | Data Mgmt Lead | ❓ EVALUATING — decide after DB exploration shows real `procedures` strings; `procedures` verbatim stays canonical regardless |

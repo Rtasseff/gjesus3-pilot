@@ -149,7 +149,7 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 
 > **🔶 Linked requirements (DRAFT 2026-05-29):** For `sample_type ∈ {organism, tissue}`, the per-acquisition `metadata.json` MUST include two blocks:
 >
-> **`subject:` block** — species / strain / sex / age_at_acquisition (the four ARRIVE-aligned required fields, DECIDED) + optional genotype / weight / facility_animal_id / cohort_id. Schema in [08_METADATA §4.4](08_METADATA.md). Auto-population via animal-facility-DB integration queued in `tasks/tasks.md §3.2`.
+> **`subject:` block** — species / strain / sex / date_of_birth → derived age_at_acquisition (the ARRIVE-aligned required fields, DECIDED; DOB added 2026-06-02) + optional genotype / weight / facility_animal_id / cohort_id / procedures free-text. Schema in [08_METADATA §4.4](08_METADATA.md). Auto-populated from the **animal-facility DB** (access obtained 2026-06-02); an ingest-time DB miss / no-credentials queues the acquisition for superuser recovery rather than failing (§4.4.6). Integration tracked in `tasks/tasks.md §3.2`.
 >
 > **`condition:` block** — `is_control` (**DECIDED-required strict boolean** — the enforceable healthy-vs-case flag) + DRAFT-required `disease_model` + `disease_state` free-text + optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. Schema in [08_METADATA §4.5](08_METADATA.md). Operator-entered only (no auto-source — disease state is a property of study design, not the animal). The `is_control` boolean is the primary cohort-builder filter for "all healthy controls" / "all cases" queries.
 >
