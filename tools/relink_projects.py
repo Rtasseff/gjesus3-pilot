@@ -38,15 +38,41 @@ import os
 import sys
 from datetime import datetime, timezone
 
+import yaml
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ingest import linker, provenance  # noqa: E402
+from ingest import linker, provenance, resolver  # noqa: E402
+
+_CONFIG_CACHE = {}
+
+
+def load_link_template(ingest_config_rel):
+    """Read the `link_filename:` template from a row's ingest_config YAML.
+
+    Paths are repo-relative (as stored in the registry). Returns "" if the
+    config is missing or has no link_filename.
+    """
+    if not ingest_config_rel:
+        return ""
+    if ingest_config_rel in _CONFIG_CACHE:
+        return _CONFIG_CACHE[ingest_config_rel]
+    repo_root = os.path.dirname(os.path.abspath(__file__))  # tools/
+    repo_root = os.path.dirname(repo_root)                  # repo root
+    path = os.path.join(repo_root, ingest_config_rel.replace("/", os.sep))
+    template = ""
+    if os.path.isfile(path):
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            cfg = yaml.safe_load(f) or {}
+        template = cfg.get("link_filename") or ""
+    _CONFIG_CACHE[ingest_config_rel] = template
+    return template
 
 
 def load_registry_index(nas_root):
     """acq_id -> registry row dict, read from registries/registry_raw.csv."""
     path = os.path.join(nas_root, "registries", "registry_raw.csv")
     index = {}
-    with open(path, "r", encoding="utf-8", newline="") as f:
+    with open(path, "r", encoding="utf-8", errors="replace", newline="") as f:
         for row in csv.DictReader(f):
             index[row["acq_id"]] = row
     return index
@@ -61,7 +87,7 @@ def load_lnk_to_acq(prov_path):
     mapping = {}
     if not os.path.exists(prov_path):
         return mapping
-    with open(prov_path, "r", encoding="utf-8", newline="") as f:
+    with open(prov_path, "r", encoding="utf-8", errors="replace", newline="") as f:
         for row in csv.DictReader(f):
             name = (row.get("output_name") or "").strip()
             acq = (row.get("input_refs") or "").strip()
@@ -159,6 +185,92 @@ def relink_project(project_abs, registry, dry_run=False, keep_lnk=False):
     return stats
 
 
+def already_linked_acqs(prov_path):
+    """ACQ-IDs that already have a hard-link provenance row in this project."""
+    linked = set()
+    if not os.path.exists(prov_path):
+        return linked
+    with open(prov_path, "r", encoding="utf-8", errors="replace", newline="") as f:
+        for row in csv.DictReader(f):
+            ft = (row.get("file_type") or "").strip()
+            acq = (row.get("input_refs") or "").strip()
+            if ft in ("hardlink", "hardlink-folder") and acq:
+                linked.add(acq)
+    return linked
+
+
+def create_missing_project(project_abs, project_id, registry, dry_run=False):
+    """Create hard links for this project's registry rows that have no link yet.
+
+    Resolves each row's `link_filename:` template (from its ingest_config) and
+    creates the hard link if absent. Skips rows whose template can't be fully
+    resolved from registry fields alone (e.g. names needing `discovered.*` that
+    is not stored in the registry) — those rows already have links from ingest.
+    """
+    raw_linked = os.path.join(project_abs, "raw_linked")
+    prov_path = os.path.join(project_abs, "provenance.csv")
+    stats = {"created_file": 0, "created_folder": 0, "skipped": 0, "errors": 0}
+    linked = already_linked_acqs(prov_path)
+
+    rows = [r for r in registry.values()
+            if (r.get("project_hint") or "").strip() == project_id
+            and r["acq_id"] not in linked]
+    for row in rows:
+        acq_id = row["acq_id"]
+        template = load_link_template(row.get("ingest_config", ""))
+        acq_date = acq_id.split("-")[1] if acq_id.count("-") >= 2 else ""
+        cfg = dict(row)
+        cfg["discovered"] = {}
+        link_name = resolver.resolve_link_filename(template, cfg, acq_id, acq_date)
+        if not link_name:
+            # No template -> fall back to the basename of original_name.
+            on = (row.get("original_name") or "").replace("\\", "/").rstrip("/")
+            link_name = on.split("/")[-1]
+        link_name = (link_name or "").rstrip("/").rstrip("\\")
+        if not link_name or "${" in link_name or "/" in link_name or "\\" in link_name:
+            print(f"    SKIP {acq_id}: unresolved/invalid link name {link_name!r}")
+            stats["skipped"] += 1
+            continue
+        src = raw_primary_path(NAS_ROOT, row)
+        is_folder = os.path.isdir(src)
+        kind = "folder" if is_folder else "file"
+        dest = os.path.join(raw_linked, link_name)
+        if os.path.exists(dest):
+            stats["skipped"] += 1
+            continue
+        if dry_run:
+            print(f"    [dry-run] {acq_id}  ->  NEW hard {kind} 'raw_linked/{link_name}'  (src: {src})")
+            stats["created_folder" if is_folder else "created_file"] += 1
+            continue
+        try:
+            dest = linker.create_hardlink(project_abs, link_name, src)
+            if not os.path.exists(dest):
+                raise RuntimeError(f"hard link not present after creation: {dest}")
+            stats["created_folder" if is_folder else "created_file"] += 1
+            is_dir_link = os.path.isdir(dest)
+            provenance.append_entry(prov_path, {
+                "output_path": f"raw_linked/{link_name}",
+                "output_name": link_name,
+                "file_type": "hardlink-folder" if is_dir_link else "hardlink",
+                "date_created": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                "creator": row.get("operator", "") or "",
+                "input_refs": acq_id,
+                "process_description": (
+                    "Created missing project link (relink_projects.py --create-missing): "
+                    + ("folder of per-file hard links" if is_dir_link else "hard link")
+                ),
+                "software_version": provenance.software_version_string("relink_projects.py"),
+                "parameters_ref": row.get("ingest_config", "") or "",
+                "lab_notebook_ref": "",
+                "notes": "Auto-generated: link missing after rebuild (original ingest failed link creation)",
+            })
+            print(f"    NEW  {acq_id}  ->  hard {kind} 'raw_linked/{link_name}'")
+        except Exception as e:  # noqa: BLE001
+            print(f"    ERROR {acq_id}: {e}")
+            stats["errors"] += 1
+    return stats
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -172,6 +284,10 @@ def main(argv=None):
                     help="Report actions without creating/deleting anything")
     ap.add_argument("--keep-lnk", action="store_true",
                     help="Create hard links but leave the .lnk files in place")
+    ap.add_argument("--create-missing", action="store_true",
+                    help="Also create hard links for project-associated registry "
+                         "rows that have NO link yet (e.g. microscopy acqs whose "
+                         "original ingest silently failed link creation)")
     args = ap.parse_args(argv)
 
     global NAS_ROOT
@@ -182,6 +298,16 @@ def main(argv=None):
 
     registry = load_registry_index(NAS_ROOT)
 
+    # Map project folder name -> PROJ-ID (for --create-missing row grouping).
+    folder_to_proj = {}
+    proj_reg = os.path.join(NAS_ROOT, "registries", "registry_projects.csv")
+    if os.path.exists(proj_reg):
+        with open(proj_reg, "r", encoding="utf-8", errors="replace", newline="") as f:
+            for r in csv.DictReader(f):
+                folder = (r.get("folder_location") or "").strip("/").split("/")[-1]
+                if folder:
+                    folder_to_proj[folder] = r.get("project_id", "")
+
     names = args.project or sorted(
         d for d in os.listdir(projects_dir)
         if os.path.isdir(os.path.join(projects_dir, d))
@@ -189,25 +315,39 @@ def main(argv=None):
 
     print(f"NAS root: {NAS_ROOT}")
     print(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}"
-          f"{' (keeping .lnk)' if args.keep_lnk else ''}")
+          f"{' (keeping .lnk)' if args.keep_lnk else ''}"
+          f"{' +create-missing' if args.create_missing else ''}")
     totals = {"lnk": 0, "file_links": 0, "folder_links": 0, "deleted": 0,
-              "skipped": 0, "errors": 0}
+              "skipped": 0, "errors": 0, "created_file": 0, "created_folder": 0}
     for name in names:
         project_abs = os.path.join(projects_dir, name)
         print(f"\n== {name} ==")
         s = relink_project(project_abs, registry,
                            dry_run=args.dry_run, keep_lnk=args.keep_lnk)
-        for k in totals:
+        line = (f"   {name}: {s['lnk']} .lnk -> "
+                f"{s['file_links']} file + {s['folder_links']} folder links, "
+                f"{s['deleted']} .lnk removed, {s['skipped']} skipped, {s['errors']} errors")
+        if args.create_missing:
+            proj_id = folder_to_proj.get(name, "")
+            cm = create_missing_project(project_abs, proj_id, registry,
+                                        dry_run=args.dry_run) if proj_id else \
+                {"created_file": 0, "created_folder": 0, "skipped": 0, "errors": 0}
+            for k in ("created_file", "created_folder", "skipped", "errors"):
+                totals[k] += cm[k]
+            line += (f" | created-missing: {cm['created_file']} file + "
+                     f"{cm['created_folder']} folder ({cm['skipped']} skipped, {cm['errors']} err)")
+        for k in ("lnk", "file_links", "folder_links", "deleted", "skipped", "errors"):
             totals[k] += s[k]
-        print(f"   {name}: {s['lnk']} .lnk -> "
-              f"{s['file_links']} file + {s['folder_links']} folder links, "
-              f"{s['deleted']} .lnk removed, {s['skipped']} skipped, {s['errors']} errors")
+        print(line)
 
     print("\n" + "=" * 60)
     print(f"TOTAL: {totals['lnk']} .lnk processed | "
           f"{totals['file_links']} file links | {totals['folder_links']} folder links | "
-          f"{totals['deleted']} .lnk removed | {totals['skipped']} skipped | "
-          f"{totals['errors']} errors")
+          f"{totals['deleted']} .lnk removed")
+    if args.create_missing:
+        print(f"       created-missing: {totals['created_file']} file + "
+              f"{totals['created_folder']} folder links")
+    print(f"       {totals['skipped']} skipped | {totals['errors']} errors")
     return 1 if totals["errors"] else 0
 
 

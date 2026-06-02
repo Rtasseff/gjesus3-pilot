@@ -275,7 +275,8 @@ link_filename: "${instrument}_${original_name}"
 - Unresolved `${X}` (key not in context dict) → log WARN, leave the literal `${X}` in the output. Safer than silently producing a half-formed name; the operator sees the broken-template indicator and fixes it.
 - Resolved-to-empty substitutions go through quietly — operator's choice if they reference a key that may be empty (e.g. `${discovered.mri_recon_indices}` could be empty for an exam where no reconstructions were kept).
 - Trailing `/` in the resolved value is stripped (operator may use it as a visual "this links to a folder" hint; the resolved name is used verbatim as the hard-link name by `linker.create_hardlink` — no extension is appended).
-- No Windows-unsafe-character sanitisation is applied — the documented `discovered.*` fields don't contain unsafe characters in practice. Add a sanitisation pass later if a real case requires it.
+- `${original_name}` resolves to the **basename** of the registry's `original_name`. This matters when staging is nested (microscopy folders store `original_name` as a staging-relative path like `Itziar/HLF/Colageno/x.czi`); a link name can't contain path separators, so the directory part is dropped (→ `x.czi`). The registry keeps the full `original_name`; only the link-name context is reduced. (Fixes the silent microscopy link-creation failure where the slash-containing name couldn't be written.)
+- No other Windows-unsafe-character sanitisation is applied — the documented `discovered.*` fields don't contain unsafe characters in practice. Add a sanitisation pass later if a real case requires it.
 
 **Per-instrument defaults (recommended patterns):**
 

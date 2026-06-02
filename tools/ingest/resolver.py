@@ -228,7 +228,16 @@ def resolve_link_filename(template, cfg_single, acq_id_str, acq_date):
     ):
         if k in cfg_single:
             v = cfg_single[k]
-            context[k] = "" if v is None else str(v)
+            if k == "original_name" and v:
+                # original_name may carry a staging-relative path (e.g.
+                # microscopy nested folders, "Itziar/HLF/Colageno/x.czi");
+                # a link name cannot contain path separators, so use the
+                # basename. The registry keeps the full original_name — only
+                # the link-name context is reduced. Splits on both separators
+                # for cross-platform safety.
+                context[k] = str(v).replace("\\", "/").rstrip("/").split("/")[-1]
+            else:
+                context[k] = "" if v is None else str(v)
     context["acq_id"] = acq_id_str or ""
     context["acq_date"] = acq_date or ""
 
