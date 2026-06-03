@@ -194,6 +194,22 @@ Read this row alongside Section A. "Where data lives" is the source share you co
 
 > Where a link name example shows `<original>`, the template's default `link_filename:` resolves to `original_name` — i.e. the source filename with the instrument code prepended. Where it shows a fully-resolved string (MRI, NI), the template ships a systematic `link_filename:` pattern to guarantee uniqueness within a project. See [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md) for the `link_filename:` resolver context.
 
+### 3.3 Operator self-service ingest (no-YAML path)
+
+> **Status:** BUILT (operator front-ends over the shared `tools/operator/` core; design + build plan in [`tasks/operator_ingest_tooling_plan.md`](../tasks/operator_ingest_tooling_plan.md)). §3.2 above remains the YAML / data-office path; this subsection is the simpler **point-at-a-folder** path for operators who do not want to edit YAML. Both run the **same validated pipeline** — the front-ends only build the config in memory and never reimplement ingest.
+
+For operators running ingest themselves on the acquisition machines there is now a no-YAML front-end per lane. They all **preview first** (a read-only "what will happen" table — one row per acquisition: ACQ-ID, sample, project, link name, file count) then ask to confirm, and they are idempotent (safe to re-run). The full operator-facing guide is [`tools/operator/README.md`](../tools/operator/README.md).
+
+| Lane | Front-end | Platform | How to run |
+|---|---|---|---|
+| Nuclear Imaging (Molecubes PET/CT) | `ni-ingest` (`tools/operator/ni_ingest.py`) | Linux acquisition machine | `python tools/operator/ni_ingest.py /path/to/folder [--dry-run] [--go]` |
+| Internal MRI (Bruker ParaVision) | `mri-ingest` (`tools/operator/mri_ingest.py`) | Linux acquisition machine | `python tools/operator/mri_ingest.py /path/to/study [--reconstructions all\|3\|1,3] [--model 7T\|11.7T] [--dry-run] [--go] [--ftp-remote …]` |
+| Microscopy (AxioScan 7 / Cell Observer / LSM 900) | microscopy GUI (`tools/operator/gui/`) | Windows | run the packaged `.exe` (opens in the browser) — pick a recipe → point at folder → preview → ingest |
+
+- The Linux scripts and the GUI find the NAS the same way `ingest_raw.py` does — `--nas-root` > `$GJESUS3_ROOT` > `/mnt/gjesus3`, validated for a `registries/` subfolder (the GUI persists the choice). MRI's optional `--ftp-remote` SFTP-pull uses the `GJESUS3_FTP_*` env vars (same as [`tools/ftp_mirror.py`](../tools/ftp_mirror.py)).
+- The microscopy GUI is **recipes + builder**: operators normally pick a saved recipe; the builder is for defining a new naming convention with a live `discovered.*` preview. It freezes to a single PyInstaller `.exe` so the locked-down Windows microscopy machine needs no Python install (build step in [`tools/operator/gui/README.md`](../tools/operator/gui/README.md)).
+- **NI live-machine note:** archive-mode NI ingest works today (extract the `.tgz` first with [`tools/extract_ni_archives.py`](../tools/extract_ni_archives.py)). Live (on-the-machine, non-archive) ingest is not wired up yet — only the live-folder-layout template (`molecubes_ni_live.yaml`) remains; deployment itself is unblocked (the NI server runs Linux and a script can be installed there — confirmed by Platform Manager Unai 2026-06-03).
+
 ---
 
 ## 4. Deposit Workflow (Operational)

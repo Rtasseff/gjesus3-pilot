@@ -2,6 +2,8 @@
 
 One-page reference for the raw-data ingest tool. For the operational ("when do I run this, what do I do next") view, see [`mfb-rdm-docs/11_OPERATIONS.md §3.2`](../mfb-rdm-docs/11_OPERATIONS.md). For the full config-schema specification, see [`mfb-rdm-docs/10_TOOLS.md §2.1`](../mfb-rdm-docs/10_TOOLS.md).
 
+> **No-YAML operator path:** operators can now ingest without editing YAML, over this same validated pipeline — dead-simple Linux scripts `ni-ingest` / `mri-ingest` (point at a folder, preview, confirm) and a Windows microscopy GUI (`.exe`, recipes + builder). They build the config in memory and call the same pipeline this CLI does. See [`tools/operator/README.md`](operator/README.md). This page remains the reference for the YAML / data-office path.
+
 ---
 
 ## Set the NAS root first (one-time per shell)
