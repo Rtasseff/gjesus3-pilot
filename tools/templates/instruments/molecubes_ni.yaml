@@ -288,7 +288,7 @@ link_filename: "${discovered.modality}_${discovered.short_sample}_${acq_date}_${
 #   age_at_acquisition:      "P12W"                   # DECIDED-REQUIRED — ISO-8601 duration preferred (P12W = 12 weeks postnatal)
 #   genotype:                "WT"                     # optional but recommended
 #   weight_at_acquisition_g: 24.3                     # optional — numeric grams (NB: protocol.txt's Animal weight (g) is already in grams)
-#   facility_animal_id:      "${discovered.short_sample}_${discovered.short_project}"  # optional — animal-facility-DB lookup key
+#   facility_animal_id:      "<animal_code>-AE-biomaGUNE-<NNNN>"  # SUBJECT id = facility canonical animal id (06_REGISTRIES §2.3) + DB lookup key. animal_code from short_sample (m14→14), NNNN from short_project (0525). In-vivo: sample_id = this. Auto-compose pending (tasks §3.2).
 #   source:                  "operator-entered"       # "animal-facility-db" | "operator-entered" | "molecubes-auto-extracted"
 
 # condition:

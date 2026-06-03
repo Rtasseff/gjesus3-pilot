@@ -166,7 +166,7 @@ link_filename: "${instrument}_${original_name}"
 #   sex:                     "F"                    # DECIDED-REQUIRED — "M" | "F" | "unknown"
 #   age_at_acquisition:      "P12W"                 # DECIDED-REQUIRED — age of source animal at the time of euthanasia (not the section date)
 #   genotype:                "WT"                   # optional but recommended
-#   facility_animal_id:      "MFB-2024-${discovered.project}-m${discovered.sample_short}"  # optional — animal-facility-DB lookup key (illustrative composition)
+#   facility_animal_id:      "<animal_code>-AE-biomaGUNE-<NNNN>"  # SUBJECT id = facility canonical animal id (06_REGISTRIES §2.3) + DB lookup key. Parse animal_code from sample_short (ID13B→13) + NNNN from project (0423); organ (B) → anatomical_entity, NOT the id. Auto-compose pending (tasks §3.2).
 #   source:                  "operator-entered"     # "animal-facility-db" | "operator-entered"
 
 # condition:

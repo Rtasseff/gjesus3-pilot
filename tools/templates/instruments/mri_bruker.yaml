@@ -321,7 +321,7 @@ link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${dis
 #   age_at_acquisition:      "P12W"                 # DECIDED-REQUIRED — ISO-8601 duration preferred (P12W = 12 weeks postnatal)
 #   genotype:                "WT"                   # optional but recommended
 #   weight_at_acquisition_g: 24.3                   # optional — numeric grams (NB: ParaVision's SUBJECT_weight is in kg)
-#   facility_animal_id:      "${discovered.jrc_id}" # optional — animal-facility-DB lookup key
+#   facility_animal_id:      "<animal_code>-AE-biomaGUNE-<NNNN>"  # SUBJECT id = facility canonical animal id (06_REGISTRIES §2.3) + DB lookup key. animal_code from jrc_id (m13→13), NNNN from project. In-vivo: sample_id = this. Auto-compose pending (tasks §3.2).
 #   source:                  "operator-entered"     # "animal-facility-db" | "operator-entered" | "bruker-auto-extracted"
 
 # condition:
