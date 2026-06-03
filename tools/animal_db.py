@@ -176,7 +176,15 @@ def age_iso8601(dob, acquisition):
             return x.date()
         if isinstance(x, date):
             return x
-        return datetime.fromisoformat(str(x)[:19]).date()
+        # Tolerate non-ISO / vendor-decorated strings (e.g. Bruker
+        # "<2025-09-15T14:30:00,500+0200>", "2025/10/29") — return None rather
+        # than raise, so callers (the Phase 3 writer + recovery tool) honour
+        # the non-blocking contract and leave age_at_acquisition blank instead
+        # of crashing the ingest/walk.
+        try:
+            return datetime.fromisoformat(str(x)[:19]).date()
+        except ValueError:
+            return None
 
     d0, d1 = _as_date(dob), _as_date(acquisition)
     if d0 is None or d1 is None:

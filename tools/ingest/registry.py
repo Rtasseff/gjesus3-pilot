@@ -48,9 +48,19 @@ def read_registry(registry_path):
     """
     if not os.path.exists(registry_path):
         return []
-    with open(registry_path, "r", newline="") as f:
-        reader = csv.DictReader(f)
-        return list(reader)
+    # Tolerant decode: prefer UTF-8 (what append_row writes — so accented
+    # operator/notes values round-trip correctly), but fall back to latin-1
+    # (which never raises) for legacy files written with a cp1252 console
+    # (e.g. registry_projects.csv produced by create_project). A fixed UTF-8
+    # read would crash on those; the platform-default read would mojibake the
+    # UTF-8 ones — the fallback chain reads both correctly.
+    for enc in ("utf-8-sig", "latin-1"):
+        try:
+            with open(registry_path, "r", encoding=enc, newline="") as f:
+                return list(csv.DictReader(f))
+        except UnicodeDecodeError:
+            continue
+    return []
 
 
 def append_row(registry_path, row_dict):

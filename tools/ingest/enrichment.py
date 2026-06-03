@@ -77,9 +77,20 @@ def _finalize_subject(subj, acq_for_age, source):
         if k in subj and subj[k] is not None:
             base[k] = subj[k]
     base["source"] = source
+    # Preserve the documented sentinel for fields whose "unknown" value is not
+    # empty-string: an explicit operator `sex: NA` resolves to "" but the
+    # sentinel for sex is "unknown".
+    if not base.get("sex"):
+        base["sex"] = "unknown"
+    # Age derivation is best-effort + NON-BLOCKING: age_iso8601 returns None on
+    # an unparseable date_of_birth, and we guard anyway so build_enrichment can
+    # never raise (08_METADATA §4.7) regardless of operator input.
     if base.get("date_of_birth") and not base.get("age_at_acquisition"):
-        base["age_at_acquisition"] = animal_db.age_iso8601(
-            base["date_of_birth"], acq_for_age) or ""
+        try:
+            base["age_at_acquisition"] = animal_db.age_iso8601(
+                base["date_of_birth"], acq_for_age) or ""
+        except Exception:
+            base["age_at_acquisition"] = ""
     return {k: base[k] for k in SUBJECT_ORDER}
 
 

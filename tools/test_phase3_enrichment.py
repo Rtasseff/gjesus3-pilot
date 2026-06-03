@@ -196,6 +196,60 @@ def test_unknown_source():
     check(subj["source"] == "unknown", "no flag + no override -> source unknown")
 
 
+def test_review_fixes():
+    """Regression guards for the Stage-4 adversarial-review findings."""
+    print("[review fixes]")
+    import recover_subject_metadata as rec
+
+    # animal_db.age_iso8601 must tolerate non-ISO / vendor dates (return None,
+    # never raise) — the root cause of the recover-walk crash + the operator
+    # bad-DOB batch abort.
+    for bad in ("<2025-09-15T14:30:00,500+0200>", "2025/10/29", "unknown", "", "x"):
+        try:
+            got = animal_db.age_iso8601(bad, "2025-10-16")
+            check(got is None, f"age_iso8601 tolerates non-ISO dob {bad!r} -> None")
+        except Exception as e:
+            check(False, f"age_iso8601 raised on {bad!r}: {e}")
+    check(animal_db.age_iso8601("2025-07-31", "2025-10-16T08:38:22,085") is not None,
+          "age_iso8601 still parses comma-decimal ISO acquisition")
+
+    # build_enrichment must NOT raise on an operator subject: with a bad DOB.
+    _, log = collecting_log()
+    case = base_case("organism", subject={"species": "Mus musculus",
+                                           "date_of_birth": "unknown"})
+    subj, _, _ = enrichment.build_enrichment(
+        case, acq_id="ACQ-B", acq_date="20251016",
+        acq_dt_iso="2025-10-16T00:00:00Z", log=log, lookup_fn=make_lookup("found"))
+    check(subj["age_at_acquisition"] == "", "operator bad DOB -> age '' (non-blocking)")
+    check(subj["source"] == "operator-entered", "operator override stays operator-entered")
+
+    # operator sex: NA must keep the 'unknown' sentinel, not become ''.
+    case2 = base_case("organism", subject={"species": "Mus musculus", "sex": "NA"})
+    s2, _, _ = enrichment.build_enrichment(
+        case2, acq_id="ACQ-S", acq_date="20251016", log=log, lookup_fn=make_lookup("found"))
+    check(s2["sex"] == "unknown", "operator sex:NA -> sentinel 'unknown'")
+
+    # recover: an operator-entered source that DISAGREES with the DB must be
+    # KEPT (no false 'animal-facility-db' provenance) when no DB field is written.
+    subject_op = {"species": "Rattus norvegicus", "strain": "Crl:WI(Han)",
+                  "sex": "F", "date_of_birth": "2025-01-01",
+                  "procedures": [{"type": "X", "date": "2025-02-02"}],
+                  "source": "operator-entered", "age_at_acquisition": "P40W"}
+    db_subj = {"species": "Mus musculus", "strain": "C57BL/6J", "sex": "M",
+               "date_of_birth": "2024-04-04", "procedures": []}
+    updates, skipped = rec.plan_subject_fill(subject_op, db_subj, "2025-10-16")
+    check("source" not in updates, "recover: operator source kept (not flipped) when no DB field written")
+    check(len(skipped) >= 3, "recover: real operator fields reported as skipped")
+
+    # recover: a placeholder (pending-db) source IS flipped + fields filled.
+    subject_ph = {"species": "", "strain": "", "sex": "unknown",
+                  "date_of_birth": None, "procedures": [],
+                  "source": "pending-db", "age_at_acquisition": ""}
+    updates2, _ = rec.plan_subject_fill(subject_ph, db_subj, "2025-10-16")
+    check(updates2.get("source") == "animal-facility-db", "recover: placeholder source flipped")
+    check(updates2.get("species") == "Mus musculus", "recover: placeholder species filled from DB")
+
+
 def main():
     test_resolvers()
     test_subject_found()
@@ -205,6 +259,7 @@ def main():
     test_operator_override()
     test_tissue_and_cells()
     test_unknown_source()
+    test_review_fixes()
     print()
     if FAILS:
         print(f"FAILED ({len(FAILS)}):")
