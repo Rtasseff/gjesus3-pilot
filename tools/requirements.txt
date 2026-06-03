@@ -2,3 +2,4 @@ pydicom>=2.4
 pyyaml>=6.0
 tqdm>=4.60
 czifile>=2019.7.2
+pymysql>=1.1  # animal_db.py — read-only animal-facility DB client (~/.my.cnf)
