@@ -137,6 +137,14 @@
 #     technician; researchers run the equipment).
 #   - `link_filename:` — `<modality>_<short_sample>_<acq_date>_<acq_datetime_full>`.
 #     Example: `PET_m14_20251029_20251029100641`. Unique per .tgz.
+#   - Phase 3 enrichment (LIVE, this template): `subject:` is auto-filled
+#     from the animal-facility DB (auto_discover.subject_from_db +
+#     subject_lookup below; project_alias from short_project, animal_code
+#     from short_sample), and live `condition:` + `anatomy:` blocks (set
+#     once per batch) are written into every metadata.json. sample_type =
+#     organism so all three enrichment blocks fire. NON-BLOCKING: a DB miss
+#     queues to registries/pending_subject_metadata.csv and the acq still
+#     ingests; null tri-state values just WARN. See 08_METADATA §4.4-4.7.
 #
 # ============================================================================
 # WHAT YOU MUST EDIT PER BATCH
@@ -201,6 +209,25 @@ auto_discover:
   # Populates the 15 `discovered.ni_*` fields documented at the top of
   # this file and the structured `ni:` sidecar block.
 
+  # --- Subject metadata from the animal-facility DB (Phase 3) ---
+  # When true, the ingest looks each animal up in the animal-facility DB and
+  # writes the subject: block (species/strain/sex/DOB->age/procedures) into
+  # metadata.json. Needs DB credentials at ~/.my.cnf on the ingest machine +
+  # on-network; on a miss / no-creds the acq still ingests with a
+  # source="pending-db" placeholder and is queued to
+  # registries/pending_subject_metadata.csv for later recovery (NON-BLOCKING,
+  # 08_METADATA §4.4.6). See tools/animal_db.py.
+  subject_from_db: true
+  subject_lookup:
+    # How to build the DB key from discovered.* fields. project_alias is the
+    # NNNN animal-protocol code; animal_code is the bare animal number. The
+    # enrichment layer strips the leading "m" (m14->14) before the lookup;
+    # phantom/QC short_sample values (e.g. "phantom_xyz") don't parse to a
+    # number and route cleanly to the non-blocking unknown path (no bogus
+    # DB lookup).
+    project_alias: "${discovered.short_project}"   # e.g. "0525"
+    animal_code:   "${discovered.short_sample}"    # e.g. "m14" (-> 14)
+
 registry:
   # PER-CASE instrument code from the parsed modality. The
   # config.INSTRUMENT_ECOSYSTEM map accepts PET / CT / SPECT / OI here.
@@ -259,44 +286,68 @@ auto_create_project:
 link_filename: "${discovered.modality}_${discovered.short_sample}_${acq_date}_${discovered.acq_datetime_full}"
 
 # ============================================================================
-# PRECLINICAL METADATA — subject: + condition: blocks
-# (FORWARD-COMPATIBLE SCAFFOLDING; writer ships in Phase 3 of tasks.md §3.2)
+# PRECLINICAL METADATA — condition: + anatomy: blocks (LIVE, Phase 3)
 # ============================================================================
-# Until the Phase 3 sidecar writer lands, anything in these blocks is IGNORED
-# by the ingest pipeline. Uncomment + fill once the writer is live. Required
-# when sample_type ∈ {organism, tissue} — ALWAYS the case for internal NI.
+# These are written into metadata.json for every acquisition this batch
+# produces (sample_type = organism). NON-BLOCKING (08_METADATA §4.7): leave a
+# value unknown and the writer records an explicit sentinel (null / "") and
+# WARNs — it never refuses the ingest. SET ONCE PER BATCH: edit the values
+# below to describe THIS batch, then every acq inherits them. NI sessions
+# routinely mix conditions across .tgz archives (same animal at baseline +
+# post-tracer-injection, multi-timepoint dynamic PET) and even across animals
+# in one batch — for those override per-acq at
+# /projects/<proj>/metadata/<acq_id>.json.
 #
-# Spec: [08_METADATA §4.4 (subject:) + §4.5 (condition:)].
+# subject: (species/strain/sex/DOB->age) is filled automatically from the
+# animal-facility DB via auto_discover.subject_from_db above — no manual block
+# needed. The DB does NOT know disease/control state, that's a study-design
+# property, so condition: stays operator-entered. To OVERRIDE the DB (or supply
+# it when the DB has no record), uncomment the subject: block at the bottom.
 #
-# Two distinct source pipelines:
-#   subject:    per-subject, fixed (species / strain / sex / age). Auto from
-#               animal-facility-DB once integration lands (`tasks.md §3.2`
-#               Phase 1, blocked on IT); until then operator-entered here.
-#               NB: Molecubes protocol.txt only carries Animal ID + weight —
-#               species/strain/sex/age MUST come from DB or operator entry.
-#   condition:  per-acquisition, varies (same animal at baseline + post-tracer-
-#               injection, multi-timepoint dynamic PET, etc.). Operator-entered
-#               only — the DB does NOT know disease/control state, it's a
-#               study-design property. For batches that mix conditions across
-#               .tgz archives, use per-acquisition overrides at
-#               /projects/<proj>/metadata/<acq_id>.json.
+# Spec: 08_METADATA §4.4 (subject) / §4.5 (condition) / §4.6 (anatomy).
 
+condition:
+  # EDIT per batch — the primary cohort filter. true=control, false=case
+  # (disease/treated), null=unknown (WARN, still ingests).
+  is_control:    null
+  # EDIT — model classification or "wild_type" / "non_transgenic". Common
+  # preclinical-NI examples: tumour xenograft models ("MDA-MB-231_orthotopic"
+  # / "U87_glioma"), neurological models ("APP/PS1_AD" / "MPTP_PD"),
+  # inflammation / atherosclerosis models. Empty -> "" + WARN.
+  disease_model: ""
+  # EDIT — state at scan time: "baseline" / "post_tracer_15min" / "endpoint".
+  disease_state: ""
+  # control_type:   "naive"      # optional when is_control=true: naive/sham/vehicle/littermate
+  # treatment:      null         # optional free-text, e.g. "drug_X_5mg/kg_IP_day_0" (also handy for tracer context, though protocol.txt captures isotope/activity)
+  # timepoint_days: 0            # optional numeric — days from intervention
+  # study_arm:      "control"    # optional cohort-grouping label
+  source:        "operator-entered"   # operator-entered | study-yaml | imported-from-excel
+
+anatomy:
+  # EDIT per batch — the whole-body-vs-ROI flag. true=whole-body,
+  # false=region of interest, null=unknown (WARN, still ingests). Whole-body
+  # is common for static PET/CT (true); set false + a region for a targeted
+  # field of view.
+  is_whole_body: null
+  # When is_whole_body=false, give the UBERON-coded region (verified starter
+  # ids: brain UBERON:0000955, heart UBERON:0000948, lung UBERON:0002048,
+  # thoracic cavity UBERON:0002224, abdomen UBERON:0000916).
+  # region:
+  #   label:    "brain"
+  #   ontology: "UBERON"
+  #   id:       "UBERON:0000955"
+  source:        "operator-entered"   # operator-entered | study-yaml | auto-guess
+
+# OPTIONAL subject: override — only needed to override the DB lookup or when
+# the animal isn't in the DB. Recognized fields: facility_animal_id, species,
+# strain, sex, date_of_birth, age_at_acquisition, genotype,
+# weight_at_acquisition_g, cohort_id, procedures, source. age_at_acquisition
+# is derived from date_of_birth automatically when present. (Molecubes
+# protocol.txt only carries Animal ID + weight — species/strain/sex/age must
+# come from the DB or this block.)
 # subject:
-#   species:                 "Mus musculus"           # DECIDED-REQUIRED — NCBI Taxonomy aligned
-#   strain:                  "C57BL/6J"               # DECIDED-REQUIRED — strain or genetic background
-#   sex:                     "F"                      # DECIDED-REQUIRED — "M" | "F" | "unknown"
-#   age_at_acquisition:      "P12W"                   # DECIDED-REQUIRED — ISO-8601 duration preferred (P12W = 12 weeks postnatal)
-#   genotype:                "WT"                     # optional but recommended
-#   weight_at_acquisition_g: 24.3                     # optional — numeric grams (NB: protocol.txt's Animal weight (g) is already in grams)
-#   facility_animal_id:      "<animal_code>-AE-biomaGUNE-<NNNN>"  # SUBJECT id = facility canonical animal id (06_REGISTRIES §2.3) + DB lookup key. animal_code from short_sample (m14→14), NNNN from short_project (0525). In-vivo: sample_id = this. Auto-compose pending (tasks §3.2).
-#   source:                  "operator-entered"       # "animal-facility-db" | "operator-entered" | "molecubes-auto-extracted"
-
-# condition:
-#   disease_model:           "wild_type"              # DRAFT-REQUIRED — model classification OR "wild_type". Common preclinical-NI examples: tumour xenograft models ("MDA-MB-231_orthotopic_breast" / "U87_glioma"), neurological models ("APP/PS1_AD" / "MPTP_PD"), inflammation/atherosclerosis models.
-#   disease_state:           "baseline"               # DRAFT-REQUIRED — state at scan time: "baseline" / "post_tracer_15min" / "endpoint" / "treatment_day_3"
-#   is_control:              true                     # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
-#   control_type:            "naive"                  # optional when is_control=true: "naive" / "sham" / "vehicle" / "littermate"
-#   treatment:               null                     # optional free-text: e.g. "vehicle", "drug_X_5mg/kg_IP_day_0". For PET also useful to record tracer-related context here even though protocol.txt captures isotope/activity.
-#   timepoint_days:          0                        # optional numeric — days from study start / from intervention
-#   study_arm:               "control_naive"          # optional — explicit experimental-arm label
-#   source:                  "operator-entered"       # "operator-entered" | "study-yaml" | "imported-from-excel"
+#   species:            "Mus musculus"
+#   strain:             "C57BL/6J"
+#   sex:                "F"
+#   date_of_birth:      "2025-01-15"
+#   source:             "operator-entered"

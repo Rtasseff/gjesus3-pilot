@@ -91,6 +91,11 @@
 #   - `auto_create_project:` — owner = researcher.
 #   - `link_filename: ${instrument}_${original_name}` — hard link
 #     prefixed with LSM9_ for clarity in raw_linked/.
+#   - Phase 3 enrichment: the DB-driven subject:/condition:/anatomy: writers
+#     do NOT fire for sample_type = cells (cell lines aren't in the
+#     animal-facility DB; facility_animal_id stays null). The commented
+#     subject:/condition: scaffolding at the bottom is optional operator-
+#     entered context only. See 08_METADATA §4.4-4.7.
 #
 # ============================================================================
 # WHAT YOU MUST EDIT PER BATCH
@@ -204,11 +209,14 @@ auto_create_project:
 link_filename: "${instrument}_${original_name}"
 
 # ============================================================================
-# PRECLINICAL METADATA — subject: + condition: blocks
-# (FORWARD-COMPATIBLE SCAFFOLDING; writer ships in Phase 3 of tasks.md §3.2)
+# PRECLINICAL METADATA — subject: + condition: blocks (OPTIONAL operator context)
 # ============================================================================
-# Until the Phase 3 sidecar writer lands, anything in these blocks is IGNORED
-# by the ingest pipeline. Uncomment + fill once the writer is live.
+# NOTE (Phase 3): the DB-driven subject:/condition:/anatomy: writers do NOT
+# fire for sample_type = cells — cell lines aren't in the animal-facility DB,
+# so facility_animal_id stays null and no DB lookup / pending-queue happens.
+# The blocks below are OPTIONAL operator-entered context only (uncomment + fill
+# if you want the cell-line's source-organism / treatment context recorded).
+# Anything left commented is simply absent from metadata.json.
 #
 # CONDITIONAL: required when the cell line is animal-origin (the typical case
 # for LSM 900 work — nanoparticle uptake into cultured lines like MDA-MB-231,

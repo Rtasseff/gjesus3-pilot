@@ -44,6 +44,18 @@ auto_discover:
   filename_parse:
     regex: '^(?P<user>[a-z]+)_(?P<series_id>\d+)_(?P<acq_date_short>\d{6})_(?P<short_project>\d+)_(?P<short_sample>[A-Za-z]+\d+|phantom[_a-z0-9]*)_(?P<acq_datetime_full>\d{14})_(?P<modality>PET|CT|SPECT|OI)$'
 
+  # Phase 3: animal-facility DB subject lookup. project_alias = animal-protocol
+  # short id (short_project), animal_code = animal id (short_sample, e.g.
+  # "m14" -> 14, stripped by the enrichment layer). phantom/QC short_sample
+  # values don't parse to a number and route to the non-blocking unknown path.
+  # NON-BLOCKING — a DB miss / no-creds queues the acq to
+  # registries/pending_subject_metadata.csv and still ingests (08_METADATA
+  # §4.4.6). See tools/animal_db.py.
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.short_project}"   # e.g. "0525"
+    animal_code:   "${discovered.short_sample}"    # e.g. "m14" (-> 14)
+
 registry:
   instrument:           discovered.modality
   data_ecosystem:       DICOM
@@ -66,3 +78,24 @@ auto_create_project:
 # Unique-per-acquisition link name.
 # Example resolved: PET_m14_20251029_20251029100641
 link_filename: "${discovered.modality}_${discovered.short_sample}_${acq_date}_${discovered.acq_datetime_full}"
+
+# Phase 3 preclinical metadata (sample_type = organism). NON-BLOCKING: null
+# tri-state values just WARN; the acq still ingests (08_METADATA §4.7). This
+# round-8 archive mixes PET + CT across animals m13/m14/... and series 0525 +
+# 1207, so condition genuinely varies acq-to-acq (baseline vs post-tracer,
+# different animals). Left as null sentinels for the TEST re-ingest; override
+# per-acq at /projects/<proj>/metadata/<acq_id>.json when the cohort key for
+# this exhibition data is confirmed.
+condition:
+  is_control:    null
+  disease_model: ""
+  disease_state: ""
+  source:        "operator-entered"
+
+anatomy:
+  is_whole_body: null
+  # region:                     # required when is_whole_body=false
+  #   label:    "brain"
+  #   ontology: "UBERON"
+  #   id:       "UBERON:0000955"
+  source:        "operator-entered"

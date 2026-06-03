@@ -105,6 +105,26 @@ auto_discover:
   # (e.g. AxioScan day folder) and put it in discovered.acquisition_date.
   acquisition_date_from: parent_folder_name
 
+  # --- Subject metadata from the animal-facility DB (Phase 3, OPTIONAL) ---
+  # For in-vivo (sample_type=organism) or tissue acquisitions, set
+  # subject_from_db: true to look each animal up in the animal-facility DB and
+  # auto-write the subject: block (species/strain/sex/DOB->age/procedures) into
+  # metadata.json. NON-BLOCKING: on a DB miss / no-creds the acq still ingests
+  # with a source="pending-db" placeholder and is queued to
+  # registries/pending_subject_metadata.csv for later recovery (08_METADATA
+  # §4.4.6). Leave OFF (or absent) for sample_type=cells/material/phantom — the
+  # DB writers don't fire for those. See tools/animal_db.py.
+  #
+  # subject_from_db: true
+  # subject_lookup:
+  #   # How to build the DB key from discovered.* fields. project_alias is the
+  #   # NNNN animal-protocol code; animal_code is the bare animal number. The
+  #   # enrichment layer strips leading "m"/"ID" decoration and any trailing
+  #   # organ letter (m14->14, ID13B->13). Unparseable codes (phantom/QC)
+  #   # route cleanly to the non-blocking unknown path.
+  #   project_alias: "${discovered.<project-code-field>}"
+  #   animal_code:   "${discovered.<animal-code-field>}"
+
 # -----------------------------------------------------------------------------
 registry:
   # User-required (key must be present; NA allowed where intentional).
@@ -138,3 +158,42 @@ registry:
 #   owner:       "${discovered.operator}"
 #   description: "Auto-created on first ingest from ${discovered.<something>}"
 #   notes:       ""
+
+# -----------------------------------------------------------------------------
+# PRECLINICAL METADATA — subject: / condition: / anatomy: blocks (Phase 3)
+# -----------------------------------------------------------------------------
+# Written into metadata.json for sample_type ∈ {organism, tissue}. anatomy: is
+# ORGANISM-only (in-vivo whole-body-vs-ROI). NON-BLOCKING (08_METADATA §4.7):
+# an unknown value records an explicit sentinel (null / "") and WARNs — never
+# refuses the ingest. SET ONCE PER BATCH; override per-acq for mixed cohorts at
+# /projects/<proj>/metadata/<acq_id>.json. Spec: 08_METADATA §4.4 (subject) /
+# §4.5 (condition) / §4.6 (anatomy).
+#
+# subject: is normally AUTO-FILLED from the animal-facility DB (set
+# auto_discover.subject_from_db: true above). Only add a subject: block to
+# OVERRIDE the DB or supply it when the animal isn't in the DB.
+
+# condition:
+#   is_control:    null                 # tri-state true|false|null (null=unknown, WARN)
+#   disease_model: ""                   # model classification or "wild_type"; "" -> WARN
+#   disease_state: ""                   # state at acquisition, e.g. "baseline"/"endpoint"
+#   # control_type:   "naive"           # optional when is_control=true: naive/sham/vehicle/littermate
+#   # treatment:      null              # optional free-text
+#   # timepoint_days: 0                 # optional numeric — days from intervention
+#   # study_arm:      "control"         # optional cohort-grouping label
+#   source:        "operator-entered"   # operator-entered | study-yaml | imported-from-excel
+
+# anatomy:   # ORGANISM-only
+#   is_whole_body: null                 # tri-state true|false|null (null=unknown, WARN)
+#   # region:                           # required when is_whole_body=false
+#   #   label:    "brain"
+#   #   ontology: "UBERON"
+#   #   id:       "UBERON:0000955"
+#   source:        "operator-entered"   # operator-entered | study-yaml | auto-guess
+
+# subject:   # OPTIONAL override of the DB lookup (or supply when not in DB)
+#   species:            "Mus musculus"
+#   strain:             "C57BL/6J"
+#   sex:                "F"
+#   date_of_birth:      "2025-01-15"    # age_at_acquisition derived automatically
+#   source:             "operator-entered"

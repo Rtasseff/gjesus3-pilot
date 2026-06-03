@@ -70,6 +70,16 @@
 #   - `link_filename:` — `${instrument}_${original_name}` keeps the full
 #     informative filename + a clear instrument prefix in the project's
 #     raw_linked/ folder. Resolver-evaluated at link-creation time.
+#   - Phase 3 enrichment (LIVE, this template): `subject:` is auto-filled
+#     from the animal-facility DB (auto_discover.subject_from_db +
+#     subject_lookup below; project_alias from project, animal_code from
+#     sample_short), and a live `condition:` block (set once per batch) is
+#     written into every metadata.json. sample_type = tissue so subject +
+#     condition fire; NO anatomy: block (anatomy is organism-only — the
+#     organ that a slide came from is a sample-level anatomical_entity, not
+#     an in-vivo whole-body/ROI flag). NON-BLOCKING: a DB miss queues to
+#     registries/pending_subject_metadata.csv and the acq still ingests.
+#     See 08_METADATA §4.4-4.7.
 #
 # ============================================================================
 # WHAT YOU MUST EDIT PER BATCH
@@ -108,6 +118,26 @@ auto_discover:
     group_code: MFB
   acquisition_date_from: parent_folder_name
 
+  # --- Subject metadata from the animal-facility DB (Phase 3) ---
+  # For a tissue section, the "subject" is the ANIMAL the tissue came from.
+  # When true, the ingest looks that animal up in the animal-facility DB and
+  # writes the subject: block (species/strain/sex/DOB->age/procedures) into
+  # metadata.json, tying the slide back to its source animal. Needs DB
+  # credentials at ~/.my.cnf on the ingest machine + on-network; on a
+  # miss / no-creds the acq still ingests with a source="pending-db"
+  # placeholder and is queued to registries/pending_subject_metadata.csv for
+  # later recovery (NON-BLOCKING, 08_METADATA §4.4.6). See tools/animal_db.py.
+  subject_from_db: true
+  subject_lookup:
+    # How to build the DB key from discovered.* fields. project_alias is the
+    # NNNN animal-protocol code; animal_code is the bare animal number. The
+    # enrichment layer strips the "ID" decoration AND the trailing organ
+    # letter before the lookup: sample_short "ID13B" -> animal_code 13 (the
+    # organ "B" is a SAMPLE-level anatomical_entity, NOT part of the subject
+    # id and NOT part of the DB key).
+    project_alias: "${discovered.project}"        # e.g. "0423"
+    animal_code:   "${discovered.sample_short}"   # e.g. "ID13B" (-> 13, organ B dropped)
+
 registry:
   instrument:           ZWSI
   data_ecosystem:       MICROSCOPY
@@ -137,47 +167,62 @@ auto_create_project:
 link_filename: "${instrument}_${original_name}"
 
 # ============================================================================
-# PRECLINICAL METADATA — subject: + condition: blocks
-# (FORWARD-COMPATIBLE SCAFFOLDING; writer ships in Phase 3 of tasks.md §3.2)
+# PRECLINICAL METADATA — condition: block (LIVE, Phase 3)
 # ============================================================================
-# Until the Phase 3 sidecar writer lands, anything in these blocks is IGNORED
-# by the ingest pipeline. Uncomment + fill once the writer is live.
+# Written into metadata.json for every acquisition this batch produces
+# (sample_type = tissue). NON-BLOCKING (08_METADATA §4.7): leave a value
+# unknown and the writer records an explicit sentinel (null / "") and WARNs —
+# it never refuses the ingest. SET ONCE PER BATCH: edit the values below, then
+# every acq inherits them.
 #
-# Required when sample_type ∈ {organism, tissue} — for MFB AxioScan work, this
-# is the typical case (H&E / IHC / fluorescence sections from mouse organs →
-# sample_type = tissue, defaulted by this template). NOT required when scanning
-# non-biological samples (sample_type = material / phantom).
+# ⚠️ AxioScan batches OFTEN MIX COHORTS — a single day folder commonly holds
+# slides from several animals spanning both control and disease-model arms.
+# A batch-level condition: is correct only for a single-cohort batch. For the
+# common mixed case, set is_control: null here and OVERRIDE per-acq at
+# /projects/<proj>/metadata/<acq_id>.json so each slide carries the right
+# cohort assignment.
 #
-# Spec: [08_METADATA §4.4 (subject:) + §4.5 (condition:)].
+# subject: (species/strain/sex/DOB->age of the SOURCE ANIMAL) is filled
+# automatically from the animal-facility DB via auto_discover.subject_from_db
+# above — no manual block needed. To OVERRIDE the DB (or supply it when the
+# animal isn't in the DB), uncomment the subject: block at the bottom.
 #
-# Source pipelines:
-#   subject:    per-subject, fixed. For tissue sections, "subject" = the
-#               animal the tissue came from. Auto from animal-facility-DB
-#               once integration lands; until then operator-entered. The
-#               facility_animal_id ties the slide back to its source animal.
-#   condition:  per-acquisition, varies. For a batch of slides from a mixed
-#               cohort (some WT, some disease-model), condition: needs to be
-#               per-acquisition — set via /projects/<proj>/metadata/<acq_id>.json
-#               instead of the batch-level block here.
+# NO anatomy: block — anatomy is ORGANISM-only (whole-body-vs-ROI of an
+# in-vivo scan). The organ a slide was cut from (the "B" in sample_short
+# "ID13B") is a SAMPLE-level anatomical_entity, recorded elsewhere, not via
+# the in-vivo anatomy: block.
+#
+# Spec: 08_METADATA §4.4 (subject) / §4.5 (condition).
 
+condition:
+  # EDIT per batch — the primary cohort filter. true=control, false=case
+  # (disease/treated), null=unknown (WARN, still ingests). Leave null for a
+  # mixed-cohort batch and override per-acq (see warning above).
+  is_control:    null
+  # EDIT — model classification or "wild_type" / "non_transgenic". Empty -> ""
+  # + WARN.
+  disease_model: ""
+  # EDIT — state at section time (ex-vivo tissue): typically "endpoint" /
+  # "post_mortem_<context>" / "<intervention>_day_N".
+  disease_state: ""
+  # control_type:   "naive"      # optional when is_control=true: naive/sham/vehicle/littermate
+  # treatment:      null         # optional free-text
+  # timepoint_days: null         # optional numeric — days from intervention
+  # study_arm:      "control"    # optional cohort-grouping label
+  source:        "operator-entered"   # operator-entered | study-yaml | imported-from-excel
+
+# OPTIONAL subject: override — only needed to override the DB lookup or when
+# the source animal isn't in the DB. Recognized fields: facility_animal_id,
+# species, strain, sex, date_of_birth, age_at_acquisition, genotype,
+# weight_at_acquisition_g, cohort_id, procedures, source. age_at_acquisition
+# is derived from date_of_birth automatically when present (for tissue, the
+# source animal's age at euthanasia, not the section date).
 # subject:
-#   species:                 "Mus musculus"         # DECIDED-REQUIRED
-#   strain:                  "C57BL/6J"             # DECIDED-REQUIRED — strain of the source animal
-#   sex:                     "F"                    # DECIDED-REQUIRED — "M" | "F" | "unknown"
-#   age_at_acquisition:      "P12W"                 # DECIDED-REQUIRED — age of source animal at the time of euthanasia (not the section date)
-#   genotype:                "WT"                   # optional but recommended
-#   facility_animal_id:      "<animal_code>-AE-biomaGUNE-<NNNN>"  # SUBJECT id = facility canonical animal id (06_REGISTRIES §2.3) + DB lookup key. Parse animal_code from sample_short (ID13B→13) + NNNN from project (0423); organ (B) → anatomical_entity, NOT the id. Auto-compose pending (tasks §3.2).
-#   source:                  "operator-entered"     # "animal-facility-db" | "operator-entered"
-
-# condition:
-#   disease_model:           "wild_type"            # DRAFT-REQUIRED — model classification OR "wild_type" / "non_transgenic"
-#   disease_state:           "endpoint"             # DRAFT-REQUIRED — for ex-vivo tissue: typically "endpoint" / "post_mortem_<context>" / "<intervention>_day_N"
-#   is_control:              true                   # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
-#   control_type:            "naive"                # optional when is_control=true: "naive" / "sham" / "vehicle" / "littermate"
-#   treatment:               null                   # optional free-text
-#   timepoint_days:          null                   # optional numeric
-#   study_arm:               "control_naive"        # optional — explicit experimental-arm label
-#   source:                  "operator-entered"     # provenance
+#   species:            "Mus musculus"
+#   strain:             "C57BL/6J"
+#   sex:                "F"
+#   date_of_birth:      "2025-01-15"
+#   source:             "operator-entered"
 #
 # For NON-BIOLOGICAL samples (sample_type = material / phantom):
-# both blocks are NOT required — comment out or leave absent.
+# the condition: block is NOT required — comment out or leave absent.

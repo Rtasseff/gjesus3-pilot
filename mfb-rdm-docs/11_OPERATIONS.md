@@ -131,7 +131,9 @@ The conceptual model above is now applied on the live container. **IT will not c
 
 Daily flow for depositing a new acquisition. This is the operational view — what to do and in what order. For the underlying command syntax and flags, see [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md).
 
-> **🔶 Pilot scope (2026-05):** The example paths, config name, and filename conventions below are written from the **AxioScan 7** perspective — that's the only instrument validated end-to-end so far. The *structure* of the workflow (find/write YAML config → dry-run → real run → verify) is intended to generalize. As more instruments come online (Cell Observer, LSM 900, MRI, Nuclear Imaging), this section will be refactored to separate the common steps from the per-instrument specifics (share path, expected filename pattern, project-hint convention). For now, treat the AxioScan 7 examples as the working template and ask the Data Mgmt Lead before applying them to a different instrument.
+The workflow is **the same four beats for every instrument** — only the share path, the expected filename/folder pattern, and the template you copy differ. Section A is the instrument-agnostic flow; Section B is the per-instrument cheat-sheet you read alongside it.
+
+#### A. Common workflow (all instruments)
 
 > **One-time per shell session (PowerShell on Windows):** point the script at the NAS once. Either add the line to your PowerShell profile or run it before each session:
 >
@@ -141,17 +143,20 @@ Daily flow for depositing a new acquisition. This is the operational view — wh
 >
 > If you forget, the script will now error out clearly rather than silently writing into a phantom path on your C: drive. The flag form `--nas-root "J:\"` on each command also works.
 
-1. **Finish the acquisition.** Confirm the file(s) are on the instrument's usual share (e.g. AxioScan 7 writes to `\\goptical\GOpticalUsers data\AxioScan\<YYYYMMDD>\`). Do not move them yet.
-2. **Find or write the YAML config.** Start from the **per-instrument template** at [`tools/templates/instruments/<instrument>.yaml`](../tools/templates/instruments/) (currently: `axioscan7.yaml`). If your instrument doesn't have one yet, start from the universal [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml) and ask the Data Mgmt Lead before running — the per-instrument template captures conventions that aren't obvious. Save your copy as `tools/configs/<instrument>_<batch>.yaml` (e.g. `axioscan7_20260520.yaml`). The configs folder is under git and the relative path of the config you ran is stamped into every registry row it produces (`ingest_config` column).
-3. **Edit the config for this batch.** At minimum, update `auto_discover.staging_dir` to your folder. Adjust per-batch fields (operator, project_hint pattern) as needed. The full schema is documented in [`10_TOOLS.md §2.1`](10_TOOLS.md).
-4. **Dry-run.** Always first. Inspect the log: file count, parsed values, project resolution, any warnings.
+1. **Finish the acquisition.** Confirm the file(s)/folder are on the instrument's usual share (Section B, "Where data lives"). For instruments whose data must first be pulled or extracted to local staging (MRI via `ftp_mirror.py`, Nuclear Imaging via `extract_ni_archives.py`), do that step first — see the per-instrument template header. Do not move the source by hand.
+2. **Copy and edit the per-instrument template.** Start from the **per-instrument template** for your instrument (Section B, "starter template"). If your instrument doesn't have one yet, start from the universal [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml) and ask the Data Mgmt Lead first — the per-instrument template captures conventions that aren't obvious. Save your copy as `tools/configs/<instrument>_<batch>.yaml` (Section B, "example per-batch config"). At minimum, edit `auto_discover.staging_dir` to point at your batch folder and update `registry.notes` with a short batch description. The configs folder is under git and the relative path of the config you ran is stamped into every registry row it produces (`ingest_config` column). The full schema is documented in [`10_TOOLS.md §2.1`](10_TOOLS.md).
+3. **Dry-run.** Always first. Inspect the log: file count, parsed values, project resolution, any warnings.
 
    ```powershell
    python tools/ingest_raw.py -c tools/configs/<your_config>.yaml --dry-run
    ```
 
-5. **Run for real.** Same command without `--dry-run`. Wait for it to finish.
-6. **Verify.** Open `registry_raw.csv`; confirm one new row per acquisition. Confirm the destination folder under `/raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/` contains `metadata.json`, `checksums.json`, `README.txt`. If a project was linked, confirm a `.lnk` shortcut appeared under `/projects/<proj-short-name>/raw_linked/`.
+4. **Run for real.** Same command without `--dry-run`. Wait for it to finish.
+5. **Verify.** Four checks, the same regardless of instrument:
+   - **Registry:** open `registry_raw.csv`; confirm **one new row per acquisition**.
+   - **Destination:** the folder under `/raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/` contains `metadata.json`, `checksums.json`, and `README.txt`.
+   - **Project link:** if a project was linked, a **hard link** appeared under `/projects/<proj-short-name>/raw_linked/`, named per the config's `link_filename:` (Section B, "link name example"). Since 2026-06-02 this is a real NTFS/SMB **hard link**, not a `.lnk` shortcut — it shows up as an ordinary file (or, for folder-primary acquisitions like MRI/NI, a real folder of per-file hard links) carrying the resolved name, with no extension added.
+   - **No surprises:** scan the log for any `WARN`/`ERROR` lines and confirm the parsed values look right.
 
 **What NOT to do:**
 
@@ -175,6 +180,20 @@ Daily flow for depositing a new acquisition. This is the operational view — wh
 | Raw area | `\\GJESUS3\gjesus3\raw\` |
 | Projects area | `\\GJESUS3\gjesus3\projects\` |
 
+#### B. Per-instrument cheat-sheet
+
+Read this row alongside Section A. "Where data lives" is the source share you copy *from*; "starter template" is the file you copy in step 2; "link name example" is what the verify step (A.5) should show under `/projects/<proj>/raw_linked/`. Cells marked **GAP** are not yet confirmed — ask the Data Mgmt Lead before assuming a value.
+
+| Instrument | Code | Where data lives / share | filename-or-folder pattern | starter template | example per-batch config | link name example |
+|---|---|---|---|---|---|---|
+| AxioScan 7 WSI | `ZWSI` | `\\goptical\GOpticalUsers data\AxioScan\<YYYYMMDD>\` (one `.czi` per scan; Ryan maps `S:`) | filename, `_`-separated: `MFB_<operator>_<project>_<sample_short>_<section>_<stain>_<mag>.czi` | `tools/templates/instruments/axioscan7.yaml` | `tools/configs/axioscan7_20260522.yaml` | `ZWSI_MFB_AUA_1022_ID58T_1_Hif1A_10x.czi` |
+| Cell Observer | `CELL` | group drive, operator folder (Ryan maps `K:`); path carries most context | path `<researcher>/<cell_line>/<experiment>/` + light filename | `tools/templates/instruments/cell_observer_cells.yaml` | `tools/configs/cell_observer_itziar_alphasma_TEST.yaml` | `CELL_<original>.czi` (template default) |
+| LSM 900 confocal | `LSM9` | same group drive (`K:`) | batch-folder regex `<researcher>_<experiment>_<cell_line>` | `tools/templates/instruments/lsm900.yaml` | `tools/configs/lsm900_laura_uptake_TEST.yaml` | `LSM9_<original>.czi` |
+| Internal MRI (Bruker ParaVision 7T/11.7T) | `MRI` | acq machine `/opt/PV-7.0.0/data/nmr/`, SFTP-pulled to local staging (`tools/ftp_mirror.py`); production NAS-side staging path = **GAP** | folder-as-primary; study-folder regex `jrc[_]?YYMMDD_m<animal>_<project_code>` | `tools/templates/instruments/mri_bruker.yaml` | `tools/configs/mri_bruker_20251016_TEST.yaml` | `MRI_jrc_251016_m17_0424_20251016_29_3` |
+| Nuclear Imaging (Molecubes PET/CT, archive mode) | `PET`/`CT`/`SPECT`/`OI` | archive on `\\cicmgsp02\gnuclear2$\<YYYY>\... .tgz`, pre-extracted by `tools/extract_ni_archives.py` to local staging | folder basename regex `user_series_date_proj_sample_datetime_modality` | `tools/templates/instruments/molecubes_ni.yaml` | `tools/configs/ni_jesus_archive_2025_TEST.yaml` | `PET_m14_20251029_20251029100641` |
+
+> Where a link name example shows `<original>`, the template's default `link_filename:` resolves to `original_name` — i.e. the source filename with the instrument code prepended. Where it shows a fully-resolved string (MRI, NI), the template ships a systematic `link_filename:` pattern to guarantee uniqueness within a project. See [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md) for the `link_filename:` resolver context.
+
 ---
 
 ## 4. Deposit Workflow (Operational)
@@ -197,7 +216,7 @@ Daily flow for depositing a new acquisition. This is the operational view — wh
    - Request folder lockdown
    ↓
 5. Link to project/publication (when relevant)
-   - Created automatically by ingest_raw.py when --project is set (Windows .lnk; see 10_TOOLS §2.1.1)
+   - Created automatically by ingest_raw.py when a project resolves; an NTFS/SMB hard link named per link_filename: under /projects/<proj>/raw_linked/ (hard links since 2026-06-02, superseding .lnk shortcuts; see 10_TOOLS §2.1.1)
    - Update provenance as work progresses
 ```
 

@@ -91,6 +91,45 @@ link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${dis
 
 The resolver context includes every `discovered.*` field (see the per-instrument template header for the full reference card per instrument), every resolved registry field (`${sample_id}`, `${instrument}`, etc.), and the computed `${acq_id}` + `${acq_date}` (YYYYMMDD). Unresolved `${X}` references log a WARN and leave the literal in place — better than silently producing a broken name.
 
+### Preclinical metadata surface — `subject:` / `condition:` / `anatomy:` (Phase 3)
+
+For in-vivo acquisitions (`sample_type` = `organism` or `tissue`) the config gains four optional knobs that write the preclinical-metadata blocks into `metadata.json`. All of it is **non-blocking**: an unknown value gets a sentinel (`null` / `""`) plus a WARN, never a refused ingest. The worked example is [`tools/templates/instruments/mri_bruker.yaml`](templates/instruments/mri_bruker.yaml); the full field contract lives in [`08_METADATA §4.4–4.7`](../mfb-rdm-docs/08_METADATA.md).
+
+**1. Auto-fill `subject:` from the animal-facility DB** — under `auto_discover:`:
+
+```yaml
+auto_discover:
+  # ... existing staging_dir / filename_parse ...
+  subject_from_db: true              # look each animal up in the animal-facility DB
+  subject_lookup:                    # how to build the DB key from discovered.* fields
+    project_alias: "${discovered.project_code}"   # the NNNN protocol code, e.g. "0424"
+    animal_code:   "${discovered.animal_num}"     # the bare animal number, e.g. "17"
+```
+
+- `subject_from_db` (bool, default off): when true, the ingest queries the animal-facility DB and writes the `subject:` block (species / strain / sex / DOB→age / procedures) automatically.
+- `subject_lookup.project_alias` + `subject_lookup.animal_code`: the two resolver-evaluated keys that form the lookup. Needs DB credentials at `~/.my.cnf` on the ingest machine and on-network access.
+- On a miss / no-creds it stays non-blocking: the acq ingests with a `source: "pending-db"` placeholder `subject:` block and is queued to `registries/pending_subject_metadata.csv` for later recovery (08_METADATA §4.4.6). Uses `tools/animal_db.py` under the hood.
+
+**2. Top-level `condition:` / `anatomy:` / `subject:` blocks** — set once per batch, inherited by every acquisition the batch produces:
+
+```yaml
+condition:                 # disease/control state (08_METADATA §4.5)
+  is_control:    null      # true=control, false=case, null=unknown (WARN, still ingests)
+  disease_model: ""        # e.g. "MI_LAD_ligation"; "" -> WARN
+  disease_state: ""        # e.g. "day_7_post_MI"
+  source:        "operator-entered"
+
+anatomy:                   # whole-body vs region of interest (08_METADATA §4.6)
+  is_whole_body: null      # true=whole-body, false=ROI, null=unknown (WARN, still ingests)
+  # region: { label, ontology, id }   # UBERON-coded region when is_whole_body=false
+  source:        "operator-entered"
+
+# subject: only when OVERRIDING the DB lookup, or when the animal isn't in the DB
+# (08_METADATA §4.4). Otherwise leave it out and let subject_from_db fill it.
+```
+
+For a mixed-condition session, override a single acquisition at `/projects/<proj>/metadata/<acq_id>.json` rather than splitting the batch. These blocks are additive to the existing `ingest:` / `auto_discover:` / `registry:` blocks and load through the same YAML loader.
+
 ### Sister utilities (standalone tools)
 
 | Tool | Purpose |

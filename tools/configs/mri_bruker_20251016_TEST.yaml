@@ -38,6 +38,16 @@ auto_discover:
     source: parent_name
     regex: '(?P<jrc_id>jrc_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))'
 
+  # Phase 3: animal-facility DB subject lookup. project_alias = protocol code
+  # (0423/0424), animal_code = bare animal number (animal_num, already without
+  # the "m"). NON-BLOCKING — a DB miss / no-creds queues the acq to
+  # registries/pending_subject_metadata.csv and still ingests (08_METADATA
+  # §4.4.6). See tools/animal_db.py.
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.project_code}"   # e.g. "0423"
+    animal_code:   "${discovered.animal_num}"     # e.g. "13"
+
 registry:
   instrument:           MRI
   data_ecosystem:       DICOM
@@ -64,3 +74,24 @@ auto_create_project:
 # collision bug where exam-number-only names clashed across animals.
 # Example resolved value: MRI_jrc_251016_m17_0424_20251016_29_3
 link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
+
+# Phase 3 preclinical metadata (sample_type = organism). NON-BLOCKING: null
+# tri-state values just WARN; the acq still ingests (08_METADATA §4.7). These
+# round-6 v2 study folders span animal protocols 0423 + 0424 and multiple
+# timepoints, so the cohort/condition genuinely varies acq-to-acq — left as
+# null sentinels here for the TEST re-ingest; fill per batch (or override
+# per-acq at /projects/<proj>/metadata/<acq_id>.json) when the cohort key
+# for this exhibition data is confirmed.
+condition:
+  is_control:    null
+  disease_model: ""
+  disease_state: ""
+  source:        "operator-entered"
+
+anatomy:
+  is_whole_body: null
+  # region:                     # required when is_whole_body=false
+  #   label:    "heart"
+  #   ontology: "UBERON"
+  #   id:       "UBERON:0000948"
+  source:        "operator-entered"
