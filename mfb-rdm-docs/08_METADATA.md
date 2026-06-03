@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-06-03 (animal-facility-DB explored + Subject/Sample identity model adopted → `subject:` block §4.4: `facility_animal_id` is the reused canonical subject ID `<animal_code>-AE-biomaGUNE-<NNNN>`; species/sex writer-normalized; `procedures` is a STRUCTURED `[{type,date}]` list from the DB vocab — META-07 retired; identity model in [06_REGISTRIES §2.3](06_REGISTRIES.md), registry `subject_id`/`anatomical_entity` columns deferred to true-prod restart. Prior: 2026-06-02 DOB + deferred-recovery §4.4.6; 2026-05-29 DRAFT `subject:`/`condition:`)
+**Last Updated:** 2026-06-03 (NEW `anatomy:` block §4.6 — `is_whole_body` DECIDED-required boolean for the dead-simple full-body-vs-ROI query + UBERON-coded `region`, operator-entered for `organism` scans since it's not auto-derivable; PLUS animal-facility-DB explored + Subject/Sample identity model → `subject:` §4.4: `facility_animal_id` = reused canonical subject ID, species/sex normalized, `procedures` STRUCTURED — META-07 retired; identity model in [06_REGISTRIES §2.3](06_REGISTRIES.md). Prior: 2026-06-02 DOB + deferred-recovery §4.4.6; 2026-05-29 DRAFT `subject:`/`condition:`)
 
 ---
 
@@ -225,6 +225,7 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
   "discovered":    { "<field>": "<value>", ... },
   "subject":       { ... },                       // when sample_type ∈ {organism, tissue} — see §4.4
   "condition":     { ... },                       // when sample_type ∈ {organism, tissue} — see §4.5 (is_control REQUIRED)
+  "anatomy":       { ... },                       // when sample_type = organism (in-vivo NI/MRI) — see §4.6 (is_whole_body REQUIRED)
   "<ecosystem_section>": { ... }
 }
 ```
@@ -233,8 +234,9 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 |---------|--------|
 | `user_supplied` | The resolved values from the YAML `registry:` block (literal text, `discovered.<x>` references, or `${...}` interpolation — see [10_TOOLS §2.1](10_TOOLS.md)). |
 | `discovered` | Everything `auto_discover` surfaced for the case: filename-parser output, parent-folder date, `folder_name` / `filename`, and embedded extracts (`discovered.czi_*` for microscopy, `discovered.mri_*` for ParaVision). |
-| `subject` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29, extended 2026-06-02. Preclinical subject metadata: species / strain / sex / date_of_birth → derived age_at_acquisition (required) + optional genotype / weight / facility_animal_id / cohort_id / procedures (+ EVALUATING procedure_tags). **Per-subject, fixed.** Source hierarchy: animal-facility-DB > study-level YAML at `/projects/<proj>/metadata/subjects.yaml` > instrument auto-extracts. On ingest-time DB miss / no-credentials, written as `source: "pending-db"` and queued for superuser recovery (§4.4.6). Frozen snapshot at ingest; refreshed at project close-out. See §4.4. |
+| `subject` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29, extended 2026-06-03. Preclinical subject metadata: `facility_animal_id` (the reused canonical **subject id**) + species / strain / sex / date_of_birth → derived age_at_acquisition (required) + optional genotype / weight / cohort_id / **structured** procedures `[{type,date}]`. **Per-subject, fixed.** Source: animal-facility-DB > study-level YAML > instrument auto-extracts. On ingest-time DB miss / no-credentials, written as `source: "pending-db"` and queued for superuser recovery (§4.4.6). See §4.4. |
 | `condition` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29. Disease state + experimental role: `is_control` (**DECIDED-required** boolean — the enforceable healthy-vs-case flag), `disease_model` + `disease_state` (DRAFT-required free-text) + optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. **Per-acquisition, varies** (same animal can be baseline + post-MI). Source: operator-entered via per-batch YAML or `/projects/<proj>/metadata/`; not derivable from animal-facility-DB. See §4.5. |
+| `anatomy` (when `sample_type = organism`) | DRAFT 2026-06-03. Anatomical coverage of an in-vivo scan: `is_whole_body` (**DECIDED-required** boolean — the dead-simple full-body-vs-ROI flag) + UBERON-coded `region` (DRAFT-required when not whole-body) + optional `additional_regions` / `auto_hint`. **Per-acquisition.** Source: operator-entered (not in the animal-DB; DICOM `BodyPartExamined` is empty upstream); optional non-authoritative auto-hint from MRI ProtocolName+FOV / NI bed-range. See §4.6. |
 | `<ecosystem_section>` | The structured embedded-metadata block keyed by ecosystem subfield: `microscopy` (for .czi), `mri` (for Bruker ParaVision — new 2026-05-20). Each has curated buckets at the top for human skimming + a `_raw_metadata` dump for forensic preservation. |
 
 **Per-column registry mapping is in YAML, not Python.** The Python `SPECIAL_FIELDS` promotion mechanism (used briefly in early 2026-05) is gone — adding or renaming a column promotion is a YAML-only edit (see [10_TOOLS §2.1](10_TOOLS.md) for schema, validation rules, and template).
@@ -625,6 +627,82 @@ The sidecar holds a **frozen snapshot at ingest time**, refreshed at project clo
 
 Until the writer ships, operators may include a `condition:` block in YAML configs as forward-compatible documentation; the loader will pick it up once Phase 3 lands.
 
+### 4.6 `anatomy:` Block — Anatomical Coverage and Region (DRAFT 2026-06-03)
+
+> **🔶 DRAFT (2026-06-03).** New top-level `anatomy:` block in `metadata.json` capturing **what part of the body an in-vivo scan covers**. Required for biomedical-imaging acquisitions of a whole organism (`sample_type = organism` — internal MRI + Nuclear Imaging). Answers the headline question *"is this a full-body scan or a region of interest?"* with a dead-simple boolean, plus an ontology-coded region for the detail.
+>
+> **Decided/Draft split:**
+> - **✅ `is_whole_body` is DECIDED-required** — a strict boolean, the sister of `condition.is_control`. The sidecar writer (Phase 3) refuses to write the sidecar if it is missing for an `organism` acquisition.
+> - **🔶 `region` is DRAFT-required when `is_whole_body = false`** — a UBERON-coded anatomical term; the writer WARNs if missing but does not block.
+> - **🔶 Optional:** `additional_regions`, `auto_hint`.
+
+#### 4.6.1 Why its own block, and why operator-entered
+
+Anatomical coverage is a property of the **imaging acquisition** (the field of view / bed range), not of the animal (`subject:`) and not of the study design (`condition:`) — so it is its own acquisition-level block in `/raw/` (immutable). It **cannot be reliably auto-derived** (established 2026-06-03 by inspecting real MRI + NI data):
+
+| Candidate source | Verdict |
+|---|---|
+| Animal-facility DB | ❌ No region/coverage field (its `procedures` are interventions/modalities). |
+| DICOM `BodyPartExamined` (0018,0015) | ❌ Empty in every Bruker (MRI) and Molecubes (NI) DICOM we hold — the standard tag isn't populated upstream. |
+| MRI `ProtocolName` (e.g. `1_Localizer_multi_slice`) + FOV geometry | 🔶 Weak hint only — anatomy sometimes in the protocol name; coverage loosely inferable from FOV. |
+| NI Molecubes bed-position range (`Scan bed position from X to Y`) + scan duration | 🔶 Weak hint only — more bed positions ≈ more axial coverage. |
+
+So `anatomy:` is **operator-entered** (like `condition:`), with an *optional, non-authoritative* `auto_hint` the ingest may surface from the protocol name / bed range / FOV to pre-fill the operator's choice.
+
+#### 4.6.2 Schema
+
+```json
+"anatomy": {
+  "is_whole_body": false,                          // DECIDED-REQUIRED strict boolean — the dead-simple full-body-vs-ROI flag (sister of condition.is_control)
+  "region": {                                      // DRAFT-REQUIRED when is_whole_body=false — the anatomical region, UBERON-coded
+    "label":    "brain",
+    "ontology": "UBERON",
+    "id":       "UBERON:0000955"
+  },
+  "additional_regions": [],                        // optional — extra UBERON terms when a scan spans more than one named region (e.g. thorax + abdomen)
+  "source":    "operator-entered",                 // DRAFT — provenance: operator-entered | study-yaml | auto-hint-confirmed
+  "auto_hint": "protocol:1_Localizer_multi_slice; fov_mm:[50,50]"  // optional, non-authoritative — surfaced from instrument metadata to assist the operator
+}
+```
+
+For a **whole-body** scan: `is_whole_body = true`; `region` may be the whole-organism term `UBERON:0000468` ("multicellular organism") or left null. For a **regional** scan: `is_whole_body = false` and `region` carries the specific structure.
+
+**Ontology = UBERON** (Uberon cross-species anatomy ontology, OBO Foundry). Chosen because it is **species-agnostic** (covers Mouse *and* Rat — both present in our colony — plus human), has resolvable PIDs (`http://purl.obolibrary.org/obo/UBERON_0000955`), is REMBI-aligned ("use a relevant ontology"), and **harmonizes with the tissue-side `anatomical_entity`** from the Subject/Sample identity model ([06_REGISTRIES §2.3](06_REGISTRIES.md)) — both reference UBERON, so anatomy is queryable uniformly across in-vivo scans and ex-vivo sections.
+
+**Verified UBERON starter set** (2026-06-03 via EBI OLS; extend per study at implementation):
+
+| Region | UBERON id |
+|---|---|
+| whole organism (whole-body) | `UBERON:0000468` |
+| brain | `UBERON:0000955` |
+| heart | `UBERON:0000948` |
+| lung | `UBERON:0002048` |
+| thoracic cavity | `UBERON:0002224` |
+| abdomen | `UBERON:0000916` |
+
+#### 4.6.3 Query patterns this enables
+
+| Query | Filter |
+|---|---|
+| **All full-body scans** | `anatomy.is_whole_body == true` |
+| **All region-of-interest scans** | `anatomy.is_whole_body == false` |
+| All brain scans | `anatomy.region.id == "UBERON:0000955"` (or `anatomy.region.label == "brain"`) |
+| All thoracic scans (incl. multi-region) | `region` or `additional_regions` contains a thoracic UBERON term |
+
+The `is_whole_body` boolean is the primary "needle in a haystack" filter — strict boolean, no ambiguity for cohort builders or future XNAT/OMERO migration, exactly mirroring how `condition.is_control` works.
+
+#### 4.6.4 Status & implementation
+
+| Aspect | Status |
+|---|---|
+| `is_whole_body` required boolean | ✅ DECIDED (2026-06-03) — writer refuses sidecar if missing for `organism` |
+| `region` UBERON-coded | 🔶 DRAFT-required when `is_whole_body=false` — writer WARNs but proceeds |
+| Ontology = UBERON | ✅ DECIDED (2026-06-03) — cross-species; harmonizes with tissue `anatomical_entity` |
+| Optional `additional_regions` / `auto_hint` | 🔶 DRAFT, write-through |
+| `anatomy:` writer in `metadata_sidecar.py` | ⚠️ Not yet implemented — same Phase 3 work as `subject:`/`condition:` (`tasks/tasks.md §3.2`) |
+| Auto-hint extractor (MRI ProtocolName+FOV, NI bed-range) | 🔶 Future — non-authoritative pre-fill only |
+| Backfill of existing 97 MRI + 84 NI organism acqs | ⚠️ Queued — Phase 4 of `tasks/tasks.md §3.2`; operator recall from protocol/notes |
+
 ---
 
 ## 5. Nanomaterial Imaging Considerations
@@ -661,3 +739,4 @@ For SEM/TEM imaging of nanomaterials (if included):
 | META-06 | Tighten `disease_model` + `disease_state` from DRAFT-required to DECIDED-required after pilot operator-habit is established (§4.5) | Data Mgmt Lead | 🔶 Open — revisit after Phase 3 writer lands + a few real batches use the `condition:` block; `is_control` already DECIDED |
 | ~~META-07~~ | ~~How to fill optional `procedure_tags` from the `procedures` free-text~~ | Data Mgmt Lead | ✅ Retired 2026-06-03 — DB exploration showed procedures are **already a structured controlled vocabulary** (`animal_procedures`→`procedures.type`+date); we carry the `[{type,date}]` list directly, no free-text parsing needed (§4.4.7). Reopens only if free-text `animal_observations` notes are ever pulled. |
 | META-08 | Subject/Sample two-tier identity model (reused facility animal ID as subject; registry `subject_id`/`anatomical_entity` columns) — confirm at PI sign-off (REG-01) + add registry columns at true-prod restart | Data Mgmt Lead + PI | 🔶 DRAFT 2026-06-03 — model adopted (Option B), grounded in FAIR/ISA/REMBI/BIDS/XNAT; see [06_REGISTRIES §2.3](06_REGISTRIES.md) |
+| META-09 | `anatomy:` block — `is_whole_body` (DECIDED-required) + UBERON `region` (§4.6). Confirm UBERON starter vocabulary per study; decide whether/when to build the optional auto-hint extractor (MRI ProtocolName+FOV, NI bed-range) | Data Mgmt Lead | 🔶 DRAFT 2026-06-03 — block adopted; operator-entered (not auto-derivable); writer is Phase 3 |
