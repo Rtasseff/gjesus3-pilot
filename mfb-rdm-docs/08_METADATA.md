@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-06-03 (**Non-blocking metadata model §4.7** — `subject:`/`condition:`/`anatomy:` NEVER block ingest; `is_control` + `is_whole_body` softened from hard-required to tri-state recommended-WARN (`true`/`false`/`null`), set-once-per-batch propagation, best-effort auto, bulk enrichment later, archive data ingests with guesses/unknown. NEW `anatomy:` §4.6 (`is_whole_body` + UBERON `region`); animal-DB explored + Subject/Sample identity model → `subject:` §4.4 (`facility_animal_id` reused subject id, `procedures` STRUCTURED, META-07 retired); identity model in [06_REGISTRIES §2.3](06_REGISTRIES.md). Prior: 2026-06-02 DOB + deferred-recovery §4.4.6)
+**Last Updated:** 2026-06-03 (**Phase 3 enrichment writer IMPLEMENTED** — `subject:`/`condition:`/`anatomy:` are now written at ingest Step 8.4 via `tools/ingest/enrichment.py` + `metadata_sidecar.build_sidecar`, non-blocking per §4.7; deferred-recovery pending list `registries/pending_subject_metadata.csv` (`tools/ingest/pending.py`) + superuser recovery `tools/recover_subject_metadata.py`; standalone read-only tools `gather_metadata.py` / `validate_registries.py` / `verify_checksums.py` / `metadata_completeness.py`. Status tables §4.4.5/§4.5.5/§4.6.4 + §4.7.4 flipped to IMPLEMENTED; backfill + registry `subject_id`/`anatomical_entity` columns stay deferred. Earlier same-day: **Non-blocking metadata model §4.7** — `subject:`/`condition:`/`anatomy:` NEVER block ingest; `is_control` + `is_whole_body` softened from hard-required to tri-state recommended-WARN (`true`/`false`/`null`), set-once-per-batch propagation, best-effort auto, bulk enrichment later, archive data ingests with guesses/unknown. NEW `anatomy:` §4.6 (`is_whole_body` + UBERON `region`); animal-DB explored + Subject/Sample identity model → `subject:` §4.4 (`facility_animal_id` reused subject id, `procedures` STRUCTURED, META-07 retired); identity model in [06_REGISTRIES §2.3](06_REGISTRIES.md). Prior: 2026-06-02 DOB + deferred-recovery §4.4.6)
 
 ---
 
@@ -224,8 +224,8 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
   "user_supplied": { "operator", "data_source", "instrument", "sample_id", "sample_type", "original_name", "notes" },
   "discovered":    { "<field>": "<value>", ... },
   "subject":       { ... },                       // when sample_type ∈ {organism, tissue} — see §4.4
-  "condition":     { ... },                       // when sample_type ∈ {organism, tissue} — see §4.5 (is_control REQUIRED)
-  "anatomy":       { ... },                       // when sample_type = organism (in-vivo NI/MRI) — see §4.6 (is_whole_body REQUIRED)
+  "condition":     { ... },                       // when sample_type ∈ {organism, tissue} — see §4.5 (is_control tri-state, non-blocking)
+  "anatomy":       { ... },                       // when sample_type = organism (in-vivo NI/MRI) — see §4.6 (is_whole_body tri-state, non-blocking)
   "<ecosystem_section>": { ... }
 }
 ```
@@ -238,6 +238,8 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 | `condition` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29; **non-blocking** 2026-06-03. Disease state + experimental role: `is_control` (highly-recommended **tri-state** `true`/`false`/`null` — WARN if null, never blocks), `disease_model` + `disease_state` (recommended free-text) + optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. **Per-acquisition; set once per batch/session.** Source: operator-entered; `disease_model` auto-seeds from DB `projects.name`. See §4.5 + §4.7. |
 | `anatomy` (when `sample_type = organism`) | DRAFT 2026-06-03; **non-blocking**. Anatomical coverage of an in-vivo scan: `is_whole_body` (highly-recommended **tri-state** — WARN if null, never blocks — the dead-simple full-body-vs-ROI flag) + UBERON-coded `region` (recommended when not whole-body) + optional `additional_regions` / `auto_hint`. **Per-acquisition.** Source: operator-entered (not in the animal-DB; DICOM `BodyPartExamined` empty upstream); optional non-authoritative auto-hint from MRI ProtocolName+FOV / NI bed-range. See §4.6 + §4.7. |
 | `<ecosystem_section>` | The structured embedded-metadata block keyed by ecosystem subfield: `microscopy` (for .czi), `mri` (for Bruker ParaVision — new 2026-05-20). Each has curated buckets at the top for human skimming + a `_raw_metadata` dump for forensic preservation. |
+
+> **✅ Enrichment writer IMPLEMENTED (Phase 3, 2026-06-03).** The `subject:` / `condition:` / `anatomy:` blocks above are no longer planned-only — they are written at ingest. New orchestrator `tools/ingest/enrichment.py` (`build_enrichment`) is called from `ingest_raw.py` **Step 8.4** and its result is nested by `metadata_sidecar.build_sidecar(... subject=, condition=, anatomy=)` in the key order `acq_id, generated, generator, user_supplied, discovered, subject, condition, anatomy, <ecosystem_section>`. The writer is **non-blocking** (§4.7): it never raises on missing data, writing explicit sentinels (`is_control`/`is_whole_body` `null`, free-text `""`, `source: "unknown"` or `"pending-db"`) + a WARN. Supporting modules: `ingest/subject_id.py` (short-code parser `m13→13`, `ID13B→13`+organ; project-alias from `project_hint`), `ingest/pending.py` (the deferred-recovery pending list, §4.4.6), `ingest/resolver.py` (validate/resolve for `condition`/`anatomy`/`subject`/`subject_lookup`/`subject_from_db` + `to_tristate`/`to_number` coercers), and the animal-facility-DB lookup `tools/animal_db.py`. The YAML surface that feeds it (`auto_discover.subject_from_db` + `subject_lookup:`, top-level `condition:` / `anatomy:` / optional `subject:`) is documented in [10_TOOLS §2.1](10_TOOLS.md). The per-block status tables (§4.4.5 / §4.5.5 / §4.6.4) still mark **backfill of existing acqs** and the **registry `subject_id` / `anatomical_entity` columns** as deferred to the true-production restart — only the *writer* shipped.
 
 **Per-column registry mapping is in YAML, not Python.** The Python `SPECIAL_FIELDS` promotion mechanism (used briefly in early 2026-05) is gone — adding or renaming a column promotion is a YAML-only edit (see [10_TOOLS §2.1](10_TOOLS.md) for schema, validation rules, and template).
 
@@ -471,9 +473,9 @@ Capturing these four fields at ingest time — rather than recovering them later
 | species/sex normalization (`Mouse`/`Rat`→binomial; `Male`/`Female`→M/F) | ✅ DECIDED 2026-06-03 — writer-side normalization (confirmed DB values) |
 | `procedures` structured `[{type,date}]` from DB controlled vocab | ✅ DECIDED optional (2026-06-03) — NOT free text; §4.4.7. **META-07 retired** |
 | `source:` provenance tag values | 🔶 DRAFT |
-| `subject:` writer in `tools/ingest/metadata_sidecar.py` | ⚠️ Not yet implemented — `tasks/tasks.md §3.2` Phase 3 |
-| Animal-facility-DB fetcher (`tools/animal_db.py`) | 🔶 Phase 1 done (schema mapped, join verified, read-only conn via `~/.my.cnf` + pymysql); Phase 2 (fetcher) next — `tasks/tasks.md §3.2` |
-| Deferred-recovery pending list + superuser retro-update | 🔶 DRAFT (2026-06-02) — design in §4.4.6; tooling in `tasks/tasks.md §3.2` |
+| `subject:` writer | ✅ IMPLEMENTED (Phase 3, 2026-06-03) — `tools/ingest/enrichment.py::build_enrichment`, nested by `metadata_sidecar.build_sidecar`, called from `ingest_raw.py` Step 8.4; non-blocking (§4.7) |
+| Animal-facility-DB fetcher (`tools/animal_db.py`) | ✅ IMPLEMENTED — read-only lookup via `~/.my.cnf` + pymysql; injectable into the writer (fail-soft without credentials) |
+| Deferred-recovery pending list + superuser retro-update | ✅ IMPLEMENTED (2026-06-03) — pending list `registries/pending_subject_metadata.csv` written by `tools/ingest/pending.py`; superuser retro-update `tools/recover_subject_metadata.py` (dry-run by default). Design in §4.4.6 |
 | Registry `subject_id` + `anatomical_entity` columns | 🔶 DEFERRED to true-production restart (Option B) — sidecar carries them meanwhile; [06_REGISTRIES §2.3](06_REGISTRIES.md) |
 | Backfill of existing 97 MRI + 84 NI acqs + animal-derived microscopy | ⚠️ Queued — `tasks/tasks.md §3.2` Phase 4 |
 
@@ -624,8 +626,8 @@ If none supply it, the block is still written with `is_control: null` + `source:
 | `disease_model` + `disease_state` (free-text) | 🔶 Recommended — writer WARNs if missing, proceeds. `disease_model` auto-seed from `projects.name` |
 | Optional fields (`control_type` / `treatment` / `timepoint_days` / `study_arm`) | 🔶 DRAFT, write-through |
 | Controlled vocabulary for `disease_model` / `disease_state` | ❓ Deferred — preclinical model vocabularies are too domain-specific to fully control. Future: per-PI vocabularies in `/projects/<proj>/metadata/vocab.yaml`. |
-| Writer in `tools/ingest/metadata_sidecar.py` | ⚠️ Not yet implemented — same Phase 3 work as `subject:` writer (`tasks/tasks.md §3.2`); WARN-not-raise |
-| YAML-level `condition:` block support in per-batch configs | ⚠️ Not yet implemented — additive to existing `registry:` block; same loader; set-once-per-batch |
+| Writer | ✅ IMPLEMENTED (Phase 3, 2026-06-03) — `tools/ingest/enrichment.py`, called from `ingest_raw.py` Step 8.4; WARN-not-raise (§4.7) |
+| YAML-level `condition:` block support in per-batch configs | ✅ IMPLEMENTED — top-level `condition:` block, resolver-evaluated, set-once-per-batch; in the per-instrument templates (`mri_bruker`, `molecubes_ni`, `axioscan7`) |
 | Backfill of existing 97 MRI + 84 NI + animal-derived microscopy | ⚠️ Queued — Phase 4; ingests now with `null`+WARN, enriched later via the Excel importer / bulk tools (§4.7) |
 
 Until the writer ships, operators may include a `condition:` block in YAML configs as forward-compatible documentation; the loader will pick it up once Phase 3 lands.
@@ -704,7 +706,7 @@ The `is_whole_body` flag is the primary "needle in a haystack" filter — `== tr
 | `region` UBERON-coded | 🔶 Recommended when `is_whole_body=false` — writer WARNs but proceeds |
 | Ontology = UBERON | ✅ DECIDED (2026-06-03) — cross-species; harmonizes with tissue `anatomical_entity` |
 | Optional `additional_regions` / `auto_hint` | 🔶 DRAFT, write-through |
-| `anatomy:` writer in `metadata_sidecar.py` | ⚠️ Not yet implemented — same Phase 3 work as `subject:`/`condition:` (`tasks/tasks.md §3.2`); WARN-not-raise |
+| `anatomy:` writer | ✅ IMPLEMENTED (Phase 3, 2026-06-03) — `tools/ingest/enrichment.py`, called from `ingest_raw.py` Step 8.4; WARN-not-raise (§4.7). Top-level `anatomy:` YAML block in the `mri_bruker` + `molecubes_ni` templates (organism-only) |
 | Auto-hint extractor (MRI ProtocolName+FOV, NI bed-range) | 🔶 Future — non-authoritative pre-fill only |
 | Backfill of existing 97 MRI + 84 NI organism acqs | ⚠️ Queued — Phase 4; ingests now with `null`+WARN, enriched later (§4.7) |
 
@@ -735,12 +737,13 @@ A hard-block on a field that no automation can supply and that the operator may 
 
 `subject:` carries the load (it auto-fills); `condition:`/`anatomy:` get a weak seed/hint and otherwise rely on set-once-per-batch input or later bulk enrichment.
 
-#### 4.7.4 Tools that make it easy (planned — help, never require)
+#### 4.7.4 Tools that make it easy (help, never require)
 
-- **Per-batch YAML blocks** (Phase 3) — the set-once-per-ingest path.
-- **Excel → study-metadata importer** (`tasks/tasks.md §3.2`) — the main bulk-fill tool for archive data: a researcher fills a per-project sheet (one row per animal/session), and it writes `condition:`/`anatomy:`/`subject:` overrides at the study level.
-- **Metadata-completeness report** — a `validate_registries`-style read that lists which acquisitions have `is_control:null` / `is_whole_body:null` / `subject.source:"pending-db"`, so gaps are visible and actionable in bulk (extends the `registries/pending_subject_metadata.csv` idea into a general "what's missing" view).
-- **Auto-hint pre-fill** — surfaces the protocol/FOV/bed-range guess so the operator *confirms* rather than types.
+- **Per-batch YAML blocks** — ✅ IMPLEMENTED (Phase 3): the set-once-per-ingest path; top-level `condition:` / `anatomy:` / optional `subject:` resolver-evaluated blocks (and `auto_discover.subject_from_db` + `subject_lookup:`), in the per-instrument templates.
+- **Metadata-completeness report** — ✅ IMPLEMENTED: `tools/metadata_completeness.py` (read-only) lists which acquisitions have `is_control:null` / `is_whole_body:null` / `subject.source:"pending-db"`; `tools/validate_registries.py` (REG-04 validator) additionally emits Phase 3 enrichment-gap WARNs. Both extend the `registries/pending_subject_metadata.csv` idea into a general "what's missing" view. (Companion read-only tools landed alongside: `tools/gather_metadata.py` merged raw+study view, `tools/verify_checksums.py` fixity re-check.)
+- **Deferred-recovery** — ✅ IMPLEMENTED: `tools/recover_subject_metadata.py` (superuser, dry-run by default) fills `pending-db` sidecars in place from the DB; see §4.4.6.
+- **Excel → study-metadata importer** (`tasks/tasks.md §3.2`) — Planned: the main bulk-fill tool for archive data; a researcher fills a per-project sheet (one row per animal/session), and it writes `condition:`/`anatomy:`/`subject:` overrides at the study level.
+- **Auto-hint pre-fill** — Planned: surfaces the protocol/FOV/bed-range guess so the operator *confirms* rather than types.
 
 #### 4.7.5 What this means for the existing 365+ acquisitions
 

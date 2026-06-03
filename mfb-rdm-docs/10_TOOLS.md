@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft
-**Last Updated:** 2026-06-01 (Phase 2 FID→DICOM regeneration: new `ingest.auto_regenerate_dicom` flag wires `tools/ingest/paravision_regen.py` (Dicomifier subprocess + PV-7 workarounds) into `copy_mri_paravision` for no-DICOM exams)
+**Last Updated:** 2026-06-03 (Phase 3 preclinical-metadata enrichment writer IMPLEMENTED: new `auto_discover.subject_from_db` + `auto_discover.subject_lookup` keys and new top-level `condition:` / `anatomy:` / `subject:` blocks (§2.1.6); five new standalone tools — `gather_metadata`, `validate_registries`, `verify_checksums`, `metadata_completeness`, `recover_subject_metadata` (§3))
 
 ---
 
@@ -21,7 +21,10 @@ This document specifies the scripts and tools needed to support the data managem
 | **P2** | `log_activity` | Helper for provenance logging | 📋 Requirements defined |
 | **P1** | `create_project` | Create project folder with templates | ✅ Implemented (`tools/create_project.py`) |
 | **P1** | Metadata extraction | Auto-extract embedded metadata (integrated into full-mode ingest) | 🔶 Design decided; implementation pending |
-| **P3** | Validation scripts | Verify registry integrity | 📋 Future |
+| **P1** | Preclinical-metadata enrichment | Write `subject:` / `condition:` / `anatomy:` blocks at ingest (Phase 3, non-blocking) | ✅ Implemented (`tools/ingest/enrichment.py`; §2.1.6) |
+| **P3** | Validation scripts | Verify registry integrity + fixity + enrichment gaps | ✅ Implemented (`validate_registries`, `verify_checksums`, `metadata_completeness`; §3) |
+| **P3** | `recover_subject_metadata` | Superuser deferred-recovery of `pending-db` subject metadata | ✅ Implemented (`tools/recover_subject_metadata.py`; §3.7) |
+| **P3** | `gather_metadata` | Merged raw + study metadata view | ✅ Implemented (`tools/gather_metadata.py`; §3.5) |
 
 ---
 
@@ -40,7 +43,10 @@ tools/
 ├── ingest/
 │   ├── __init__.py
 │   ├── config.py            # YAML loading + validation; expand_batch (file/dir glob, filename_parse, filter, idempotency); FORMAT_SUMMARIZERS dispatch
-│   ├── resolver.py          # Resolves the YAML registry: block — literal | discovered.<x> | ${...} interp | NA
+│   ├── resolver.py          # Resolves the YAML registry: block — literal | discovered.<x> | ${...} interp | NA; also validate/resolve condition: / anatomy: / subject: + subject_lookup + to_tristate/to_number coercers (§2.1.6)
+│   ├── enrichment.py        # Phase 3 orchestrator: builds subject/condition/anatomy blocks (non-blocking) for sample_type ∈ {organism,tissue} at Step 8.4 (§2.1.6)
+│   ├── subject_id.py        # Short-code subject parser (m13→13, ID13B→13+organ) + project_alias_from_hint
+│   ├── pending.py           # Deferred-recovery pending list (registries/pending_subject_metadata.csv) read/append/update (§2.1.6, 08_METADATA §4.4.6)
 │   ├── acq_id.py            # ACQ-ID generation (date + inst + seq)
 │   ├── checksum.py          # SHA-256 checksums → checksums.json
 │   ├── registry.py          # Read/append registry_raw.csv (REGISTRY_FIELDS includes ingest_config)
@@ -289,6 +295,59 @@ link_filename: "${instrument}_${original_name}"
 
 See each per-instrument template under `tools/templates/instruments/` for the in-context comment block listing every `discovered.*` field that instrument exposes.
 
+### 2.1.6 Preclinical-metadata enrichment — `subject:` / `condition:` / `anatomy:` + `subject_from_db` (Phase 3, 2026-06-03)
+
+> **✅ IMPLEMENTED (Phase 3 of `tasks/tasks.md §3.2`).** For acquisitions with `sample_type ∈ {organism, tissue}`, full-mode ingest writes a `subject:` + `condition:` block (and, for `organism` only, an `anatomy:` block) into `metadata.json`. The writer is **NON-BLOCKING** ([08_METADATA §4.7](08_METADATA.md), DECIDED): it never raises on missing data — unknowns are written as explicit sentinels (`is_control` / `is_whole_body` `null`, free-text `""`, `source` `"unknown"` / `"pending-db"`) and a WARN is logged. The orchestrator is `tools/ingest/enrichment.py`, invoked at **Step 8.4** of full-mode ingest. The field contract for each block lives in [08_METADATA §4.4 (`subject:`)](08_METADATA.md) / [§4.5 (`condition:`)](08_METADATA.md) / [§4.6 (`anatomy:`)](08_METADATA.md); this section documents only the YAML surface that drives them. The `subject:` source enum + the `condition:` / `anatomy:` field sets are **DRAFT**; the registry `subject_id` / `anatomical_entity` **columns remain DEFERRED** to the true-production restart — the blocks live in the sidecar only, not in `registry_raw.csv`.
+
+#### `auto_discover.subject_from_db` + `auto_discover.subject_lookup`
+
+Two keys inside the `auto_discover:` block drive the automatic `subject:` lookup against the animal-facility DB (`tools/animal_db.py`):
+
+| Key | Type | Default | Purpose |
+|-----|------|---------|---------|
+| `subject_from_db` | boolean | `false` | When `true`, the ingest looks each subject up in the animal-facility MariaDB and writes the resolved `subject:` block (species / strain / sex / DOB → derived `age_at_acquisition` / structured `procedures`). Needs DB credentials at `~/.my.cnf` on the ingest machine + on-network. |
+| `subject_lookup` | mapping | (none) | How to build the DB key from `discovered.*` fields. Resolver-evaluated `${discovered.X}` references. Two recognized fields: `project_alias` (the `NNNN` protocol code) and `animal_code` (the bare animal number, e.g. `m13`→`13`). |
+
+```yaml
+auto_discover:
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.project_code}"   # e.g. "0424"
+    animal_code:   "${discovered.animal_num}"     # e.g. "17"
+```
+
+On a **DB miss / no-credentials** the acquisition still ingests: the `subject:` block is written with `source: "pending-db"` and a row is appended to `registries/pending_subject_metadata.csv` for later superuser recovery via `recover_subject_metadata.py` (§3.6; [08_METADATA §4.4.6](08_METADATA.md)). This is the non-blocking contract — an unreachable DB never aborts the batch.
+
+#### Top-level `condition:` / `anatomy:` / `subject:` blocks
+
+Three new top-level blocks, peers of `registry:` / `auto_create_project:`. They are **resolver-evaluated** (literal | `discovered.<field>` | `${...}` interpolation, same engine as `registry:`) and **set once per batch** — the resolved values apply to **every acquisition the batch produces**. For a mixed-condition session, override per-acquisition at `/projects/<proj>/metadata/<acq_id>.json`.
+
+- `condition:` — fields: `is_control` (tri-state `true`/`false`/`null`), `disease_model`, `disease_state`, `control_type`, `treatment`, `timepoint_days`, `study_arm`, `source`.
+- `anatomy:` (organism-only) — fields: `is_whole_body` (tri-state), `region` (`{label, ontology (UBERON), id}`), `additional_regions[]`, `source`, `auto_hint`.
+- `subject:` (optional override) — supplied only to override the `subject_from_db` lookup or when the animal isn't in the DB. Recognized fields: `facility_animal_id`, `species`, `strain`, `sex`, `date_of_birth`, `age_at_acquisition`, `genotype`, `weight_at_acquisition_g`, `cohort_id`, `procedures`, `source` (`age_at_acquisition` is derived from `date_of_birth` when present).
+
+```yaml
+condition:
+  is_control:    null            # tri-state: true=control, false=case, null=unknown (WARN)
+  disease_model: ""              # e.g. "MI_LAD_ligation"; "" -> WARN
+  disease_state: ""              # e.g. "day_7_post_MI"
+  source:        "operator-entered"
+
+anatomy:                         # organism only
+  is_whole_body: null            # tri-state; null=unknown (WARN)
+  # region:                      # required only when is_whole_body=false
+  #   label:    "brain"
+  #   ontology: "UBERON"
+  #   id:       "UBERON:0000955"
+  source:        "operator-entered"
+```
+
+**Validation vs data.** Structural config errors (unknown keys, wrong types) fail fast at config-load time via `resolver.validate_condition_block` / `validate_anatomy_block` / `validate_subject_block` / `validate_subject_lookup` / `validate_subject_from_db`. Missing or empty *data* never raises — `resolver.resolve_condition_block` / `resolve_anatomy_block` (with the `to_tristate` / `to_number` coercers) emit the sentinels above and the orchestrator WARNs. This is the [§4.7](08_METADATA.md) non-blocking model in code.
+
+**Sidecar nesting.** `metadata_sidecar.build_sidecar` nests the resolved blocks in this key order: `acq_id`, `generated`, `generator`, `user_supplied`, `discovered`, `subject`, `condition`, `anatomy`, `<ecosystem_section>` (e.g. `mri:` / `microscopy:` / `ni:`).
+
+**Worked example:** [`tools/templates/instruments/mri_bruker.yaml`](../tools/templates/instruments/mri_bruker.yaml) ships all three blocks live (with `subject_from_db: true` + `subject_lookup`); `molecubes_ni.yaml` likewise; `axioscan7.yaml` carries `subject` + `condition` only (ex-vivo — no `anatomy`); `cell_observer_cells.yaml` + `lsm900.yaml` carry none (cells); the universal `ingest_template.yaml` carries commented examples.
+
 ---
 
 **Two Ingest Modes:**
@@ -298,7 +357,7 @@ See each per-instrument template under `tools/templates/instruments/` for the in
 **Full Mode (default) — per acquisition:**
 1. Load + validate config (YAML or interactive)
 2. Analyze source data (DICOM headers: modality, StudyDate, file count, size)
-3. Extract embedded metadata → `metadata.json` sidecar
+3. Extract embedded metadata → `metadata.json` sidecar (Step 8.4: for `sample_type ∈ {organism, tissue}`, the enrichment writer nests `subject:` + `condition:` (+ `anatomy:` for organism) blocks — non-blocking, see §2.1.6)
 4. Compress DICOM (if applicable) → `.zip` or `.tar.gz` archive
 5. Generate ACQ-ID (read registry for next sequence number)
 6. Create folder: `raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/`
@@ -330,6 +389,9 @@ Three required top-level blocks plus one optional. `defaults:` is gone — non-r
 | `auto_discover:`        | Yes       | How to discover cases and what variables to extract per case. Each case's discovered fields land in a `discovered` namespace, referenceable below. Supports `filename_parse:` and `path_parse:` (see §2.1.3). |
 | `registry:`             | Yes       | Explicit per-column registry mapping. Three value forms: literal text/number, `discovered.<field>` (bare reference), or `"...${discovered.<field>}..."` (interpolation). Use `NA` to leave a column intentionally empty. |
 | `auto_create_project:`  | Optional  | Project-creation metadata used only when `ingest.auto_create_projects: true` and a new project is being created. Resolver-evaluated like `registry:`. First-write-wins (see §2.1.4). |
+| `condition:`            | Optional  | Preclinical disease-state / study-role block (Phase 3). Resolver-evaluated, set-once-per-batch, non-blocking. Written to `metadata.json` for `sample_type ∈ {organism, tissue}`. See §2.1.6 + [08_METADATA §4.5](08_METADATA.md). |
+| `anatomy:`              | Optional  | Anatomical-coverage block (Phase 3, organism-only). Resolver-evaluated, set-once-per-batch, non-blocking. See §2.1.6 + [08_METADATA §4.6](08_METADATA.md). |
+| `subject:`              | Optional  | Subject-metadata override (Phase 3) — supplied only to override the `auto_discover.subject_from_db` lookup or when the animal isn't in the DB. See §2.1.6 + [08_METADATA §4.4](08_METADATA.md). |
 
 `ingest:` flags currently honored:
 
@@ -591,23 +653,30 @@ python tools/create_project.py --name test --description "test" --owner RT --dry
 
 ### 3.2 `validate_registries`
 
-**Purpose:** Check registry integrity.
+**Purpose:** Read-only consistency checker for the registry area (REG-04). **Location:** `tools/validate_registries.py`. **Read-only** — never writes; the NAS can be mounted read-only.
 
-**Checks:**
-- All paths resolve to existing folders
-- Required fields are populated
-- IDs are unique
-- Dates are valid format
-- Cross-references are valid
+**Checks (ERROR-level — exit nonzero):**
+- `registry_raw.csv` header EXACTLY equals `ingest.registry.REGISTRY_FIELDS` (schema imported, never hardcoded — `06_REGISTRIES` is the contract).
+- No duplicate `acq_id`; `acq_id` matches `ACQ-YYYYMMDD-<CODE>-NNN`.
+- Required columns non-empty per row (`acq_id`, `registration_datetime`, `data_ecosystem`, `instrument`, `canonical_path`).
+- `sample_type`, when set, is in the controlled vocab `{tissue, organism, cells, material, phantom}`.
+- `canonical_path` starts with `/raw/` and the acquisition folder exists on disk.
+- `project_hint`, when set and matching `PROJ-XXXX`, exists in `registries/registry_projects.csv`.
+
+**Phase 3 enrichment checks (WARN-level — never affect exit code):** for `sample_type ∈ {organism, tissue}`, the sidecar must carry a `subject:` + `condition:` block (and `anatomy:` for organism); the explicit "unknown" sentinels (`subject.source == "pending-db"`, `condition.is_control == null`, `anatomy.is_whole_body == null`) are WARNs, legitimate under the non-blocking model ([08_METADATA §4.7](08_METADATA.md)). `--no-enrichment` skips these.
+
+```bash
+python tools/validate_registries.py --nas-root J:\gjesus3-data
+python tools/validate_registries.py --no-enrichment   # skip Phase 3 WARNs
+```
 
 ### 3.3 `verify_checksums`
 
-**Purpose:** Verify file integrity against stored checksums.
+**Purpose:** Read-only fixity / bit-rot re-check for the `/raw/` area. **Location:** `tools/verify_checksums.py`. **Read-only** — re-hashes data only, never writes. Re-verifies the SHA-256 digests recorded in each acquisition's `checksums.json` against the current on-disk bytes (ingest verified source-vs-dest at copy time; this answers the later "are the bytes still what we stored?"). Extra files not in `checksums.json` (e.g. a later-written sidecar) are reported as INFO, not a mismatch.
 
-**Usage:**
 ```bash
-verify_checksums --scope /raw/MICROSCOPY/2026/  # Check specific path
-verify_checksums --sample 10  # Random 10% sample
+python tools/verify_checksums.py --acq ACQ-20251016-MRI-029 --nas-root J:\gjesus3-data   # single acquisition
+python tools/verify_checksums.py --scope /raw/MICROSCOPY/2026/                            # specific path
 ```
 
 ### 3.4 Metadata Extraction and Backfill
@@ -633,6 +702,33 @@ python tools/backfill_metadata.py --dry-run --scope /raw/DICOM/     # preview
 **Supported formats:** DICOM (.dcm via pydicom), .czi (via aicspylibczi or czifile), others TBD
 
 > **Note:** User-supplied metadata (sample context, experimental notes via CSVs/Excel) remains deferred.
+
+### 3.5 `gather_metadata`
+
+**Purpose:** Read-only merged "single source of truth" view. **Location:** `tools/gather_metadata.py`. **Read-only** — never writes. Joins the acquisition-level `/raw/<…>/<ACQ-ID>/metadata.json` sidecar with the study-level `/projects/<proj>/metadata/<acq_id>.json` supplement (plus project-wide `study.json` + `biosamples.json` when present) on `acq_id`, and emits ONE merged JSON document to stdout. The merge is additive and non-destructive: the raw sidecar is the base document (never overwritten); study-level data nests under a `study` key. See [08_METADATA §1.4](08_METADATA.md).
+
+```bash
+python tools/gather_metadata.py --acq ACQ-20251016-MRI-029 --nas-root J:\gjesus3-data
+python tools/gather_metadata.py --project ae-biomegune-0424
+```
+
+### 3.6 `metadata_completeness`
+
+**Purpose:** Read-only enrichment-gap report — the gap-focused companion to `validate_registries`. **Location:** `tools/metadata_completeness.py`. **Read-only**. Walks `/raw/` sidecars and surfaces the *non-blocking* enrichment gaps (the explicit "unknown" sentinels of [08_METADATA §4.7](08_METADATA.md)) so a superuser can bulk-fill them. Counts as a gap (organism/tissue only): `condition.is_control == null`, `anatomy.is_whole_body == null` (organism), `subject.source == "pending-db"`, or an expected block missing entirely. Also lists the `registries/pending_subject_metadata.csv` recovery backlog. Optional `--project` filter matches the registry `project_hint`.
+
+```bash
+python tools/metadata_completeness.py --nas-root J:\gjesus3-data
+python tools/metadata_completeness.py --project ae-biomegune-0525
+```
+
+### 3.7 `recover_subject_metadata`
+
+**Purpose:** Superuser deferred-recovery for `subject:` metadata that was queued `pending-db` at ingest time ([08_METADATA §4.4.6](08_METADATA.md)). **Location:** `tools/recover_subject_metadata.py`. Run from a superuser machine that holds `~/.my.cnf` (on-network). Read-only against the DB; **controlled-write** against `/raw` sidecars + the pending list — **DRY-RUN by default** (touches nothing; reports what would change). Writing requires explicit `--apply`. For each pending row it re-attempts the animal-DB lookup and, on a hit, fills ONLY blank / placeholder `subject:` required fields in place (recomputing `age_at_acquisition`), VERIFIES-after-write, then flips the pending row to `recovered`. Never overwrites a real value; idempotent; non-hits stay pending.
+
+```bash
+python tools/recover_subject_metadata.py --nas-root J:\gjesus3-data            # preview (dry-run, default)
+python tools/recover_subject_metadata.py --nas-root J:\gjesus3-data --apply    # write sidecars + flip pending rows
+```
 
 ---
 

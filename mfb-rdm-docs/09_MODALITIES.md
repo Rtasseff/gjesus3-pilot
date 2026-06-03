@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-06-03 (per-instrument subject + condition + anatomy metadata — `subject:` §4.4 / `condition:` §4.5 / `anatomy:` §4.6; **non-blocking model §4.7** — `is_control` + `is_whole_body` are highly-recommended tri-state, WARN-not-block)
+**Last Updated:** 2026-06-03 (per-instrument subject + condition + anatomy metadata — `subject:` §4.4 / `condition:` §4.5 / `anatomy:` §4.6; **non-blocking model §4.7** — `is_control` + `is_whole_body` are highly-recommended tri-state, WARN-not-block; **the enrichment writer is now IMPLEMENTED** — Phase 3, fires at ingest for `sample_type ∈ {organism, tissue}`, see [10_TOOLS §2.1.6](10_TOOLS.md))
 
 ---
 
@@ -45,6 +45,8 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 > **Source hierarchies differ:**
 > - **`subject:`** — animal-facility-DB (authoritative, blocked on IT for programmatic access — `tasks/tasks.md §3.2`) > study-level YAML at `/projects/<proj>/metadata/subjects.yaml` > instrument auto-extracts (often partial).
 > - **`condition:`** — operator-entered only (per-batch YAML `condition:` block, or per-acquisition `/projects/<proj>/metadata/<acq_id>.json`, or via the Excel importer when it ships). The DB does NOT know disease state; it's a property of the study design, not the animal.
+>
+> **✅ Writer IMPLEMENTED (Phase 3, 2026-06-03).** The enrichment writer that produces these blocks now fires at ingest for every acquisition with `sample_type ∈ {organism, tissue}` (`anatomy:` for `organism` only) — **non-blocking** (§4.7): unknowns are written as explicit sentinels + a WARN, never an aborted ingest. The YAML surface that drives it (`auto_discover.subject_from_db` + `subject_lookup`, and the top-level `condition:` / `anatomy:` / `subject:` blocks) is documented in [10_TOOLS §2.1.6](10_TOOLS.md); the field contract stays in [08_METADATA §4.4-4.7](08_METADATA.md). The registry `subject_id` / `anatomical_entity` columns remain **deferred** to the true-production restart — the blocks live in the sidecar only.
 
 ---
 
