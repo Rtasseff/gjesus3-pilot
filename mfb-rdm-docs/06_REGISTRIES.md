@@ -68,7 +68,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `data_source` | String | ✅ Yes | User | `internal` or `collaborator:<name>`. |
 | `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. See §2.3 for the recommended composite format. |
 | `sample_type` | String | 🔶 Recommended | User | Category of biological material. Use the controlled vocabulary in §2.4 (DRAFT). |
-| `session_id` | String | 🔶 Recommended (DRAFT) | User | DRAFT 2026-05-20. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc251016_m17_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. Status open (REG-08) pending PI sign-off. |
+| `session_id` | String | 🔶 Recommended (DRAFT) | User | DRAFT 2026-05-20. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc251016_m17_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. Status open (REG-08) pending a Data Office decision (user input welcome; this project has no PI sign-off gate). |
 | `primary_kind` | String | ✅ Yes (DRAFT) | Auto | DRAFT 2026-05-20. One of `file` \| `archive` \| `folder` — the shape of the primary entity on disk. `file` = single canonical file (microscopy `.czi`). `archive` = compressed archive (legacy collaborator DICOM `.zip`). `folder` = the acquisition folder itself is the unit (internal MRI ParaVision bundle). See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
 | `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary entity. When `primary_kind` = `file` or `archive`, this is a filename (`<ACQ-ID>.czi`, `<ACQ-ID>.zip`). When `primary_kind` = `folder`, this is the folder name (`<ACQ-ID>`) — the unit IS the folder, see [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
 | `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
@@ -88,7 +88,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 ### 2.3a ISA Terminology Mapping (DRAFT)
 
-> **🔶 DRAFT pilot guidance (2026-05-20).** The MFB workflow maps cleanly onto **ISA** (Investigation / Study / Assay) terminology. Adopting that vocabulary in the registry makes the data more compatible with REMBI-style metadata standards and any future migration to XNAT / OMERO / institutional platforms. Status open (REG-09) pending PI sign-off.
+> **🔶 DRAFT pilot guidance (2026-05-20).** The MFB workflow maps cleanly onto **ISA** (Investigation / Study / Assay) terminology. Adopting that vocabulary in the registry makes the data more compatible with REMBI-style metadata standards and any future migration to XNAT / OMERO / institutional platforms. Status open (REG-09) pending a Data Office decision (user input welcome; this project has no PI sign-off gate).
 
 | ISA term | gjesus3 equivalent | Where recorded | Example |
 |---|---|---|---|
@@ -106,7 +106,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 ### 2.3 Subject and Sample Identity (DRAFT — refines REG-01)
 
-> **🔶 DRAFT pilot guidance, re-grounded 2026-06-03 in FAIR / ISA / REMBI / BIDS / XNAT.** Status open (REG-01) pending PI sign-off. Supersedes the earlier bare `<short_project>_<short_sample>` recommendation. Per **Option B**: the model below is adopted now and carried in the `metadata.json` sidecar; the dedicated registry `subject_id` column is **deferred to the post-exhibition true-production restart** (no quasi-prod migration).
+> **🔶 DRAFT pilot guidance, re-grounded 2026-06-03 in FAIR / ISA / REMBI / BIDS / XNAT.** Status open (REG-01) pending a Data Office decision (user input welcome; this project has no PI sign-off gate). Supersedes the earlier bare `<short_project>_<short_sample>` recommendation. Per **Option B**: the model below is adopted now and carried in the `metadata.json` sidecar; the dedicated registry `subject_id` column is **deferred to the post-exhibition true-production restart** (no quasi-prod migration).
 
 **Two distinct entities, two identifiers.** Every standard we align to models the **subject** (the animal) and the **sample** (the physical thing imaged) as *separate* entities, each with its own identifier, joined by an explicit reference — never collapsed into one overloaded string:
 
@@ -150,7 +150,7 @@ The instrument short code embeds `animal_code` with instrument-specific decorati
 
 ### 2.4 Sample Type Vocabulary (DRAFT)
 
-> **🔶 DRAFT pilot guidance.** `sample_type` is the category of biological material in REMBI terms — *not* the species and *not* the anatomy. Status open (REG-07) pending PI sign-off.
+> **🔶 DRAFT pilot guidance.** `sample_type` is the category of biological material in REMBI terms — *not* the species and *not* the anatomy. Status open (REG-07) pending a Data Office decision (user input welcome; this project has no PI sign-off gate).
 
 REMBI separates concerns: **sample type** (the kind of biological material), **organism/species**, **anatomical entity**, **preparation**, and **imaging mode**. In the current registry only one of these has its own column (`sample_type`); the others ride along in `sample_id` / `notes` for now (see future split tracked in `tasks/tasks.md` §3.1).
 
@@ -411,12 +411,12 @@ Generation: Next available number within each type.
 
 | ID | Question | Owner | Status |
 |----|----------|-------|--------|
-| REG-01 | Include sample_id in raw registry as required or recommended? Composite format `<short_project>_<short_sample>` recommended (§2.3); PI sign-off pending. | Users / PI | 🔶 Draft |
+| REG-01 | Include sample_id in raw registry as required or recommended? Composite recommendation superseded by the Option B subject/sample identity model (§2.3); a Data Office decision (user input welcome; no PI sign-off gate). | Data Office (+ users) | 🔶 Draft |
 | REG-02 | What additional fields needed for REMBI/ISA alignment? | Data Mgmt Lead | 🔶 See [08_METADATA](08_METADATA.md) |
 | REG-03 | Git versioning for registries? | Data Mgmt Lead | 📋 Future consideration |
 | REG-04 | Validation script requirements | Data Mgmt Lead | 📋 Planned |
 | REG-05 | Curated datasets registry: finalize schema after pilot experience | Data Mgmt Lead | ❓ Evaluating |
 | REG-06 | Track DICOM instance count (.dcm files) in registry or only in extended metadata? | Data Mgmt Lead | 🔶 Draft |
-| REG-07 | Sample type controlled vocabulary (`tissue`/`organism`/`cells`/`material`/`phantom`) DRAFT in §2.4; PI sign-off + first round of cross-instrument application pending. Future split of species/anatomy into dedicated columns. | Users / PI | 🔶 Draft |
-| REG-08 | DRAFT `session_id` column (§2.2) — groups acquisitions that share an ISA "study" (one animal session, one MR study, etc.). For MRI typically the JRC study identifier; for microscopy may be empty/NA. | Users / PI | 🔶 Draft — pending PI sign-off |
-| REG-09 | DRAFT ISA terminology mapping (§2.3a) — Investigation=Project / Study=Session / Assay=Acquisition. Adopting ISA vocabulary improves REMBI compatibility + future XNAT/OMERO portability. | Users / PI | 🔶 Draft — pending PI sign-off |
+| REG-07 | Sample type controlled vocabulary (`tissue`/`organism`/`cells`/`material`/`phantom`) DRAFT in §2.4; first round of cross-instrument application pending (a Data Office decision; user input welcome — no PI sign-off gate). Future split of species/anatomy into dedicated columns. | Data Office (+ users) | 🔶 Draft |
+| REG-08 | DRAFT `session_id` column (§2.2) — groups acquisitions that share an ISA "study" (one animal session, one MR study, etc.). For MRI typically the JRC study identifier; for microscopy may be empty/NA. | Data Office (+ users) | 🔶 Draft — pending a Data Office decision (user input welcome; this project has no PI sign-off gate) |
+| REG-09 | DRAFT ISA terminology mapping (§2.3a) — Investigation=Project / Study=Session / Assay=Acquisition. Adopting ISA vocabulary improves REMBI compatibility + future XNAT/OMERO portability. | Data Office (+ users) | 🔶 Draft — pending a Data Office decision (user input welcome; this project has no PI sign-off gate) |
