@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-06-03 (NEW `anatomy:` block §4.6 — `is_whole_body` DECIDED-required boolean for the dead-simple full-body-vs-ROI query + UBERON-coded `region`, operator-entered for `organism` scans since it's not auto-derivable; PLUS animal-facility-DB explored + Subject/Sample identity model → `subject:` §4.4: `facility_animal_id` = reused canonical subject ID, species/sex normalized, `procedures` STRUCTURED — META-07 retired; identity model in [06_REGISTRIES §2.3](06_REGISTRIES.md). Prior: 2026-06-02 DOB + deferred-recovery §4.4.6; 2026-05-29 DRAFT `subject:`/`condition:`)
+**Last Updated:** 2026-06-03 (**Non-blocking metadata model §4.7** — `subject:`/`condition:`/`anatomy:` NEVER block ingest; `is_control` + `is_whole_body` softened from hard-required to tri-state recommended-WARN (`true`/`false`/`null`), set-once-per-batch propagation, best-effort auto, bulk enrichment later, archive data ingests with guesses/unknown. NEW `anatomy:` §4.6 (`is_whole_body` + UBERON `region`); animal-DB explored + Subject/Sample identity model → `subject:` §4.4 (`facility_animal_id` reused subject id, `procedures` STRUCTURED, META-07 retired); identity model in [06_REGISTRIES §2.3](06_REGISTRIES.md). Prior: 2026-06-02 DOB + deferred-recovery §4.4.6)
 
 ---
 
@@ -550,12 +550,14 @@ This is a forward-only mechanism: the historical/archival backfills in progress 
 
 ### 4.5 `condition:` Block — Disease State and Experimental Role (DRAFT 2026-05-29)
 
-> **🔶 DRAFT (2026-05-29).** New top-level `condition:` block in `metadata.json` capturing the disease/control state of each acquisition. Sister block to §4.4 `subject:`; same trigger condition (`sample_type ∈ {organism, tissue}`).
+> **🔶 DRAFT (2026-05-29; non-blocking model adopted 2026-06-03).** New top-level `condition:` block in `metadata.json` capturing the disease/control state of each acquisition. Sister block to §4.4 `subject:`; same trigger condition (`sample_type ∈ {organism, tissue}`).
 >
-> **Decided/Draft split:**
-> - **✅ `is_control` is DECIDED-required** — a strict boolean. The sidecar writer (Phase 3, `tasks/tasks.md §3.2`) refuses to write the sidecar if `is_control` is missing for an organism/tissue acquisition.
-> - **🔶 `disease_model` and `disease_state` are DRAFT-required** — free-text, the writer logs a WARN if missing but does not block. The pilot can tighten to DECIDED-required once a working operator habit is established.
-> - **🔶 Optional fields** (`control_type` / `treatment` / `timepoint_days` / `study_arm`) — write-through, no validation.
+> **⚠️ Non-blocking (revised 2026-06-03 — see the unified model in §4.7).** Nothing in this block ever blocks ingest. `is_control` is **highly recommended, not required** — it is **tri-state** `true | false | null` (where `null` = unknown), defaults to `null` when unsupplied, and the writer **WARNs** (never raises) if it is `null` for an organism/tissue acquisition. This reverses the earlier "DECIDED-required hard-block": a hard-block punished archive data and the realistic operator (who can barely supply a folder name), and "data + a guess" beats refusing the ingest.
+>
+> **Recommended/Optional split:**
+> - **`is_control`** — highly recommended tri-state boolean (`true`/`false`/`null=unknown`). WARN if `null`. The primary cohort filter when present.
+> - **`disease_model` / `disease_state`** — recommended free-text; WARN if missing. `disease_model` can be **pre-seeded** from the animal-DB `projects.name` (a project-level hint — see §4.5.4).
+> - **Optional** (`control_type` / `treatment` / `timepoint_days` / `study_arm`) — write-through, no validation.
 
 #### 4.5.1 Why this is its own block (not folded into `subject:`)
 
@@ -563,8 +565,8 @@ This is a forward-only mechanism: the historical/archival backfills in progress 
 |---|---|---|
 | **What it answers** | "Who is this animal?" | "What study state is this acquisition?" |
 | **Variation** | Per-subject, fixed | Per-acquisition, varies (same animal at baseline + post-treatment) |
-| **Source** | Animal-facility-DB (auto, when integration lands) > study YAML > instrument extracts | Operator-entered via per-batch YAML or `/projects/<proj>/metadata/`; DB does not know this |
-| **Required for** | `sample_type ∈ {organism, tissue}` | `sample_type ∈ {organism, tissue}` |
+| **Source** | Animal-facility-DB (auto) > study YAML > instrument extracts | Operator-entered via per-batch YAML or `/projects/<proj>/metadata/`; `disease_model` can be pre-seeded from the DB `projects.name`, but `is_control` is not in the DB |
+| **Recommended for** (non-blocking) | `sample_type ∈ {organism, tissue}` | `sample_type ∈ {organism, tissue}` |
 
 Folding into `subject:` would conflate two different source pipelines (DB-auto vs. operator-only) and obscure the per-acquisition semantics.
 
@@ -572,16 +574,18 @@ Folding into `subject:` would conflate two different source pipelines (DB-auto v
 
 ```json
 "condition": {
-  "disease_model":     "wild_type",            // DRAFT-REQUIRED — constitutive disease/model classification, OR "wild_type" / "non_transgenic" for naive animals
-  "disease_state":     "baseline",              // DRAFT-REQUIRED — state at scan time. Free-text. Examples: "baseline", "day_7_post_MI", "endpoint", "6mo_AD_phenotype", "MPTP_day_21", "post_treatment_day_3"
-  "is_control":        true,                    // DECIDED-REQUIRED — strict boolean: true if this acquisition serves as a control reference, false if case/disease
+  "is_control":        true,                    // HIGHLY RECOMMENDED — tri-state: true (control) | false (case/disease) | null (unknown). null = "not yet determined" (default when unsupplied); WARN, never block. Primary cohort filter.
+  "disease_model":     "wild_type",            // RECOMMENDED — constitutive disease/model classification, OR "wild_type" / "non_transgenic" for naive animals. May be pre-seeded from the DB projects.name.
+  "disease_state":     "baseline",              // RECOMMENDED — state at scan time. Free-text. Examples: "baseline", "day_7_post_MI", "endpoint", "6mo_AD_phenotype", "MPTP_day_21", "post_treatment_day_3"
   "control_type":      "naive",                 // optional (only meaningful when is_control=true): "naive" / "sham" / "vehicle" / "littermate" / "untreated_baseline"
   "treatment":         null,                    // optional free-text: e.g. "vehicle", "drug_X_5mg/kg_IP_day_0", "MI_LAD_ligation"
   "timepoint_days":    0,                       // optional numeric — days from study start or from intervention
   "study_arm":         "control_naive",         // optional — explicit experimental-arm label for cohort grouping
-  "source":            "operator-entered"       // DRAFT — provenance: "operator-entered" / "study-yaml" / "imported-from-excel"
+  "source":            "operator-entered"       // provenance / confidence: "operator-entered" | "study-yaml" | "imported-from-excel" | "auto-guess" (e.g. disease_model from project name) | "unknown"
 }
 ```
+
+Missing/unsupplied fields are written explicitly: `is_control: null`, free-text fields `""`, `source: "unknown"`. The block is always present for organism/tissue acquisitions — never omitted, never blocking.
 
 #### 4.5.3 Query patterns this enables
 
@@ -593,37 +597,36 @@ Folding into `subject:` would conflate two different source pipelines (DB-auto v
 | Post-MI day 7 cases | `disease_state contains "day_7" AND is_control == false` |
 | All vehicle controls | `is_control == true AND control_type == "vehicle"` |
 
-The `is_control` boolean is the primary "needle in a haystack" filter — strict boolean means no ambiguity for cohort-builder scripts or for future XNAT/OMERO migration.
+`is_control == true` / `== false` are the primary "needle in a haystack" filters; `null` (unknown) is simply excluded from both and surfaces in the completeness report (§4.7) as a gap to fill.
 
-#### 4.5.4 Source: operator-entered, not auto-derivable
+#### 4.5.4 Source: mostly operator-entered, with a project-level auto-seed — set once, propagate
 
-Unlike `subject:` (which the animal-facility-DB will eventually populate), `condition:` cannot be auto-derived. The disease/control state is a property of the **study design**, not the animal — same animal can be a baseline-scan control on day 0 and a post-MI case on day 7. Operators set it via:
+The disease/control state is largely a property of the **study design**, not the animal — the same animal can be a baseline-scan control on day 0 and a post-MI case on day 7. The DB cannot fully supply it (the `animals.exp_group` group-link is unpopulated), but `projects.name` gives a usable **project-level `disease_model` hint** (e.g. *"…hipertensión pulmonar"* → `disease_model` seed). Set it via, in precedence order:
 
-1. **Per-batch YAML** (registry block) for batches where every acquisition shares the same condition. Example:
+1. **Per-batch YAML `condition:` block** — **set once, applies to every acquisition the batch produces.** This is the normal path and the key to adoption: the operator (or Ryan) supplies the condition **once per ingest batch / session**, never per scan. A batch is typically one session or one animal-cohort's worth of scans, so one block covers them all.
    ```yaml
-   registry:
-     # ... other fields ...
    condition:
+     is_control: true            # tri-state; omit to leave null=unknown
      disease_model: "wild_type"
      disease_state: "baseline"
-     is_control: true
    ```
-2. **Per-acquisition YAML** in `/projects/<proj>/metadata/<acq_id>.json` for batches that mix conditions (e.g., a single MRI session that scans baseline + post-MI animals back-to-back).
-3. **Excel → study-metadata importer** (when it ships — `tasks/tasks.md §3.2`) for researcher-driven population from a per-project Excel.
+2. **Per-acquisition override** in `/projects/<proj>/metadata/<acq_id>.json` — only for the rare batch that genuinely mixes conditions; not the default.
+3. **Project-level auto-seed** — `disease_model` pre-filled from the DB `projects.name` (`source: "auto-guess"`), overridable.
+4. **Excel → study-metadata importer** (`tasks/tasks.md §3.2`) — researcher-driven bulk fill at the study level, the main tool for enriching archive data after the fact.
 
-The sidecar holds a **frozen snapshot at ingest time**, refreshed at project close-out before `/projects/<proj>/` deletion. Same lifecycle as `subject:`.
+If none supply it, the block is still written with `is_control: null` + `source: "unknown"` and a WARN — the acquisition ingests and is flagged for later enrichment (§4.7). The sidecar holds a **frozen snapshot at ingest**, refreshed at project close-out before `/projects/<proj>/` deletion. Same lifecycle as `subject:`.
 
 #### 4.5.5 Status & implementation
 
 | Aspect | Status |
 |---|---|
-| `is_control` required field (boolean) | ✅ DECIDED (2026-05-29) — writer refuses sidecar if missing |
-| `disease_model` + `disease_state` required (free-text) | 🔶 DRAFT — writer WARNs but proceeds; tighten to DECIDED post-pilot |
+| `is_control` (tri-state `true`/`false`/`null`) | ✅ DECIDED highly-recommended, **non-blocking** (revised 2026-06-03) — writer WARNs if `null`, never refuses |
+| `disease_model` + `disease_state` (free-text) | 🔶 Recommended — writer WARNs if missing, proceeds. `disease_model` auto-seed from `projects.name` |
 | Optional fields (`control_type` / `treatment` / `timepoint_days` / `study_arm`) | 🔶 DRAFT, write-through |
-| Controlled vocabulary for `disease_model` / `disease_state` | ❓ Deferred — preclinical model vocabularies are too domain-specific to fully control. Future enhancement: per-PI vocabularies in `/projects/<proj>/metadata/vocab.yaml`. |
-| Writer in `tools/ingest/metadata_sidecar.py` | ⚠️ Not yet implemented — same Phase 3 work as `subject:` writer (`tasks/tasks.md §3.2`) |
-| YAML-level `condition:` block support in per-batch configs | ⚠️ Not yet implemented — additive to existing `registry:` block; same loader |
-| Backfill of existing 97 MRI + 84 NI + animal-derived microscopy | ⚠️ Queued — Phase 4 of `tasks/tasks.md §3.2`; operators will need to recall the condition info from study notes when backfilling |
+| Controlled vocabulary for `disease_model` / `disease_state` | ❓ Deferred — preclinical model vocabularies are too domain-specific to fully control. Future: per-PI vocabularies in `/projects/<proj>/metadata/vocab.yaml`. |
+| Writer in `tools/ingest/metadata_sidecar.py` | ⚠️ Not yet implemented — same Phase 3 work as `subject:` writer (`tasks/tasks.md §3.2`); WARN-not-raise |
+| YAML-level `condition:` block support in per-batch configs | ⚠️ Not yet implemented — additive to existing `registry:` block; same loader; set-once-per-batch |
+| Backfill of existing 97 MRI + 84 NI + animal-derived microscopy | ⚠️ Queued — Phase 4; ingests now with `null`+WARN, enriched later via the Excel importer / bulk tools (§4.7) |
 
 Until the writer ships, operators may include a `condition:` block in YAML configs as forward-compatible documentation; the loader will pick it up once Phase 3 lands.
 
@@ -631,10 +634,12 @@ Until the writer ships, operators may include a `condition:` block in YAML confi
 
 > **🔶 DRAFT (2026-06-03).** New top-level `anatomy:` block in `metadata.json` capturing **what part of the body an in-vivo scan covers**. Required for biomedical-imaging acquisitions of a whole organism (`sample_type = organism` — internal MRI + Nuclear Imaging). Answers the headline question *"is this a full-body scan or a region of interest?"* with a dead-simple boolean, plus an ontology-coded region for the detail.
 >
-> **Decided/Draft split:**
-> - **✅ `is_whole_body` is DECIDED-required** — a strict boolean, the sister of `condition.is_control`. The sidecar writer (Phase 3) refuses to write the sidecar if it is missing for an `organism` acquisition.
-> - **🔶 `region` is DRAFT-required when `is_whole_body = false`** — a UBERON-coded anatomical term; the writer WARNs if missing but does not block.
-> - **🔶 Optional:** `additional_regions`, `auto_hint`.
+> **⚠️ Non-blocking (2026-06-03 — same unified model as `condition:`, see §4.7).** Nothing here blocks ingest.
+> - **`is_whole_body`** — highly recommended, **tri-state** `true | false | null` (`null` = unknown), defaults to `null`; the writer **WARNs** (never raises) if `null` for an `organism` acquisition. Sister of `condition.is_control`; the dead-simple full-body-vs-ROI filter when present.
+> - **`region`** — recommended UBERON-coded term when `is_whole_body = false`; WARN if missing, never block.
+> - **Optional:** `additional_regions`, `auto_hint`.
+>
+> (Reverses the earlier "DECIDED-required hard-block" — archive scans and the can-barely-name-a-folder operator must still ingest; a guess or `null` beats refusing the data.)
 
 #### 4.6.1 Why its own block, and why operator-entered
 
@@ -653,19 +658,19 @@ So `anatomy:` is **operator-entered** (like `condition:`), with an *optional, no
 
 ```json
 "anatomy": {
-  "is_whole_body": false,                          // DECIDED-REQUIRED strict boolean — the dead-simple full-body-vs-ROI flag (sister of condition.is_control)
-  "region": {                                      // DRAFT-REQUIRED when is_whole_body=false — the anatomical region, UBERON-coded
+  "is_whole_body": false,                          // HIGHLY RECOMMENDED — tri-state: true | false | null (unknown). Default null when unsupplied; WARN, never block. The dead-simple full-body-vs-ROI flag.
+  "region": {                                      // RECOMMENDED when is_whole_body=false — the anatomical region, UBERON-coded. null when unknown.
     "label":    "brain",
     "ontology": "UBERON",
     "id":       "UBERON:0000955"
   },
   "additional_regions": [],                        // optional — extra UBERON terms when a scan spans more than one named region (e.g. thorax + abdomen)
-  "source":    "operator-entered",                 // DRAFT — provenance: operator-entered | study-yaml | auto-hint-confirmed
-  "auto_hint": "protocol:1_Localizer_multi_slice; fov_mm:[50,50]"  // optional, non-authoritative — surfaced from instrument metadata to assist the operator
+  "source":    "operator-entered",                 // provenance / confidence: operator-entered | study-yaml | auto-hint-confirmed | auto-guess | unknown
+  "auto_hint": "protocol:1_Localizer_multi_slice; fov_mm:[50,50]"  // optional, non-authoritative — surfaced from instrument metadata to assist/pre-fill the operator
 }
 ```
 
-For a **whole-body** scan: `is_whole_body = true`; `region` may be the whole-organism term `UBERON:0000468` ("multicellular organism") or left null. For a **regional** scan: `is_whole_body = false` and `region` carries the specific structure.
+For a **whole-body** scan: `is_whole_body = true`; `region` may be the whole-organism term `UBERON:0000468` ("multicellular organism") or left null. For a **regional** scan: `is_whole_body = false` and `region` carries the specific structure. **When unknown** (archive data, no operator input): `is_whole_body: null`, `region: null`, `source: "unknown"` — the block is still written and the scan ingests; the gap surfaces in the completeness report (§4.7).
 
 **Ontology = UBERON** (Uberon cross-species anatomy ontology, OBO Foundry). Chosen because it is **species-agnostic** (covers Mouse *and* Rat — both present in our colony — plus human), has resolvable PIDs (`http://purl.obolibrary.org/obo/UBERON_0000955`), is REMBI-aligned ("use a relevant ontology"), and **harmonizes with the tissue-side `anatomical_entity`** from the Subject/Sample identity model ([06_REGISTRIES §2.3](06_REGISTRIES.md)) — both reference UBERON, so anatomy is queryable uniformly across in-vivo scans and ex-vivo sections.
 
@@ -695,13 +700,51 @@ The `is_whole_body` boolean is the primary "needle in a haystack" filter — str
 
 | Aspect | Status |
 |---|---|
-| `is_whole_body` required boolean | ✅ DECIDED (2026-06-03) — writer refuses sidecar if missing for `organism` |
-| `region` UBERON-coded | 🔶 DRAFT-required when `is_whole_body=false` — writer WARNs but proceeds |
+| `is_whole_body` (tri-state `true`/`false`/`null`) | ✅ DECIDED highly-recommended, **non-blocking** (2026-06-03) — writer WARNs if `null`, never refuses |
+| `region` UBERON-coded | 🔶 Recommended when `is_whole_body=false` — writer WARNs but proceeds |
 | Ontology = UBERON | ✅ DECIDED (2026-06-03) — cross-species; harmonizes with tissue `anatomical_entity` |
 | Optional `additional_regions` / `auto_hint` | 🔶 DRAFT, write-through |
-| `anatomy:` writer in `metadata_sidecar.py` | ⚠️ Not yet implemented — same Phase 3 work as `subject:`/`condition:` (`tasks/tasks.md §3.2`) |
+| `anatomy:` writer in `metadata_sidecar.py` | ⚠️ Not yet implemented — same Phase 3 work as `subject:`/`condition:` (`tasks/tasks.md §3.2`); WARN-not-raise |
 | Auto-hint extractor (MRI ProtocolName+FOV, NI bed-range) | 🔶 Future — non-authoritative pre-fill only |
-| Backfill of existing 97 MRI + 84 NI organism acqs | ⚠️ Queued — Phase 4 of `tasks/tasks.md §3.2`; operator recall from protocol/notes |
+| Backfill of existing 97 MRI + 84 NI organism acqs | ⚠️ Queued — Phase 4; ingests now with `null`+WARN, enriched later (§4.7) |
+
+### 4.7 Metadata Completeness — the Non-Blocking Model (DECIDED 2026-06-03)
+
+> **✅ DECIDED (2026-06-03).** The enrichment blocks — `subject:` (§4.4), `condition:` (§4.5), `anatomy:` (§4.6) — follow one rule: **they never block ingest.** Data always lands; metadata is layered on afterwards. This reverses the earlier hard-required `is_control` / `is_whole_body` checks.
+
+#### 4.7.1 Why
+
+A hard-block on a field that no automation can supply and that the operator may not know fails the two cases gjesus3 most needs to serve:
+- **Archive / historical data** — nobody is left to say "control vs case" or "whole-body vs ROI." Refusing it means losing the data entirely. **Data + a guess (or an honest `unknown`) beats no data.**
+- **The realistic operator** — for internal MRI we are lucky to get a session *folder name*; requiring extra per-scan fields at sub-folder granularity is an adoption dead-end.
+
+#### 4.7.2 The four principles
+
+1. **Never block.** No writer ever raises on a missing enrichment field. The acquisition is registered and the sidecar is written regardless.
+2. **Explicit sentinels, not absence.** Unknowns are written, not omitted: tri-state booleans (`is_control`, `is_whole_body`) take `null` = unknown; free-text → `""`; `source` → `"unknown"`. A consumer can always tell "false" from "not yet known."
+3. **Set once, propagate down — never per-scan.** Enrichment is supplied at the **batch / session / project / animal** level and inherited by every acquisition in scope (per-batch YAML block is the normal path; per-acquisition override is the rare exception). The operator answers once per session, not once per scan.
+4. **WARN + track, then bulk-fill.** Missing recommended fields emit a WARN and are recorded as gaps (the pending/completeness tracker), to be filled **later, in bulk**, by the people who know — not at ingest time under pressure.
+
+#### 4.7.3 Source precedence (best-effort auto first)
+
+| Block | Auto (best-effort) | Then | Sentinel if nothing |
+|---|---|---|---|
+| `subject:` | **Animal-facility DB** (strong — §4.4) | study YAML > instrument extract | `source:"pending-db"` + pending list (§4.4.6) |
+| `condition:` | `disease_model` seed from DB `projects.name` (weak) | per-batch YAML > per-acq override > Excel import | `is_control:null`, `source:"unknown"` |
+| `anatomy:` | `auto_hint` from protocol/FOV/bed-range (weak, non-authoritative) | per-batch YAML > per-acq override | `is_whole_body:null`, `source:"unknown"` |
+
+`subject:` carries the load (it auto-fills); `condition:`/`anatomy:` get a weak seed/hint and otherwise rely on set-once-per-batch input or later bulk enrichment.
+
+#### 4.7.4 Tools that make it easy (planned — help, never require)
+
+- **Per-batch YAML blocks** (Phase 3) — the set-once-per-ingest path.
+- **Excel → study-metadata importer** (`tasks/tasks.md §3.2`) — the main bulk-fill tool for archive data: a researcher fills a per-project sheet (one row per animal/session), and it writes `condition:`/`anatomy:`/`subject:` overrides at the study level.
+- **Metadata-completeness report** — a `validate_registries`-style read that lists which acquisitions have `is_control:null` / `is_whole_body:null` / `subject.source:"pending-db"`, so gaps are visible and actionable in bulk (extends the `registries/pending_subject_metadata.csv` idea into a general "what's missing" view).
+- **Auto-hint pre-fill** — surfaces the protocol/FOV/bed-range guess so the operator *confirms* rather than types.
+
+#### 4.7.5 What this means for the existing 365+ acquisitions
+
+They ingest cleanly today: `subject:` auto-fills from the DB, `condition.disease_model` gets a project-name seed, everything else is `null`/`unknown` + WARN. Nothing is lost, nothing is blocked, and the completeness report + Excel importer drive enrichment at the post-exhibition true-production restart (Phase 4).
 
 ---
 
@@ -736,7 +779,7 @@ For SEM/TEM imaging of nanomaterials (if included):
 | ~~META-03~~ | ~~Develop metadata extraction scripts~~ | — | ✅ Resolved: integrated into full-mode ingest; see [10_TOOLS](10_TOOLS.md). Implementation pending. |
 | META-04 | ISA-TAB-Nano for nanomaterials? | Data Mgmt Lead | ❓ If SEM/TEM included |
 | META-05 | Animal-facility-DB programmatic access + auto-populate `subject:` block (§4.4) | Data Mgmt Lead + IT | 🔶 **Access obtained 2026-06-02** — Phase 1 exploration (schema/auth/field mapping) in progress; then fetcher + deferred-recovery tooling. 4-phase plan in `tasks/tasks.md §3.2` |
-| META-06 | Tighten `disease_model` + `disease_state` from DRAFT-required to DECIDED-required after pilot operator-habit is established (§4.5) | Data Mgmt Lead | 🔶 Open — revisit after Phase 3 writer lands + a few real batches use the `condition:` block; `is_control` already DECIDED |
+| ~~META-06~~ | ~~Tighten `disease_model`/`disease_state`/`is_control` to DECIDED-required (hard-block)~~ | Data Mgmt Lead | ✅ Resolved 2026-06-03 — **superseded by the non-blocking model (§4.7).** Hard-required checks are off the table (adoption + archive-data killer); all enrichment fields are recommended-WARN, never blocking. |
 | ~~META-07~~ | ~~How to fill optional `procedure_tags` from the `procedures` free-text~~ | Data Mgmt Lead | ✅ Retired 2026-06-03 — DB exploration showed procedures are **already a structured controlled vocabulary** (`animal_procedures`→`procedures.type`+date); we carry the `[{type,date}]` list directly, no free-text parsing needed (§4.4.7). Reopens only if free-text `animal_observations` notes are ever pulled. |
 | META-08 | Subject/Sample two-tier identity model (reused facility animal ID as subject; registry `subject_id`/`anatomical_entity` columns) — confirm at PI sign-off (REG-01) + add registry columns at true-prod restart | Data Mgmt Lead + PI | 🔶 DRAFT 2026-06-03 — model adopted (Option B), grounded in FAIR/ISA/REMBI/BIDS/XNAT; see [06_REGISTRIES §2.3](06_REGISTRIES.md) |
 | META-09 | `anatomy:` block — `is_whole_body` (DECIDED-required) + UBERON `region` (§4.6). Confirm UBERON starter vocabulary per study; decide whether/when to build the optional auto-hint extractor (MRI ProtocolName+FOV, NI bed-range) | Data Mgmt Lead | 🔶 DRAFT 2026-06-03 — block adopted; operator-entered (not auto-derivable); writer is Phase 3 |
