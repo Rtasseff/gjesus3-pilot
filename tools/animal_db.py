@@ -358,7 +358,7 @@ def _cmd_check():
         with conn.cursor() as cur:
             cur.execute("SELECT VERSION() AS v, CURRENT_USER() AS u, DATABASE() AS d")
             row = cur.fetchone()
-        log(f"OK — server {row['v']}, user {row['u']}, db {row['d']}")
+        log(f"OK - server {row['v']}, user {row['u']}, db {row['d']}")
         return 0
     finally:
         conn.close()
@@ -387,7 +387,7 @@ def _cmd_self_test():
     if not isinstance(res.subject.get("procedures"), list):
         log("FAIL: procedures is not a structured list", "ERROR")
         return 1
-    log(f"PASS — {res.subject['facility_animal_id']}: {res.subject['species']}, "
+    log(f"PASS - {res.subject['facility_animal_id']}: {res.subject['species']}, "
         f"{res.subject['strain']}, {res.subject['sex']}, DOB {res.subject['date_of_birth']}, "
         f"{len(res.subject['procedures'])} procedure(s)")
     return 0
@@ -411,6 +411,13 @@ def main():
     p.add_argument("--self-test", action="store_true",
                    help="live lookup of the known (0525, 13) with assertions")
     args = p.parse_args()
+
+    # DB values can carry accents (e.g. Spanish procedure names); keep them
+    # legible on the Windows console. The sidecar file is always written UTF-8.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
 
     if not HAS_PYMYSQL:
         log("pymysql not installed. In WSL: pip install 'pymysql>=1.1'", "ERROR")
