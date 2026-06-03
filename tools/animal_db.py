@@ -12,17 +12,20 @@ WHAT IT CONNECTS TO
     this is a shared production database; never write to it.
 
 WHERE IT RUNS / CREDENTIALS
-    Credentials live ONLY in `~/.my.cnf` (mode 600), never in this repo,
-    env vars, or logs. On Ryan's setup that file is in the WSL home
-    (`/home/rtasseff/.my.cnf`), so this tool runs from WSL with pymysql
-    installed (e.g. the `~/.venvs/gjesus3db` venv). On-network / VPN only.
+    Runs on Windows alongside the rest of the ingest pipeline — single OS, no
+    WSL split (pymysql is pure Python and installs fine on Windows; the DB is
+    a network resource reachable from Windows). Credentials live ONLY in
+    `~/.my.cnf` — on Windows that is `C:\\Users\\<you>\\.my.cnf`; keep it in the
+    local user profile, NOT in OneDrive or this repo (it's protected by the
+    profile's NTFS ACLs). Never put the password in the repo, env vars, or
+    logs. On-network / VPN only. Override the path with GJESUS3_MYCNF.
 
-    A Windows operator machine typically has NEITHER the creds NOR pymysql —
-    that is expected. `lookup()` then returns status="unreachable", and the
-    ingest pipeline (Phase 3) WARNs, writes a placeholder subject block, and
-    queues the acquisition for a superuser to recover later (the
-    deferred-recovery subsystem, 08_METADATA §4.4.6). So auto-population
-    works where creds exist and defers cleanly where they don't.
+    Whether a machine can auto-populate depends on whether IT HAS CREDS, not
+    on the OS: the Data-Mgmt-Lead / superuser machines hold `~/.my.cnf`; a
+    generic operator machine may not. With no creds (or off-network),
+    `lookup()` returns status="unreachable" and the ingest pipeline (Phase 3)
+    WARNs, writes a placeholder subject block, and queues the acquisition for
+    a superuser to recover later (deferred-recovery, 08_METADATA §4.4.6).
 
 THE JOIN (verified 2026-06-02)
     project_hint `ae-biomegune-<NNNN>` → `projects.projectAlias = <NNNN>`
@@ -75,7 +78,7 @@ except ImportError:
 # exists only in ~/.my.cnf). Override via env var for portability.
 DB_USER = os.environ.get("GJESUS3_ANIMALDB_USER", "rtasseff")
 DATABASE = "animal_facility"
-CNF_PATH = os.path.expanduser(os.environ.get("GJESUS3_MYCNF", "~/.my.cnf"))
+CNF_PATH = os.environ.get("GJESUS3_MYCNF") or os.path.join(os.path.expanduser("~"), ".my.cnf")
 CONNECT_TIMEOUT = 8
 
 # The institute's animal-protocol code stem; the facility's project_code is
