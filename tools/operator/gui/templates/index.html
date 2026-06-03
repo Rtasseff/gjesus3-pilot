@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Microscopy Ingest — gjesus3</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>Microscopy Ingest</h1>
+    <div class="nasbar">
+      <label>NAS root
+        <input id="nas-root" type="text" value="{{ nas_root }}" size="28"
+               placeholder="J:\gjesus3-data">
+      </label>
+      <button id="nas-save" type="button">Set</button>
+      <span id="nas-status" class="pill"></span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="runner" type="button">Run a recipe</button>
+    <button class="tab" data-tab="builder" type="button">Build a recipe</button>
+  </nav>
+
+  <!-- ====================================================== RECIPE RUNNER -->
+  <section id="tab-runner" class="tabpane active">
+    <div class="row">
+      <label>Instrument
+        <select id="r-instrument">
+          {% for inst in instruments %}
+          <option value="{{ inst.key }}">{{ inst.label }} ({{ inst.key }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Recipe
+        <select id="r-recipe"><option value="">— pick a recipe —</option></select>
+      </label>
+    </div>
+    <p id="r-recipe-desc" class="muted"></p>
+    <div class="row">
+      <label class="grow">Staging folder (point at the day/batch folder)
+        <input id="r-staging" type="text"
+               placeholder="S:\goptical\GOpticalUsers data\AxioScan\20260522">
+      </label>
+      <button id="r-preview" type="button" class="primary">Preview</button>
+    </div>
+
+    <div id="r-summary" class="summary"></div>
+    <div id="r-errors" class="errbox"></div>
+    <div id="r-table-wrap" class="table-wrap"></div>
+    <details id="r-warnings-wrap" class="warnings"><summary>Warnings / log</summary>
+      <pre id="r-warnings"></pre>
+    </details>
+
+    <div class="row commit-row">
+      <label class="check"><input id="r-dry" type="checkbox" checked> Dry-run (safe; writes nothing)</label>
+      <button id="r-ingest" type="button" class="go" disabled>Ingest</button>
+    </div>
+    <div id="r-log-wrap" class="log-wrap" hidden>
+      <h3>Ingest log</h3>
+      <pre id="r-log"></pre>
+      <div id="r-result" class="summary"></div>
+    </div>
+  </section>
+
+  <!-- =========================================================== BUILDER -->
+  <section id="tab-builder" class="tabpane">
+    <p class="muted">
+      Builder mode is a working scaffold: edit the parse rules and field
+      mappings, watch the live <code>discovered.*</code> grid and resolved
+      examples update, then save as a recipe. It re-runs the same read-only
+      preview as the runner.
+    </p>
+
+    <div class="row">
+      <label>Instrument
+        <select id="b-instrument">
+          {% for inst in instruments %}
+          <option value="{{ inst.key }}">{{ inst.label }} ({{ inst.key }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button id="b-load-template" type="button">Load template defaults</button>
+    </div>
+    <div class="row">
+      <label class="grow">Staging folder (live preview uses real files here)
+        <input id="b-staging" type="text" placeholder="point at a real batch folder">
+      </label>
+    </div>
+
+    <!-- (a) PARSE RULES -->
+    <fieldset>
+      <legend>(a) Where the metadata lives in the names</legend>
+      <div class="row">
+        <label>Parse mode
+          <select id="b-parse-mode">
+            <option value="positional">Positional (separator + ordered fields)</option>
+            <option value="regex">Regex (named groups)</option>
+          </select>
+        </label>
+        <label id="b-source-wrap">Parse source
+          <select id="b-source">
+            <option value="name">file/folder name</option>
+            <option value="parent_name">parent folder name</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="b-positional" class="parse-block">
+        <label>Separator
+          <input id="b-separator" type="text" value="_" size="3">
+        </label>
+        <label class="grow">Ordered fields (comma-separated, left to right)
+          <input id="b-fields" type="text"
+                 placeholder="group_code, operator, project, sample_short, section, stain, magnification">
+        </label>
+      </div>
+
+      <div id="b-regex" class="parse-block" hidden>
+        <label class="grow">Regex with named groups (each <code>(?P&lt;name&gt;...)</code> becomes a discovered field)
+          <input id="b-regex-pat" type="text"
+                 placeholder="^(?P<researcher>[^_]+)_(?P<experiment>.+)_(?P<cell_line>[^_]+)$">
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="grow">Path levels (folders between staging dir and the file; comma-separated; needs a recursive <code>**</code> pattern)
+          <input id="b-path-levels" type="text" placeholder="researcher, cell_line, experiment">
+        </label>
+      </div>
+      <div class="row">
+        <label class="grow">Filter (<code>field=value</code> pairs, comma-separated; only matching files are in scope)
+          <input id="b-filter" type="text" placeholder="group_code=MFB">
+        </label>
+        <button id="b-refresh-grid" type="button" class="primary">Refresh discovered grid</button>
+      </div>
+
+      <div id="b-errors" class="errbox"></div>
+      <div id="b-grid-wrap" class="table-wrap"></div>
+    </fieldset>
+
+    <!-- (b) FIELD MAPPING via token chips -->
+    <fieldset>
+      <legend>(b) Map registry fields &amp; names</legend>
+      <p class="muted">
+        Click a chip to insert a token into the focused field. Each field shows
+        a live resolved example from the first file; unresolved
+        <code>${…}</code> tokens flag <span class="bad">red</span>.
+      </p>
+      <div id="b-chips" class="chips"></div>
+
+      <div class="mapgrid">
+        <label>project_hint
+          <input class="b-map" data-key="registry.project_hint" type="text">
+          <span class="example"></span>
+        </label>
+        <label>sample_id
+          <input class="b-map" data-key="registry.sample_id" type="text">
+          <span class="example"></span>
+        </label>
+        <label>operator
+          <input class="b-map" data-key="registry.operator" type="text">
+          <span class="example"></span>
+        </label>
+        <label>notes
+          <input class="b-map" data-key="registry.notes" type="text">
+          <span class="example"></span>
+        </label>
+        <label>link_filename
+          <input class="b-map" data-key="link_filename" type="text">
+          <span class="example"></span>
+        </label>
+        <label class="check">
+          <input id="b-auto-create" type="checkbox" checked> auto_create_project
+        </label>
+      </div>
+      <div class="row">
+        <button id="b-preview" type="button" class="primary">Preview with these mappings</button>
+      </div>
+      <div id="b-map-summary" class="summary"></div>
+      <div id="b-map-table-wrap" class="table-wrap"></div>
+    </fieldset>
+
+    <!-- SAVE -->
+    <fieldset>
+      <legend>Save as recipe</legend>
+      <div class="row">
+        <label class="grow">Recipe name
+          <input id="b-recipe-name" type="text" placeholder="AxioScan 7 - my convention">
+        </label>
+        <button id="b-save" type="button" class="go">Save recipe</button>
+      </div>
+      <label class="grow">Description
+        <input id="b-recipe-desc" type="text" placeholder="what this convention is for">
+      </label>
+      <div id="b-save-status" class="summary"></div>
+      <details><summary>Override dict that will be saved</summary>
+        <pre id="b-override-json"></pre>
+      </details>
+    </fieldset>
+  </section>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -3,3 +3,6 @@ pyyaml>=6.0
 tqdm>=4.60
 czifile>=2019.7.2
 pymysql>=1.1  # animal_db.py — read-only animal-facility DB client (~/.my.cnf)
+paramiko>=3.0  # ftp_mirror.py + operator MRI/NI front-ends — SFTP pull from instrument consoles
+flask>=3.0  # tools/operator/gui — local microscopy ingest GUI (browser front-end)
+# pyinstaller>=6.0  # BUILD-ONLY: freeze the microscopy GUI to a single .exe (not a runtime dep)

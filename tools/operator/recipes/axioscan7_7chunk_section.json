@@ -1,0 +1,22 @@
+{
+  "schema": "gjesus3.operator.recipe/v1",
+  "name": "AxioScan 7 - MFB 7-chunk (with <section>)",
+  "instrument": "ZWSI",
+  "description": "AxioScan 7 / MFB whole-slide batch where the filename carries an explicit <section> chunk between sample_short and stain (7 underscore chunks). Mirrors the 2026-05-22 day-folder convention captured in tools/configs/axioscan7_20260522.yaml: MFB_<operator>_<project>_<sample_short>_<section>_<stain>_<magnification>.czi (e.g. MFB_AUA_1022_ID58T_1_Hif1A_10x.czi). Pick this recipe, point at the day folder, preview, ingest.",
+  "based_on": "tools/configs/axioscan7_20260522.yaml",
+  "overrides": {
+    "auto_discover.filename_parse": {
+      "separator": "_",
+      "fields": [
+        "group_code",
+        "operator",
+        "project",
+        "sample_short",
+        "section",
+        "stain",
+        "magnification"
+      ]
+    },
+    "registry.notes": "MFB AxioScan 7 WSI batch (${discovered.stain} stain, section ${discovered.section}, ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
+  }
+}
