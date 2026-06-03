@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
-    metadata_sidecar, provenance, resolver,
+    metadata_sidecar, provenance, resolver, enrichment,
 )
 import create_project as create_project_mod
 
@@ -949,11 +949,31 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         or (data_ecosystem.lower() if data_ecosystem else "")
     )
     eco_section = cfg_single.get("ecosystem_section") or {}
+
+    # --- Step 8.4: Preclinical enrichment blocks (non-blocking) ---
+    # subject/condition/anatomy for organism|tissue acquisitions
+    # (08_METADATA §4.4–4.7). Never raises: a DB miss WARNs, writes a
+    # source="pending-db" placeholder, and queues the acq to
+    # registries/pending_subject_metadata.csv for later recovery.
+    subject_block, condition_block, anatomy_block = enrichment.build_enrichment(
+        cfg_single,
+        acq_id=acq_id_str,
+        acq_date=acq_date,
+        acq_dt_iso=acq_dt_iso,
+        canonical_path=canonical_path,
+        registries_dir=os.path.join(nas_root, "registries"),
+        dry_run=dry_run,
+        log=log,
+    )
+
     sidecar_dict = metadata_sidecar.build_sidecar(
         acq_id_str,
         cfg_single,
         ecosystem_section_name=eco_section_name,
         ecosystem_section=eco_section,
+        subject=subject_block,
+        condition=condition_block,
+        anatomy=anatomy_block,
     )
     sidecar_path = metadata_sidecar.write_sidecar(dest_dir, sidecar_dict)
     cfg_single["extended_metadata_present"] = "Y"

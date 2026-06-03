@@ -285,6 +285,209 @@ def resolve_auto_create_project_block(block, discovered):
     return out
 
 
+# ---- Phase 3 enrichment: condition / anatomy / subject blocks ----------
+# These mirror the lenient auto_create_project resolver: structural config
+# errors fail fast (the validate_* functions, called at expand_batch /
+# prep_single_case time), but missing or empty DATA never raises — the
+# non-blocking metadata model (08_METADATA §4.7) writes explicit sentinels
+# (null / "" / "unknown") and the orchestrator WARNs instead. The enrichment
+# orchestrator (ingest/enrichment.py) adds WARN logging + the animal-DB
+# lookup on top of these pure resolvers.
+
+CONDITION_FIELDS = [
+    "is_control", "disease_model", "disease_state", "control_type",
+    "treatment", "timepoint_days", "study_arm", "source",
+]
+ANATOMY_FIELDS = ["is_whole_body", "region", "additional_regions", "source", "auto_hint"]
+ANATOMY_REGION_FIELDS = {"label", "ontology", "id"}
+# Operator-override subject: block (overrides the DB lookup); 06_METADATA §4.4.
+SUBJECT_FIELDS = {
+    "facility_animal_id", "species", "strain", "sex", "date_of_birth",
+    "age_at_acquisition", "genotype", "weight_at_acquisition_g", "cohort_id",
+    "procedures", "source",
+}
+SUBJECT_LOOKUP_FIELDS = {"project_alias", "animal_code"}
+
+_TRUE_STRINGS = {"true", "yes", "1", "y", "t"}
+_FALSE_STRINGS = {"false", "no", "0", "n", "f"}
+
+
+def to_tristate(value):
+    """Coerce a YAML value to True | False | None (None = unknown).
+
+    YAML parses bare `true`/`false` to bool already; this also accepts the
+    common string spellings and treats anything else (including absence /
+    "unknown") as None — the non-blocking default.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    s = str(value).strip().lower()
+    if s in _TRUE_STRINGS:
+        return True
+    if s in _FALSE_STRINGS:
+        return False
+    return None
+
+
+def to_number(value):
+    """Coerce to int/float; '' / 'NA' / None / non-numeric -> None."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    s = str(value).strip()
+    if not s or s.upper() == "NA":
+        return None
+    try:
+        return int(s) if re.fullmatch(r"[+-]?\d+", s) else float(s)
+    except ValueError:
+        return None
+
+
+def _resolve_text_lenient(value, discovered, key):
+    """Resolve a free-text enrichment field; NA/missing -> ''. Never raises."""
+    if is_na(value):
+        return ""
+    try:
+        return resolve_value(value, discovered, key_for_error=key)
+    except ResolverError as e:
+        print(f"[resolve_enrichment] WARN: {e} -- leaving '{key}' empty.")
+        return ""
+
+
+def _resolve_optional_text(value, discovered, key):
+    """Like _resolve_text_lenient but the unsupplied sentinel is None (for
+    fields whose 'not set' value is null, e.g. condition.treatment)."""
+    if value is None or is_na(value):
+        return None
+    try:
+        return resolve_value(value, discovered, key_for_error=key)
+    except ResolverError as e:
+        print(f"[resolve_enrichment] WARN: {e} -- leaving '{key}' null.")
+        return None
+
+
+def validate_condition_block(block):
+    """Structural validation of the optional top-level `condition:` block."""
+    if block is None:
+        return []
+    if not isinstance(block, dict):
+        return [f"`condition:` must be a mapping, got {type(block).__name__}"]
+    allowed = set(CONDITION_FIELDS)
+    return [
+        f"condition: '{k}' is not a recognized field. Allowed: {sorted(allowed)}"
+        for k in block if k not in allowed
+    ]
+
+
+def resolve_condition_block(block, discovered):
+    """Resolve the `condition:` block to all-keys-present sentinels.
+
+    is_control is tri-state (true/false/null); free-text -> '' (treatment ->
+    null); timepoint_days -> number|null. Never raises (08_METADATA §4.7).
+    """
+    b = block or {}
+    return {
+        "is_control": to_tristate(b.get("is_control")),
+        "disease_model": _resolve_text_lenient(b.get("disease_model"), discovered, "condition.disease_model"),
+        "disease_state": _resolve_text_lenient(b.get("disease_state"), discovered, "condition.disease_state"),
+        "control_type": _resolve_text_lenient(b.get("control_type"), discovered, "condition.control_type"),
+        "treatment": _resolve_optional_text(b.get("treatment"), discovered, "condition.treatment"),
+        "timepoint_days": to_number(b.get("timepoint_days")),
+        "study_arm": _resolve_text_lenient(b.get("study_arm"), discovered, "condition.study_arm"),
+        "source": (_resolve_text_lenient(b.get("source"), discovered, "condition.source")
+                   or ("operator-entered" if block else "unknown")),
+    }
+
+
+def validate_anatomy_block(block):
+    """Structural validation of the optional top-level `anatomy:` block."""
+    if block is None:
+        return []
+    if not isinstance(block, dict):
+        return [f"`anatomy:` must be a mapping, got {type(block).__name__}"]
+    errors = [
+        f"anatomy: '{k}' is not a recognized field. Allowed: {sorted(ANATOMY_FIELDS)}"
+        for k in block if k not in set(ANATOMY_FIELDS)
+    ]
+    region = block.get("region")
+    if "region" in block and region is not None and not isinstance(region, dict):
+        errors.append("anatomy.region: must be a mapping (label/ontology/id) or null")
+    elif isinstance(region, dict):
+        errors += [
+            f"anatomy.region: '{rk}' is not recognized. Allowed: {sorted(ANATOMY_REGION_FIELDS)}"
+            for rk in region if rk not in ANATOMY_REGION_FIELDS
+        ]
+    ar = block.get("additional_regions")
+    if "additional_regions" in block and ar is not None and not isinstance(ar, list):
+        errors.append("anatomy.additional_regions: must be a list")
+    return errors
+
+
+def resolve_anatomy_block(block, discovered):
+    """Resolve the `anatomy:` block to all-keys-present sentinels.
+
+    is_whole_body tri-state; region {label,ontology,id} | null (ontology
+    defaults to UBERON). Never raises (08_METADATA §4.7).
+    """
+    b = block or {}
+    region_raw = b.get("region")
+    if isinstance(region_raw, dict):
+        region = {
+            "label": _resolve_text_lenient(region_raw.get("label"), discovered, "anatomy.region.label"),
+            "ontology": region_raw.get("ontology") or "UBERON",
+            "id": _resolve_text_lenient(region_raw.get("id"), discovered, "anatomy.region.id"),
+        }
+    else:
+        region = None
+    ar = b.get("additional_regions")
+    return {
+        "is_whole_body": to_tristate(b.get("is_whole_body")),
+        "region": region,
+        "additional_regions": ar if isinstance(ar, list) else [],
+        "source": (_resolve_text_lenient(b.get("source"), discovered, "anatomy.source")
+                   or ("operator-entered" if block else "unknown")),
+        "auto_hint": _resolve_text_lenient(b.get("auto_hint"), discovered, "anatomy.auto_hint"),
+    }
+
+
+def validate_subject_block(block):
+    """Structural validation of the optional top-level `subject:` operator-
+    override block (overrides the animal-DB lookup; 08_METADATA §4.4)."""
+    if block is None:
+        return []
+    if not isinstance(block, dict):
+        return [f"`subject:` must be a mapping, got {type(block).__name__}"]
+    return [
+        f"subject: '{k}' is not a recognized field. Allowed: {sorted(SUBJECT_FIELDS)}"
+        for k in block if k not in SUBJECT_FIELDS
+    ]
+
+
+def validate_subject_lookup(block):
+    """Structural validation of the optional `auto_discover.subject_lookup:`
+    block (how to build the animal-DB key from discovered.* fields)."""
+    if block is None:
+        return []
+    if not isinstance(block, dict):
+        return [f"`subject_lookup:` must be a mapping, got {type(block).__name__}"]
+    return [
+        f"subject_lookup: '{k}' is not a recognized field. Allowed: {sorted(SUBJECT_LOOKUP_FIELDS)}"
+        for k in block if k not in SUBJECT_LOOKUP_FIELDS
+    ]
+
+
+def validate_subject_from_db(value):
+    """`auto_discover.subject_from_db:` must be a boolean (or absent)."""
+    if value is None:
+        return []
+    if not isinstance(value, bool):
+        return [f"`subject_from_db:` must be true/false, got {type(value).__name__}"]
+    return []
+
+
 def normalize_acquisition_datetime(value):
     """Coerce a date-shaped string into ISO. Empty pass-through; ISO pass-through.
 

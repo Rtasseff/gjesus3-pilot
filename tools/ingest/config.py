@@ -209,6 +209,42 @@ def apply_registry_block(case, registry_block):
         case.setdefault(k, v)
 
 
+def _validate_enrichment_blocks(cfg, disco):
+    """Validate the Phase 3 enrichment config and return the raw blocks.
+
+    Reads the top-level `subject:` / `condition:` / `anatomy:` blocks and the
+    `auto_discover.subject_from_db` flag + `auto_discover.subject_lookup` map.
+    Raises ValueError on a structurally invalid config (fail-fast); the field
+    VALUES are resolved non-blockingly later by ingest/enrichment.py.
+
+    `disco` is cfg["auto_discover"] (or {} for single-case configs).
+    """
+    disco = disco or {}
+    subject = cfg.get("subject")
+    condition = cfg.get("condition")
+    anatomy = cfg.get("anatomy")
+    subject_from_db = disco.get("subject_from_db")
+    subject_lookup = disco.get("subject_lookup")
+
+    errors = []
+    errors += resolver.validate_subject_block(subject)
+    errors += resolver.validate_condition_block(condition)
+    errors += resolver.validate_anatomy_block(anatomy)
+    errors += resolver.validate_subject_from_db(subject_from_db)
+    errors += resolver.validate_subject_lookup(subject_lookup)
+    if errors:
+        raise ValueError(
+            "Invalid enrichment config:\n  - " + "\n  - ".join(errors)
+        )
+    return {
+        "subject": subject,
+        "condition": condition,
+        "anatomy": anatomy,
+        "subject_from_db": bool(subject_from_db),
+        "subject_lookup": subject_lookup or {},
+    }
+
+
 def expand_batch(cfg, nas_root=None):
     """Expand a batch config into a list of validated, registry-resolved cases.
 
@@ -296,6 +332,12 @@ def expand_batch(cfg, nas_root=None):
             "Invalid auto_create_project: block:\n  - " + "\n  - ".join(acp_errors)
         )
 
+    # Phase 3 preclinical enrichment blocks (08_METADATA §4.4–4.7). Validate
+    # structure up front (fail-fast on a malformed config); the values
+    # themselves resolve non-blockingly at the sidecar-write site. The raw
+    # blocks are stashed on each case and consumed by ingest/enrichment.py.
+    enrich_block = _validate_enrichment_blocks(cfg, disco)
+
     # Build idempotency index from existing registry (if known)
     registry_path = (
         os.path.join(nas_root, "registries", "registry_raw.csv")
@@ -329,6 +371,12 @@ def expand_batch(cfg, nas_root=None):
             "ingest": cfg.get("ingest") or {},
             "auto_create_project": acp_block,
             "link_filename": cfg.get("link_filename") or "",
+            # Phase 3 enrichment (raw blocks; resolved per-case at Step 8.5).
+            "subject": enrich_block["subject"],
+            "condition": enrich_block["condition"],
+            "anatomy": enrich_block["anatomy"],
+            "subject_from_db": enrich_block["subject_from_db"],
+            "subject_lookup": enrich_block["subject_lookup"],
         }
         discovered = {}
 
@@ -555,6 +603,12 @@ def prep_single_case(cfg):
         raise ValueError(
             "Invalid auto_create_project: block:\n  - " + "\n  - ".join(acp_errors)
         )
+    # Phase 3 enrichment: validate the top-level subject/condition/anatomy
+    # blocks and promote the auto_discover lookup config to top-level keys so
+    # ingest/enrichment.py finds them uniformly with the batch path.
+    enrich_block = _validate_enrichment_blocks(cfg, cfg.get("auto_discover"))
+    cfg["subject_from_db"] = enrich_block["subject_from_db"]
+    cfg["subject_lookup"] = enrich_block["subject_lookup"]
     cfg.setdefault("discovered", {})
     src = cfg.get("source_path", "")
     if src:

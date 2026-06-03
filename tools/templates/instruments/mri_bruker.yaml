@@ -236,6 +236,21 @@ auto_discover:
   # ~20 discovered.mri_* fields. Don't turn off unless you know why.
   # embedded_metadata: true   # default
 
+  # --- Subject metadata from the animal-facility DB (Phase 3) ---
+  # When true, the ingest looks each animal up in the animal-facility DB and
+  # writes the subject: block (species/strain/sex/DOB→age/procedures) into
+  # metadata.json. Needs DB credentials at ~/.my.cnf on the ingest machine +
+  # on-network; on a miss / no-creds the acq still ingests with a
+  # source="pending-db" placeholder and is queued to
+  # registries/pending_subject_metadata.csv for later recovery (NON-BLOCKING,
+  # 08_METADATA §4.4.6). See tools/animal_db.py.
+  subject_from_db: true
+  subject_lookup:
+    # How to build the DB key from discovered.* fields. project_alias is the
+    # NNNN protocol code; animal_code is the bare animal number (m13→13).
+    project_alias: "${discovered.project_code}"   # e.g. "0424"
+    animal_code:   "${discovered.animal_num}"     # e.g. "17"
+
 registry:
   instrument:           MRI
   data_ecosystem:       DICOM
@@ -293,43 +308,60 @@ auto_create_project:
 link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
 
 # ============================================================================
-# PRECLINICAL METADATA — subject: + condition: blocks
-# (FORWARD-COMPATIBLE SCAFFOLDING; writer ships in Phase 3 of tasks.md §3.2)
+# PRECLINICAL METADATA — condition: + anatomy: blocks (LIVE, Phase 3)
 # ============================================================================
-# Until the Phase 3 sidecar writer lands, anything in these blocks is IGNORED
-# by the ingest pipeline. Uncomment + fill once the writer is live. Required
-# when sample_type ∈ {organism, tissue} — ALWAYS the case for internal MRI.
+# These are written into metadata.json for every acquisition this batch
+# produces (sample_type = organism). NON-BLOCKING (08_METADATA §4.7): leave a
+# value unknown and the writer records an explicit sentinel (null / "") and
+# WARNs — it never refuses the ingest. SET ONCE PER BATCH: edit the values
+# below to describe THIS batch, then every acq inherits them. For a
+# mixed-condition session, override per-acq at
+# /projects/<proj>/metadata/<acq_id>.json.
 #
-# Spec: [08_METADATA §4.4 (subject:) + §4.5 (condition:)].
+# subject: (species/strain/sex/DOB→age) is filled automatically from the
+# animal-facility DB via auto_discover.subject_from_db above — no manual
+# block needed. To OVERRIDE the DB (or supply it when the DB has no record),
+# uncomment the subject: block at the bottom.
 #
-# Two distinct source pipelines:
-#   subject:    per-subject, fixed (species / strain / sex / age). Auto from
-#               animal-facility-DB once integration lands (`tasks.md §3.2`
-#               Phase 1, blocked on IT); until then operator-entered here.
-#   condition:  per-acquisition, varies (same animal can be baseline-control +
-#               post-MI-case). Operator-entered only — the DB does NOT know
-#               disease/control state, it's a study-design property.
-#               For MIXED-CONDITION batches (e.g. baseline + post-treatment
-#               scans in the same session), use per-acquisition overrides at
-#               /projects/<proj>/metadata/<acq_id>.json instead of the
-#               batch-level block here.
+# Spec: 08_METADATA §4.4 (subject) / §4.5 (condition) / §4.6 (anatomy).
 
+condition:
+  # EDIT per batch — the primary cohort filter. true=control, false=case
+  # (disease/treated), null=unknown (WARN, still ingests).
+  is_control:    null
+  # EDIT — model classification or "wild_type" / "non_transgenic". Common
+  # preclinical-MRI examples: "MI_LAD_ligation" / "APP/PS1_AD" / "MPTP_PD" /
+  # "TAC_pressure_overload". Empty -> "" + WARN.
+  disease_model: ""
+  # EDIT — state at scan time: "baseline" / "day_7_post_MI" / "endpoint".
+  disease_state: ""
+  # control_type:   "naive"      # optional when is_control=true: naive/sham/vehicle/littermate
+  # treatment:      null         # optional free-text, e.g. "drug_X_5mg/kg_IP_day_0"
+  # timepoint_days: 0            # optional numeric — days from intervention
+  # study_arm:      "control"    # optional cohort-grouping label
+  source:        "operator-entered"   # operator-entered | study-yaml | imported-from-excel
+
+anatomy:
+  # EDIT per batch — the whole-body-vs-ROI flag. true=whole-body,
+  # false=region of interest, null=unknown (WARN, still ingests).
+  is_whole_body: null
+  # When is_whole_body=false, give the UBERON-coded region (verified starter
+  # ids: brain UBERON:0000955, heart UBERON:0000948, lung UBERON:0002048,
+  # thoracic cavity UBERON:0002224, abdomen UBERON:0000916).
+  # region:
+  #   label:    "brain"
+  #   ontology: "UBERON"
+  #   id:       "UBERON:0000955"
+  source:        "operator-entered"   # operator-entered | study-yaml | auto-guess
+
+# OPTIONAL subject: override — only needed to override the DB lookup or when
+# the animal isn't in the DB. Recognized fields: facility_animal_id, species,
+# strain, sex, date_of_birth, age_at_acquisition, genotype,
+# weight_at_acquisition_g, cohort_id, procedures, source. age_at_acquisition
+# is derived from date_of_birth automatically when present.
 # subject:
-#   species:                 "Mus musculus"         # DECIDED-REQUIRED — NCBI Taxonomy aligned
-#   strain:                  "C57BL/6J"             # DECIDED-REQUIRED — strain or genetic background
-#   sex:                     "F"                    # DECIDED-REQUIRED — "M" | "F" | "unknown"
-#   age_at_acquisition:      "P12W"                 # DECIDED-REQUIRED — ISO-8601 duration preferred (P12W = 12 weeks postnatal)
-#   genotype:                "WT"                   # optional but recommended
-#   weight_at_acquisition_g: 24.3                   # optional — numeric grams (NB: ParaVision's SUBJECT_weight is in kg)
-#   facility_animal_id:      "<animal_code>-AE-biomaGUNE-<NNNN>"  # SUBJECT id = facility canonical animal id (06_REGISTRIES §2.3) + DB lookup key. animal_code from jrc_id (m13→13), NNNN from project. In-vivo: sample_id = this. Auto-compose pending (tasks §3.2).
-#   source:                  "operator-entered"     # "animal-facility-db" | "operator-entered" | "bruker-auto-extracted"
-
-# condition:
-#   disease_model:           "wild_type"            # DRAFT-REQUIRED — model classification OR "wild_type" / "non_transgenic". Common preclinical-MRI examples: "MI_LAD_ligation" / "APP/PS1_AD" / "MPTP_PD" / "TAC_pressure_overload"
-#   disease_state:           "baseline"             # DRAFT-REQUIRED — state at scan time: "baseline" / "day_7_post_MI" / "endpoint" / "6mo_AD_phenotype"
-#   is_control:              true                   # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
-#   control_type:            "naive"                # optional when is_control=true: "naive" / "sham" / "vehicle" / "littermate"
-#   treatment:               null                   # optional free-text: e.g. "vehicle", "drug_X_5mg/kg_IP_day_0", "MI_LAD_ligation"
-#   timepoint_days:          0                      # optional numeric — days from study start or from intervention
-#   study_arm:               "control_naive"        # optional — explicit experimental-arm label for cohort grouping
-#   source:                  "operator-entered"     # "operator-entered" | "study-yaml" | "imported-from-excel"
+#   species:            "Mus musculus"
+#   strain:             "C57BL/6J"
+#   sex:                "F"
+#   date_of_birth:      "2025-01-15"
+#   source:             "operator-entered"
