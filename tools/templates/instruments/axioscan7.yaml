@@ -172,7 +172,7 @@ link_filename: "${instrument}_${original_name}"
 # condition:
 #   disease_model:           "wild_type"            # DRAFT-REQUIRED — model classification OR "wild_type" / "non_transgenic"
 #   disease_state:           "endpoint"             # DRAFT-REQUIRED — for ex-vivo tissue: typically "endpoint" / "post_mortem_<context>" / "<intervention>_day_N"
-#   is_control:              true                   # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue)
+#   is_control:              true                   # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
 #   control_type:            "naive"                # optional when is_control=true: "naive" / "sham" / "vehicle" / "littermate"
 #   treatment:               null                   # optional free-text
 #   timepoint_days:          null                   # optional numeric

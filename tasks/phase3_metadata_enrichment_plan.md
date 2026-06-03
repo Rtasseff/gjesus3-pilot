@@ -7,6 +7,15 @@ three preclinical enrichment blocks into the ingest pipeline. Read this first
 when picking up the metadata-writer work. Spec authority stays in
 `mfb-rdm-docs/`; this doc is the build plan.
 
+> **🤝 Handoff note.** Planning + specs are complete; **implementation is handed
+> off to a separate session — nothing here is built yet** beyond `tools/animal_db.py`.
+> The plan is grounded in a scan of the current pipeline (hook points in §5 are
+> real), but the **open decisions in §10 (YAML field names, module placement,
+> completeness-report timing) must be confirmed with Ryan at kickoff** before
+> coding — they shape the schema. Nothing touches the live NAS until the staged
+> dry-run in §8 step 7 passes. The non-blocking rule (§3.1) is non-negotiable:
+> the writer must never raise on missing enrichment.
+
 ---
 
 ## 1. Where we are

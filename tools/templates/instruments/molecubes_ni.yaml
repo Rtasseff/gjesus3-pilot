@@ -294,7 +294,7 @@ link_filename: "${discovered.modality}_${discovered.short_sample}_${acq_date}_${
 # condition:
 #   disease_model:           "wild_type"              # DRAFT-REQUIRED — model classification OR "wild_type". Common preclinical-NI examples: tumour xenograft models ("MDA-MB-231_orthotopic_breast" / "U87_glioma"), neurological models ("APP/PS1_AD" / "MPTP_PD"), inflammation/atherosclerosis models.
 #   disease_state:           "baseline"               # DRAFT-REQUIRED — state at scan time: "baseline" / "post_tracer_15min" / "endpoint" / "treatment_day_3"
-#   is_control:              true                     # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue acquisitions)
+#   is_control:              true                     # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
 #   control_type:            "naive"                  # optional when is_control=true: "naive" / "sham" / "vehicle" / "littermate"
 #   treatment:               null                     # optional free-text: e.g. "vehicle", "drug_X_5mg/kg_IP_day_0". For PET also useful to record tracer-related context here even though protocol.txt captures isotope/activity.
 #   timepoint_days:          0                        # optional numeric — days from study start / from intervention

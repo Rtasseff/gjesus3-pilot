@@ -228,7 +228,7 @@ link_filename: "${instrument}_${original_name}"
 # condition:
 #   disease_model:           "MDA-MB-231_breast_cancer"  # DRAFT-REQUIRED — for cell-line work, the model = the cell line's pathology context
 #   disease_state:           "untreated_baseline"   # DRAFT-REQUIRED — state at image time: "untreated_baseline" / "${treatment}_${timepoint}" / "post_uptake_${dose}"
-#   is_control:              true                   # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue/animal-origin cells)
+#   is_control:              true                   # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
 #   control_type:            "vehicle"              # optional when is_control=true: "naive" / "vehicle" / "untreated_well"
 #   treatment:               null                   # optional free-text: e.g. "LP-IONP_doxo_25ug/mL_6h" / "vehicle_DMSO_0.1%"
 #   timepoint_days:          0                      # optional numeric — days from treatment start

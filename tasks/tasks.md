@@ -301,7 +301,7 @@ All round-6 framework items below shipped across commits `17ac781` → `66887ae`
 
     **`subject:` block** — species / strain / sex / age_at_acquisition (4 required fields DECIDED) + optional fields. **Auto-populatable from animal-facility-DB once integration lands.** Per-subject, fixed.
 
-    **`condition:` block** — `is_control` (DECIDED-required strict boolean), `disease_model` + `disease_state` (DRAFT-required free-text), optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. **Operator-entered only** (no DB source — disease state is a property of study design, not the animal). Per-acquisition, varies.
+    **`condition:` block** — `is_control` (highly-recommended **tri-state** `true`/`false`/`null`, non-blocking §4.7), `disease_model` + `disease_state` (recommended free-text), optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. **Operator-entered** (`disease_model` auto-seeds from DB `projects.name`; `is_control` not in DB). Per-acquisition, set once per batch.
 
     **Required `subject:` fields** (DECIDED): `facility_animal_id` (the **subject id** = canonical `<animal_code>-AE-biomaGUNE-<NNNN>`, reused) + species / strain / sex / **date_of_birth** (→ derived age_at_acquisition) — all DB-sourced. **Optional:** procedures (**STRUCTURED `[{type,date}]`** from the DB controlled vocab — NOT free text; META-07 retired). Subject/Sample identity model in [06_REGISTRIES §2.3](../mfb-rdm-docs/06_REGISTRIES.md); schema in [08_METADATA §4.4](../mfb-rdm-docs/08_METADATA.md) (explored + revised 2026-06-03).
 

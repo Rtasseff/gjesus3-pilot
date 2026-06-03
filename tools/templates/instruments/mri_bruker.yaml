@@ -327,7 +327,7 @@ link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${dis
 # condition:
 #   disease_model:           "wild_type"            # DRAFT-REQUIRED — model classification OR "wild_type" / "non_transgenic". Common preclinical-MRI examples: "MI_LAD_ligation" / "APP/PS1_AD" / "MPTP_PD" / "TAC_pressure_overload"
 #   disease_state:           "baseline"             # DRAFT-REQUIRED — state at scan time: "baseline" / "day_7_post_MI" / "endpoint" / "6mo_AD_phenotype"
-#   is_control:              true                   # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue acquisitions)
+#   is_control:              true                   # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
 #   control_type:            "naive"                # optional when is_control=true: "naive" / "sham" / "vehicle" / "littermate"
 #   treatment:               null                   # optional free-text: e.g. "vehicle", "drug_X_5mg/kg_IP_day_0", "MI_LAD_ligation"
 #   timepoint_days:          0                      # optional numeric — days from study start or from intervention

@@ -230,7 +230,7 @@ link_filename: "${instrument}_${original_name}"
 # condition:
 #   disease_model:           "MDA-MB-231_breast_cancer"  # DRAFT-REQUIRED — cell line's pathology context
 #   disease_state:           "post_uptake_6h"       # DRAFT-REQUIRED — state at image time: "untreated_baseline" / "post_uptake_${duration}"
-#   is_control:              false                  # DECIDED-REQUIRED — strict boolean (writer REFUSES sidecar write if missing for organism/tissue/animal-origin cells)
+#   is_control:              false                  # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
 #   control_type:            null                   # optional when is_control=true: "vehicle" / "untreated_well"
 #   treatment:               "LP-IONP-doxo_${discovered.experiment}"  # optional free-text — nanoparticle + dose info, often derivable from the experiment/condition chunks
 #   timepoint_days:          null                   # optional numeric — fractional days OK for sub-day timepoints (e.g. 0.25 for 6h)

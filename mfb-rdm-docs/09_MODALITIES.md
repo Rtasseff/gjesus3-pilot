@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-05-29 (per-instrument subject + condition metadata requirements — `subject:` block §4.4 + `condition:` block §4.5; `is_control` DECIDED-required as the enforceable healthy-vs-case flag)
+**Last Updated:** 2026-06-03 (per-instrument subject + condition + anatomy metadata — `subject:` §4.4 / `condition:` §4.5 / `anatomy:` §4.6; **non-blocking model §4.7** — `is_control` + `is_whole_body` are highly-recommended tri-state, WARN-not-block)
 
 ---
 
