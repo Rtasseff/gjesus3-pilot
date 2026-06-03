@@ -104,26 +104,49 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 **Implementation:** `session_id` is User-populated via the YAML `registry:` block (literal, `discovered.<field>`, or NA). Existing rows are not backfilled; pre-cutover acquisitions hold empty `session_id`.
 
-### 2.3 Sample ID Format (DRAFT)
+### 2.3 Subject and Sample Identity (DRAFT — refines REG-01)
 
-> **🔶 DRAFT pilot guidance.** Recommended `sample_id` format is `<short_project>_<short_sample>`. Status remains open (REG-01) pending PI sign-off after pilot validation.
+> **🔶 DRAFT pilot guidance, re-grounded 2026-06-03 in FAIR / ISA / REMBI / BIDS / XNAT.** Status open (REG-01) pending PI sign-off. Supersedes the earlier bare `<short_project>_<short_sample>` recommendation. Per **Option B**: the model below is adopted now and carried in the `metadata.json` sidecar; the dedicated registry `subject_id` column is **deferred to the post-exhibition true-production restart** (no quasi-prod migration).
 
-The `sample_id` chunk recorded by an instrument (e.g. `ID26H` on an AxioScan filename) is typically **not unique on its own** — the same short ID gets reused across projects. The combination `<short_project>_<short_sample>` (e.g. `0525_ID26H`) is what makes a row globally identifiable within `registry_raw.csv`.
+**Two distinct entities, two identifiers.** Every standard we align to models the **subject** (the animal) and the **sample** (the physical thing imaged) as *separate* entities, each with its own identifier, joined by an explicit reference — never collapsed into one overloaded string:
 
-**Recommended pattern** (apply via YAML interpolation; no code change needed):
+| Standard | Subject entity | Sample entity | Key rule |
+|---|---|---|---|
+| **ISA** | Source (organism) | Sample | one Source *splits* into ≥1 Samples; "all nodes MUST be uniquely identifiable" |
+| **REMBI** | Biosample (organism: species, strain, background) | Specimen (the prepared sample) | organism-level vs preparation-level separated |
+| **BIDS** | `participant_id` (species/strain/sex in `participants.tsv`) | `sample_id` (`samples.tsv`) | a sample is "a specimen extracted from a subject"; only the **pair `(participant_id, sample_id)` must be unique** |
+| **XNAT** (interop target) | Subject | Session → Scan | Subject is first-class; one Subject → many sessions |
 
-```yaml
-registry:
-  sample_id: "${discovered.project}_${discovered.sample_short}"
+Sources: [ISA model](https://isa-specs.readthedocs.io/en/latest/isamodel.html) · [REMBI (Nat. Methods 2021)](https://www.nature.com/articles/s41592-021-01166-8) · [BIDS data-summary files](https://bids-specification.readthedocs.io/en/stable/modality-agnostic-files/data-summary-files.html) · [XNAT data model](https://wiki.xnat.org/documentation/how-to-use-xnat/understanding-the-xnat-data-model).
+
+#### 2.3.1 Subject identifier — reuse the animal-facility ID
+
+The **subject** of any animal acquisition is identified by the **animal-facility canonical animal ID, reused verbatim**:
+
+```
+<animal_code>-AE-biomaGUNE-<NNNN>          e.g. 13-AE-biomaGUNE-0525
 ```
 
-This composes the registry value at ingest time from filename chunks. The raw chunks remain in the per-acquisition `metadata.json` `discovered` block (alongside any auto-extracted embedded fields), so the decomposition is never lost.
+We **reuse** the facility's own identifier rather than mint a parallel one (FAIR F1 "reuse existing identifiers" — [GO-FAIR F1](https://www.go-fair.org/fair-principles/f1-meta-data-assigned-globally-unique-persistent-identifiers/); the [FAIR Cookbook](https://faircookbook.elixir-europe.org/content/recipes/findability/identifiers.html) treats this as a *local accession* made globally unique by namespacing — `prefix:accession` — which is the future-globalization path, **not** a reason to bake meaning into the string today). This composite is also the **DB lookup key** (`projects.projectAlias = NNNN` + `animals.animal_code` = the leading number; verified 2026-06-02). The DB has **no single stored unique-ID column** — the composite is constructed (`animals.id` PK is the only single-column unique, internal-only) and has one near-duplicate in 18,353; treat as effectively unique and flag any exact collision.
 
-**Notes:**
+#### 2.3.2 Where the subject ID lives (Option B)
 
-- If a `<short_project>` is genuinely unset (no project chunk in the filename), leave `sample_id` as the bare short ID and accept that uniqueness is project-scoped only. Flag in `notes`.
-- This convention does **not** override official sample identifiers when they exist as a single string already (e.g. an animal registry ID like `MOUSE-2024-042`). Use those verbatim in `sample_id` and skip the composite.
-- Organ-letter encoding inside the short ID (e.g. `H` = Heart, `B` = Brain in `ID26H`) is not parsed today; team convention is not yet confirmed. Tracked as a future enhancement.
+The subject ID is carried in the per-acquisition `metadata.json` **`subject:` block** as `facility_animal_id` ([08_METADATA §4.4](08_METADATA.md)). A dedicated **registry `subject_id` column is DEFERRED to the true-production restart** — the restart is the natural point to add it without migrating quasi-prod rows. Until then, registry-level grouping rides on `sample_id` + the sidecar.
+
+#### 2.3.3 `sample_id` rules
+
+| Acquisition kind | `sample_id` | Rationale |
+|---|---|---|
+| **`organism`** (in-vivo MRI / PET / SPECT) | = the subject ID `<animal_code>-AE-biomaGUNE-<NNNN>` | the animal *is* the sample (ISA Source ≡ Sample for in-vivo; DICOM has only a Patient, no separate specimen) |
+| **`tissue`** (organ sections) | the specimen's own label, **unique within the subject** (BIDS `(subject, sample)` rule) — e.g. an organ/replicate label | one animal yields several Specimens; the animal link is the `facility_animal_id` reference, **not** concatenation |
+
+- **Organ/anatomy is a structured field, not part of the ID.** The organ-letter in legacy short IDs (`B` in `ID13B`) becomes a dedicated **`anatomical_entity`** value (REMBI "Location within biosample") — in the sidecar now, promoted to a registry column at the restart (converges with the REG-07 `sample_organism` + `anatomical_entity` split, §2.4).
+- **Don't overload the ID with meaning** (FAIR Cookbook: prefer semantically-free identifiers; meaning belongs in fields). A readable label MAY be rendered for display, but the *identifying* fields are `facility_animal_id` (subject) + `sample_id` + `anatomical_entity`.
+- Official single-string IDs that already exist are used verbatim. Pre-cutover rows keep their `<short_project>_<short_sample>` `sample_id` (e.g. `0525_ID26H`); not retrofitted in quasi-prod. Raw filename chunks always remain in the sidecar `discovered` block, so nothing is lost.
+
+#### 2.3.4 Ingest-tool implication (parse the animal short code)
+
+The instrument short code embeds `animal_code` with instrument-specific decoration: NI `m14`→`14`, MRI `m13`→`13`, AxioScan `ID13B`→`13` + organ `B`. The ingest tools must parse it into `animal_code` (+ `anatomical_entity` for tissue), derive the project alias from `project_hint` (`ae-biomegune-NNNN` → `NNNN`), and compose the canonical subject ID / DB lookup key. Tracked in `tasks/tasks.md §3.2`. Current per-instrument templates carry an illustrative `facility_animal_id` that predates this and is corrected to the canonical form.
 
 ### 2.4 Sample Type Vocabulary (DRAFT)
 
@@ -149,7 +172,7 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 
 > **🔶 Linked requirements (DRAFT 2026-05-29):** For `sample_type ∈ {organism, tissue}`, the per-acquisition `metadata.json` MUST include two blocks:
 >
-> **`subject:` block** — species / strain / sex / date_of_birth → derived age_at_acquisition (the ARRIVE-aligned required fields, DECIDED; DOB added 2026-06-02) + optional genotype / weight / facility_animal_id / cohort_id / procedures free-text. Schema in [08_METADATA §4.4](08_METADATA.md). Auto-populated from the **animal-facility DB** (access obtained 2026-06-02); an ingest-time DB miss / no-credentials queues the acquisition for superuser recovery rather than failing (§4.4.6). Integration tracked in `tasks/tasks.md §3.2`.
+> **`subject:` block** — species / strain / sex / date_of_birth → derived age_at_acquisition (the ARRIVE-aligned required fields, DECIDED; DOB added 2026-06-02) + `facility_animal_id` (the canonical **subject ID** `<animal_code>-AE-biomaGUNE-<NNNN>`, reused verbatim — see the identity model in §2.3) + optional genotype / weight / cohort_id / procedures (a **structured** `[{type, date}]` list from the DB's controlled vocab, **not** free text — DB explored 2026-06-02). Schema in [08_METADATA §4.4](08_METADATA.md). Auto-populated from the **animal-facility DB** (`animal_facility` schema, access obtained 2026-06-02); an ingest-time DB miss / no-credentials queues the acquisition for superuser recovery rather than failing (§4.4.6). Integration tracked in `tasks/tasks.md §3.2`.
 >
 > **`condition:` block** — `is_control` (**DECIDED-required strict boolean** — the enforceable healthy-vs-case flag) + DRAFT-required `disease_model` + `disease_state` free-text + optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. Schema in [08_METADATA §4.5](08_METADATA.md). Operator-entered only (no auto-source — disease state is a property of study design, not the animal). The `is_control` boolean is the primary cohort-builder filter for "all healthy controls" / "all cases" queries.
 >
