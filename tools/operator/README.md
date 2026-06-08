@@ -119,6 +119,33 @@ python tools/operator/mri_ingest.py /path/to/study --go                         
   Without `--ftp-remote`, the tool assumes the data is already on a local or
   mounted path (no network needed).
 
+### Study metadata — disease state & body coverage (both Linux tools)
+
+`ni-ingest` and `mri-ingest` also capture a little **study metadata** that makes
+the data findable later: whether the animal is a control or a case, the disease
+model/state for cases, and whether the scan is whole-body or a region. Pass them
+as flags, or just answer the short prompts the tool shows before it ingests:
+
+```sh
+mri-ingest /path/to/study --is-control false --disease-model "EAE" \
+    --disease-state "acute" --is-whole-body true
+```
+
+- **`--is-control true|false`** — `true` = a **control** (a naive / untreated
+  animal with *no disease model, no perturbation, no intervention*); `false` = a
+  **case**.
+- **`--disease-model` / `--disease-state`** — free text describing a case (e.g.
+  `EAE` / `acute`). Only asked for a case (`--is-control false`); optional.
+- **`--is-whole-body true|false`** — `true` = full-body scan; `false` = a region
+  of interest (set the exact UBERON region later in the project metadata).
+- Omit any of them and the tool **asks**, one question at a time, before
+  ingesting. **Press enter to skip** any question — skipped values are left
+  blank and never block the ingest. The answers apply to **every acquisition in
+  the run**, so if a folder mixes controls and cases, skip them and set them
+  per-acquisition later.
+- `--no-prompt` turns the questions off entirely (for scripted runs); you then
+  get only what you passed as flags.
+
 ### The everyday flow (both Linux tools)
 
 1. Finish the acquisition; make sure the data is on a folder the machine can see

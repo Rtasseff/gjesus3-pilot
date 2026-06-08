@@ -80,7 +80,7 @@ def load():
     # Eagerly bind the public submodules so callers can do `pkg.preview` etc.
     # without a separate import (they import each other relatively anyway).
     for sub in ("templates", "config_builder", "scope", "preview",
-                "runner", "env"):
+                "runner", "env", "metadata_prompt"):
         full = f"{ALIAS}.{sub}"
         if full not in sys.modules:
             importlib.import_module(full)

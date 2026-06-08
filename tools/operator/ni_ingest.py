@@ -74,6 +74,7 @@ scope = _CORE.scope
 preview = _CORE.preview
 runner = _CORE.runner
 env = _CORE.env
+metadata_prompt = _CORE.metadata_prompt
 
 
 INSTRUMENT_KEY = "NI"          # hardcoded -> molecubes_ni.yaml (templates map)
@@ -286,13 +287,15 @@ def _print_preview_table(result):
 
 # ----------------------------------------------------------------------- runner
 
-def _build_cfg(staging_dir, pattern):
-    """Load the NI template and apply the scope overrides -> in-memory cfg."""
+def _build_cfg(staging_dir, pattern, extra_overrides=None):
+    """Load the NI template and apply the scope (+ metadata) overrides -> cfg."""
     template = templates.load_template(INSTRUMENT_KEY)
     overrides = {
         "auto_discover.staging_dir": staging_dir,
         "auto_discover.pattern": pattern,
     }
+    if extra_overrides:
+        overrides.update(extra_overrides)
     return config_builder.build_config(template, overrides)
 
 
@@ -347,6 +350,35 @@ def _parse_args(argv):
         help="NAS root (must contain a registries/ subdir). Defaults to "
              "$GJESUS3_ROOT, then /mnt/gjesus3.",
     )
+    # Operator condition/anatomy metadata (08_METADATA). Omitted flags are
+    # prompted for interactively (unless --no-prompt / no TTY); see
+    # metadata_prompt. All optional + non-blocking.
+    parser.add_argument(
+        "--is-control", type=metadata_prompt.cli_bool, default=None,
+        metavar="true|false",
+        help="condition.is_control: true=control (no disease model / "
+             "perturbation / intervention), false=case. Omit to be prompted.",
+    )
+    parser.add_argument(
+        "--disease-model", default=None,
+        help="condition.disease_model (free text). Only asked/used for a case "
+             "(--is-control false).",
+    )
+    parser.add_argument(
+        "--disease-state", default=None,
+        help="condition.disease_state (free text). Only asked/used for a case.",
+    )
+    parser.add_argument(
+        "--is-whole-body", type=metadata_prompt.cli_bool, default=None,
+        metavar="true|false",
+        help="anatomy.is_whole_body: true=whole-body, false=region of interest "
+             "(set the UBERON region later in the per-acq metadata file).",
+    )
+    parser.add_argument(
+        "--no-prompt", action="store_true",
+        help="Never prompt for condition/anatomy metadata; use only the flags "
+             "given (leaves the rest unset / non-blocking).",
+    )
     return parser.parse_args(argv)
 
 
@@ -390,8 +422,27 @@ def main(argv=None):
 
     log(f"scope: staging_dir={staging_dir!r}, pattern={pattern!r}", "INFO")
 
-    # 4) Build the in-memory config from the NI template + scope overrides.
-    cfg = _build_cfg(staging_dir, pattern)
+    # 3.5) Collect operator condition/anatomy metadata (CLI flags + optional
+    #      interactive prompts). is_batch -> the scope pattern carries a
+    #      wildcard ('*/' for a batch root vs '<acq>/' for one acquisition).
+    #      Non-blocking: skipped values keep the template's null sentinels.
+    is_batch = "*" in pattern
+    interactive = (not args.no_prompt) and sys.stdin.isatty()
+    meta_overrides = metadata_prompt.collect_overrides(
+        {
+            "is_control": args.is_control,
+            "disease_model": args.disease_model,
+            "disease_state": args.disease_state,
+            "is_whole_body": args.is_whole_body,
+        },
+        is_batch=is_batch, interactive=interactive,
+    )
+    summary = metadata_prompt.describe(meta_overrides)
+    if summary:
+        log(f"metadata: {summary}")
+
+    # 4) Build the in-memory config from the NI template + scope + metadata.
+    cfg = _build_cfg(staging_dir, pattern, extra_overrides=meta_overrides)
 
     # 5) Read-only preview (the real acq_id / project / link, not the dry-run).
     log("building preview (read-only)...", "INFO")

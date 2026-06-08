@@ -558,8 +558,10 @@ This is a forward-only mechanism: the historical/archival backfills in progress 
 >
 > **Recommended/Optional split:**
 > - **`is_control`** — highly recommended tri-state boolean (`true`/`false`/`null=unknown`). WARN if `null`. The primary cohort filter when present.
-> - **`disease_model` / `disease_state`** — recommended free-text; WARN if missing. `disease_model` can be **pre-seeded** from the animal-DB `projects.name` (a project-level hint — see §4.5.4).
+> - **`disease_model` / `disease_state`** — recommended free-text; WARN if missing **for a case** (see the control definition below). `disease_model` can be **pre-seeded** from the animal-DB `projects.name` (a project-level hint — see §4.5.4).
 > - **Optional** (`control_type` / `treatment` / `timepoint_days` / `study_arm`) — write-through, no validation.
+
+> **Definition of *control* (`is_control = true`) — DECIDED 2026-06-08.** A control is an animal with **no disease model, no perturbation, and no intervention** (naive / wild-type / untreated baseline). It follows that a control has no `disease_model` or `disease_state` to record — those characterize a **case** (`is_control = false`). The enrichment writer is therefore **gate-aware**: it WARNs about an empty `disease_model`/`disease_state` only for a *case*, never for a control (a control's empty disease fields are correct, not a gap). `control_type` (naive / sham / vehicle / littermate / …) optionally refines *what kind* of control it is.
 
 #### 4.5.1 Why this is its own block (not folded into `subject:`)
 
@@ -605,16 +607,17 @@ Missing/unsupplied fields are written explicitly: `is_control: null`, free-text 
 
 The disease/control state is largely a property of the **study design**, not the animal — the same animal can be a baseline-scan control on day 0 and a post-MI case on day 7. The DB cannot fully supply it (the `animals.exp_group` group-link is unpopulated), but `projects.name` gives a usable **project-level `disease_model` hint** (e.g. *"…hipertensión pulmonar"* → `disease_model` seed). Set it via, in precedence order:
 
-1. **Per-batch YAML `condition:` block** — **set once, applies to every acquisition the batch produces.** This is the normal path and the key to adoption: the operator (or Ryan) supplies the condition **once per ingest batch / session**, never per scan. A batch is typically one session or one animal-cohort's worth of scans, so one block covers them all.
+1. **Operator front-end at ingest — `ni-ingest` / `mri-ingest` (2026-06-08).** The simplest path for the Linux command-line operators: pass `--is-control true|false`, `--disease-model`, `--disease-state` and `--is-whole-body true|false` (the latter feeds the §4.6 `anatomy:` block), **or omit them and answer the interactive prompts** the tool shows before ingest. Set **once per run**, applied to every acquisition in the batch (the prompt banner says so, and warns to skip if the answer is not consistent across the batch). Disease fields are asked only for a **case** (`--is-control false`) and are optional — a blank leaves the sentinel, non-blocking. See `tools/INGEST_CLI.md`. (The microscopy GUI does not prompt for these; microscopy is typically `tissue`/`organism` set per-recipe.)
+2. **Per-batch YAML `condition:` block** (the data-office path) — **set once, applies to every acquisition the batch produces.** The operator (or Ryan) supplies the condition **once per ingest batch / session**, never per scan. A batch is typically one session or one animal-cohort's worth of scans, so one block covers them all.
    ```yaml
    condition:
      is_control: true            # tri-state; omit to leave null=unknown
      disease_model: "wild_type"
      disease_state: "baseline"
    ```
-2. **Per-acquisition override** in `/projects/<proj>/metadata/<acq_id>.json` — only for the rare batch that genuinely mixes conditions; not the default.
-3. **Project-level auto-seed** — `disease_model` pre-filled from the DB `projects.name` (`source: "auto-guess"`), overridable.
-4. **Excel → study-metadata importer** (`tasks/tasks.md §3.2`) — researcher-driven bulk fill at the study level, the main tool for enriching archive data after the fact.
+3. **Per-acquisition override** in `/projects/<proj>/metadata/<acq_id>.json` — only for the rare batch that genuinely mixes conditions; not the default.
+4. **Project-level auto-seed** — `disease_model` pre-filled from the DB `projects.name` (`source: "auto-guess"`), overridable.
+5. **Excel → study-metadata importer** (`tasks/tasks.md §3.2`) — researcher-driven bulk fill at the study level, the main tool for enriching archive data after the fact.
 
 If none supply it, the block is still written with `is_control: null` + `source: "unknown"` and a WARN — the acquisition ingests and is flagged for later enrichment (§4.7). The sidecar holds a **frozen snapshot at ingest**, refreshed at project close-out before `/projects/<proj>/` deletion. Same lifecycle as `subject:`.
 
@@ -628,6 +631,7 @@ If none supply it, the block is still written with `is_control: null` + `source:
 | Controlled vocabulary for `disease_model` / `disease_state` | ❓ Deferred — preclinical model vocabularies are too domain-specific to fully control. Future: per-PI vocabularies in `/projects/<proj>/metadata/vocab.yaml`. |
 | Writer | ✅ IMPLEMENTED (Phase 3, 2026-06-03) — `tools/ingest/enrichment.py`, called from `ingest_raw.py` Step 8.4; WARN-not-raise (§4.7) |
 | YAML-level `condition:` block support in per-batch configs | ✅ IMPLEMENTED — top-level `condition:` block, resolver-evaluated, set-once-per-batch; in the per-instrument templates (`mri_bruker`, `molecubes_ni`, `axioscan7`) |
+| Operator-CLI capture (`ni-ingest` / `mri-ingest` `--is-control` / `--disease-model` / `--disease-state` / `--is-whole-body`, or interactive prompts) | ✅ IMPLEMENTED (2026-06-08) — `tools/operator/metadata_prompt.py`; set once per run, applied to all acquisitions; disease fields gated to cases + optional; gate-aware WARNs (no disease nag for a control) |
 | Backfill of existing 97 MRI + 84 NI + animal-derived microscopy | ⚠️ Queued — Phase 4; ingests now with `null`+WARN, enriched later via the Excel importer / bulk tools (§4.7) |
 
 Until the writer ships, operators may include a `condition:` block in YAML configs as forward-compatible documentation; the loader will pick it up once Phase 3 lands.
@@ -654,7 +658,7 @@ Anatomical coverage is a property of the **imaging acquisition** (the field of v
 | MRI `ProtocolName` (e.g. `1_Localizer_multi_slice`) + FOV geometry | 🔶 Weak hint only — anatomy sometimes in the protocol name; coverage loosely inferable from FOV. |
 | NI Molecubes bed-position range (`Scan bed position from X to Y`) + scan duration | 🔶 Weak hint only — more bed positions ≈ more axial coverage. |
 
-So `anatomy:` is **operator-entered** (like `condition:`), with an *optional, non-authoritative* `auto_hint` the ingest may surface from the protocol name / bed range / FOV to pre-fill the operator's choice.
+So `anatomy:` is **operator-entered** (like `condition:`), with an *optional, non-authoritative* `auto_hint` the ingest may surface from the protocol name / bed range / FOV to pre-fill the operator's choice. The MRI/NI operator front-ends collect `is_whole_body` at ingest (the `--is-whole-body true|false` flag or an interactive prompt, 2026-06-08, set once per run); the UBERON `region` is **not** prompted there — when `is_whole_body = false` it is left `null` (WARN) and filled later via the per-acq metadata override, because a region needs a label + ontology id that don't belong in the dead-simple capture path.
 
 #### 4.6.2 Schema
 

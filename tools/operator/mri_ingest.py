@@ -71,6 +71,7 @@ scope = _op.scope
 preview = _op.preview
 runner = _op.runner
 env = _op.env
+metadata_prompt = _op.metadata_prompt
 
 INSTRUMENT_KEY = "MRI"
 
@@ -254,7 +255,8 @@ def print_preview_table(result):
 
 # ------------------------------------------------------------ build config
 
-def build_mri_config(staging_dir, pattern, reconstructions=None, model=None):
+def build_mri_config(staging_dir, pattern, reconstructions=None, model=None,
+                     extra_overrides=None):
     """Load the MRI template and apply the per-run overrides.
 
     Args:
@@ -263,6 +265,8 @@ def build_mri_config(staging_dir, pattern, reconstructions=None, model=None):
         reconstructions: parsed value (str 'all' | list[int]) or None to keep
             the template default.
         model: '7T' | '11.7T' or None to keep the template placeholder.
+        extra_overrides: optional flat dict of additional config_builder
+            overrides (e.g. condition.*/anatomy.* from metadata_prompt).
 
     Returns:
         (cfg, template_path) — cfg is the in-memory config dict; template_path
@@ -284,6 +288,8 @@ def build_mri_config(staging_dir, pattern, reconstructions=None, model=None):
                 f"{sorted(_MODEL_MAP)}."
             )
         overrides["registry.instrument_model"] = _MODEL_MAP[model]
+    if extra_overrides:
+        overrides.update(extra_overrides)
 
     cfg = config_builder.build_config(template, overrides)
     return cfg, template_path
@@ -349,6 +355,35 @@ def main(argv=None):
         help="NAS root (must contain a registries/ subdir). Default: "
              "$GJESUS3_ROOT, else /mnt/gjesus3.",
     )
+    # Operator condition/anatomy metadata (08_METADATA). Omitted flags are
+    # prompted for interactively (unless --no-prompt / no TTY). All optional +
+    # non-blocking; the values apply to every exam in the run.
+    p.add_argument(
+        "--is-control", type=metadata_prompt.cli_bool, default=None,
+        metavar="true|false",
+        help="condition.is_control: true=control (no disease model / "
+             "perturbation / intervention), false=case. Omit to be prompted.",
+    )
+    p.add_argument(
+        "--disease-model", dest="disease_model", default=None,
+        help="condition.disease_model (free text). Only asked/used for a case "
+             "(--is-control false).",
+    )
+    p.add_argument(
+        "--disease-state", dest="disease_state", default=None,
+        help="condition.disease_state (free text). Only asked/used for a case.",
+    )
+    p.add_argument(
+        "--is-whole-body", type=metadata_prompt.cli_bool, default=None,
+        metavar="true|false",
+        help="anatomy.is_whole_body: true=whole-body, false=region of interest "
+             "(set the UBERON region later in the per-acq metadata file).",
+    )
+    p.add_argument(
+        "--no-prompt", action="store_true",
+        help="Never prompt for condition/anatomy metadata; use only the flags "
+             "given (leaves the rest unset / non-blocking).",
+    )
     args = p.parse_args(argv)
 
     # --- NAS root (validate first; fail fast with a plain message) ----------
@@ -396,11 +431,31 @@ def main(argv=None):
         return 2
     log(f"Scope: staging_dir={staging_dir} pattern={pattern!r}")
 
+    # --- operator condition/anatomy metadata (CLI flags + optional prompts) -
+    # is_batch -> the scope pattern carries a wildcard (a study '<study>/*' or
+    # batch root '*/*'); a single exam is a literal '<study>/<exam>'.
+    # Non-blocking: skipped values keep the template's null sentinels.
+    is_batch = "*" in pattern
+    interactive = (not args.no_prompt) and sys.stdin.isatty()
+    meta_overrides = metadata_prompt.collect_overrides(
+        {
+            "is_control": args.is_control,
+            "disease_model": args.disease_model,
+            "disease_state": args.disease_state,
+            "is_whole_body": args.is_whole_body,
+        },
+        is_batch=is_batch, interactive=interactive,
+    )
+    meta_summary = metadata_prompt.describe(meta_overrides)
+    if meta_summary:
+        log(f"Metadata: {meta_summary}")
+
     # --- build the in-memory config -----------------------------------------
     try:
         cfg, template_path = build_mri_config(
             staging_dir, pattern,
             reconstructions=reconstructions, model=args.model,
+            extra_overrides=meta_overrides,
         )
     except ValueError as e:
         log(str(e), "ERROR")

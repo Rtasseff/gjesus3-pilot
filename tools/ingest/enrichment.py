@@ -181,13 +181,21 @@ def _build_subject(cfg_single, discovered, acq_for_age, acq_id,
 
 def _build_condition(cfg_single, discovered, log):
     out = resolver.resolve_condition_block(cfg_single.get("condition"), discovered)
-    if out.get("is_control") is None:
+    is_control = out.get("is_control")
+    if is_control is None:
         log("condition: is_control is null (unknown) - set it once per batch "
             "when known (true=control / false=case).", "WARN")
-    if not out.get("disease_model"):
-        log("condition: disease_model is empty.", "WARN")
-    if not out.get("disease_state"):
-        log("condition: disease_state is empty.", "WARN")
+    elif is_control is False:
+        # A case: disease_model / disease_state characterize it, so an empty
+        # value is worth a (non-blocking) reminder. A CONTROL, by definition,
+        # has no disease model / perturbation / intervention, so its empty
+        # disease fields are correct and must NOT warn (08_METADATA).
+        if not out.get("disease_model"):
+            log("condition: disease_model is empty (case with no disease model "
+                "recorded).", "WARN")
+        if not out.get("disease_state"):
+            log("condition: disease_state is empty (case with no disease state "
+                "recorded).", "WARN")
     return out
 
 
