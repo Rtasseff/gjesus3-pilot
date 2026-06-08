@@ -217,7 +217,7 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
         writer.writerow(row)
     log(f"Appended to registry: {registry_path}")
 
-    log(f"DONE: {project_id} — {canonical_path}")
+    log(f"DONE: {project_id} - {canonical_path}")
     return project_id, True
 
 

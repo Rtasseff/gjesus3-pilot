@@ -471,7 +471,7 @@ def main(argv=None):
         return 2
 
     if not args.apply:
-        log("*** DRY-RUN MODE — no changes will be made (use --apply to write) ***")
+        log("*** DRY-RUN MODE - no changes will be made (use --apply to write) ***")
 
     summary = recover_all(registries_dir, apply=args.apply)
     _print_summary(summary)

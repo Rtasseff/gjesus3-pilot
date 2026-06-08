@@ -329,7 +329,7 @@ def _main(argv):
     except RuntimeError as e:
         _default_log(str(e), "ERROR")
         return 1
-    _default_log(f"Done — {n} DICOMs regenerated and organized.")
+    _default_log(f"Done - {n} DICOMs regenerated and organized.")
     return 0
 
 

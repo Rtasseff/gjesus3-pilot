@@ -434,7 +434,7 @@ def main(argv=None):
     print()
 
     if result.blocking_errors:
-        log("Cannot proceed — the config has blocking errors:", "ERROR")
+        log("Cannot proceed - the config has blocking errors:", "ERROR")
         for be in result.blocking_errors:
             log(f"  {be}", "ERROR")
         return 1

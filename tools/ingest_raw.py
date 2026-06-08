@@ -916,9 +916,9 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         log("Verifying copy integrity...")
         ok, mismatches = checksum.verify_checksums(source_path, copy_dest)
         if ok:
-            log("Verification PASSED — all files match")
+            log("Verification PASSED - all files match")
         else:
-            log(f"Verification FAILED — {len(mismatches)} mismatches:", "ERROR")
+            log(f"Verification FAILED - {len(mismatches)} mismatches:", "ERROR")
             for m in mismatches[:10]:
                 log(f"  {m}", "ERROR")
             return acq_id_str, False
@@ -1368,7 +1368,7 @@ def main():
         log(f"NAS UNC:  {nas_unc} (legacy .lnk seam only; unused by hard-link linker)")
 
     if args.dry_run:
-        log("*** DRY RUN MODE — no changes will be made ***")
+        log("*** DRY RUN MODE - no changes will be made ***")
 
     if args.delete_source:
         log("--delete-source: source files will be removed after successful verify", "WARN")

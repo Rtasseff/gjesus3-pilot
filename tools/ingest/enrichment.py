@@ -182,7 +182,7 @@ def _build_subject(cfg_single, discovered, acq_for_age, acq_id,
 def _build_condition(cfg_single, discovered, log):
     out = resolver.resolve_condition_block(cfg_single.get("condition"), discovered)
     if out.get("is_control") is None:
-        log("condition: is_control is null (unknown) — set it once per batch "
+        log("condition: is_control is null (unknown) - set it once per batch "
             "when known (true=control / false=case).", "WARN")
     if not out.get("disease_model"):
         log("condition: disease_model is empty.", "WARN")
@@ -194,7 +194,7 @@ def _build_condition(cfg_single, discovered, log):
 def _build_anatomy(cfg_single, discovered, log):
     out = resolver.resolve_anatomy_block(cfg_single.get("anatomy"), discovered)
     if out.get("is_whole_body") is None:
-        log("anatomy: is_whole_body is null (unknown) — set it once per batch "
+        log("anatomy: is_whole_body is null (unknown) - set it once per batch "
             "when known (true=whole-body / false=region of interest).", "WARN")
     elif out.get("is_whole_body") is False and not out.get("region"):
         log("anatomy: is_whole_body=false but no UBERON region given.", "WARN")
