@@ -100,9 +100,19 @@ def build_test_nas(dest, src_nas, force=False):
             f"empty path, or pass --force to reset it."
         )
 
-    # Fresh tree (force = wipe the registries so a re-build starts clean; the
-    # raw/projects content is left as-is unless you delete dest yourself, but a
-    # header-only registry means a re-run just re-ingests into the same raw/).
+    # On --force, wipe the DATA dirs (raw/projects/staging/...) too, not just
+    # the registries. Otherwise a rebuild leaves orphaned raw files + project
+    # link folders from a prior test run on disk, out of sync with the now-empty
+    # registry (e.g. a raw_linked/<acq> folder for an acquisition that is no
+    # longer in registry_raw) -- which looks like a phantom extra acquisition.
+    if force:
+        for sub in _NAS_SUBDIRS:
+            if sub == "registries":
+                continue  # recreated + reseeded below
+            data_dir = os.path.join(dest, sub)
+            if os.path.isdir(data_dir):
+                shutil.rmtree(data_dir, ignore_errors=True)
+
     for sub in _NAS_SUBDIRS:
         os.makedirs(os.path.join(dest, sub), exist_ok=True)
 
@@ -152,7 +162,9 @@ def main(argv=None):
     )
     p.add_argument(
         "--force", action="store_true",
-        help="Reset registries even if --dest is a non-empty directory.",
+        help="Reset an existing test NAS: wipe the data dirs "
+             "(raw/projects/staging/...) AND reset the registries to a clean "
+             "slate. Required when --dest is a non-empty directory.",
     )
     args = p.parse_args(argv)
 

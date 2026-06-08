@@ -610,15 +610,27 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             return None, False
         cfg_single["instrument"] = instrument
 
-    # Validate / confirm instrument matches DICOM
+    # Validate / confirm instrument matches DICOM.
+    # DICOM_MODALITY_TO_CODE maps a Modality tag to the *external* (X-prefix)
+    # code, because the first DICOM data onboarded was collaborator XMRI/XPET.
+    # The same Modality is equally valid for the internal counterpart
+    # (MR -> MRI, PT -> PET, CT -> CT, NM/ST -> SPECT), so only warn on a
+    # GENUINE mismatch (e.g. Modality=CT but instrument=MRI) -- not on the
+    # internal-vs-external distinction, which fires on every internal scan.
     if is_dicom and summary.get("modality"):
         expected_code = config.DICOM_MODALITY_TO_CODE.get(summary["modality"])
-        if expected_code and expected_code != instrument:
-            log(
-                f"WARNING: DICOM Modality={summary['modality']} suggests "
-                f"{expected_code}, but config says {instrument}",
-                "WARN",
+        if expected_code:
+            internal_equiv = (
+                expected_code[1:] if expected_code.startswith("X")
+                else expected_code
             )
+            if instrument not in (expected_code, internal_equiv):
+                log(
+                    f"WARNING: DICOM Modality={summary['modality']} suggests "
+                    f"{expected_code} (or internal {internal_equiv}), but config "
+                    f"says {instrument}",
+                    "WARN",
+                )
 
     # Resolve ecosystem
     data_ecosystem = config.resolve_ecosystem(instrument)
