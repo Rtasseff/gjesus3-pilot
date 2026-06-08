@@ -177,6 +177,13 @@ Python install, no admin rights needed.
    - Pick your instrument (ZWSI / CELL / LSM9) and a saved **recipe** (a
      ready-made convention the data office prepared).
    - Use the folder box to point at your day/batch folder.
+   - **(AxioScan only) Study metadata** — a small panel lets you mark the tissue
+     as **control** or **case**, and for a case enter `disease_model` /
+     `disease_state`. Type a value, or open *"Pull a value from the CZI name /
+     folders"* and click a `discovered.*` chip to map it from the filename. Set
+     once, applied to every acquisition in the run; leave it on "skip" to record
+     nothing (non-blocking). The cell modes don't show this — cultured cells
+     have no disease/control state.
    - Click **Preview** — a read-only table shows each acquisition's ACQ-ID,
      project, link name, the resolved registry row, and *X new / Y
      already-ingested*. Check it.

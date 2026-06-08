@@ -47,6 +47,40 @@
       <button id="r-preview" type="button" class="primary">Preview</button>
     </div>
 
+    <!-- Per-run study metadata (condition block). Shown only for instruments
+         whose template carries a condition: block (AxioScan tissue). -->
+    <fieldset id="r-meta" hidden>
+      <legend>Study metadata <span class="muted">— recorded on every acquisition in this run</span></legend>
+      <div class="row">
+        <label>Animal role
+          <select id="r-is-control">
+            <option value="">— skip (leave unknown) —</option>
+            <option value="true">control — no disease model / perturbation / intervention</option>
+            <option value="false">case</option>
+          </select>
+        </label>
+      </div>
+      <div id="r-meta-case" class="row" hidden>
+        <label class="grow">disease_model
+          <input id="r-disease-model" type="text" placeholder="e.g. EAE  (or ${discovered.stain})">
+          <span class="example" id="r-dm-ex"></span>
+        </label>
+        <label class="grow">disease_state
+          <input id="r-disease-state" type="text" placeholder="e.g. acute">
+          <span class="example" id="r-ds-ex"></span>
+        </label>
+      </div>
+      <details>
+        <summary>Pull a value from the CZI name / folders (discovered fields)</summary>
+        <p class="muted">Click a chip to insert a token into the focused box; it
+          resolves per file at ingest. Set the folder + NAS root, then load.</p>
+        <div class="row">
+          <button id="r-meta-load-fields" type="button">Load discovered fields from the folder</button>
+        </div>
+        <div id="r-meta-chips" class="chips"></div>
+      </details>
+    </fieldset>
+
     <div id="r-summary" class="summary"></div>
     <div id="r-errors" class="errbox"></div>
     <div id="r-table-wrap" class="table-wrap"></div>

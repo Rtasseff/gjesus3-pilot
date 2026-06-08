@@ -15,6 +15,15 @@ Phase 4 of [`tasks/operator_ingest_tooling_plan.md`](../../../tasks/operator_ing
   (a read-only "what will happen" table: acq_id, project, link name, resolved
   registry row, *X new / Y already-ingested*, warnings) → **Ingest** with a live
   streaming log. A *Dry-run* checkbox (default on) writes nothing.
+  - **Study metadata panel** — shown only when the instrument's template carries
+    a `condition:` block (AxioScan tissue; hidden for the cell modes, gated on
+    the `condition` field of `GET /api/template`). Lets the operator set
+    `condition.is_control` (control/case/skip) and, for a case,
+    `condition.disease_model` / `disease_state` — typed or mapped from a CZI
+    `discovered.*` field via token chips (reusing `POST /api/discovered`). The
+    values are added to the override dict as `condition.*` and applied to every
+    acquisition in the run (the GUI equivalent of `ni/mri-ingest --is-control`
+    etc.). `anatomy.is_whole_body` is intentionally not offered — in-vivo only.
 - **Build a recipe** (define a new convention): edit the parse rules
   (positional `separator` + ordered fields, or `regex` + source; plus
   `path_parse.levels` + `filter`) and watch a live `discovered.*` grid over the
@@ -67,7 +76,7 @@ first. Verify the frozen exe by previewing **and** dry-run-ingesting a real
 | endpoint | core call | writes? |
 |---|---|---|
 | `GET /api/recipes` | reads `recipes_dir()` | no |
-| `GET /api/template` | `templates.load_template` | no |
+| `GET /api/template` | `templates.load_template` (returns `auto_discover`/`registry`/`link_filename`/`ingest` defaults + the `condition` block if any — the runner gates the Study-metadata panel on it) | no |
 | `GET/POST /api/nas_root` | `env.is_valid_nas_root` | NAS-root state file only |
 | `POST /api/preview` | `scope.resolve_scope` → `config_builder.build_config` → `preview.preview_batch` | no |
 | `POST /api/discovered` | same, returns the `discovered.*` grid | no |

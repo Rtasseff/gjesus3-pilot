@@ -285,6 +285,11 @@ def api_template():
         "link_filename": tpl.get("link_filename") or "",
         "auto_create_project": tpl.get("auto_create_project") or {},
         "ingest": tpl.get("ingest") or {},
+        # The optional condition: block (08_METADATA §4.5). Present only for
+        # tissue instruments (e.g. AxioScan); absent for the cell modes. The
+        # runner uses its presence to decide whether to show the per-run
+        # "Study metadata" panel.
+        "condition": tpl.get("condition"),
     })
 
 

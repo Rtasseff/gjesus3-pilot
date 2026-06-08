@@ -83,6 +83,107 @@ function currentRecipeOverrides() {
   return rec ? (rec.overrides || {}) : {};
 }
 
+// ---- per-run study metadata (condition block) ----------------------------
+// Shown only for instruments whose template carries a condition: block
+// (AxioScan tissue; not the cell modes). Values become condition.* overrides
+// applied to EVERY acquisition in the run — the GUI equivalent of the
+// ni/mri-ingest --is-control / --disease-* flags.
+const rIsControl = $("#r-is-control");
+let runnerDiscoveredRow = {};
+let focusedMetaInput = null;
+
+async function updateMetaPanel() {
+  try {
+    const t = await getJSON(`/api/template?instrument=${encodeURIComponent(rInstrument.value)}`);
+    $("#r-meta").hidden = !(t && t.condition);
+  } catch (e) {
+    $("#r-meta").hidden = true;
+  }
+}
+rInstrument.addEventListener("change", updateMetaPanel);
+updateMetaPanel();
+
+rIsControl.addEventListener("change", () => {
+  // disease_model / disease_state are only meaningful for a case.
+  $("#r-meta-case").hidden = rIsControl.value !== "false";
+  updateMetaExamples();
+});
+
+function runnerMetaOverrides() {
+  const ov = {};
+  const ic = rIsControl.value;            // "", "true", "false"
+  if (ic === "true") {
+    ov["condition.is_control"] = true;    // control -> no disease fields
+  } else if (ic === "false") {
+    ov["condition.is_control"] = false;
+    const dm = $("#r-disease-model").value.trim();
+    const ds = $("#r-disease-state").value.trim();
+    if (dm) ov["condition.disease_model"] = dm;
+    if (ds) ov["condition.disease_state"] = ds;
+  }
+  return ov;                               // "" -> {} (skip, non-blocking)
+}
+
+// Recipe overrides + per-run condition (condition.* wins on the rare overlap).
+function runnerOverrides() {
+  return Object.assign({}, currentRecipeOverrides(), runnerMetaOverrides());
+}
+
+$$("#r-meta input[type=text]").forEach((inp) => {
+  inp.addEventListener("focus", () => { focusedMetaInput = inp; });
+  inp.addEventListener("input", updateMetaExamples);
+});
+
+async function loadMetaFields() {
+  $("#r-meta-chips").innerHTML = "Loading…";
+  try {
+    const data = await postJSON("/api/discovered", {
+      instrument: rInstrument.value,
+      overrides: currentRecipeOverrides(),
+      staging_path: $("#r-staging").value,
+      nas_root: nasRoot(),
+      limit: 5,
+    });
+    runnerDiscoveredRow = (data.rows && data.rows[0]) ? data.rows[0].discovered : {};
+    const keys = data.keys || [];
+    $("#r-meta-chips").innerHTML = keys.length
+      ? keys.map((k) =>
+          `<span class="chip" data-token="\${discovered.${esc(k)}}">\${discovered.${esc(k)}}</span>`).join("")
+      : "<span class='muted'>No discovered fields parsed for this folder.</span>";
+    $$("#r-meta-chips .chip").forEach((chip) =>
+      chip.addEventListener("click", () => insertMetaToken(chip.dataset.token)));
+    updateMetaExamples();
+  } catch (e) {
+    $("#r-meta-chips").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
+  }
+}
+$("#r-meta-load-fields").addEventListener("click", loadMetaFields);
+
+function insertMetaToken(token) {
+  const inp = focusedMetaInput || $("#r-disease-model");
+  if (!inp) return;
+  const s = inp.selectionStart ?? inp.value.length;
+  const e = inp.selectionEnd ?? inp.value.length;
+  inp.value = inp.value.slice(0, s) + token + inp.value.slice(e);
+  inp.focus();
+  const pos = s + token.length;
+  inp.setSelectionRange(pos, pos);
+  updateMetaExamples();
+}
+
+// Live resolved example, shown only for token values (reuses resolveExample).
+function updateMetaExamples() {
+  const ctx = runnerDiscoveredRow || {};
+  [["#r-disease-model", "#r-dm-ex"], ["#r-disease-state", "#r-ds-ex"]].forEach(([inSel, exSel]) => {
+    const inp = $(inSel), ex = $(exSel);
+    if (!inp || !ex) return;
+    if (!inp.value.includes("${")) { ex.textContent = ""; ex.classList.remove("bad"); return; }
+    const { text, unresolved } = resolveExample(inp.value, ctx, {});
+    ex.textContent = "→ " + text;
+    ex.classList.toggle("bad", unresolved);
+  });
+}
+
 function renderSummary(el, data) {
   el.innerHTML =
     `<span class="new">${data.n_new} new</span> · ` +
@@ -126,7 +227,7 @@ async function runnerPreview() {
   try {
     const data = await postJSON("/api/preview", {
       instrument: rInstrument.value,
-      overrides: currentRecipeOverrides(),
+      overrides: runnerOverrides(),
       staging_path: $("#r-staging").value,
       nas_root: nasRoot(),
     });
@@ -175,7 +276,7 @@ async function runnerIngest() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         instrument: rInstrument.value,
-        overrides: currentRecipeOverrides(),
+        overrides: runnerOverrides(),
         staging_path: $("#r-staging").value,
         nas_root: nasRoot(),
         dry_run: dry,
