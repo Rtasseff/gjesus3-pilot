@@ -30,6 +30,7 @@ MUST NOT write anything to the NAS. Every call is pure CSV reads
 import contextlib
 import io
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -58,7 +59,10 @@ class PreviewResult:
     """Aggregate preview over a whole batch config."""
     cases: list = field(default_factory=list)         # list[CasePreview]
     n_matched: int = 0                                 # glob matches before dedup
-    n_skipped: int = 0                                 # already-ingested / skipped
+    n_skipped: int = 0                                 # = n_already_ingested (back-compat alias)
+    n_already_ingested: int = 0                         # dropped by the idempotency dedup
+    n_dropped: int = 0                                 # dropped by a PARSE/FILTER/VALIDATE error
+    dropped: list = field(default_factory=list)        # [{"name", "reason"}] for n_dropped
     n_new: int = 0                                     # cases that would ingest
     blocking_errors: list = field(default_factory=list)
     warnings: list = field(default_factory=list)       # batch-level warnings
@@ -144,10 +148,17 @@ def preview_batch(cfg, nas_root):
     _drain_stdout(buf, result.warnings)
 
     result.n_new = len(cases)
-    # Skipped = matched-minus-new when we have a reliable match count; the
-    # captured stdout WARN/SKIP lines carry the per-case detail.
-    if result.n_matched:
-        result.n_skipped = max(result.n_matched - result.n_new, 0)
+    # expand_batch drops a file (continue) for FIVE different reasons, all printed
+    # as "[expand_batch] SKIP <name>: <reason>": filename-parse failure, path-level
+    # mismatch, filter miss, validate error, OR genuinely-already-in-the-registry.
+    # We must NOT lump these together as "already-ingested" (the historical bug:
+    # a parse failure looked like a duplicate). Split them by reason so the UI can
+    # say "0 already-ingested, 44 skipped — parse/filter error" and show why.
+    already, dropped = _categorize_skips(result.warnings)
+    result.n_already_ingested = already
+    result.dropped = dropped
+    result.n_dropped = len(dropped)
+    result.n_skipped = already            # back-compat alias = true already-ingested
 
     auto_create = bool((cfg.get("ingest") or {}).get("auto_create_projects"))
 
@@ -192,6 +203,32 @@ def _drain_stdout(buf, warnings):
         line = line.rstrip()
         if line:
             warnings.append(line)
+
+
+# Matches expand_batch's per-case drop lines: "[expand_batch] SKIP <name>: <reason>".
+_SKIP_RE = re.compile(r"^\[expand_batch\] SKIP (?P<name>.+?): (?P<reason>.+)$")
+
+
+def _categorize_skips(lines):
+    """Split expand_batch SKIP lines into (already_ingested_count, dropped[]).
+
+    `dropped` is a list of {"name", "reason"} for files dropped by a parse / path
+    / filter / validate problem — the cases the operator most needs to SEE (a
+    parse failure means their convention or a stray file is wrong), as opposed to
+    the benign "already in registry" idempotency skips.
+    """
+    already = 0
+    dropped = []
+    for line in lines:
+        m = _SKIP_RE.match(line.strip())
+        if not m:
+            continue
+        reason = m.group("reason").strip()
+        if "already in registry" in reason.lower():
+            already += 1
+        else:
+            dropped.append({"name": m.group("name").strip(), "reason": reason})
+    return already, dropped
 
 
 def _preview_acq_id(acq_date, instrument, registry_path, seq_seen, warnings):

@@ -16,7 +16,11 @@ body {
   font: 14px/1.45 system-ui, "Segoe UI", Arial, sans-serif;
   color: var(--ink);
   background: var(--bg);
+  overflow-x: hidden;          /* backstop: a wide table can never scroll the page */
 }
+/* Center the app and cap its width; wide tables scroll INSIDE their own box
+   (.table-wrap) rather than stretching the whole page. */
+main.wrap { max-width: 1080px; margin: 0 auto; }
 header {
   display: flex; align-items: center; justify-content: space-between;
   gap: 1rem; padding: .6rem 1rem; background: var(--panel);
@@ -37,9 +41,13 @@ header h1 { font-size: 1.1rem; margin: 0; }
 .tabpane.active { display: block; }
 
 .row { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; margin: .5rem 0; }
-.row .grow, label.grow { flex: 1 1 320px; }
-label { display: flex; flex-direction: column; gap: .2rem; font-size: .8rem; color: var(--muted); }
-label.check { flex-direction: row; align-items: center; gap: .35rem; color: var(--ink); }
+.row .grow, label.grow { flex: 1 1 320px; min-width: 0; }
+/* Field NAMES are dark and readable; only genuine helper text (.muted spans)
+   stays grey. (#1 — labels were all grey and looked disabled.) */
+label { display: flex; flex-direction: column; gap: .2rem; font-size: .82rem;
+  font-weight: 600; color: var(--ink); }
+label .muted { font-weight: 400; }
+label.check { flex-direction: row; align-items: center; gap: .35rem; font-weight: 400; }
 input[type=text], select {
   font: inherit; padding: .35rem .45rem; border: 1px solid var(--border);
   border-radius: 5px; background: #fff; color: var(--ink); width: 100%;
@@ -73,7 +81,10 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .errbox { background: #fef2f2; border: 1px solid #fecaca; color: var(--bad);
   padding: .5rem .7rem; border-radius: 6px; margin: .5rem 0; white-space: pre-wrap; }
 
-.table-wrap { overflow: auto; max-height: 60vh; border: 1px solid var(--border); border-radius: 6px; }
+/* Tables live in their own scroll box: a long/wide table scrolls left-right and
+   up-down INSIDE this frame instead of stretching the page (#16/#19). */
+.table-wrap { overflow: auto; max-height: 60vh; width: 100%; max-width: 100%;
+  border: 1px solid var(--border); border-radius: 6px; }
 .table-wrap:empty { display: none; }
 table { border-collapse: collapse; width: 100%; font-size: .8rem; }
 th, td { border: 1px solid var(--border); padding: .3rem .45rem; text-align: left; vertical-align: top; white-space: nowrap; }
@@ -91,7 +102,31 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
 .log-wrap .WARN { color: #fcd34d; }
 .log-wrap .OK { color: #86efac; }
 
-.commit-row { margin-top: 1rem; padding-top: .6rem; border-top: 1px dashed var(--border); }
+/* Commit row: dry-run is OFF by default (#8), so make the live-vs-safe state
+   loud — a small grey checkbox in the corner was too easy to miss. */
+.commit-row { margin-top: 1rem; padding: .7rem .8rem; border-radius: 8px;
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  border: 1px solid var(--border); background: #fff; }
+.commit-row.live { background: #fff7ed; border-color: #fed7aa; }
+.commit-row.safe { background: #f0f9ff; border-color: #bae6fd; }
+.commit-row .check { font-weight: 600; }
+.commit-row .state { font-size: .82rem; font-weight: 600; }
+.commit-row.live .state { color: var(--warn); }
+.commit-row.safe .state { color: var(--accent); }
+.commit-row .go { margin-left: auto; }
+
+/* Files dropped by a parse/filter error (NOT already-ingested) — shown up top,
+   never buried in the collapsed log (#6). */
+.dropbox:empty { display: none; }
+.dropbox { background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+  padding: .5rem .7rem; border-radius: 6px; margin: .5rem 0; font-size: .85rem; }
+.dropbox h4 { margin: 0 0 .3rem; font-size: .85rem; }
+.dropbox ul { margin: .2rem 0 0; padding-left: 1.1rem; }
+.dropbox code { background: #fef3c7; padding: 0 .2rem; border-radius: 3px; }
+
+/* Inline "Browse…" button sitting next to a path box. */
+.browse { white-space: nowrap; }
+.summary .drop { color: var(--warn); font-weight: 600; }
 
 .chips { display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0; }
 .chip {

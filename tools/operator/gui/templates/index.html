@@ -10,15 +10,17 @@
   <header>
     <h1>Microscopy Ingest</h1>
     <div class="nasbar">
-      <label>NAS root
-        <input id="nas-root" type="text" value="{{ nas_root }}" size="28"
+      <label>Destination NAS <span class="muted">— where files are ingested to</span>
+        <input id="nas-root" type="text" value="{{ nas_root }}" size="24"
                placeholder="J:\gjesus3-data">
       </label>
+      <button id="nas-browse" type="button" class="browse">Browse…</button>
       <button id="nas-save" type="button">Set</button>
       <span id="nas-status" class="pill"></span>
     </div>
   </header>
 
+  <main class="wrap">
   <nav class="tabs">
     <button class="tab active" data-tab="runner" type="button">Run a recipe</button>
     <button class="tab" data-tab="builder" type="button">Build a recipe</button>
@@ -40,17 +42,18 @@
     </div>
     <p id="r-recipe-desc" class="muted"></p>
     <div class="row">
-      <label class="grow">Staging folder (point at the day/batch folder)
+      <label class="grow">Source folder <span class="muted">— the instrument day/batch folder to upload files from</span>
         <input id="r-staging" type="text"
                placeholder="S:\goptical\GOpticalUsers data\AxioScan\20260522">
       </label>
+      <button id="r-browse" type="button" class="browse">Browse…</button>
       <button id="r-preview" type="button" class="primary">Preview</button>
     </div>
 
-    <!-- Researcher (the person who set up the experiment) -> registry. The
-         operator (the tech who ran the scope) comes from the filename. -->
+    <!-- Researcher (the person who ran the study) -> registry. The operator (the
+         tech who ran the scope) comes from the filename. -->
     <div class="row">
-      <label class="grow">Researcher <span class="muted">— who set up the experiment (goes in the registry)</span>
+      <label class="grow">Researcher <span class="muted">— who ran the study (goes in the registry)</span>
         <input id="r-researcher" type="text"
                placeholder="e.g. Laura   (AxioScan: set this; cells: leave blank to use the folder name)">
       </label>
@@ -91,14 +94,16 @@
     </fieldset>
 
     <div id="r-summary" class="summary"></div>
+    <div id="r-dropped" class="dropbox"></div>
     <div id="r-errors" class="errbox"></div>
     <div id="r-table-wrap" class="table-wrap"></div>
     <details id="r-warnings-wrap" class="warnings"><summary>Warnings / log</summary>
       <pre id="r-warnings"></pre>
     </details>
 
-    <div class="row commit-row">
-      <label class="check"><input id="r-dry" type="checkbox" checked> Dry-run (safe; writes nothing)</label>
+    <div class="commit-row" id="r-commit">
+      <label class="check"><input id="r-dry" type="checkbox"> Dry-run (test only — writes nothing)</label>
+      <span class="state" id="r-dry-state"></span>
       <button id="r-ingest" type="button" class="go" disabled>Ingest</button>
     </div>
     <div id="r-log-wrap" class="log-wrap" hidden>
@@ -128,9 +133,10 @@
       <button id="b-load-template" type="button">Load template defaults</button>
     </div>
     <div class="row">
-      <label class="grow">Staging folder (live preview uses real files here)
+      <label class="grow">Example source folder <span class="muted">— a real batch folder; the live preview parses files from here</span>
         <input id="b-staging" type="text" placeholder="point at a real batch folder">
       </label>
+      <button id="b-browse" type="button" class="browse">Browse…</button>
     </div>
 
     <!-- (a) PARSE RULES -->
@@ -244,6 +250,7 @@
       </details>
     </fieldset>
   </section>
+  </main>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

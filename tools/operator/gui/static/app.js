@@ -57,6 +57,33 @@ getJSON("/api/nas_root").then((d) => { setNasStatus(d.valid); });
 
 function nasRoot() { return nasInput.value.trim(); }
 
+// ---------------------------------------------------------------- folder browse
+// A browser <input> can't return a real local path, but this is a LOCAL app, so
+// the server pops the OS-native folder picker and hands the path back here.
+async function browseInto(input, title) {
+  if (!input) return;
+  try {
+    const data = await postJSON("/api/browse_folder", {
+      initial: input.value.trim(), title: title || "",
+    });
+    if (data.path) {
+      input.value = data.path;
+      input.dispatchEvent(new Event("input"));
+      input.dispatchEvent(new Event("change"));
+    } else if (data.error) {
+      input.placeholder = data.error;   // headless box: operator types it
+    }
+  } catch (e) { /* non-fatal — typing the path still works */ }
+}
+$("#nas-browse").addEventListener("click", async () => {
+  await browseInto(nasInput, "Select the destination NAS root (gjesus3-data)");
+  if (nasInput.value.trim()) saveNas();
+});
+$("#r-browse").addEventListener("click", () =>
+  browseInto($("#r-staging"), "Select the source folder to ingest"));
+$("#b-browse").addEventListener("click", () =>
+  browseInto($("#b-staging"), "Select an example source folder"));
+
 // ============================================================ RECIPE RUNNER
 const rInstrument = $("#r-instrument");
 const rRecipe = $("#r-recipe");
@@ -195,10 +222,32 @@ function updateMetaExamples() {
 }
 
 function renderSummary(el, data) {
-  el.innerHTML =
+  // already-ingested (benign dedup) and dropped-on-error are NOW distinct — a
+  // parse failure must never read as "already ingested" (#6).
+  const already = (data.n_already_ingested != null) ? data.n_already_ingested
+                                                     : (data.n_skipped || 0);
+  const dropped = data.n_dropped || 0;
+  let s =
     `<span class="new">${data.n_new} new</span> · ` +
-    `<span class="skip">${data.n_skipped} already-ingested</span> · ` +
-    `${data.n_matched} matched · pattern <code>${esc(data.pattern)}</code>`;
+    `<span class="skip">${already} already-ingested</span>`;
+  if (dropped) s += ` · <span class="drop">${dropped} skipped (errors)</span>`;
+  s += ` · ${data.n_matched} matched · pattern <code>${esc(data.pattern)}</code>`;
+  el.innerHTML = s;
+}
+
+// Files dropped by a parse/filter/validate error — shown prominently, not buried
+// in the collapsed log, so the operator sees WHY nothing ingested (#6).
+function renderDropped(el, data) {
+  if (!el) return;
+  const dropped = data.dropped || [];
+  if (!dropped.length) { el.innerHTML = ""; return; }
+  const shown = dropped.slice(0, 50).map((d) =>
+    `<li><code>${esc(d.name)}</code> — ${esc(d.reason)}</li>`).join("");
+  const more = dropped.length > 50
+    ? `<li>…and ${dropped.length - 50} more</li>` : "";
+  el.innerHTML =
+    `<h4>${dropped.length} file(s) skipped because of a parse / filter error ` +
+    `— these are NOT already ingested:</h4><ul>${shown}${more}</ul>`;
 }
 
 function renderCasesTable(cases) {
@@ -232,6 +281,7 @@ function renderCasesTable(cases) {
 async function runnerPreview() {
   $("#r-errors").textContent = "";
   $("#r-summary").innerHTML = "";
+  $("#r-dropped").innerHTML = "";
   $("#r-table-wrap").innerHTML = "Previewing…";
   $("#r-ingest").disabled = true;
   try {
@@ -243,6 +293,7 @@ async function runnerPreview() {
     });
     lastRunnerCases = data.cases;
     renderSummary($("#r-summary"), data);
+    renderDropped($("#r-dropped"), data);
     if (data.blocking_errors && data.blocking_errors.length) {
       $("#r-errors").textContent = data.blocking_errors.join("\n");
     }
@@ -337,6 +388,21 @@ async function runnerIngest() {
   $("#r-preview").disabled = false;
 }
 $("#r-ingest").addEventListener("click", runnerIngest);
+
+// ---- dry-run state (OFF by default; make LIVE-vs-SAFE loud) (#8) ----
+const rDry = $("#r-dry");
+const rCommit = $("#r-commit");
+const rDryState = $("#r-dry-state");
+function updateDryState() {
+  const dry = rDry.checked;
+  rCommit.classList.toggle("safe", dry);
+  rCommit.classList.toggle("live", !dry);
+  rDryState.textContent = dry
+    ? "Safe — nothing will be written."
+    : "LIVE — Ingest will write to the NAS.";
+}
+rDry.addEventListener("change", updateDryState);
+updateDryState();
 
 // ================================================================ BUILDER
 const bInstrument = $("#b-instrument");

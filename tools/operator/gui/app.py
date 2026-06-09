@@ -309,6 +309,58 @@ def api_nas_root():
     })
 
 
+def _native_pick_folder(title, initial):
+    """Pop the OS-native "Select Folder" dialog and return the chosen abspath.
+
+    A browser <input> can't hand us a real local path (the browser sandboxes
+    file paths), but this GUI runs locally on the operator's own machine, so we
+    can show the familiar native picker via tkinter and return the absolute path.
+    Returns "" if the operator cancels. Raises if no GUI toolkit is available.
+    """
+    import tkinter
+    from tkinter import filedialog
+    root = tkinter.Tk()
+    root.withdraw()
+    try:
+        root.attributes("-topmost", True)   # surface above the browser window
+    except Exception:  # noqa: BLE001 — attribute is platform-best-effort
+        pass
+    try:
+        kw = {"title": title or "Select a folder", "mustexist": True}
+        if initial and os.path.isdir(initial):
+            kw["initialdir"] = initial
+        path = filedialog.askdirectory(**kw)
+    finally:
+        try:
+            root.update()
+        finally:
+            root.destroy()
+    # os.path.abspath normalises to backslashes on Windows (the path style the
+    # operators expect — see the windows-path-style convention).
+    return os.path.abspath(path) if path else ""
+
+
+@app.route("/api/browse_folder", methods=["POST"])
+def api_browse_folder():
+    """Open a native folder picker and return the chosen path to the page.
+
+    Best-effort: on a headless/test box with no GUI toolkit this returns a clear
+    message (HTTP 200, no path) so the operator just types the path instead —
+    the picker is a convenience, never a hard dependency.
+    """
+    data = request.get_json(silent=True) or {}
+    initial = (data.get("initial") or "").strip()
+    title = (data.get("title") or "").strip()
+    try:
+        path = _native_pick_folder(title, initial)
+    except Exception as e:  # noqa: BLE001 — degrade to type-it-yourself
+        return jsonify({
+            "path": "",
+            "error": f"Folder picker unavailable ({e}). Type or paste the path.",
+        })
+    return jsonify({"path": path})
+
+
 @app.route("/api/preview", methods=["POST"])
 def api_preview():
     """Build a config from instrument + overrides + staging path and return the
@@ -352,6 +404,9 @@ def api_preview():
         "n_matched": result.n_matched,
         "n_new": result.n_new,
         "n_skipped": result.n_skipped,
+        "n_already_ingested": result.n_already_ingested,
+        "n_dropped": result.n_dropped,
+        "dropped": result.dropped,
         "blocking_errors": result.blocking_errors,
         "warnings": result.warnings,
         "cases": [_case_to_dict(c) for c in result.cases],
