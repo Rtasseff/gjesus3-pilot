@@ -22,9 +22,14 @@ REGISTRY_FIELDS = [
     "instrument_model",
     "modalities_in_study",
     "researcher",        # RENAMED from "operator" 2026-06-09 — the person who
-                         # set up the experiment. The operator who RAN the
-                         # equipment is sidecar-only (metadata_sidecar.py +
-                         # 06_REGISTRIES §2.3a). "user" = software only.
+                         # set up / ran the study. "user" = software only.
+    "operator",          # ADDED BACK 2026-06-09 (REG-decision #4.2) — the person
+                         # who RAN the equipment for the acquisition. Recorded for
+                         # EVERY study (~half the time == researcher) so operators
+                         # can find their own scans in the registry without opening
+                         # sidecars. Populated from the top-level `operator:` config
+                         # key (NOT the registry: block) — same value also written
+                         # to the metadata_sidecar. See 06_REGISTRIES §2.3a.
     "data_source",
     "sample_id",
     "sample_type",
@@ -138,6 +143,7 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt):
         "instrument_model": cfg.get("instrument_model", ""),
         "modalities_in_study": modalities,
         "researcher": cfg.get("researcher", ""),
+        "operator": cfg.get("operator", ""),   # top-level operator: -> column + sidecar
         "data_source": cfg.get("data_source", ""),
         "sample_id": cfg.get("sample_id", ""),
         "sample_type": cfg.get("sample_type", ""),

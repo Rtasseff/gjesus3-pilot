@@ -498,8 +498,9 @@ registry:
   project_hint:         "${discovered.researcher}-${discovered.experiment}"
   notes:                "${discovered.experiment} cells at ${discovered.magnification}, condition ${discovered.condition}, image ${discovered.image_num}"
 
-# operator = the tech who ran the scope (SIDECAR-ONLY top-level key, not a
-# registry column; 06_REGISTRIES §2.3a-bis). Often != researcher.
+# operator = the tech who ran the scope. A TOP-LEVEL key (NOT in the registry:
+# block) that is written to BOTH the registry `operator` column AND the sidecar
+# (06_REGISTRIES §2.3a-bis, decision #4.2 2026-06-09). Often != researcher.
 operator: "${discovered.czi_user}"
 
 # ⚠️ PROVISIONAL PROJECT NAMING — the ${researcher}-${experiment} pattern is a stopgap.
