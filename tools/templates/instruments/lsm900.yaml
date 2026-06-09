@@ -91,11 +91,12 @@
 #   - `auto_create_project:` — owner = researcher.
 #   - `link_filename: ${instrument}_${original_name}` — hard link
 #     prefixed with LSM9_ for clarity in raw_linked/.
-#   - Phase 3 enrichment: the DB-driven subject:/condition:/anatomy: writers
-#     do NOT fire for sample_type = cells (cell lines aren't in the
-#     animal-facility DB; facility_animal_id stays null). The commented
-#     subject:/condition: scaffolding at the bottom is optional operator-
-#     entered context only. See 08_METADATA §4.4-4.7.
+#   - Phase 3 enrichment: `condition:` IS written for sample_type = cells
+#     (enabled 2026-06-09 — cells have a control-vs-case distinction too); set
+#     it per run via the microscopy GUI's "Study metadata" panel or the active
+#     condition: block at the bottom. subject:/anatomy: are NOT written for
+#     cells (cell lines aren't in the animal-facility DB; no in-vivo anatomy).
+#     See 08_METADATA §4.4-4.7.
 #
 # ============================================================================
 # WHAT YOU MUST EDIT PER BATCH
@@ -209,41 +210,25 @@ auto_create_project:
 link_filename: "${instrument}_${original_name}"
 
 # ============================================================================
-# PRECLINICAL METADATA — subject: + condition: blocks (OPTIONAL operator context)
+# CONDITION — disease/control state of the cell sample (08_METADATA §4.5)
 # ============================================================================
-# NOTE (Phase 3): the DB-driven subject:/condition:/anatomy: writers do NOT
-# fire for sample_type = cells — cell lines aren't in the animal-facility DB,
-# so facility_animal_id stays null and no DB lookup / pending-queue happens.
-# The blocks below are OPTIONAL operator-entered context only (uncomment + fill
-# if you want the cell-line's source-organism / treatment context recorded).
-# Anything left commented is simply absent from metadata.json.
-#
-# CONDITIONAL: required when the cell line is animal-origin (the typical case
-# for LSM 900 work — nanoparticle uptake into cultured lines like MDA-MB-231,
-# HeLa, primary mouse cells, etc.). Spec [08_METADATA §4.4 + §4.5]. For purely
-# synthetic / cell-free imaging leave both blocks out.
-#
-# For LSM 900 confocal work, "condition" typically describes the well-level
-# treatment: nanoparticle exposure dose + duration, vehicle-control wells, etc.
+# Operator-entered, NON-BLOCKING (null / "" -> WARN, never refuses). Cell
+# cultures have a control-vs-case distinction too — a disease-model line vs a
+# wild-type/untreated control, a treated vs vehicle well — so condition: is
+# WRITTEN for sample_type = cells (enabled 2026-06-09). For LSM 900 confocal
+# work this usually captures the well-level treatment (nanoparticle dose +
+# duration, vehicle-control wells). The microscopy GUI's "Study metadata" panel
+# sets these per run and can map disease_* from a CZI `discovered.*` chunk.
+# Leave null / "" for a mixed-cohort batch; override per-acq in
+# /projects/<proj>/metadata/<acq_id>.json.
+condition:
+  is_control:    null    # true=control (no disease model / perturbation / intervention), false=case, null=unknown (WARN)
+  disease_model: ""      # the cell line's pathology context, or map ${discovered.condition}
+  disease_state: ""      # state at image time, e.g. "untreated_baseline" / "post_uptake_6h"
+  # control_type / treatment / timepoint_days / study_arm — optional, see 08_METADATA §4.5
+  source:        "operator-entered"
 
-# subject:
-#   species:                 "Homo sapiens"         # DECIDED-REQUIRED — source organism of the cell line (Mus musculus / Homo sapiens / Rattus norvegicus / ...)
-#   strain:                  "MDA-MB-231"           # DECIDED-REQUIRED — for cell lines, the line identifier serves as the genetic-background identifier
-#   sex:                     "F"                    # DECIDED-REQUIRED — sex of the cell line's source donor (MDA-MB-231 = female); "unknown" if not characterised
-#   age_at_acquisition:      "unknown"              # DECIDED-REQUIRED — for established cell lines, donor age is rarely known; use "unknown" with notes entry
-#   genotype:                "WT"                   # optional — cell line genotype (knockouts, reporters, transgenics)
-#   facility_animal_id:      null                   # n/a for established cell lines
-#   source:                  "operator-entered"     # provenance
-
-# condition:
-#   disease_model:           "MDA-MB-231_breast_cancer"  # DRAFT-REQUIRED — cell line's pathology context
-#   disease_state:           "post_uptake_6h"       # DRAFT-REQUIRED — state at image time: "untreated_baseline" / "post_uptake_${duration}"
-#   is_control:              false                  # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
-#   control_type:            null                   # optional when is_control=true: "vehicle" / "untreated_well"
-#   treatment:               "LP-IONP-doxo_${discovered.experiment}"  # optional free-text — nanoparticle + dose info, often derivable from the experiment/condition chunks
-#   timepoint_days:          null                   # optional numeric — fractional days OK for sub-day timepoints (e.g. 0.25 for 6h)
-#   study_arm:               null                   # optional — explicit experimental-arm label
-#   source:                  "operator-entered"     # provenance
-#
-# For SYNTHETIC / CELL-FREE imaging (sample_type = material / phantom):
-# both blocks are NOT required — comment out or leave absent.
+# NOTE: subject: and anatomy: are NOT written for sample_type = cells — cell
+# lines aren't in the animal-facility DB (no facility_animal_id / DB lookup), and
+# is_whole_body is an in-vivo concept. If you need the cell line's source-organism
+# context, record it in the project-level study metadata, not here.

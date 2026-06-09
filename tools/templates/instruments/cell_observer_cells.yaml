@@ -76,11 +76,12 @@
 #   - `auto_create_project:` — sets owner to the researcher.
 #   - `link_filename:` — `${instrument}_${original_name}` keeps the source
 #     filename + a clear instrument prefix in raw_linked/.
-#   - Phase 3 enrichment: the DB-driven subject:/condition:/anatomy: writers
-#     do NOT fire for sample_type = cells (cell lines aren't in the
-#     animal-facility DB; facility_animal_id stays null). The commented
-#     subject:/condition: scaffolding at the bottom is optional operator-
-#     entered context only. See 08_METADATA §4.4-4.7.
+#   - Phase 3 enrichment: `condition:` IS written for sample_type = cells
+#     (enabled 2026-06-09 — cells have a control-vs-case distinction too); set
+#     it per run via the microscopy GUI's "Study metadata" panel or the active
+#     condition: block at the bottom. subject:/anatomy: are NOT written for
+#     cells (cell lines aren't in the animal-facility DB; no in-vivo anatomy).
+#     See 08_METADATA §4.4-4.7.
 #
 # ============================================================================
 # WHAT YOU MUST EDIT PER BATCH
@@ -205,43 +206,23 @@ auto_create_project:
 link_filename: "${instrument}_${original_name}"
 
 # ============================================================================
-# PRECLINICAL METADATA — subject: + condition: blocks (OPTIONAL operator context)
+# CONDITION — disease/control state of the cell sample (08_METADATA §4.5)
 # ============================================================================
-# NOTE (Phase 3): the DB-driven subject:/condition:/anatomy: writers do NOT
-# fire for sample_type = cells — cell lines aren't in the animal-facility DB,
-# so facility_animal_id stays null and no DB lookup / pending-queue happens.
-# The blocks below are OPTIONAL operator-entered context only (uncomment + fill
-# if you want the cell-line's source-organism / treatment context recorded).
-# Anything left commented is simply absent from metadata.json.
-#
-# CONDITIONAL: required when the cell line is animal-origin (the typical case;
-# most cultured lines trace back to a species — mouse, human, etc.). The spec
-# trigger is sample_type ∈ {organism, tissue}, but for cells: operator judges
-# whether the underlying organism context warrants the blocks. Spec [08_METADATA
-# §4.4 + §4.5]. For purely synthetic / cell-free assays leave both blocks out.
-#
-# For cell-line work, "subject" maps to the cell line's source organism (the
-# strain/genetic context of the line), not a specific animal. "condition" maps
-# to the experimental treatment / well condition.
+# Operator-entered, NON-BLOCKING (null / "" -> WARN, never refuses). Cell
+# cultures have a control-vs-case distinction too — a disease-model line vs a
+# wild-type/untreated control, a treated vs vehicle well — so condition: is
+# WRITTEN for sample_type = cells (enabled 2026-06-09). The microscopy GUI's
+# "Study metadata" panel sets these per run, and can map disease_* from the CZI
+# `discovered.condition` chunk parsed above. Leave null / "" for a mixed-cohort
+# batch and override per-acq in /projects/<proj>/metadata/<acq_id>.json.
+condition:
+  is_control:    null    # true=control (no disease model / perturbation / intervention), false=case, null=unknown (WARN)
+  disease_model: ""      # the cell line's pathology context, or map ${discovered.condition}
+  disease_state: ""      # state at image time, e.g. "untreated_baseline" / "treated_24h"
+  # control_type / treatment / timepoint_days / study_arm — optional, see 08_METADATA §4.5
+  source:        "operator-entered"
 
-# subject:
-#   species:                 "Mus musculus"         # DECIDED-REQUIRED — source organism of the cell line
-#   strain:                  "C57BL/6J"             # DECIDED-REQUIRED — genetic background (or human donor population for human cell lines)
-#   sex:                     "F"                    # DECIDED-REQUIRED — sex of the cell line's source organism / donor; "unknown" if not characterised
-#   age_at_acquisition:      "P12W"                 # DECIDED-REQUIRED — for cell lines this is somewhat artificial; record the donor age if known, otherwise "unknown" with a notes entry
-#   genotype:                "WT"                   # optional — the cell line's genotype (knockouts, reporters, etc.)
-#   facility_animal_id:      null                   # n/a for established cell lines; populate for primary cultures derived from a specific animal
-#   source:                  "operator-entered"     # provenance
-
-# condition:
-#   disease_model:           "MDA-MB-231_breast_cancer"  # DRAFT-REQUIRED — for cell-line work, the model = the cell line's pathology context
-#   disease_state:           "untreated_baseline"   # DRAFT-REQUIRED — state at image time: "untreated_baseline" / "${treatment}_${timepoint}" / "post_uptake_${dose}"
-#   is_control:              true                   # HIGHLY RECOMMENDED — tri-state true|false|null; NON-BLOCKING (WARN if null, never refuses). 08_METADATA §4.7
-#   control_type:            "vehicle"              # optional when is_control=true: "naive" / "vehicle" / "untreated_well"
-#   treatment:               null                   # optional free-text: e.g. "LP-IONP_doxo_25ug/mL_6h" / "vehicle_DMSO_0.1%"
-#   timepoint_days:          0                      # optional numeric — days from treatment start
-#   study_arm:               "control_untreated"    # optional — explicit experimental-arm label
-#   source:                  "operator-entered"     # provenance
-#
-# For SYNTHETIC / CELL-FREE samples (sample_type = material / phantom):
-# both blocks are NOT required — comment out or leave absent.
+# NOTE: subject: and anatomy: are NOT written for sample_type = cells — cell
+# lines aren't in the animal-facility DB (no facility_animal_id / DB lookup), and
+# is_whole_body is an in-vivo concept. If you need the cell line's source-organism
+# context, record it in the project-level study metadata, not here.

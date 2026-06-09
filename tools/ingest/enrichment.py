@@ -227,12 +227,18 @@ def build_enrichment(cfg_single, *, acq_id, acq_date, acq_dt_iso="",
     acq_for_age = _acq_for_age(acq_dt_iso, acq_date)
 
     subject = condition = anatomy = None
+    # subject: only for animal-derived in-vivo / ex-vivo samples (DB-linked).
     if sample_type in ("organism", "tissue"):
         subject = _build_subject(
             cfg_single, discovered, acq_for_age, acq_id,
             canonical_path, registries_dir, dry_run, lookup_fn, log,
         )
+    # condition: any biological sample can be control-vs-case (a disease-model
+    # cell line vs wild-type, treated vs vehicle) -> written for cells too
+    # (2026-06-09). Cells get NO subject/anatomy (not DB-linked, not in-vivo).
+    if sample_type in ("organism", "tissue", "cells"):
         condition = _build_condition(cfg_single, discovered, log)
+    # anatomy: in-vivo whole-body-vs-region only.
     if sample_type == "organism":
         anatomy = _build_anatomy(cfg_single, discovered, log)
     return subject, condition, anatomy

@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-06-03 (per-instrument subject + condition + anatomy metadata — `subject:` §4.4 / `condition:` §4.5 / `anatomy:` §4.6; **non-blocking model §4.7** — `is_control` + `is_whole_body` are highly-recommended tri-state, WARN-not-block; **the enrichment writer is now IMPLEMENTED** — Phase 3, fires at ingest for `sample_type ∈ {organism, tissue}`, see [10_TOOLS §2.1.6](10_TOOLS.md))
+**Last Updated:** 2026-06-09 (**`condition:` now written for `sample_type = cells`** — Cell Observer + LSM 900; cell cultures are control-vs-case too. `subject:` stays tissue/organism-only, `anatomy:` organism-only. §4.5 + the per-instrument rows below. Prior 2026-06-03: per-instrument subject + condition + anatomy metadata — `subject:` §4.4 / `condition:` §4.5 / `anatomy:` §4.6; **non-blocking model §4.7** — `is_control` + `is_whole_body` are highly-recommended tri-state, WARN-not-block; **the enrichment writer is now IMPLEMENTED** — Phase 3, fires at ingest for `sample_type ∈ {organism, tissue}`, see [10_TOOLS §2.1.6](10_TOOLS.md))
 
 ---
 
@@ -39,7 +39,7 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 >
 > **Applicability per instrument in current scope** (all **non-blocking** — WARN, never refuse; §4.7):
 > - Internal MRI (§1.4) and Nuclear Imaging (§1.5) — `subject:` + `condition:` + **`anatomy:`** always recommended (sample is always an organism; in-vivo scans need anatomical coverage). Unknowns written as `null` + WARN.
-> - AxioScan 7 (§1.1), Cell Observer (§1.2), LSM 900 (§1.3) — `subject:` + `condition:` **required when the sample is animal-derived** (typical: tissue sections, ex-vivo slides, animal-origin cell preps). `anatomy:` does **not** apply (ex-vivo) — the source organ is the sample-level `anatomical_entity` instead ([06_REGISTRIES §2.3](06_REGISTRIES.md)).
+> - AxioScan 7 (§1.1), Cell Observer (§1.2), LSM 900 (§1.3) — **`condition:` is written for every microscopy sample** (tissue **and** `sample_type = cells` — a disease-model cell line vs a wild-type/untreated control is control-vs-case too; enabled 2026-06-09). Set it per run via the microscopy GUI's *Study metadata* panel or the template `condition:` block. **`subject:`** is written only for **animal-derived tissue** (DB-linked) — **not** for `sample_type = cells` (cell lines aren't in the animal-facility DB; record source-organism context in project metadata if needed). `anatomy:` does **not** apply (ex-vivo) — the source organ is the sample-level `anatomical_entity` instead ([06_REGISTRIES §2.3](06_REGISTRIES.md)).
 > - Not required for non-biological `material` / `phantom` samples.
 >
 > **Source hierarchies differ:**
@@ -115,8 +115,8 @@ The richer structured form of all the above plus channels/detectors/objective li
 | **Imaging modes** | Epifluorescence, brightfield, phase contrast, DIC; time lapse, z-stack, large-area tiling |
 | **Objectives** | 5x-100x (air and oil immersion) |
 | **Embedded metadata** | Expected extensive (ZEN-based .czi) |
-| **Subject metadata** (DRAFT 2026-05-29) | 🔶 **Required when animal-derived** — typical for tissue sections; for `sample_type = cells` (cultured / isolated) required only when the cell line is animal-origin (most are; immortalized human lines `MDA`/`HeLa`/etc. are still animal-origin in the broader sense — operator judgement until vocab clarifies). See [08_METADATA §4.4](08_METADATA.md). |
-| **Condition / disease-state metadata** (DRAFT 2026-05-29) | 🔶 **Required when animal-derived** — sidecar `condition:` block: `is_control` + DRAFT `disease_model` + `disease_state`. For cell-line work, "disease_model" maps to the cell line's pathology context (e.g. `disease_model: "MDA-MB-231_breast_cancer"`, `disease_state: "untreated_baseline"`, `is_control: true` for untreated reference wells). See [08_METADATA §4.5](08_METADATA.md). |
+| **Subject metadata** (DRAFT 2026-05-29) | 🔶 Recommended for animal-derived **tissue**; **NOT auto-written for `sample_type = cells`** — the sidecar `subject:` writer is DB-only and cell lines aren't in the animal-facility DB. Capture a cell line's source-organism context in project-level study metadata instead. See [08_METADATA §4.4](08_METADATA.md). |
+| **Condition / disease-state metadata** (DRAFT 2026-05-29) | 🔶 **Written for every acquisition** (incl. `sample_type = cells`, 2026-06-09) — sidecar `condition:` block: `is_control` + `disease_model` + `disease_state`, non-blocking (`null`/`""`+WARN until set). Set per run via the microscopy GUI *Study metadata* panel or the template block. For cell-line work, `disease_model` maps to the cell line's pathology context (e.g. `disease_model: "MDA-MB-231_breast_cancer"`, `disease_state: "untreated_baseline"`, `is_control: true` for untreated reference wells); can be mapped from the CZI `discovered.condition` chunk. See [08_METADATA §4.5](08_METADATA.md). |
 | **Not embedded** | Sample information, experimental context |
 | **Analysis tools** | ZEN, ImageJ/FIJI, QuPath |
 | **Status** | ✅ Confirmed for pilot |
@@ -139,8 +139,8 @@ The richer structured form of all the above plus channels/detectors/objective li
 | **Imaging modes** | Confocal fluorescence (3 simultaneous channels), Z-stack, time series, tile, FRAP, FRET |
 | **Objectives** | 2.5x-63x (air, water multi-immersion, oil) |
 | **Embedded metadata** | Extensive (same 21 curated `discovered.czi_*` fields as §1.1 — same extractor). Distinguishing fingerprint vs Cell Observer: `czi_acquisition_mode = "LaserScanningConfocalMicroscopy"` (Cell Observer reports `"WideField"`). `czi_microscope_name` reports `"Axio Observer.Z1 / 7"` — same string as Cell Observer because the LSM 900 sits on an Axio Observer stage, so the name alone isn't a reliable fingerprint. |
-| **Subject metadata** (DRAFT 2026-05-29) | 🔶 **Required when animal-derived** — same rule as Cell Observer (§1.2); commonly `sample_type = cells` for the round-7 batch (cultured MDA line on coverslips). See [08_METADATA §4.4](08_METADATA.md). |
-| **Condition / disease-state metadata** (DRAFT 2026-05-29) | 🔶 **Required when animal-derived** — same rule as Cell Observer (§1.2). For nanoparticle-uptake studies typical of LSM 900 work, `condition:` typically carries `disease_model: <cell_line_pathology>`, `disease_state: "<exposure_condition>_<timepoint>"`, `is_control: true` for vehicle/untreated wells, `treatment: "<nanoparticle>_<dose>"`. See [08_METADATA §4.5](08_METADATA.md). |
+| **Subject metadata** (DRAFT 2026-05-29) | 🔶 Same rule as Cell Observer (§1.2): **not auto-written for `sample_type = cells`** (DB-only writer; the round-7 batch is cultured MDA line on coverslips). Source-organism context goes in project metadata. See [08_METADATA §4.4](08_METADATA.md). |
+| **Condition / disease-state metadata** (DRAFT 2026-05-29) | 🔶 **Written for every acquisition** (incl. `cells`, 2026-06-09) — same as Cell Observer (§1.2). For nanoparticle-uptake studies typical of LSM 900 work, `condition:` typically carries `disease_model: <cell_line_pathology>`, `disease_state: "<exposure_condition>_<timepoint>"`, `is_control: true` for vehicle/untreated wells, `treatment: "<nanoparticle>_<dose>"`; set via the GUI panel or template block. See [08_METADATA §4.5](08_METADATA.md). |
 | **Not embedded** | Sample / experimental context — captured via per-instrument template's folder-name regex (researcher / experiment / cell_line) + project-level metadata for finer-grained context. |
 | **Analysis tools** | ZEN, ImageJ/FIJI, QuPath, Napari |
 | **Status** | 🔶 Round 7 active (2026-05-22). Per-instrument template at [`tools/templates/instruments/lsm900.yaml`](../tools/templates/instruments/lsm900.yaml); first test batch (LAURA_UPTAKE_LP-IONP-doxo_MDA) ingest in progress. |

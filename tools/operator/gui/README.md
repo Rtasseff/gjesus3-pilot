@@ -15,10 +15,11 @@ Phase 4 of [`tasks/operator_ingest_tooling_plan.md`](../../../tasks/operator_ing
   (a read-only "what will happen" table: acq_id, project, link name, resolved
   registry row, *X new / Y already-ingested*, warnings) → **Ingest** with a live
   streaming log. A *Dry-run* checkbox (default on) writes nothing.
-  - **Study metadata panel** — shown only when the instrument's template carries
-    a `condition:` block (AxioScan tissue; hidden for the cell modes, gated on
-    the `condition` field of `GET /api/template`). Lets the operator set
-    `condition.is_control` (control/case/skip) and, for a case,
+  - **Study metadata panel** — shown when the instrument's template carries a
+    `condition:` block, gated on the `condition` field of `GET /api/template`.
+    All microscopy templates now carry one (AxioScan tissue + the Cell Observer /
+    LSM 900 cell modes — cells gained `condition:` 2026-06-09). Lets the operator
+    set `condition.is_control` (control/case/skip) and, for a case,
     `condition.disease_model` / `disease_state` — typed or mapped from a CZI
     `discovered.*` field via token chips (reusing `POST /api/discovered`). The
     values are added to the override dict as `condition.*` and applied to every
