@@ -99,10 +99,13 @@ python tools/operator/mri_ingest.py /path/to/study --go                         
 - Point it at **one exam**, a **study folder**, or a **batch root** — it
   auto-detects the scope and previews every exam.
 - Per-run knobs (everything else is locked in by the template):
-  - `--operator "<name>"` — **the person who ran the scanner** (= the researcher,
-    for MRI). It's not in the folder name, so supply it here. It populates the
-    registry `researcher` column **and** the sidecar `operator`. ("user" is
-    reserved for software users — this is `--operator`.)
+  - `--operator "<name>"` — **REQUIRED. The person who ran the scanner** (= the
+    researcher, for MRI). It's **not** in the folder name (the folder carries
+    only the PI initials, e.g. `jrc`=Jesus — the PI is the group lead, not the
+    operator), so you must supply it. It populates the registry `researcher`
+    column **and** the sidecar `operator`. If you omit it the tool **prompts**
+    (on a terminal) or **errors** (in a script) — it can't be skipped. ("user"
+    is reserved for software users — this is `--operator`.)
   - `--reconstructions all | 3 | 1,3` — which reconstruction images to copy
     (omit to keep the template default).
   - `--model 7T | 11.7T` — which BioSpec scanner produced the batch. If you omit

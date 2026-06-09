@@ -357,10 +357,12 @@ def main(argv=None):
     )
     p.add_argument(
         "--operator", default=None,
-        help="The person who ran the scanner (= the researcher, for MRI). Sets "
-             "the registry `researcher` column AND the sidecar `operator`. Not "
-             "in the folder name, so supply it here (or edit the YAML). 'user' "
-             "is reserved for software users -- this is 'operator'.",
+        help="REQUIRED. The person who ran the scanner (= the researcher, for "
+             "MRI). Sets the registry `researcher` column AND the sidecar "
+             "`operator`. It is NOT in the folder name (the folder only carries "
+             "the PI initials, e.g. jrc=Jesus), so you must supply it. Prompted "
+             "if omitted on a terminal; a hard error in a script. ('user' is "
+             "reserved for software users -- this is 'operator'.)",
     )
     # Operator condition/anatomy metadata (08_METADATA). Omitted flags are
     # prompted for interactively (unless --no-prompt / no TTY). All optional +
@@ -400,6 +402,28 @@ def main(argv=None):
         log(str(e), "ERROR")
         return 2
     log(f"NAS root: {nas_root}")
+
+    # --operator is REQUIRED for MRI: the person who RAN the scanner is the
+    # researcher (registry) AND the sidecar operator, and it is NOT in the folder
+    # name (only the PI initials are). Cannot be skipped -- prompt on a terminal,
+    # hard-error in a script.
+    operator = (args.operator or "").strip()
+    if not operator:
+        if sys.stdin.isatty():
+            try:
+                while not operator:
+                    operator = input(
+                        "Operator -- who RAN the scanner (REQUIRED; = the "
+                        "researcher): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                log("--operator is required for MRI; aborted.", "ERROR")
+                return 2
+        else:
+            log("MRI requires --operator (the person who ran the scanner). It is "
+                "NOT in the folder name -- the folder carries only the PI "
+                "initials (e.g. jrc=Jesus). Pass --operator \"<name>\".", "ERROR")
+            return 2
 
     # --- recon parse (fail fast on a bad string) ----------------------------
     try:
@@ -457,13 +481,13 @@ def main(argv=None):
     if meta_summary:
         log(f"Metadata: {meta_summary}")
 
-    # --operator: for MRI the researcher RUNS the scanner, so one value sets the
-    # registry `researcher` column AND the sidecar `operator`.
-    if args.operator:
-        meta_overrides = dict(meta_overrides)
-        meta_overrides["registry.researcher"] = args.operator
-        meta_overrides["operator"] = args.operator
-        log(f"Researcher/operator: {args.operator}")
+    # --operator (REQUIRED, resolved above): for MRI the researcher RUNS the
+    # scanner, so this one value sets the registry `researcher` column AND the
+    # sidecar `operator`.
+    meta_overrides = dict(meta_overrides)
+    meta_overrides["registry.researcher"] = operator
+    meta_overrides["operator"] = operator
+    log(f"Researcher/operator: {operator}")
 
     # --- build the in-memory config -----------------------------------------
     try:

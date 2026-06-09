@@ -271,12 +271,14 @@ registry:
   instrument_model:     "Bruker BioSpec <7T|11.7T>"
   modalities_in_study:  NA
   # researcher = the person who set up the experiment (the registry person
-  # column, RENAMED from `operator` 2026-06-09). For MRI the researcher RUNS the
-  # scanner themselves, so researcher == operator. Set it via
-  # `mri-ingest --operator <name>` (the CLI populates BOTH registry.researcher
-  # and the sidecar `operator:` below), or edit here for the data-office YAML
-  # path. ("user" is reserved for software users — not a role here.)
-  researcher:           "<researcher - set via mri-ingest --operator>"
+  # column, RENAMED from `operator` 2026-06-09). REQUIRED. For MRI the researcher
+  # RUNS the scanner themselves, so researcher == operator, and it is NOT in the
+  # folder name (the folder carries only the PI initials, e.g. jrc=Jesus — the
+  # PI is the group lead, NOT the operator). `mri-ingest` REQUIRES --operator and
+  # populates BOTH this column and the sidecar `operator:` below; on the
+  # data-office YAML path you MUST replace the placeholder here. ("user" is
+  # reserved for software users — not a role.)
+  researcher:           "<REQUIRED - set via mri-ingest --operator, or replace here>"
   data_source:          internal
   # sample_id = the biological subject identifier, ALIGNED with NI's
   # `m<animal>_<project>` form (2026-06-09) so MRI and NI subjects line up
@@ -299,8 +301,10 @@ registry:
 
 # operator = the person who RAN the scanner for this acquisition (SIDECAR-ONLY,
 # 2026-06-09 — kept for future DB/image-server search, NOT a registry column).
-# For MRI operator == researcher; `mri-ingest --operator <name>` sets both.
-operator: "<operator - set via mri-ingest --operator>"
+# REQUIRED. For MRI operator == researcher; `mri-ingest --operator <name>` sets
+# both (it prompts if you omit it on a terminal, errors in a script). On the
+# data-office YAML path, replace the placeholder.
+operator: "<REQUIRED - set via mri-ingest --operator, or replace here>"
 
 # First-time project-creation defaults (10_TOOLS §2.1.4). Read only on
 # initial project creation; ignored otherwise. For internal MRI work,
