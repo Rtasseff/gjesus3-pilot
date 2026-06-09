@@ -187,12 +187,15 @@ link_filename: "${instrument}_${original_name}"
 # above — no manual block needed. To OVERRIDE the DB (or supply it when the
 # animal isn't in the DB), uncomment the subject: block at the bottom.
 #
-# NO anatomy: block — anatomy is ORGANISM-only (whole-body-vs-ROI of an
-# in-vivo scan). The organ a slide was cut from (the "B" in sample_short
-# "ID13B") is a SAMPLE-level anatomical_entity, recorded elsewhere, not via
-# the in-vivo anatomy: block.
+# anatomy: block — for TISSUE this records the UBERON organ/region the section
+# was cut from (region-only; is_whole_body is N/A for an ex-vivo section, so it
+# stays null and is not warned). This is the SAME UBERON anatomical-entity
+# concept as the in-vivo anatomy.region, queryable across in-vivo scans + ex-vivo
+# sections. The organ is also hinted by sample_short's letter (the "B" in
+# "ID13B"), but the letter->UBERON mapping is lab-specific — set the UBERON term
+# explicitly per batch below.
 #
-# Spec: 08_METADATA §4.4 (subject) / §4.5 (condition).
+# Spec: 08_METADATA §4.4 (subject) / §4.5 (condition) / §4.6 (anatomy).
 
 condition:
   # EDIT per batch — the primary cohort filter. true=control, false=case
@@ -210,6 +213,19 @@ condition:
   # timepoint_days: null         # optional numeric — days from intervention
   # study_arm:      "control"    # optional cohort-grouping label
   source:        "operator-entered"   # operator-entered | study-yaml | imported-from-excel
+
+anatomy:
+  # Ex-vivo tissue: is_whole_body is N/A (a section is never whole-body) -> left
+  # null and NOT warned. The meaningful field is the UBERON organ/region the
+  # section was cut from. EDIT per batch (one batch of slides is usually one
+  # organ) or override per-acq in /projects/<proj>/metadata/<acq_id>.json.
+  # NON-BLOCKING: an empty region just WARNs, the acq still ingests.
+  is_whole_body: null
+  # region:                       # uncomment + fill (verified UBERON ids in 08_METADATA §4.6)
+  #   label:    "heart"
+  #   ontology: "UBERON"
+  #   id:       "UBERON:0000948"
+  source:        "operator-entered"
 
 # OPTIONAL subject: override — only needed to override the DB lookup or when
 # the source animal isn't in the DB. Recognized fields: facility_animal_id,

@@ -199,13 +199,25 @@ def _build_condition(cfg_single, discovered, log):
     return out
 
 
-def _build_anatomy(cfg_single, discovered, log):
+def _build_anatomy(cfg_single, discovered, log, sample_type="organism"):
     out = resolver.resolve_anatomy_block(cfg_single.get("anatomy"), discovered)
-    if out.get("is_whole_body") is None:
-        log("anatomy: is_whole_body is null (unknown) - set it once per batch "
-            "when known (true=whole-body / false=region of interest).", "WARN")
-    elif out.get("is_whole_body") is False and not out.get("region"):
-        log("anatomy: is_whole_body=false but no UBERON region given.", "WARN")
+    region = out.get("region")
+    has_region = bool(region and region.get("label"))
+    if sample_type == "tissue":
+        # Ex-vivo tissue: is_whole_body is N/A (a section is never whole-body),
+        # so it stays null and is NOT warned. The meaningful field is the UBERON
+        # region/organ the section was cut from (the same anatomical_entity
+        # concept as in-vivo region — 08_METADATA §4.6 / 06_REGISTRIES §2.3).
+        if not has_region:
+            log("anatomy: region is empty - set the UBERON organ/region the "
+                "tissue section came from (e.g. heart / UBERON:0000948).", "WARN")
+    else:
+        # organism (in-vivo coverage): the full-body-vs-ROI flag + region.
+        if out.get("is_whole_body") is None:
+            log("anatomy: is_whole_body is null (unknown) - set it once per batch "
+                "when known (true=whole-body / false=region of interest).", "WARN")
+        elif out.get("is_whole_body") is False and not has_region:
+            log("anatomy: is_whole_body=false but no UBERON region given.", "WARN")
     return out
 
 
@@ -238,7 +250,10 @@ def build_enrichment(cfg_single, *, acq_id, acq_date, acq_dt_iso="",
     # (2026-06-09). Cells get NO subject/anatomy (not DB-linked, not in-vivo).
     if sample_type in ("organism", "tissue", "cells"):
         condition = _build_condition(cfg_single, discovered, log)
-    # anatomy: in-vivo whole-body-vs-region only.
-    if sample_type == "organism":
-        anatomy = _build_anatomy(cfg_single, discovered, log)
+    # anatomy: in-vivo coverage (organism: is_whole_body + region) OR ex-vivo
+    # origin (tissue: UBERON region only — a section is never whole-body). Both
+    # are the same UBERON anatomical-entity concept. Not for cells (a cell
+    # line's source organ is line-static metadata, deferred 2026-06-09).
+    if sample_type in ("organism", "tissue"):
+        anatomy = _build_anatomy(cfg_single, discovered, log, sample_type)
     return subject, condition, anatomy

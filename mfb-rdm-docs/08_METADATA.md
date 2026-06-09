@@ -638,11 +638,15 @@ Until the writer ships, operators may include a `condition:` block in YAML confi
 
 ### 4.6 `anatomy:` Block — Anatomical Coverage and Region (DRAFT 2026-06-03)
 
-> **🔶 DRAFT (2026-06-03).** New top-level `anatomy:` block in `metadata.json` capturing **what part of the body an in-vivo scan covers**. Required for biomedical-imaging acquisitions of a whole organism (`sample_type = organism` — internal MRI + Nuclear Imaging). Answers the headline question *"is this a full-body scan or a region of interest?"* with a dead-simple boolean, plus an ontology-coded region for the detail.
+> **🔶 DRAFT (2026-06-03; extended to tissue 2026-06-09).** New top-level `anatomy:` block in `metadata.json` capturing **what part of the body an acquisition concerns**. Two cases, one UBERON-coded `region` field:
+> - **In-vivo (`sample_type = organism`** — internal MRI + Nuclear Imaging): the scan's **coverage** — *"is this a full-body scan or a region of interest?"* (`is_whole_body` boolean) plus the ontology-coded `region` for the detail.
+> - **Ex-vivo tissue (`sample_type = tissue`** — microscopy sections): the UBERON **organ/region the section was cut from** — `region` only. `is_whole_body` is **N/A** (a section is never whole-body), so it stays `null` and is not warned.
+>
+> Both use the **same UBERON `region`** (the same anatomical-entity concept, see [06_REGISTRIES §2.3](06_REGISTRIES.md)), so anatomy is queryable uniformly across in-vivo scans and ex-vivo sections. Not written for `cells` (a cell line's source organ is line-static metadata — deferred).
 >
 > **⚠️ Non-blocking (2026-06-03 — same unified model as `condition:`, see §4.7).** Nothing here blocks ingest.
 > - **`is_whole_body`** — highly recommended, **tri-state** `true | false | null` (`null` = unknown), defaults to `null`; the writer **WARNs** (never raises) if `null` for an `organism` acquisition. Sister of `condition.is_control`; the dead-simple full-body-vs-ROI filter when present.
-> - **`region`** — recommended UBERON-coded term when `is_whole_body = false`; WARN if missing, never block.
+> - **`region`** — UBERON-coded term: recommended when `is_whole_body = false` (in-vivo ROI) **and for every `tissue` acquisition** (the organ the section was cut from). WARN if missing, never block.
 > - **Optional:** `additional_regions`, `auto_hint`.
 >
 > (Reverses the earlier "DECIDED-required hard-block" — archive scans and the can-barely-name-a-folder operator must still ingest; a guess or `null` beats refusing the data.)
@@ -676,7 +680,7 @@ So `anatomy:` is **operator-entered** (like `condition:`), with an *optional, no
 }
 ```
 
-For a **whole-body** scan: `is_whole_body = true`; `region` may be the whole-organism term `UBERON:0000468` ("multicellular organism") or left null. For a **regional** scan: `is_whole_body = false` and `region` carries the specific structure. **When unknown** (archive data, no operator input): `is_whole_body: null`, `region: null`, `source: "unknown"` — the block is still written and the scan ingests; the gap surfaces in the completeness report (§4.7).
+For a **whole-body** scan: `is_whole_body = true`; `region` may be the whole-organism term `UBERON:0000468` ("multicellular organism") or left null. For a **regional** scan: `is_whole_body = false` and `region` carries the specific structure. For **ex-vivo tissue** (`sample_type = tissue`): `is_whole_body` stays `null` (N/A — a section is never whole-body) and `region` carries the organ the section was cut from (e.g. heart / `UBERON:0000948`); an empty `region` WARNs. **When unknown** (archive data, no operator input): `is_whole_body: null`, `region: null`, `source: "unknown"` — the block is still written and the scan ingests; the gap surfaces in the completeness report (§4.7).
 
 **Ontology = UBERON** (Uberon cross-species anatomy ontology, OBO Foundry). Chosen because it is **species-agnostic** (covers Mouse *and* Rat — both present in our colony — plus human), has resolvable PIDs (`http://purl.obolibrary.org/obo/UBERON_0000955`), is REMBI-aligned ("use a relevant ontology"), and **harmonizes with the tissue-side `anatomical_entity`** from the Subject/Sample identity model ([06_REGISTRIES §2.3](06_REGISTRIES.md)) — both reference UBERON, so anatomy is queryable uniformly across in-vivo scans and ex-vivo sections.
 
@@ -698,6 +702,7 @@ For a **whole-body** scan: `is_whole_body = true`; `region` may be the whole-org
 | **All full-body scans** | `anatomy.is_whole_body == true` |
 | **All region-of-interest scans** | `anatomy.is_whole_body == false` |
 | All brain scans | `anatomy.region.id == "UBERON:0000955"` (or `anatomy.region.label == "brain"`) |
+| All **heart** material — in-vivo **and** ex-vivo | `anatomy.region.id == "UBERON:0000948"` — matches a cardiac MRI **and** a heart tissue section alike (same `region` field) |
 | All thoracic scans (incl. multi-region) | `region` or `additional_regions` contains a thoracic UBERON term |
 
 The `is_whole_body` flag is the primary "needle in a haystack" filter — `== true` / `== false` are unambiguous for cohort builders or future XNAT/OMERO migration; `null` (unknown) is excluded from both and surfaces in the completeness report (§4.7). Exactly mirrors how `condition.is_control` works.
@@ -706,11 +711,11 @@ The `is_whole_body` flag is the primary "needle in a haystack" filter — `== tr
 
 | Aspect | Status |
 |---|---|
-| `is_whole_body` (tri-state `true`/`false`/`null`) | ✅ DECIDED highly-recommended, **non-blocking** (2026-06-03) — writer WARNs if `null`, never refuses |
-| `region` UBERON-coded | 🔶 Recommended when `is_whole_body=false` — writer WARNs but proceeds |
-| Ontology = UBERON | ✅ DECIDED (2026-06-03) — cross-species; harmonizes with tissue `anatomical_entity` |
+| `is_whole_body` (tri-state `true`/`false`/`null`) | ✅ DECIDED highly-recommended, **non-blocking** (2026-06-03) — writer WARNs if `null` for an **organism** acq, never refuses. **N/A for `tissue`** (stays null, not warned) |
+| `region` UBERON-coded | 🔶 Recommended when `is_whole_body=false` (in-vivo ROI) **and for every `tissue` acquisition** (the organ origin) — writer WARNs but proceeds |
+| Ontology = UBERON | ✅ DECIDED (2026-06-03) — cross-species; **one `region` field** across in-vivo scans + ex-vivo tissue (the tissue `anatomical_entity` registry column is its denormalized projection) |
 | Optional `additional_regions` / `auto_hint` | 🔶 DRAFT, write-through |
-| `anatomy:` writer | ✅ IMPLEMENTED (Phase 3, 2026-06-03) — `tools/ingest/enrichment.py`, called from `ingest_raw.py` Step 8.4; WARN-not-raise (§4.7). Top-level `anatomy:` YAML block in the `mri_bruker` + `molecubes_ni` templates (organism-only) |
+| `anatomy:` writer | ✅ IMPLEMENTED (Phase 3, 2026-06-03; **extended to `tissue` 2026-06-09**) — `tools/ingest/enrichment.py`, called from `ingest_raw.py` Step 8.4; WARN-not-raise (§4.7), gate-aware (no `is_whole_body` nag for tissue). Top-level `anatomy:` YAML block in `mri_bruker` + `molecubes_ni` (organism) + `axioscan7` (tissue, region-only). **Not** written for `cells` (deferred) |
 | Auto-hint extractor (MRI ProtocolName+FOV, NI bed-range) | 🔶 Future — non-authoritative pre-fill only |
 | Backfill of existing 97 MRI + 84 NI organism acqs | ⚠️ Queued — Phase 4; ingests now with `null`+WARN, enriched later (§4.7) |
 
