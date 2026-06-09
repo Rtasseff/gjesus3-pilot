@@ -163,14 +163,13 @@ registry:
   # of Cell Observer at other sites distinguishable in the registry.
   instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
-  # In cells-mode, the registry `operator` column captures the data
-  # OWNER (the researcher whose data this is), not the technician who
-  # ran the scope. The technician/operator-acquirer is not currently
-  # surfaced as a registry column; it's implicit in the staging_dir path
-  # (e.g. K:/gjesus/Ainhize/...) and lives in the sidecar `discovered`
-  # block via czi_user if needed. Future schema split may add a separate
-  # `data_user` column — tracked alongside REG-01 in tasks §3.1.
-  operator:             discovered.researcher
+  # researcher = the data owner / who set up the experiment (registry person
+  # column, RENAMED from `operator` 2026-06-09; resolves the old confusion where
+  # `operator` here meant the researcher). The folder level carries it as
+  # discovered.researcher (e.g. K:/gjesus/Ainhize/...). The TECH who ran the
+  # scope is the sidecar `operator:` below (discovered.czi_user, the ZEN
+  # account) — often a different person.
+  researcher:           discovered.researcher
   data_source:          internal
   # Composite sample_id (06_REGISTRIES §2.3 DRAFT). Replicates within the
   # same (cell_line, condition) share one sample_id by design; the
@@ -185,6 +184,11 @@ registry:
   project_hint:         "${discovered.researcher}-${discovered.experiment}"
   # EDIT: short description of this batch.
   notes:                "Cell-culture imaging (${discovered.cell_line} / ${discovered.experiment}): ${discovered.condition}, image ${discovered.image_num}; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na}"
+
+# operator = the tech who RAN the scope for this acquisition (SIDECAR-ONLY,
+# 2026-06-09 — kept for future DB/image-server search, NOT a registry column).
+# From the .czi ZEN account (discovered.czi_user); often != the researcher.
+operator: "${discovered.czi_user}"
 
 # First-time project-creation defaults (10_TOOLS §2.1.4). Read only on
 # initial project creation; ignored otherwise. For cells-mode work, the

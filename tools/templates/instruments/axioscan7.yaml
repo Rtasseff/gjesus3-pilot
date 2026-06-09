@@ -143,13 +143,26 @@ registry:
   data_ecosystem:       MICROSCOPY
   instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
-  operator:             discovered.operator
+  # researcher = the person who set up the experiment (registry person column,
+  # RENAMED from `operator` 2026-06-09). For microscopy the researcher and the
+  # operator (the tech who ran the scope) are OFTEN DIFFERENT. The operator is
+  # in the filename (discovered.operator, a REQUIRED chunk) and is recorded in
+  # the sidecar `operator:` below; the researcher is NOT in the filename, so
+  # SET IT PER BATCH here (or via the GUI's Researcher box).
+  researcher:           "<researcher - set per batch / in the GUI>"
   data_source:          internal
   sample_id:            "${discovered.project}_${discovered.sample_short}"
   sample_type:          tissue
   acquisition_datetime: discovered.czi_acquisition_datetime
   project_hint:         "AE-biomeGUNE-${discovered.project}"
   notes:                "WGA fluorescence WSI batch (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
+
+# operator = the tech who RAN the scope for this acquisition (SIDECAR-ONLY,
+# 2026-06-09 — kept for future DB/image-server search, NOT a registry column).
+# AxioScan encodes it as a REQUIRED filename chunk (discovered.operator, e.g.
+# "MBC"/"AUA"); it's also what the GUI uses to filter a folder to one tech's
+# scans. Often != researcher.
+operator: "${discovered.operator}"
 
 # First-time project-creation defaults (10_TOOLS §2.1.4).
 auto_create_project:

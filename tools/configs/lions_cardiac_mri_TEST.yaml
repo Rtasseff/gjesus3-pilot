@@ -52,7 +52,7 @@ registry:
   instrument:           XMRI
   data_ecosystem:       DICOM
   modalities_in_study:  NA
-  operator:             RT
+  researcher:               RT
   data_source:          collaborator:LIONS
   sample_id:            "${discovered.folder_name}"
   sample_type:          "cardiac MRI study"

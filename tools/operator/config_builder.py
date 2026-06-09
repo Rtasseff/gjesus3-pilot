@@ -62,6 +62,8 @@ INGEST_LOCKED = {
 # Top-level scalar overrides.
 TOPLEVEL_OVERRIDES = {
     "link_filename",
+    "operator",          # sidecar-only acquisition operator (2026-06-09);
+                         # registry.researcher is the experiment owner.
 }
 
 # Whole-block override families: an override key of the form "<family>.<leaf>"

@@ -209,6 +209,27 @@ def apply_registry_block(case, registry_block):
         case.setdefault(k, v)
 
 
+def _apply_operator(case, operator_expr):
+    """Resolve the SIDECAR-ONLY top-level `operator:` expr and set case["operator"].
+
+    `operator` is the person who RAN the equipment for this acquisition. It is
+    distinct from `registry.researcher` (the experiment owner — a registry
+    column) and is written to the sidecar only (metadata_sidecar), kept for
+    future DB/image-server search. For MRI/NI the two are the same person.
+    Lenient: an unresolved ref WARNs and leaves operator "" (non-blocking).
+    ("user" is reserved for "a person using the software"; not a role here.)
+    """
+    if operator_expr is None:
+        return
+    discovered = case.get("discovered") or {}
+    try:
+        case["operator"] = resolver.resolve_value(
+            operator_expr, discovered, key_for_error="operator")
+    except resolver.ResolverError as e:
+        print(f"[expand_batch] WARN: operator: {e} -- leaving operator empty.")
+        case["operator"] = ""
+
+
 def _validate_enrichment_blocks(cfg, disco):
     """Validate the Phase 3 enrichment config and return the raw blocks.
 
@@ -539,6 +560,7 @@ def expand_batch(cfg, nas_root=None):
         except resolver.ResolverError as e:
             print(f"[expand_batch] SKIP {match_basename}: {e}")
             continue
+        _apply_operator(case, cfg.get("operator"))
 
         # Idempotency: skip if already ingested. Key is (acq_date,
         # original_name) where original_name is the relpath set above.
@@ -642,6 +664,7 @@ def prep_single_case(cfg):
         cfg["ecosystem_section_name"] = eco_section_name_override
 
     apply_registry_block(cfg, registry_block)
+    _apply_operator(cfg, cfg.get("operator"))
     return cfg
 
 

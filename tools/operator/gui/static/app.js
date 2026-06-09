@@ -124,9 +124,19 @@ function runnerMetaOverrides() {
   return ov;                               // "" -> {} (skip, non-blocking)
 }
 
-// Recipe overrides + per-run condition (condition.* wins on the rare overlap).
+// The Researcher box -> registry.researcher (the experiment owner). Blank = use
+// the template default (cells resolve it from discovered.researcher; AxioScan
+// has only a placeholder, so it should be set here).
+function runnerResearcher() {
+  const el = $("#r-researcher");
+  const v = (el && el.value || "").trim();
+  return v ? { "registry.researcher": v } : {};
+}
+
+// Recipe overrides + per-run researcher + condition (later wins on overlap).
 function runnerOverrides() {
-  return Object.assign({}, currentRecipeOverrides(), runnerMetaOverrides());
+  return Object.assign({}, currentRecipeOverrides(), runnerResearcher(),
+                       runnerMetaOverrides());
 }
 
 $$("#r-meta input[type=text]").forEach((inp) => {

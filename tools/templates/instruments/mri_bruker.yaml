@@ -270,10 +270,13 @@ registry:
   # EDIT: which scanner produced this batch.
   instrument_model:     "Bruker BioSpec <7T|11.7T>"
   modalities_in_study:  NA
-  # Operator-of-record for the registry is the platform group, not the
-  # researcher (the researcher is captured as the auto-created project's
-  # owner, set in auto_create_project below).
-  operator:             NMR-platform
+  # researcher = the person who set up the experiment (the registry person
+  # column, RENAMED from `operator` 2026-06-09). For MRI the researcher RUNS the
+  # scanner themselves, so researcher == operator. Set it via
+  # `mri-ingest --operator <name>` (the CLI populates BOTH registry.researcher
+  # and the sidecar `operator:` below), or edit here for the data-office YAML
+  # path. ("user" is reserved for software users — not a role here.)
+  researcher:           "<researcher - set via mri-ingest --operator>"
   data_source:          internal
   # sample_id = the biological subject identifier, ALIGNED with NI's
   # `m<animal>_<project>` form (2026-06-09) so MRI and NI subjects line up
@@ -293,6 +296,11 @@ registry:
   project_hint:         "ae-biomegune-${discovered.project_code}"
   # EDIT: short batch description.
   notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol ${discovered.project_code}); recons kept: ${discovered.mri_recon_indices}"
+
+# operator = the person who RAN the scanner for this acquisition (SIDECAR-ONLY,
+# 2026-06-09 — kept for future DB/image-server search, NOT a registry column).
+# For MRI operator == researcher; `mri-ingest --operator <name>` sets both.
+operator: "<operator - set via mri-ingest --operator>"
 
 # First-time project-creation defaults (10_TOOLS §2.1.4). Read only on
 # initial project creation; ignored otherwise. For internal MRI work,

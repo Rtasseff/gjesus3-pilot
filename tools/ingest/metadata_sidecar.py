@@ -7,8 +7,8 @@ Schema follows the on-disk shape already deployed for DICOM acquisitions
       "acq_id": ...,
       "generated": "<ISO UTC>",
       "generator": "ingest_raw.py",
-      "user_supplied": {operator, data_source, instrument, sample_id,
-                        sample_type, original_name, notes},
+      "user_supplied": {researcher, operator, data_source, instrument,
+                        sample_id, sample_type, original_name, notes},
       "discovered": {<field>: <value>, ...}        # everything auto_discover surfaced
       "<ecosystem_section>": {...}                  # "dicom", "microscopy", ...
     }
@@ -29,8 +29,17 @@ SIDECAR_FILENAME = "metadata.json"
 
 
 def build_user_supplied(cfg):
-    """Pluck the user-facing config fields that go into the sidecar."""
+    """Pluck the user-facing config fields that go into the sidecar.
+
+    Two distinct person roles (2026-06-09, 06_REGISTRIES §2.3a):
+      - `researcher` — set up the experiment. ALSO a registry column.
+      - `operator`   — ran the equipment for THIS acquisition. SIDECAR-ONLY
+                       (not a registry column); kept for future DB/image-server
+                       search. For MRI/NI the two are the same person.
+    ("user" is reserved for "a person using the software" and is not a role.)
+    """
     return {
+        "researcher":   cfg.get("researcher", ""),
         "operator":     cfg.get("operator", ""),
         "data_source":  cfg.get("data_source", ""),
         "instrument":   cfg.get("instrument", ""),

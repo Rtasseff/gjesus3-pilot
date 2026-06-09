@@ -50,7 +50,7 @@ registry:
   data_ecosystem:       MICROSCOPY
   instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
-  operator:             discovered.researcher
+  researcher:               discovered.researcher
   data_source:          internal
   # Composite sample_id. cell_line comes from path_parse here.
   sample_id:            "${discovered.cell_line}_${discovered.condition}"

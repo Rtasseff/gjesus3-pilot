@@ -355,6 +355,13 @@ def main(argv=None):
         help="NAS root (must contain a registries/ subdir). Default: "
              "$GJESUS3_ROOT, else /mnt/gjesus3.",
     )
+    p.add_argument(
+        "--operator", default=None,
+        help="The person who ran the scanner (= the researcher, for MRI). Sets "
+             "the registry `researcher` column AND the sidecar `operator`. Not "
+             "in the folder name, so supply it here (or edit the YAML). 'user' "
+             "is reserved for software users -- this is 'operator'.",
+    )
     # Operator condition/anatomy metadata (08_METADATA). Omitted flags are
     # prompted for interactively (unless --no-prompt / no TTY). All optional +
     # non-blocking; the values apply to every exam in the run.
@@ -449,6 +456,14 @@ def main(argv=None):
     meta_summary = metadata_prompt.describe(meta_overrides)
     if meta_summary:
         log(f"Metadata: {meta_summary}")
+
+    # --operator: for MRI the researcher RUNS the scanner, so one value sets the
+    # registry `researcher` column AND the sidecar `operator`.
+    if args.operator:
+        meta_overrides = dict(meta_overrides)
+        meta_overrides["registry.researcher"] = args.operator
+        meta_overrides["operator"] = args.operator
+        log(f"Researcher/operator: {args.operator}")
 
     # --- build the in-memory config -----------------------------------------
     try:

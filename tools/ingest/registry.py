@@ -21,7 +21,10 @@ REGISTRY_FIELDS = [
     "instrument",
     "instrument_model",
     "modalities_in_study",
-    "operator",
+    "researcher",        # RENAMED from "operator" 2026-06-09 — the person who
+                         # set up the experiment. The operator who RAN the
+                         # equipment is sidecar-only (metadata_sidecar.py +
+                         # 06_REGISTRIES §2.3a). "user" = software only.
     "data_source",
     "sample_id",
     "sample_type",
@@ -134,7 +137,7 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt):
         "instrument": instrument,
         "instrument_model": cfg.get("instrument_model", ""),
         "modalities_in_study": modalities,
-        "operator": cfg.get("operator", ""),
+        "researcher": cfg.get("researcher", ""),
         "data_source": cfg.get("data_source", ""),
         "sample_id": cfg.get("sample_id", ""),
         "sample_type": cfg.get("sample_type", ""),

@@ -49,7 +49,7 @@ registry:
   # Microscope-issued name from the .czi keeps Axioscan units distinguishable.
   instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
-  operator:             discovered.operator
+  researcher:               discovered.operator
   data_source:          internal
   # Composite sample_id (06_REGISTRIES §2.3 DRAFT): biological sample =
   # <project>_<sample_short> (e.g. 1022_ID58T). The section / stain that

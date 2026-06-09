@@ -130,7 +130,11 @@ registry:
   # User-required (key must be present; NA allowed where intentional).
   instrument:           ZWSI                          # ZWSI, CELL, LSM9, MRI, PET, ...
   data_ecosystem:       MICROSCOPY                    # MICROSCOPY, DICOM, EM
-  operator:             discovered.operator
+  # researcher = the person who SET UP the experiment (registry person column,
+  # RENAMED from `operator` 2026-06-09). The person who RAN the equipment is the
+  # SIDECAR-ONLY top-level `operator:` below. For MRI/NI they're the same person;
+  # for microscopy usually different. ("user" = software user only — not a role.)
+  researcher:           discovered.researcher         # or a literal / ${discovered.x}
   data_source:          internal                      # or "collaborator:<name>"
 
   # Recommended.
@@ -143,6 +147,12 @@ registry:
   modalities_in_study:  NA                            # populated for hybrid DICOM (e.g. "PT;CT")
   project_hint:         NA                            # PROJ-XXXX, triggers .lnk creation. See WARNING at top of file.
   notes:                "Routine WSI batch; ${discovered.stain} stain at ${discovered.magnification}"
+
+# operator = the person who RAN the equipment for THIS acquisition. SIDECAR-ONLY
+# (2026-06-09 — written to metadata.json.user_supplied for future DB/image-server
+# search, NOT a registry column). A literal or ${discovered.x}; leave out if
+# unknown. (researcher above is the registry person column.)
+operator:               discovered.operator
 
 # -----------------------------------------------------------------------------
 # OPTIONAL — only consulted when ingest.auto_create_projects: true AND

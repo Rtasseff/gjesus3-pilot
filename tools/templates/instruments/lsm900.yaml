@@ -175,12 +175,11 @@ registry:
   # sites would each report their own name).
   instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
-  # `operator` here records the data OWNER (the researcher whose data
-  # this is). Same model as Cell Observer cells-mode (06_REGISTRIES /
-  # CLAUDE.md note on operator vs data-user). The technician who ran
-  # the scope is implicit in the K: path (Ainhize's folder) and lives
-  # in the sidecar as `discovered.czi_user`.
-  operator:             discovered.researcher
+  # researcher = the data owner / who set up the experiment (registry person
+  # column, RENAMED from `operator` 2026-06-09). From the parse'd folder chunk
+  # discovered.researcher. The TECH who ran the scope is the sidecar `operator:`
+  # below (discovered.czi_user, the ZEN account) — often a different person.
+  researcher:           discovered.researcher
   data_source:          internal
   # Composite sample_id. Multiple .czi acquisitions per (cell_line,
   # experiment) pair legitimately share one sample_id by design —
@@ -193,6 +192,11 @@ registry:
   project_hint:         "${discovered.researcher}"
   # EDIT: short description of this batch.
   notes:                "LSM 900 confocal of ${discovered.cell_line} cells; experiment '${discovered.experiment}'; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na} ${discovered.czi_acquisition_mode}; ${discovered.czi_size_z}-slice Z-stack"
+
+# operator = the tech who RAN the scope for this acquisition (SIDECAR-ONLY,
+# 2026-06-09 — kept for future DB/image-server search, NOT a registry column).
+# From the .czi ZEN account (discovered.czi_user); often != the researcher.
+operator: "${discovered.czi_user}"
 
 # First-time project-creation defaults (10_TOOLS §2.1.4). Read only on
 # initial project creation; ignored otherwise.

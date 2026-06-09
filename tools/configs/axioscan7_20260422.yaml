@@ -28,7 +28,7 @@ registry:
   # so different Axioscan units stay distinguishable.
   instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
-  operator:             discovered.operator
+  researcher:               discovered.operator
   data_source:          internal
   sample_id:            discovered.sample_id
   sample_type:          NA

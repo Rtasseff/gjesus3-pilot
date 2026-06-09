@@ -34,7 +34,7 @@ registry:
   data_ecosystem:       MICROSCOPY
   instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
-  operator:             discovered.researcher
+  researcher:               discovered.researcher
   data_source:          internal
   sample_id:            "${discovered.cell_line}_${discovered.condition}"
   sample_type:          cells

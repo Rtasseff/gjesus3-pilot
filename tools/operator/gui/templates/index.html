@@ -47,6 +47,15 @@
       <button id="r-preview" type="button" class="primary">Preview</button>
     </div>
 
+    <!-- Researcher (the person who set up the experiment) -> registry. The
+         operator (the tech who ran the scope) comes from the filename. -->
+    <div class="row">
+      <label class="grow">Researcher <span class="muted">— who set up the experiment (goes in the registry)</span>
+        <input id="r-researcher" type="text"
+               placeholder="e.g. Laura   (AxioScan: set this; cells: leave blank to use the folder name)">
+      </label>
+    </div>
+
     <!-- Per-run study metadata (condition block). Shown only for instruments
          whose template carries a condition: block (AxioScan tissue). -->
     <fieldset id="r-meta" hidden>

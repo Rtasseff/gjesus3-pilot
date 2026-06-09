@@ -74,7 +74,8 @@ USER_CONTROLLABLE_COLUMNS = {
     "instrument",
     "instrument_model",
     "modalities_in_study",
-    "operator",
+    "researcher",    # RENAMED from "operator" 2026-06-09 — experiment owner; the
+                     # acquisition operator is the sidecar-only top-level `operator:`
     "data_source",
     "sample_id",
     "sample_type",
@@ -87,7 +88,7 @@ USER_CONTROLLABLE_COLUMNS = {
 REQUIRED_REGISTRY_KEYS = {
     "instrument",
     "data_ecosystem",
-    "operator",
+    "researcher",    # RENAMED from "operator" 2026-06-09
     "data_source",
 }
 

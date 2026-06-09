@@ -236,11 +236,13 @@ registry:
   # EDIT: which platform produced this batch.
   instrument_model:     "Molecubes (PET/SPECT/CT)"
   modalities_in_study:  NA
-  # NI has no dedicated technician — researchers run the equipment
-  # themselves. For the registry's operator column we record the
-  # platform group; the actual user is captured via discovered.user
-  # and project ownership.
-  operator:             NI-platform
+  # researcher = the person who set up the experiment (registry person column,
+  # RENAMED from `operator` 2026-06-09). NI has no dedicated technician — the
+  # researcher RUNS the equipment themselves, so researcher == operator, and
+  # both come from the archive name's `discovered.user` (e.g. "irene").
+  # (NOT the PI: the PI is the archive `<PI first name>` dir level; and the
+  # protocol.txt "Principal Investigator" is unreliable — see ni_metadata.py.)
+  researcher:           "${discovered.user}"
   data_source:          internal
   # sample_id composite: short_sample (animal) + short_project (the
   # animal-protocol id). Multiple acquisitions per (animal, project)
@@ -266,6 +268,11 @@ registry:
   # handles those.
   project_hint:         "ae-biomegune-${discovered.short_project}"
   notes:                "Archive-mode NI ingest (round 8): ${discovered.modality} of ${discovered.short_sample} (animal protocol ${discovered.short_project}, funded project ${discovered.series_id}); operator ${discovered.user}, acquired ${discovered.acq_datetime_full}"
+
+# operator = the person who RAN the equipment for this acquisition (SIDECAR-ONLY,
+# 2026-06-09 — kept for future DB/image-server search, NOT a registry column).
+# For NI operator == researcher == the archive-name user (e.g. "irene").
+operator: "${discovered.user}"
 
 # First-time project-creation defaults (10_TOOLS §2.1.4). NI projects
 # typically already exist (PROJ-0003..0005 from rounds 4 + 6 via the

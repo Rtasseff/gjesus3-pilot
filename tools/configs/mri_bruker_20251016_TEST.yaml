@@ -53,7 +53,7 @@ registry:
   data_ecosystem:       DICOM
   instrument_model:     "Bruker BioSpec 7T"
   modalities_in_study:  NA
-  operator:             NMR-platform
+  researcher:               NMR-platform
   data_source:          internal
   sample_id:            "${discovered.jrc_id}"
   sample_type:          organism

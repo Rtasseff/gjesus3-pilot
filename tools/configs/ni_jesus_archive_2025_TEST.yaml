@@ -61,7 +61,7 @@ registry:
   data_ecosystem:       DICOM
   instrument_model:     "Molecubes (PET/SPECT/CT)"
   modalities_in_study:  NA
-  operator:             NI-platform
+  researcher:               NI-platform
   data_source:          internal
   sample_id:            "${discovered.short_sample}_${discovered.short_project}"
   sample_type:          organism
