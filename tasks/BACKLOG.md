@@ -64,6 +64,15 @@ raw value preserved in `_raw_metadata`). What's left are the *entry* mechanisms:
   a GUI field — ideally auto-mapped from the `sample_short` organ letter (the "B"
   in "ID13B") via a lab letter→UBERON table — would let operators set it inline.
 
+## Person/role rename — residual cleanup (core done 2026-06-09)
+
+The global researcher/operator/tech/user rename ([06_REGISTRIES §2.3a-bis](../mfb-rdm-docs/06_REGISTRIES.md)) landed in the code, schema, templates, configs, CLIs, GUI, and the authoritative docs. Residual, non-blocking:
+
+- [ ] **Reclassify the people roster** in [`11_OPERATIONS`](../mfb-rdm-docs/11_OPERATIONS.md) (the table still lists individuals as "Operator") into **Tech** vs **Researcher** — needs the user's input on who is which.
+- [ ] **Exhaustive prose sweep** of remaining "operator" mentions that mean the *role* (e.g. "Operator model" rows in `09_MODALITIES`, scattered "operators may…" lines) — the schema/authoritative docs are done; these are descriptive prose.
+- [ ] **`source: "operator-entered"` enum** (in `condition:`/`anatomy:` provenance) — a *different* sense of "operator" (a human supplied the value at ingest). Decide whether to rename it (e.g. `manually-entered`) for consistency, or keep.
+- [ ] **Project owner = researcher.** `auto_create_project.owner` still resolves to the filename/operator person for microscopy; consider making the auto-created project owner the `researcher`.
+
 ## Misc
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)

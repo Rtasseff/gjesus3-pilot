@@ -64,7 +64,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `instrument` | String | ✅ Yes | User | Instrument code (e.g., `ZWSI`, `LSM9`, `PET`). |
 | `instrument_model` | String | 🔶 Recommended | User | Full instrument name (e.g., `Bruker BioSpec 11.7T`). |
 | `modalities_in_study` | String | Optional | User (or auto fallback) | For multi-modal acquisitions: semicolon-separated DICOM modality codes (e.g., `PT;CT`). If left empty/NA, falls back to the source summarizer's `modality` field. |
-| `operator` | String | ✅ Yes | User | Person who collected the data. |
+| `researcher` | String | ✅ Yes | Ingest | **The person who set up the experiment.** RENAMED from `operator` 2026-06-09 (see §2.3a). The person who *ran the equipment* for the acquisition is the **sidecar-only** `operator` field ([08_METADATA](08_METADATA.md)), not a registry column. For MRI/NI the two are the same person (the researcher runs the equipment); for microscopy usually different. |
 | `data_source` | String | ✅ Yes | User | `internal` or `collaborator:<name>`. |
 | `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. See §2.3 for the recommended composite format. |
 | `sample_type` | String | 🔶 Recommended | User | Category of biological material. Use the controlled vocabulary in §2.4 (DRAFT). |
@@ -84,7 +84,23 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 **Population key:**
 - **Auto** — set by the ingest pipeline; user must NOT put it in the YAML `registry:` block.
-- **User** — set in the YAML `registry:` block (literal, `discovered.<field>`, or `NA`). See [10_TOOLS §2.1](10_TOOLS.md).
+- **Ingest** — set in the YAML `registry:` block (literal, `discovered.<field>`, or `NA`), or via a CLI/GUI override at ingest. See [10_TOOLS §2.1](10_TOOLS.md). (Formerly labelled "User"; relabelled 2026-06-09 to keep "user" out of role vocabulary — see §2.3a-bis.)
+
+#### 2.3a-bis Person roles — researcher / operator / tech / user (DECIDED 2026-06-09)
+
+> The pilot previously overloaded **"user"** and **"operator"**, because the MRI/NI platforms call *their researchers* "users" (the researcher uses + operates the scanner), microscopy calls *the tech* the "operator", and software calls *anyone at a keyboard* a "user". This fixes the vocabulary globally.
+
+| Term | Definition | Where recorded |
+|---|---|---|
+| **researcher** | The person who **set up the experiment** (the data owner). | **Registry column `researcher`** (renamed from `operator` 2026-06-09) + sidecar `user_supplied.researcher`. |
+| **operator** | The person who **ran the equipment** for *this* acquisition. | **Sidecar only** — `metadata.json.user_supplied.operator` ([08_METADATA](08_METADATA.md)). Kept for future DB/image-server search; deliberately **not** a registry column. |
+| **tech** | A *permission role*: staff who run instruments / deposit data. Renamed from "operator" in the permission model. | [11_OPERATIONS](11_OPERATIONS.md) — read + write-but-not-modify on `raw/`. |
+| **user** | Reserved for **"a person using the software"** (software lingo only). **Not** a data or permission role. | — |
+
+- **Record BOTH `researcher` and `operator` on every acquisition.** `researcher` → registry; `operator` → sidecar.
+- **MRI / NI:** `operator == researcher` (the researcher runs the equipment). NI reads both from the archive-name user (`discovered.user`); MRI takes both from `mri-ingest --operator`.
+- **Microscopy:** usually different. The `operator` is in the AxioScan filename (`discovered.operator`) / the ZEN account (`discovered.czi_user`) and is what the GUI uses to **filter a folder to one tech's scans**; the `researcher` is a per-batch field (YAML / GUI).
+- The **`researcher` registry column** values logged before 2026-06-09 are mislabelled (they held the old `operator` value) and are corrected at the post-exhibition purge + re-ingest.
 
 ### 2.3a ISA Terminology Mapping (DRAFT)
 
@@ -186,7 +202,7 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 > **Note:** The CSV example below shows the schema **including** the DRAFT `session_id` and `primary_kind` columns. Production registry rows pre-2026-05-20 do not have these columns; the schema grows column-by-column with a defensive header check (see [10_TOOLS](10_TOOLS.md)) preventing silent shift.
 
 ```csv
-acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,operator,data_source,sample_id,sample_type,session_id,primary_kind,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
+acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,researcher,data_source,sample_id,sample_type,session_id,primary_kind,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
 ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axio Scan 7,,MBC,internal,MOUSE-2024-042,tissue,,file,ACQ-20260215-ZWSI-001.czi,MFB_MBC_PROJ-0003_MOUSE-2024-042_HE_20x.czi,.czi,2450,1,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,tools/configs/axioscan7_20260215.yaml,Microscopy single-file
 ACQ-20251016-MRI-029,2025-10-16T17:00:00Z,2025-10-16T08:38:22Z,DICOM,MRI,Bruker BioSpec 7T,,IFF,internal,jrc251016_m17_0424_heart,organism,jrc251016_m17_0424,folder,ACQ-20251016-MRI-029,29,folder,150,17,/raw/DICOM/2025/2025-10/ACQ-20251016-MRI-029/,Y,Y,PROJ-0009,tools/configs/mri_bruker_20251016_TEST.yaml,Internal MRI ParaVision exam 29 (cine cardiac)
 ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,organism,,archive,ACQ-20260220-PET-001.zip,,.zip,2100,4,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,Y,,tools/configs/pet_20260220.yaml,Legacy PET/CT zip-per-session (pre-folder-bundle)

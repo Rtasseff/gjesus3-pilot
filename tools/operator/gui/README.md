@@ -15,6 +15,11 @@ Phase 4 of [`tasks/operator_ingest_tooling_plan.md`](../../../tasks/operator_ing
   (a read-only "what will happen" table: acq_id, project, link name, resolved
   registry row, *X new / Y already-ingested*, warnings) → **Ingest** with a live
   streaming log. A *Dry-run* checkbox (default on) writes nothing.
+  - **Researcher field** — a text box → `registry.researcher` (the person who set
+    up the experiment; renamed from `operator` 2026-06-09, 06_REGISTRIES §2.3a-bis).
+    Blank = the template default (cells resolve it from `discovered.researcher`;
+    AxioScan has only a placeholder, so set it). The **operator** (the tech who
+    ran the scope) comes from the filename and is sidecar-only.
   - **Study metadata panel** — shown when the instrument's template carries a
     `condition:` block, gated on the `condition` field of `GET /api/template`.
     All microscopy templates now carry one (AxioScan tissue + the Cell Observer /

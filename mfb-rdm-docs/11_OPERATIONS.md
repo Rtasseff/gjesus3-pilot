@@ -20,10 +20,14 @@ This document covers operational aspects: roles, permissions, workflows, onboard
 |------|------------------|-----|
 | **System Owner** | Strategic decisions; access authorization; escalation | Jesús Ruiz-Cabello (PI) |
 | **Data Management Lead** | Define rules; implement system; support users; manage registries; admin writes to `/raw/` (corrections, project close-out merges) | Ryan Tasseff |
-| **Operator** | Deposit data into `/raw/`; fill ingest-time metadata; maintain provenance; follow conventions | Trained lab technicians |
-| **User** | Read raw data; work in own project folder under `/projects/`; **supply study-level metadata** under `/projects/<own>/metadata/`; contribute to publications | Researchers (e.g. PhD students, postdocs) |
+| **Tech** | Deposit data into `/raw/`; fill ingest-time metadata; maintain provenance; follow conventions | Trained lab technicians (RENAMED from "Operator" 2026-06-09) |
+| **Researcher** | Read raw data; work in own project folder under `/projects/`; **supply study-level metadata** under `/projects/<own>/metadata/`; contribute to publications | Researchers (e.g. PhD students, postdocs) — RENAMED from "User" 2026-06-09 |
 
-The **Operator vs User** distinction is the writeability boundary on `/raw/` and on which area each role primarily inhabits. Operators bring data IN at ingest time; Users work WITH data after deposit. A single person can wear both hats — but the roles describe the *action*, not the person. The new `User` role is the home for **study-level metadata work** in `/projects/<own>/metadata/` (see [08_METADATA §1](08_METADATA.md)).
+> **Permission-role vocabulary (DECIDED 2026-06-09).** Renamed **Operator → Tech** and **User → Researcher** to fix the global naming mess (the MRI/NI platforms call *researchers* "users", microscopy calls *the tech* the "operator"). "**user**" is now reserved for "a person using the software". Note the distinction from the *metadata* roles in [06_REGISTRIES §2.3a-bis](06_REGISTRIES.md): there, **researcher** = who set up the experiment (registry) and **operator** = who ran the equipment (sidecar). Here, **Tech** is the *permission* class for instrument staff who deposit data, and **Researcher** the class for data owners. A person can be both.
+
+The **Tech vs Researcher** distinction is the writeability boundary on `/raw/` and on which area each role primarily inhabits. Techs bring data IN at ingest time; Researchers work WITH data after deposit. A single person can wear both hats — the roles describe the *action*, not the person. The `Researcher` role is the home for **study-level metadata work** in `/projects/<own>/metadata/` (see [08_METADATA §1](08_METADATA.md)).
+
+> **MRI / NI ingest runs as the data office or a shared platform login (2026-06-09).** Preclinical MRI and Nuclear Imaging acquisitions are always ingested either by the Data Office or **directly on the platform acquisition machine**, which uses its own login. That platform/data-office login is granted write access to `raw/` so that whoever is at the machine can deposit — the per-person Tech write-but-not-modify model below is the microscopy / workstation path.
 
 ### 1.2 Authorized Users (Initial Pilot)
 
@@ -49,7 +53,7 @@ The **Operator vs User** distinction is the writeability boundary on `/raw/` and
 
 > **✅ DECIDED (2026-05-12):** Permissions are folder-level, anchored on the [08_METADATA §1](08_METADATA.md) split between immutable acquisition-level metadata (in `/raw/`) and mutable study-level metadata (in `/projects/<proj>/metadata/`). `/raw/` is uniformly read-only post-deposit for everyone except the Data Mgmt Lead doing controlled admin writes (corrections, project close-out merges).
 
-| Area | Data Mgmt Lead | Operators (technicians) | Users (researchers) | Others |
+| Area | Data Mgmt Lead | Techs (technicians) | Researchers | Others |
 |------|----------------|-------------------------|---------------------|--------|
 | `/staging/` ¹ | Read/Write | Read/Write | — | — |
 | `/raw/` (pre-deposit) | Read/Write | Create/Write | — | — |
@@ -61,20 +65,20 @@ The **Operator vs User** distinction is the writeability boundary on `/raw/` and
 
 > ¹ NAS `staging/` is a **secondary convenience dump**. The recommended ingest path uses fast local or network storage as the primary source (see [03_RAW_STORAGE](03_RAW_STORAGE.md) Section 5.2).
 >
-> **Registries change (2026-06-02):** operators were previously Read-only on registries; since operators run the ingest (which appends rows to `registry_raw.csv` / `ingest_manifest.csv` / `registry_projects.csv`), they now need Read/Write there. Registries are the mutable metadata ledger — not the protected raw *data*; raw immutability + per-acquisition `checksums.json` are what guarantee data traceability.
+> **Registries change (2026-06-02):** techs (the role formerly called "operators") were previously Read-only on registries; since they run the ingest (which appends rows to `registry_raw.csv` / `ingest_manifest.csv` / `registry_projects.csv`), they now need Read/Write there. Registries are the mutable metadata ledger — not the protected raw *data*; raw immutability + per-acquisition `checksums.json` are what guarantee data traceability.
 
 #### 2.1.1 Applied implementation — `J:\gjesus3-data\` (DECIDED + APPLIED 2026-06-02)
 
-The conceptual model above is now applied on the live container. **IT will not create custom groups**, so the model uses the pre-existing `CICBIOMAGUNE\GJesus` group (which contains the lab — researchers, operators, PI) instead of the originally-planned `pilot-users` / `pilot-operators` groups:
+The conceptual model above is now applied on the live container. **IT will not create custom groups**, so the model uses the pre-existing `CICBIOMAGUNE\GJesus` group (which contains the lab — researchers, techs, PI) instead of the originally-planned `pilot-users` / `pilot-operators` groups:
 
 | Principal | `raw\` | `registries\` | `projects\`, `publications\`, `staging\`, `curated_datasets\` |
 |---|---|---|---|
 | `GJesus` group (everyone) | **Read** (inherited from top) | Read | Read everywhere; **Modify** on projects/publications/staging |
-| Operators (individual accounts) | **write-but-not-modify** ("create files" scoped to folders only + read-only on files → can deposit new acqs, cannot edit/delete existing) | Modify (append) | (Modify via the group) |
+| Techs (individual accounts) — and the MRI/NI platform/data-office login | **write-but-not-modify** ("create files" scoped to folders only + read-only on files → can deposit new acqs, cannot edit/delete existing) | Modify (append) | (Modify via the group) |
 | Superusers (rtasseff = Lead, jruizcabello = PI) | Full | Full | Full |
 
 - **Read baseline:** `GJesus` = Read at the top of `gjesus3-data`, inherited down — no per-folder read work.
-- **Build UP with grants only — NEVER DENY.** Windows ALLOW grants are cumulative (union); a group-Read floor does NOT cap a member's individual Full. A DENY would override everyone in the group (operators + superusers are all in `GJesus`) and is sticky enough to block its own cleanup — so deny is forbidden here.
+- **Build UP with grants only — NEVER DENY.** Windows ALLOW grants are cumulative (union); a group-Read floor does NOT cap a member's individual Full. A DENY would override everyone in the group (techs + superusers are all in `GJesus`) and is sticky enough to block its own cleanup — so deny is forbidden here.
 - **Raw is writable only by superusers + operator-create.** Careless users cannot modify a raw file directly (read-only) nor through a project hard link (the link shares raw's single ACL — proven; a RW projects folder does not leak write onto the linked file). This closes the silent-untraceable-edit hole.
 - **Defense in depth:** ACL (prevent) + per-acq `checksums.json` (detect any raw change) + `@Recently-Snapshot` (recover).
 - **Operator immutability is a future-verify item** — see §2.3 and `tasks/tasks.md §4.3`. The fine-grained "create-but-not-modify" must be tested with a real operator account on the QNAP filesystem; superusers can't test it (their Full masks the restriction). If it doesn't translate over SMB, fall back to a tool-applied read-only lock at end-of-ingest, or an operator drop-box → superuser-move path. Filesystem (ext4 vs ZFS) still unconfirmed; ZFS/NFSv4-ACL honors the fine grain better than ext4/POSIX-ACL.

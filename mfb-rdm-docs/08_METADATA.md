@@ -21,7 +21,7 @@ This document specifies the metadata requirements for raw acquisitions, includin
 | Location | What lives there | Set by | When | Mutable post-ingest? |
 |----------|------------------|--------|------|----------------------|
 | `registry_raw.csv` | Indexed core fields (`acq_id`, `instrument`, `sample_id`, `sample_type`, `project_hint`, etc.). See [06_REGISTRIES](06_REGISTRIES.md). | Auto + Operator (via YAML `registry:` block) | At ingest | Admin-only (corrections) |
-| `/raw/<ACQ-ID>/metadata.json` | Per-acquisition sidecar — `user_supplied` (Operator at ingest), `discovered` (filename chunks + embedded auto-extracts), `<ecosystem_section>` (structured + `_raw_metadata` lossless). | Auto + Operator | At ingest | No (raw is read-only post-deposit) |
+| `/raw/<ACQ-ID>/metadata.json` | Per-acquisition sidecar — `user_supplied` (researcher + operator, at ingest), `discovered` (filename chunks + embedded auto-extracts), `<ecosystem_section>` (structured + `_raw_metadata` lossless). | Auto + ingest | At ingest | No (raw is read-only post-deposit) |
 | `/projects/<proj>/metadata/` | Study-level metadata — experimental aim, biological subject details (strain, age, sex, treatment), experimental groups, per-acquisition supplements. REMBI's **Study** + **Biosample** context. | Researcher (eventually via the Excel-import tool — see [10_TOOLS](10_TOOLS.md)) | After ingest, iteratively | Yes (project owners write during the project's life) |
 
 ### 1.2 Why the split
@@ -221,7 +221,7 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
   "acq_id": "...",
   "generated": "<ISO UTC>",
   "generator": "ingest_raw.py",
-  "user_supplied": { "operator", "data_source", "instrument", "sample_id", "sample_type", "original_name", "notes" },
+  "user_supplied": { "researcher", "operator", "data_source", "instrument", "sample_id", "sample_type", "original_name", "notes" },
   "discovered":    { "<field>": "<value>", ... },
   "subject":       { ... },                       // when sample_type ∈ {organism, tissue} — see §4.4
   "condition":     { ... },                       // when sample_type ∈ {organism, tissue} — see §4.5 (is_control tri-state, non-blocking)
@@ -232,7 +232,7 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 
 | Section | Source |
 |---------|--------|
-| `user_supplied` | The resolved values from the YAML `registry:` block (literal text, `discovered.<x>` references, or `${...}` interpolation — see [10_TOOLS §2.1](10_TOOLS.md)). |
+| `user_supplied` | The resolved values from the YAML `registry:` block + the top-level `operator:` key (literal text, `discovered.<x>` references, or `${...}` interpolation — see [10_TOOLS §2.1](10_TOOLS.md)). **Two person roles** (2026-06-09, [06_REGISTRIES §2.3a-bis](06_REGISTRIES.md)): `researcher` (set up the experiment — also the registry column) and `operator` (ran the equipment for this acquisition — **sidecar-only**, for future DB/image-server search). For MRI/NI they're the same person; for microscopy usually different. ("user" in the key name is legacy software-lingo for "supplied at the keyboard", not a role.) |
 | `discovered` | Everything `auto_discover` surfaced for the case: filename-parser output, parent-folder date, `folder_name` / `filename`, and embedded extracts (`discovered.czi_*` for microscopy, `discovered.mri_*` for ParaVision). |
 | `subject` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29, extended 2026-06-03. Preclinical subject metadata: `facility_animal_id` (the reused canonical **subject id**) + species / strain / sex / date_of_birth → derived age_at_acquisition (required) + optional genotype / weight / cohort_id / **structured** procedures `[{type,date}]`. **Per-subject, fixed.** Source: animal-facility-DB > study-level YAML > instrument auto-extracts. On ingest-time DB miss / no-credentials, written as `source: "pending-db"` and queued for superuser recovery (§4.4.6). See §4.4. |
 | `condition` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29; **non-blocking** 2026-06-03. Disease state + experimental role: `is_control` (highly-recommended **tri-state** `true`/`false`/`null` — WARN if null, never blocks), `disease_model` + `disease_state` (recommended free-text) + optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. **Per-acquisition; set once per batch/session.** Source: operator-entered; `disease_model` auto-seeds from DB `projects.name`. See §4.5 + §4.7. |

@@ -432,7 +432,7 @@ registry:
   data_ecosystem:       MICROSCOPY
   instrument_model:     "Zeiss Axio Scan 7"
   modalities_in_study:  NA
-  operator:             discovered.operator
+  researcher:           "<set per batch / GUI>"   # registry person column (renamed from operator 2026-06-09)
   data_source:          internal
   sample_id:            discovered.sample_id
   sample_type:          NA
@@ -490,13 +490,17 @@ registry:
   instrument:           CELL
   data_ecosystem:       MICROSCOPY
   instrument_model:     "Zeiss Axio Observer (Cell Observer)"
-  operator:             discovered.researcher   # see note on operator vs user below
+  researcher:           discovered.researcher   # registry person column (RENAMED from operator 2026-06-09)
   data_source:          internal
   sample_id:            "${discovered.cell_line}_${discovered.condition}"
   sample_type:          cells
   acquisition_datetime: discovered.czi_acquisition_datetime
   project_hint:         "${discovered.researcher}-${discovered.experiment}"
   notes:                "${discovered.experiment} cells at ${discovered.magnification}, condition ${discovered.condition}, image ${discovered.image_num}"
+
+# operator = the tech who ran the scope (SIDECAR-ONLY top-level key, not a
+# registry column; 06_REGISTRIES §2.3a-bis). Often != researcher.
+operator: "${discovered.czi_user}"
 
 # ⚠️ PROVISIONAL PROJECT NAMING — the ${researcher}-${experiment} pattern is a stopgap.
 # Experiments are metadata, not projects. A real project name should map to a unit of

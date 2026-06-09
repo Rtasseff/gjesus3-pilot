@@ -74,7 +74,8 @@ filename_parse:
 registry:
   sample_id:    "${discovered.project}_${discovered.sample_short}"   # -> "0525_ID26H"
   project_hint: "AE-biomeGUNE-${discovered.project}"                  # -> "AE-biomeGUNE-0525"
-  operator:     discovered.operator                                   # -> "MBC"
+  researcher:   "<set per batch / GUI>"          # registry person column (renamed from operator 2026-06-09)
+operator:       discovered.operator              # SIDECAR-ONLY top-level key (the tech) -> "MBC"
 ```
 
 ### Auto-populated columns (do NOT list in `registry:`)

@@ -98,7 +98,11 @@ python tools/operator/mri_ingest.py /path/to/study --go                         
 
 - Point it at **one exam**, a **study folder**, or a **batch root** — it
   auto-detects the scope and previews every exam.
-- Two optional per-run knobs (everything else is locked in by the template):
+- Per-run knobs (everything else is locked in by the template):
+  - `--operator "<name>"` — **the person who ran the scanner** (= the researcher,
+    for MRI). It's not in the folder name, so supply it here. It populates the
+    registry `researcher` column **and** the sidecar `operator`. ("user" is
+    reserved for software users — this is `--operator`.)
   - `--reconstructions all | 3 | 1,3` — which reconstruction images to copy
     (omit to keep the template default).
   - `--model 7T | 11.7T` — which BioSpec scanner produced the batch. If you omit
@@ -177,6 +181,11 @@ Python install, no admin rights needed.
    - Pick your instrument (ZWSI / CELL / LSM9) and a saved **recipe** (a
      ready-made convention the data office prepared).
    - Use the folder box to point at your day/batch folder.
+   - **Researcher** — type who *set up the experiment* (goes in the registry
+     `researcher` column). On AxioScan this isn't in the filename, so set it; for
+     the cell modes you can leave it blank to use the researcher folder name. The
+     **operator** (the tech who ran the scope) comes from the filename
+     automatically and is recorded in the sidecar.
    - **Study metadata** — a small panel lets you mark the sample as **control**
      or **case**, and for a case enter `disease_model` / `disease_state`. Type a
      value, or open *"Pull a value from the CZI name / folders"* and click a
