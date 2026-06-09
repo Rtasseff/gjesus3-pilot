@@ -354,7 +354,17 @@ def _build_study(md):
     return {
         "study_name":             pt.get("Study name", ""),
         "series_name":            pt.get("Series name", ""),
-        "principal_investigator": pt.get("Principal Investigator", ""),
+        # PI is intentionally NOT taken from protocol.txt: the Molecubes platform
+        # writes the *operator's username* into the "Principal Investigator"
+        # field (a platform-labelling bug, under investigation 2026-06-09), so
+        # the value is unreliable for historical data. Leave it empty here -- the
+        # true PI is only knowable from the archive directory structure
+        # (<year>/<PI first name>/<user>/<session>) at a higher-level batch
+        # import, or entered by the operator. The raw (possibly-wrong) value is
+        # still preserved verbatim under `_raw_metadata.protocol_txt`.
+        # PHASE-OUT: once the platform records the PI correctly, restore
+        # `pt.get("Principal Investigator", "")` for new acquisitions.
+        "principal_investigator": "",
         "modality":               pt.get("Modality", ""),
         "datetime":               _parse_protocol_datetime(pt.get("Date/time", "")),
         "datetime_raw":           pt.get("Date/time", ""),
@@ -495,8 +505,13 @@ EXPOSED_FIELDS = [
         lambda md: _g(md, "protocol_txt", "Series name"),
         "Series name from protocol.txt (typically the acquisition-date short form)"),
     ("ni_pi",
-        lambda md: _g(md, "protocol_txt", "Principal Investigator"),
-        "PI from protocol.txt (often the operator's username — Molecubes labelling)"),
+        lambda md: "",  # intentionally empty -- NOT protocol.txt (see _build_study)
+        "PI — intentionally empty. NOT taken from protocol.txt, which carries "
+        "the operator's username due to a Molecubes labelling bug (under "
+        "investigation 2026-06-09); the true PI comes from the archive "
+        "<PI>/<user>/<session> tree at batch import or operator entry. The raw "
+        "value stays in `ni._raw_metadata.protocol_txt`. PHASE-OUT once the "
+        "platform is fixed."),
     ("ni_modality",
         lambda md: _g(md, "protocol_txt", "Modality"),
         "Modality reported by the platform: PET / CT / SPECT / OI"),

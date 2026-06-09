@@ -251,7 +251,7 @@ These come from `tools/ingest/ni_metadata.py::EXPOSED_FIELDS`, parsed out of `pr
 |-------|-------------|--------|
 | `ni_study_name` | Study name from `protocol.txt` (typically the funded-project id, e.g. `0525`) | `protocol.txt: Study name` |
 | `ni_series_name` | Series name from `protocol.txt` (typically the acquisition-date short form) | `protocol.txt: Series name` |
-| `ni_pi` | Principal investigator from `protocol.txt` (often the operator's username — Molecubes labelling, not strictly the lab PI) | `protocol.txt: Principal Investigator` |
+| `ni_pi` | **Intentionally empty (2026-06-09).** NOT taken from `protocol.txt`: the Molecubes platform writes the **operator's username** into the "Principal Investigator" field (a platform-labelling bug, under investigation), so it's unreliable. The curated `ni.study.principal_investigator` is also emptied; the raw (possibly-wrong) value is preserved verbatim in `ni._raw_metadata.protocol_txt`. The true PI comes from the archive `<year>/<PI first name>/<user>/<session>` tree at batch import, or operator entry (see `tasks/BACKLOG.md`). **PHASE-OUT:** restore reading `protocol.txt` once the platform is fixed. | `""` (was `protocol.txt: Principal Investigator`) |
 | `ni_modality` | Modality reported by the platform: `PET` / `CT` / `SPECT` / `OI` | `protocol.txt: Modality` |
 | `ni_acquisition_datetime` | Per-acquisition datetime from `protocol.txt` (machine-issued) | `protocol.txt: Date/time` |
 | `ni_animal_id` | Subject/animal ID (e.g. `0525_m13` — combines short_project + short_sample) | `protocol.txt: Animal ID` |

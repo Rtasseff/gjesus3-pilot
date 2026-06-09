@@ -1,0 +1,43 @@
+# PI / group lookup table
+# =======================================================================
+# Links the three per-instrument person/group naming conventions so the
+# ingest tools (and humans) can cross-reference them:
+#
+#   - PI first name   — Nuclear Imaging convention (the archive directory
+#                       <year>/<PI first name>/<user>/<session>; also the
+#                       Molecubes protocol labelling). e.g. "Jesus".
+#   - PI initials     — MRI / Bruker ParaVision convention (the study-folder
+#                       prefix, e.g. "jrc_251016_m17_0424"). e.g. "jrc".
+#   - group initials  — AxioScan 7 / microscopy convention and the best
+#                       GLOBAL default identifier. e.g. "MFB".
+#
+# This is the foundation the user asked for so we can map, say, the MRI
+# folder's `discovered.pi_initials = "jrc"` to the group "MFB" and PI
+# "Jesus", aligning identities across MRI / NI / microscopy.
+#
+# STATUS (2026-06-09): reference DATA only. The tools do NOT consume this
+# file yet -- that wiring (auto-map pi_initials -> group/PI; a `--group`
+# default-settings option) is BACKLOG (tasks/BACKLOG.md, "NI PI / group
+# stages 2-3"). For now it documents the mapping and is the single place to
+# add a new PI/group when one comes online.
+#
+# Keyed by GROUP INITIALS (the global default). `aliases` lists every token
+# the tools might encounter for this group/PI across the instrument naming
+# conventions, for a tolerant reverse lookup when the wiring lands.
+
+groups:
+  MFB:
+    group_name:    "Molecular and Functional Biomarkers"
+    pi_full_name:  "Jesus Ruiz-Cabello"
+    pi_first_name: "Jesus"          # NI convention
+    pi_initials:   "jrc"            # MRI convention
+    aliases: ["MFB", "Jesus", "jrc"]
+
+# Add new groups here as they are onboarded, e.g.:
+# groups:
+#   XYZ:
+#     group_name:    "..."
+#     pi_full_name:  "..."
+#     pi_first_name: "..."
+#     pi_initials:   "..."
+#     aliases: ["XYZ", "...", "..."]

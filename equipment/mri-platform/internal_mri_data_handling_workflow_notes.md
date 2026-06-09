@@ -271,12 +271,18 @@ Observed in real data: sometimes the folder name has `jrc251016_m17_0424` (no un
 **Round 6 handles both forms** via the `regex:` extractor in `filename_parse` (see `tools/templates/instruments/mri_bruker.yaml`):
 
 ```
-(?P<jrc_id>jrc_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))
+(?P<jrc_id>(?P<pi_initials>[a-z]+)_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))
 ```
 
-The `jrc_?` matches `jrc` or `jrc_`; `\d{6,8}` covers 6-digit (`YYMMDD`) or 8-digit (`YYYYMMDD`) dates. The named groups `jrc_id`, `animal_num`, `project_code` become `discovered.*` for use elsewhere in the YAML config.
+The leading lowercase run is captured as **`pi_initials`** (the PI initials, MRI convention — "jrc" = Jesús Ruiz-Cabello); the `_?` after it absorbs the `jrc` vs `jrc_` ambiguity; `\d{6,8}` covers 6-digit (`YYMMDD`) or 8-digit (`YYYYMMDD`) dates. The named groups `pi_initials`, `jrc_id`, `animal_num`, `project_code` become `discovered.*` for use elsewhere in the YAML config (added `pi_initials` 2026-06-09).
 
-A **long-term fix** is to ask the platform manager to standardise the convention; that's tracked as future work in `tasks/tasks.md`.
+> **The `jrc`/`jrc_` no-separator quirk is group-specific** (it's how this group's platform writes the name) and may differ for other PIs — it's documented here as the canonical record. The `[a-z]+` form generalizes the prefix to any PI initials so a new group doesn't need a regex edit.
+
+**PI initials → group / PI mapping.** `pi_initials` ("jrc") maps to the **group initials** ("MFB", the AxioScan / global-default convention) and the **PI first name** ("Jesus", the NI convention) via [`tools/reference/pi_group_lookup.yaml`](../../tools/reference/pi_group_lookup.yaml). This is what lets MRI / NI / microscopy identities line up; the table is reference data today, tool-wiring is on [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md).
+
+**Subject-id alignment with NI (2026-06-09).** The registry `sample_id` is built as `m<animal_num>_<project_code>` → `m17_0424`, matching NI's `m13_0525` form, so MRI and NI subjects line up at the registry level. `session_id` keeps the fuller `jrc_id` (it groups all exams of one session). The **canonical** cross-instrument subject id is the DB-driven `subject.facility_animal_id` (`17-AE-biomaGUNE-0424`), which already matches NI's `13-AE-biomaGUNE-0525` ([06_REGISTRIES §2.3](../../mfb-rdm-docs/06_REGISTRIES.md)). The raw ParaVision `SUBJECT_id` stays verbatim in `metadata.json.mri.subject.id`.
+
+A **long-term fix** is to ask the platform manager to standardise the `jrc`/`jrc_` convention; that's tracked as future work in `tasks/tasks.md`.
 
 ### Terminology confusion: "project" in MRI vs Nuclear Imaging
 
@@ -293,7 +299,7 @@ For gjesus3 round 6 we use the **animal-protocol short id** as the project `shor
 
 The round-6 ingest config exposes these `discovered.*` fields per acquisition (from the path + regex + ParaVision JCAMP-DX extractor):
 
-- From `filename_parse` regex on the study folder name: `discovered.jrc_id`, `discovered.animal_num`, `discovered.project_code`.
+- From `filename_parse` regex on the study folder name: `discovered.pi_initials`, `discovered.jrc_id`, `discovered.animal_num`, `discovered.project_code`.
 - From standard auto-discovery: `discovered.folder_name` (the exam folder basename, i.e. the protocol number).
 - From `paravision_metadata.py` parsing of `subject` + `acqp` + `method` + `visu_pars`: ~20 `discovered.mri_*` fields including `mri_exam_number`, `mri_recon_indices`, `mri_sequence_name`, `mri_acquisition_datetime`. See [`mri_bruker.yaml`](../../tools/templates/instruments/mri_bruker.yaml) for the full reference card.
 

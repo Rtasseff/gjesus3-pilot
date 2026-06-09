@@ -50,6 +50,10 @@ Each acquisition session lands as a `.tgz` archive in a date-stamped folder unde
 | `<YYMMDD>` | Six-digit acquisition date | `251029` |
 | `<archive name>.tgz` | The session archive; structure broken down below | (see below) |
 
+> **⚠️ The PI is in the directory tree, NOT in the session/archive name (2026-06-09).** The true PI is the `<PI first name>` directory level (e.g. `Jesus`) — it is **not** recoverable from a single session/archive name. So a single-folder ingest cannot know the PI from the archive name alone; it comes from traversing up to the `<PI first name>` dir (a higher-level batch import — NI "stage 2", on [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md)) or from operator entry.
+>
+> **`protocol.txt` "Principal Investigator" is wrong — it holds the *operator's username*.** The Molecubes platform writes the username (e.g. `irene`) into the protocol.txt "Principal Investigator" field — a platform-labelling bug (under investigation 2026-06-09, likely affecting much historical data). The ingest therefore **does not** use it: the curated `ni.study.principal_investigator` and `discovered.ni_pi` are left **empty** (`ni_metadata.py`), while the raw (wrong) value is preserved verbatim in `ni._raw_metadata.protocol_txt` (raw readings are captured as-is even when the source is wrong). **PHASE-OUT:** once the platform records the PI correctly, restore reading `protocol.txt` for new files. `discovered.user` (e.g. `irene`) is parsed from the archive name and IS correct — it's the user/operator, not the PI.
+
 ### `<archive name>` structure (Molecubes archive)
 
 The archive's filename itself encodes everything we need at the registry level — 7 fields parseable by regex:

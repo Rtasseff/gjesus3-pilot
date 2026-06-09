@@ -28,13 +28,20 @@
 #
 # Regex extraction from the study-folder name (the messy FTP form
 # `20251016_083822_jrc_251016_m17_0424_jrc_251016_m17_0424_1_1`):
-#   discovered.jrc_id              e.g. "jrc_251016_m17_0424" — the
-#                                   canonical study identifier (acts as
-#                                   sample_id and session_id by default)
+#   discovered.pi_initials         e.g. "jrc" — PI initials (MRI naming
+#                                   convention; "jrc" = Jesus Ruiz-Cabello).
+#                                   Map to PI first name ("Jesus", NI
+#                                   convention) + group initials ("MFB",
+#                                   AxioScan convention) via
+#                                   tools/reference/pi_group_lookup.yaml.
+#   discovered.jrc_id              e.g. "jrc_251016_m17_0424" — the full
+#                                   study identifier (used as session_id)
 #   discovered.animal_num          e.g. "17" — short animal number
 #                                   inside the protocol
 #   discovered.project_code        e.g. "0424" — the animal-protocol id
 #                                   used as the gjesus3 project name
+#   (sample_id is built as `m<animal_num>_<project_code>` -> "m17_0424",
+#    aligned with NI's `m13_0525`; see the registry: block below.)
 #
 # Standard auto-discovery (any instrument):
 #   discovered.folder_name         basename of the matched exam folder
@@ -69,8 +76,8 @@
 #
 # Resolver also provides these in resolver-evaluated fields below:
 #   ${instrument}              "MRI" after registry resolution
-#   ${sample_id}               resolved from registry: block (jrc_id today)
-#   ${session_id}              resolved from registry: block (jrc_id today)
+#   ${sample_id}               resolved from registry: block ("m17_0424")
+#   ${session_id}              resolved from registry: block (jrc_id)
 #   ${acquisition_datetime}    resolved ISO datetime
 #   ${original_name}           exam folder basename (e.g. "29")
 #   ${acq_id}                  generated ACQ-ID (e.g. ACQ-20251016-MRI-029)
@@ -93,15 +100,17 @@
 #     the unit. Registry's primary_kind = "folder". See 10_TOOLS.md.
 #   - `instrument_model` — set per per-batch config (7T vs 11.7T).
 #   - `sample_type: organism` — DRAFT REMBI vocab; in-vivo MRI.
-#   - `session_id` + `sample_id` both = JRC study ID for now (one animal
-#     per session). Refine when biosample modelling matures (REG-01).
+#   - `sample_id` = `m<animal_num>_<project_code>` ("m17_0424"), aligned
+#     with NI ("m13_0525"); `session_id` = the fuller JRC study id (groups
+#     all exams of one session). Canonical cross-instrument subject id is
+#     subject.facility_animal_id from the DB (06_REGISTRIES §2.3).
 #   - `project_hint: ae-biomegune-${discovered.project_code}` — the
 #     animal-protocol code becomes the project short_name. Same pattern
 #     AxioScan round 4 uses; cross-modality projects share workspaces.
 #   - `auto_create_project:` — owner = `NMR-platform` since there's no
 #     dedicated technician. Edit _project.yaml after creation.
 #   - `link_filename:` — `MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`.
-#     Example: `MRI_jrc_251016_m17_0424_20251016_29_3`. Each link is
+#     Example: `MRI_m17_0424_20251016_29_3`. Each link is
 #     unique within a project even when multiple animals (m17/m18/m19)
 #     share exam numbers — the round-6 collision bug fix.
 #
@@ -225,12 +234,16 @@ auto_discover:
     source: parent_name
     # FTP server folder names look like:
     #   20251016_083822_jrc_251016_m17_0424_jrc_251016_m17_0424_1_1
-    # Regex pulls the canonical JRC ID + project_code (animal_num is
-    # optional but useful for sample_id refinement).
-    # Both `jrc251016_m17_0424` (no underscore after jrc) and
-    # `jrc_251016_m17_0424` (with) are observed; \d{6,8} covers
-    # both 6-digit and 8-digit dates.
-    regex: '(?P<jrc_id>jrc_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))'
+    # Regex pulls the PI initials + the canonical JRC ID + animal_num +
+    # project_code. The leading lowercase run is the PI initials (MRI
+    # naming convention, e.g. "jrc" = Jesus Ruiz-Cabello; map to the group
+    # initials "MFB" + PI first name "Jesus" via tools/reference/
+    # pi_group_lookup.yaml). Both `jrc251016_m17_0424` (NO underscore after
+    # the initials) and `jrc_251016_m17_0424` (with) are observed in the
+    # same batch -- the `_?` after pi_initials handles it. \d{6,8} covers
+    # 6-digit and 8-digit dates. See equipment/mri-platform/
+    # internal_mri_data_handling_workflow_notes.md "Systematic naming".
+    regex: '(?P<jrc_id>(?P<pi_initials>[a-z]+)_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))'
 
   # Embedded extraction (ParaVision JCAMP-DX aux files) populates
   # ~20 discovered.mri_* fields. Don't turn off unless you know why.
@@ -262,12 +275,16 @@ registry:
   # owner, set in auto_create_project below).
   operator:             NMR-platform
   data_source:          internal
-  # sample_id and session_id both pin to the JRC study ID for now.
-  # session_id groups all exams of one animal session (ISA "study");
-  # sample_id is the biological subject identifier. Treating them as
-  # equal is correct for the one-animal-per-session pattern — refine
-  # when biosample modelling matures (REG-01 in 06_REGISTRIES §2.3).
-  sample_id:            "${discovered.jrc_id}"
+  # sample_id = the biological subject identifier, ALIGNED with NI's
+  # `m<animal>_<project>` form (2026-06-09) so MRI and NI subjects line up
+  # at the registry level: MRI "m17_0424" <-> NI "m13_0525". (The canonical
+  # cross-instrument subject id is the DB-driven subject.facility_animal_id
+  # `17-AE-biomaGUNE-0424`, which already matches NI's `13-AE-biomaGUNE-0525`
+  # -- 06_REGISTRIES §2.3.) session_id keeps the fuller JRC study id (it
+  # groups all exams of one animal SESSION, ISA "study", and carries the
+  # date). The raw ParaVision SUBJECT_id stays verbatim in
+  # metadata.json.mri.subject.id / _raw_metadata.
+  sample_id:            "m${discovered.animal_num}_${discovered.project_code}"
   sample_type:          organism
   session_id:           "${discovered.jrc_id}"
   acquisition_datetime: discovered.mri_acquisition_datetime
@@ -304,7 +321,7 @@ auto_create_project:
 # and reconstruction → guaranteed unique per (animal, exam, recon).
 #
 # Example resolved value:
-#   MRI_jrc_251016_m17_0424_20251016_29_3
+#   MRI_m17_0424_20251016_29_3
 link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
 
 # ============================================================================
