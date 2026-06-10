@@ -105,6 +105,9 @@ AUTO_COLUMNS = {
     "extended_metadata_present",
     "original_name",
     "ingest_config",
+    "sample_organism",     # NEW 2026-06-10 — projection of enrichment subject.species
+    "subject_id",          # NEW 2026-06-10 — projection of subject.facility_animal_id
+    "anatomical_entity",   # NEW 2026-06-10 — projection of anatomy.region.label
 }
 
 

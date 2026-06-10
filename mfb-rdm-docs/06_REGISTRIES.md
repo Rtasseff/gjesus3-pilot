@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-06-09 (`operator` re-added as a registry column alongside `researcher` — decision #4.2, §2.3a-bis; live header migrated 24→25 cols)
+**Last Updated:** 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
 
 ---
 
@@ -69,6 +69,9 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `data_source` | String | ✅ Yes | User | `internal` or `collaborator:<name>`. |
 | `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. See §2.3 for the recommended composite format. |
 | `sample_type` | String | 🔶 Recommended | User | Category of biological material. Use the controlled vocabulary in §2.4 (DRAFT). |
+| `sample_organism` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 (REG-07). Binomial species, e.g. `Mus musculus`. **Projection of the `subject:` block's `species`** ([08_METADATA §4.4](08_METADATA.md)), sourced from the animal-facility DB. Blank for non-animal samples (`cells`/`material`/`phantom`) and where the subject is unresolved. Pipeline-derived — NOT a `registry:` key. |
+| `subject_id` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 (REG-01 Option B, §2.3.2). The canonical facility subject id `<animal_code>-AE-biomaGUNE-<NNNN>` — **projection of `subject:`.`facility_animal_id`**. Same value across every acquisition of that animal, so cohort queries ride on the column instead of the sidecar. Blank for non-animal samples. Pipeline-derived. |
+| `anatomical_entity` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 (REG-07 / META-09). UBERON organ/region label (e.g. `heart`) — **projection of `anatomy:`.`region.label`** ([08_METADATA §4.6](08_METADATA.md)). For in-vivo `organism` scans the region imaged (blank when whole-body), and for ex-vivo `tissue` the organ the section was cut from. Blank when unset / non-animal. Pipeline-derived. |
 | `session_id` | String | 🔶 Recommended (DRAFT) | User | DRAFT 2026-05-20. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc251016_m17_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. Status open (REG-08) pending a Data Office decision (user input welcome; this project has no PI sign-off gate). |
 | `primary_kind` | String | ✅ Yes (DRAFT) | Auto | DRAFT 2026-05-20. One of `file` \| `archive` \| `folder` — the shape of the primary entity on disk. `file` = single canonical file (microscopy `.czi`). `archive` = compressed archive (legacy collaborator DICOM `.zip`). `folder` = the acquisition folder itself is the unit (internal MRI ParaVision bundle). See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
 | `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary entity. When `primary_kind` = `file` or `archive`, this is a filename (`<ACQ-ID>.czi`, `<ACQ-ID>.zip`). When `primary_kind` = `folder`, this is the folder name (`<ACQ-ID>`) — the unit IS the folder, see [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
@@ -148,7 +151,7 @@ We **reuse** the facility's own identifier rather than mint a parallel one (FAIR
 
 #### 2.3.2 Where the subject ID lives (Option B)
 
-The subject ID is carried in the per-acquisition `metadata.json` **`subject:` block** as `facility_animal_id` ([08_METADATA §4.4](08_METADATA.md)). A dedicated **registry `subject_id` column is DEFERRED to the true-production restart** — the restart is the natural point to add it without migrating quasi-prod rows. Until then, registry-level grouping rides on `sample_id` + the sidecar.
+The subject ID is carried in the per-acquisition `metadata.json` **`subject:` block** as `facility_animal_id` ([08_METADATA §4.4](08_METADATA.md)). A dedicated **registry `subject_id` column was ADDED at the true-production restart (2026-06-10)** — an Auto projection of `subject:`.`facility_animal_id` (§2 schema). The restart was the natural point to add it on a fresh header without migrating quasi-prod rows. Registry-level cohort grouping now rides on the `subject_id` column directly.
 
 #### 2.3.3 `sample_id` rules
 
@@ -170,7 +173,7 @@ The instrument short code embeds `animal_code` with instrument-specific decorati
 
 > **🔶 DRAFT pilot guidance.** `sample_type` is the category of biological material in REMBI terms — *not* the species and *not* the anatomy. Status open (REG-07) pending a Data Office decision (user input welcome; this project has no PI sign-off gate).
 
-REMBI separates concerns: **sample type** (the kind of biological material), **organism/species**, **anatomical entity**, **preparation**, and **imaging mode**. In the current registry only one of these has its own column (`sample_type`); the others ride along in `sample_id` / `notes` for now (see future split tracked in `tasks/tasks.md` §3.1).
+REMBI separates concerns: **sample type** (the kind of biological material), **organism/species**, **anatomical entity**, **preparation**, and **imaging mode**. As of the 2026-06-10 restart, three of these have their own columns — `sample_type`, `sample_organism`, and `anatomical_entity` (the last two Auto projections of the enrichment blocks, §2 schema); `preparation` / `imaging mode` still ride along in `sample_id` / `notes` / the sidecar.
 
 **Controlled vocabulary** — small enough to remember, broad enough to cover everything in scope:
 
@@ -185,7 +188,7 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 **Notes:**
 
 - Use lowercase, one of the five values verbatim. If a future sample doesn't fit, flag for vocab extension before ingest rather than inventing a value on the fly.
-- Species/anatomy details that today appear as freeform `"mouse lung section"`-style strings in pre-cutover example rows should migrate to dedicated columns once REG-07 closes (proposed `sample_organism` + `anatomical_entity`; tracked in `tasks/tasks.md` §3.1).
+- Species/anatomy details that appeared as freeform `"mouse lung section"`-style strings in pre-cutover example rows now have dedicated columns: **`sample_organism` + `anatomical_entity` were added 2026-06-10** (REG-07), both Auto projections of the enrichment `subject:` / `anatomy:` blocks. Pre-cutover quasi-prod rows were purged, so there is nothing to retrofit.
 - For batches where every acquisition shares the same type, set the value at the YAML template level rather than per-row. The AxioScan 7 per-instrument template pre-fills `sample_type: tissue` for this reason.
 
 > **🔶 Linked requirements (DRAFT 2026-05-29):** For `sample_type ∈ {organism, tissue}`, the per-acquisition `metadata.json` MUST include two blocks:
@@ -203,7 +206,7 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 > **Note:** The CSV example below shows the schema **including** the DRAFT `session_id` and `primary_kind` columns. Production registry rows pre-2026-05-20 do not have these columns; the schema grows column-by-column with a defensive header check (see [10_TOOLS](10_TOOLS.md)) preventing silent shift.
 
 ```csv
-acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,researcher,operator,data_source,sample_id,sample_type,session_id,primary_kind,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
+acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,researcher,operator,data_source,sample_id,sample_type,sample_organism,subject_id,anatomical_entity,session_id,primary_kind,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
 ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axio Scan 7,,MBC,internal,MOUSE-2024-042,tissue,,file,ACQ-20260215-ZWSI-001.czi,MFB_MBC_PROJ-0003_MOUSE-2024-042_HE_20x.czi,.czi,2450,1,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,tools/configs/axioscan7_20260215.yaml,Microscopy single-file
 ACQ-20251016-MRI-029,2025-10-16T17:00:00Z,2025-10-16T08:38:22Z,DICOM,MRI,Bruker BioSpec 7T,,IFF,internal,jrc251016_m17_0424_heart,organism,jrc251016_m17_0424,folder,ACQ-20251016-MRI-029,29,folder,150,17,/raw/DICOM/2025/2025-10/ACQ-20251016-MRI-029/,Y,Y,PROJ-0009,tools/configs/mri_bruker_20251016_TEST.yaml,Internal MRI ParaVision exam 29 (cine cardiac)
 ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,organism,,archive,ACQ-20260220-PET-001.zip,,.zip,2100,4,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,Y,,tools/configs/pet_20260220.yaml,Legacy PET/CT zip-per-session (pre-folder-bundle)

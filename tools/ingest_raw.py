@@ -1083,8 +1083,11 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 )
 
     # --- Step 10: Update registry ---
+    # subject_block / anatomy_block were built at Step 8.4 (above); pass them so
+    # build_row can project sample_organism / subject_id / anatomical_entity.
     reg_dt = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt)
+    row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt,
+                             subject=subject_block, anatomy=anatomy_block)
     registry.append_row(registry_path, row)
     log(f"Appended to registry: {registry_path}")
 
