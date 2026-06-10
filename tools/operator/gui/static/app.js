@@ -553,7 +553,7 @@ function renderLevels() {
 function builderLevelLabels() {
   return $$("#b-levels .level-label").map((inp, i) => inp.value.trim() || `folder_${i + 1}`);
 }
-$("#b-levels-count").addEventListener("input", renderLevels);
+$("#b-levels-count").addEventListener("input", () => { renderLevels(); loadLayoutDebounced(); });
 
 // ---- filter rows (section 2) ----
 function filterFieldOptions(selected) {
@@ -598,10 +598,17 @@ function builderFilter() {
 $("#b-filter-add").addEventListener("click", () => addFilterRow());
 
 // ---- example-layout preview (section 1): show the operator their REAL folders ----
-// Probes the example source folder and renders the actual folder structure (a real
-// name at each level, capped at 3 deep) + example file names split into chunks, so
-// "Folder levels" and "File-name metadata labels" are grounded in their own data.
+// Probes the example source folder ANCHORED to the chosen "Folder levels" count
+// (N) — shows a real data path exactly N deep (refreshing as N changes) instead
+// of chasing the deepest, possibly irrelevant, sub-folder. Also splits example
+// file names into chunks so the "File-name metadata labels" count is obvious.
 let builderLayout = null;
+function currentLevels() {
+  return Math.max(0, parseInt($("#b-levels-count").value, 10) || 0);
+}
+function debounce(fn, ms) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
 
 async function loadLayout() {
   const path = $("#b-staging").value.trim();
@@ -609,7 +616,9 @@ async function loadLayout() {
   if (!path) { box.innerHTML = ""; builderLayout = null; renderFileExamples(); return; }
   box.innerHTML = "<span class='muted'>Reading example folder…</span>";
   try {
-    const data = await postJSON("/api/sample_layout", { path, instrument: bInstrument.value });
+    const data = await postJSON("/api/sample_layout", {
+      path, levels: currentLevels(), instrument: bInstrument.value,
+    });
     builderLayout = data;
     renderLayout();
     renderFileExamples();
@@ -618,12 +627,25 @@ async function loadLayout() {
     builderLayout = null; renderFileExamples();
   }
 }
+const loadLayoutDebounced = debounce(loadLayout, 250);
 
 function renderLayout() {
   const box = $("#b-layout");
   const d = builderLayout;
   if (!d) { box.innerHTML = ""; return; }
   if (d.error) { box.innerHTML = `<span class="muted">${esc(d.error)}</span>`; return; }
+
+  // No data path at exactly the chosen depth — point them at the real depth.
+  if (!d.match) {
+    let msg = `No <code>${esc(d.ext)}</code> files exactly <strong>${d.levels}</strong> folder level${d.levels === 1 ? "" : "s"} below the source.`;
+    if (d.file_depths && d.file_depths.length) {
+      const list = d.file_depths.join(" or ");
+      msg += ` Your files are <strong>${list}</strong> level${d.file_depths.length === 1 && d.file_depths[0] === 1 ? "" : "s"} down — set "Folder levels before the files" to match.`;
+    }
+    box.innerHTML = `<div class="layout-tree warn">${msg}</div>`;
+    return;
+  }
+
   const lines = [
     `<div class="lt-row"><span class="lt-ic">📁</span><strong>${esc(d.root)}</strong> <span class="muted">— your source folder</span></div>`,
   ];
@@ -636,10 +658,9 @@ function renderLayout() {
     lines.push(`<div class="lt-row lt-file" style="padding-left:${filesIndent}rem">` +
       `<span class="lt-ic">📄</span>${esc(f)}</div>`);
   });
-  let note;
-  if (d.depth_capped) note = `…your files are actually ${d.depth} folders deep (showing the first 3).`;
-  else if (d.depth === 0) note = `Files are directly in the source folder → set "Folder levels before the files" to 0.`;
-  else note = `Files are ${d.depth} folder${d.depth > 1 ? "s" : ""} deep → set "Folder levels before the files" to ${d.depth}.`;
+  const note = d.levels === 0
+    ? `Example: files sit directly in the source folder.`
+    : `Example data path at ${d.levels} folder level${d.levels === 1 ? "" : "s"} deep.`;
   box.innerHTML = `<div class="layout-tree">${lines.join("")}</div><div class="muted lt-note">${note}</div>`;
 }
 

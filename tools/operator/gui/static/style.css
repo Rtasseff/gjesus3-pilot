@@ -231,6 +231,7 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
 .layoutbox { margin: .5rem 0; }
 .layout-tree { background: #f8fafc; border: 1px solid var(--border);
   border-radius: 6px; padding: .5rem .6rem; font-size: .85rem; overflow-x: auto; }
+.layout-tree.warn { background: #fffbeb; border-color: #fde68a; color: #92400e; white-space: normal; }
 .lt-row { padding: .12rem 0; white-space: nowrap; }
 .lt-ic { margin-right: .35rem; opacity: .85; }
 .lt-file { color: var(--muted); }

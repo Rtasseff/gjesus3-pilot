@@ -372,40 +372,26 @@ def api_listdir():
     return jsonify(out)
 
 
-def _find_deepest_primary(src, ext, max_depth=12, max_dirs=4000):
-    """Bounded walk: return the path of a primary (<ext>) file in the DEEPEST
-    folder reachable from `src`, so the builder can show the real structure.
-
-    Bounded by max_depth (don't descend past it) + max_dirs (stop the walk) so a
-    huge share can't hang the probe. Returns None if no <ext> file is found.
-    """
-    best = None  # (depth, filepath)
-    seen = 0
-    for dirpath, dirnames, filenames in os.walk(src):
-        seen += 1
-        if seen > max_dirs:
-            break
-        depth = 0 if os.path.normpath(dirpath) == os.path.normpath(src) else \
-            len(os.path.relpath(dirpath, src).replace("\\", "/").split("/"))
-        if depth >= max_depth:
-            dirnames[:] = []  # stop descending
-        hit = next((f for f in filenames if f.lower().endswith(ext)), None)
-        if hit and (best is None or depth > best[0]):
-            best = (depth, os.path.join(dirpath, hit))
-    return best[1] if best else None
-
-
 @app.route("/api/sample_layout", methods=["POST"])
 def api_sample_layout():
-    """Sample the example source folder's real layout for the builder preview:
-    the deepest folder chain (capped to 3 for display) with a real folder name at
-    each level, plus up to 3 example primary-file names in that deepest folder.
+    """Sample the example source folder for the builder preview, anchored to the
+    operator's chosen `levels` count (not the deepest path — a stray deep folder
+    must not hijack the example).
+
+    Returns a representative folder chain of EXACTLY `levels` deep that actually
+    contains primary (<ext>) files, plus up to 3 of those file names. Also returns
+    `file_depths` — the depths where <ext> files really live — so when `levels` is
+    wrong the UI can point the operator at the right number.
     """
     data = request.get_json(silent=True) or {}
     raw = (data.get("path") or "").strip()
+    try:
+        levels = max(0, int(data.get("levels")))
+    except (TypeError, ValueError):
+        levels = 0
     ext = ".czi"   # all microscopy instruments this GUI serves are .czi
-    out = {"root": "", "chain": [], "depth": 0, "depth_capped": False,
-           "files": [], "ext": ext, "error": None}
+    out = {"root": "", "levels": levels, "chain": [], "files": [],
+           "file_depths": [], "match": False, "ext": ext, "error": None}
 
     if not raw or not os.path.isdir(raw):
         out["error"] = "Pick an example source folder first."
@@ -413,25 +399,30 @@ def api_sample_layout():
     src = os.path.abspath(raw)
     out["root"] = os.path.basename(src.rstrip("\\/")) or src
 
-    rep = _find_deepest_primary(src, ext)
-    if not rep:
+    # Bounded walk: find a representative folder at EXACTLY `levels` deep that
+    # directly holds <ext> files, and record every depth where <ext> files live.
+    depths = set()
+    seen = 0
+    for dirpath, dirnames, filenames in os.walk(src):
+        seen += 1
+        if seen > 6000:
+            break
+        depth = 0 if os.path.normpath(dirpath) == os.path.normpath(src) else \
+            len(os.path.relpath(dirpath, src).replace("\\", "/").split("/"))
+        if depth > 12:
+            dirnames[:] = []
+            continue
+        czi = sorted(f for f in filenames if f.lower().endswith(ext))
+        if czi:
+            depths.add(depth)
+            if depth == levels and not out["match"]:
+                out["match"] = True
+                out["chain"] = ([] if depth == 0 else
+                                os.path.relpath(dirpath, src).replace("\\", "/").split("/"))
+                out["files"] = czi[:3]
+    out["file_depths"] = sorted(depths)
+    if not depths:
         out["error"] = f"No {ext} files found anywhere under this folder."
-        return jsonify(out)
-
-    parts = os.path.relpath(rep, src).replace("\\", "/").split("/")
-    chain = parts[:-1]                 # folder names between src and the file
-    out["depth"] = len(chain)
-    out["chain"] = chain[:3]
-    out["depth_capped"] = len(chain) > 3
-
-    repdir = os.path.dirname(rep)
-    try:
-        out["files"] = sorted(
-            e.name for e in os.scandir(repdir)
-            if e.is_file() and e.name.lower().endswith(ext)
-        )[:3]
-    except OSError:
-        out["files"] = [os.path.basename(rep)]
     return jsonify(out)
 
 
