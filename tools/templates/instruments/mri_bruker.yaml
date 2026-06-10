@@ -259,10 +259,28 @@ auto_discover:
   # 08_METADATA §4.4.6). See tools/animal_db.py.
   subject_from_db: true
   subject_lookup:
-    # How to build the DB key from discovered.* fields. project_alias is the
-    # NNNN protocol code; animal_code is the bare animal number (m13→13).
-    project_alias: "${discovered.project_code}"   # e.g. "0424"
-    animal_code:   "${discovered.animal_num}"     # e.g. "17"
+    # --- HOW THE SOURCE ANIMAL IS LOOKED UP (automatic; no operator input) ---
+    # The enrichment writer builds the animal-facility DB key from two
+    # discovered.* fields and fills metadata.json.subject (species / strain / sex
+    # / date_of_birth -> derived age / procedures).
+    #
+    # REQUIREMENT for a NEW convention: keep a discovered field carrying the
+    # animal-protocol code (the NNNN) and one carrying the animal number, and
+    # point the two ${discovered.*} refs below at them — otherwise the lookup
+    # won't fire (the acq still ingests, just with no subject:).
+    #
+    # PARSE (tools/ingest/subject_id.py — pure string parser, unit-tested):
+    #   animal_num   "17"     ->  animal_code 17   [already a bare number — the
+    #     ParaVision study-folder regex captures the digits from "m17"; in-vivo
+    #     organism, so no trailing organ letter]
+    #   project_code "0424"   ->  project_alias 0424
+    #   DB key       (project_alias 0424, animal_code 17)
+    #   subject id   17-AE-biomaGUNE-0424  (via animal_db.compose_subject_id;
+    #                                        reused verbatim as the canonical id)
+    #   Other accepted short codes: "m13" -> 13; "ID13B" -> 13 (+organ B); bare
+    #   "14" -> 14. Non-numeric (e.g. "phantom" / "qc") -> no lookup (unknown).
+    project_alias: "${discovered.project_code}"   # the NNNN protocol code, e.g. "0424"
+    animal_code:   "${discovered.animal_num}"     # the bare animal number, e.g. "17"
 
 registry:
   instrument:           MRI

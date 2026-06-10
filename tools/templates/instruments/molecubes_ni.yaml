@@ -219,14 +219,28 @@ auto_discover:
   # 08_METADATA §4.4.6). See tools/animal_db.py.
   subject_from_db: true
   subject_lookup:
-    # How to build the DB key from discovered.* fields. project_alias is the
-    # NNNN animal-protocol code; animal_code is the bare animal number. The
-    # enrichment layer strips the leading "m" (m14->14) before the lookup;
-    # phantom/QC short_sample values (e.g. "phantom_xyz") don't parse to a
-    # number and route cleanly to the non-blocking unknown path (no bogus
-    # DB lookup).
-    project_alias: "${discovered.short_project}"   # e.g. "0525"
-    animal_code:   "${discovered.short_sample}"    # e.g. "m14" (-> 14)
+    # --- HOW THE SOURCE ANIMAL IS LOOKED UP (automatic; no operator input) ---
+    # The enrichment writer builds the animal-facility DB key from two
+    # discovered.* fields and fills metadata.json.subject (species / strain / sex
+    # / date_of_birth -> derived age / procedures).
+    #
+    # REQUIREMENT for a NEW convention: keep a discovered field carrying the
+    # animal-protocol code (the NNNN) and one carrying the animal number, and
+    # point the two ${discovered.*} refs below at them — otherwise the lookup
+    # won't fire (the acq still ingests, just with no subject:).
+    #
+    # PARSE (tools/ingest/subject_id.py — pure string parser, unit-tested):
+    #   short_sample  "m14"   ->  strip leading "m" + zeros  ->  animal_code 14
+    #     [in-vivo organism, so no trailing organ letter]
+    #   short_project "0525"  ->  project_alias 0525
+    #   DB key        (project_alias 0525, animal_code 14)
+    #   subject id    14-AE-biomaGUNE-0525  (via animal_db.compose_subject_id;
+    #                                         reused verbatim as the canonical id)
+    #   Other accepted short codes: "ID13B" -> 13 (+organ B); bare "14" -> 14.
+    #   phantom / QC short_sample (e.g. "phantom_xyz") doesn't parse to a number
+    #   -> routes cleanly to the non-blocking unknown path (no bogus lookup).
+    project_alias: "${discovered.short_project}"   # the NNNN protocol code, e.g. "0525"
+    animal_code:   "${discovered.short_sample}"    # carries the animal number, e.g. "m14"
 
 registry:
   # PER-CASE instrument code from the parsed modality. The
