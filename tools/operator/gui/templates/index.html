@@ -74,13 +74,18 @@
       </details>
     </fieldset>
 
-    <!-- Filter — shown only when the recipe sets none. Same UI as the builder
-         (label = value rows, AND). Lets the operator scope this batch. -->
+    <!-- Filter. If the recipe sets one, it's shown read-only here (edit it in the
+         builder); otherwise the operator scopes this batch with label=value rows.
+         Exactly ONE filter applies — the recipe's, OR the runner rows when the
+         recipe sets none (see runnerFilter()). -->
     <fieldset id="r-filter" hidden>
-      <legend>Filter <span class="muted">— the recipe sets none; only ingest files that match (optional)</span></legend>
-      <p class="muted">Add label = value conditions to scope this batch (e.g. one group); leave empty to ingest everything. Click "Show metadata labels from the folder" above to fill the label list.</p>
-      <div id="r-filter-rows"></div>
-      <button id="r-filter-add" type="button">+ Add condition</button>
+      <legend>Filter <span class="muted">— only ingest files that match (optional)</span></legend>
+      <div id="r-filter-recipe" class="muted" hidden></div>
+      <div id="r-filter-edit">
+        <p class="muted">Add label = value conditions to scope this batch (e.g. one group); leave empty to ingest everything. Click "Show metadata labels from the folder" above to fill the label list.</p>
+        <div id="r-filter-rows"></div>
+        <button id="r-filter-add" type="button">+ Add condition</button>
+      </div>
     </fieldset>
 
     <!-- Per-run study metadata (condition block). Shown only for instruments

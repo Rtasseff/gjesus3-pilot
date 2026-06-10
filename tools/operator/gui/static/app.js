@@ -331,9 +331,23 @@ $("#r-gaps-load").addEventListener("click", loadGapFields);
 const runnerFilterUI = makeFilterBuilder("#r-filter-rows", () => runnerKeys, null);
 $("#r-filter-add").addEventListener("click", () => runnerFilterUI.addRow());
 function updateFilterPanel() {
-  $("#r-filter").hidden = "auto_discover.filter" in currentRecipeOverrides();
+  const rf = currentRecipeOverrides()["auto_discover.filter"];
+  const hasRecipeFilter = rf && typeof rf === "object" && Object.keys(rf).length > 0;
+  $("#r-filter").hidden = false;                 // the filter section is always visible
+  $("#r-filter-recipe").hidden = !hasRecipeFilter;
+  $("#r-filter-edit").hidden = hasRecipeFilter;
+  if (hasRecipeFilter) {
+    runnerFilterUI.clear();                      // drop any stale runner rows — recipe wins
+    $("#r-filter-recipe").innerHTML = "This recipe filters to " +
+      Object.entries(rf).map(([k, v]) =>
+        `<code>${esc(tfHumanizeRef(k))} = ${esc(v)}</code>`).join(" <b>AND</b> ") +
+      " — edit it in the builder.";
+  }
 }
 function runnerFilter() {
+  // Only the runner's OWN rows count, and only when the recipe sets no filter
+  // (otherwise the recipe's filter applies and must not be overridden).
+  if ($("#r-filter-edit").hidden) return {};
   const f = runnerFilterUI.collect();
   return Object.keys(f).length ? { "auto_discover.filter": f } : {};
 }
