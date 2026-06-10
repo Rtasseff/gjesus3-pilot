@@ -27,7 +27,11 @@ import create_project as create_project_mod
 def relative_config_path(config_path):
     """Return config_path as a forward-slash path relative to the git repo root.
 
-    Falls back to a CWD-relative path if not in a git repo.
+    Falls back to a CWD-relative path if not in a git repo, and to the absolute
+    path if even that is impossible. On Windows, os.path.relpath raises
+    ValueError when the two paths live on different drives (e.g. a batch config
+    on D: while the repo/CWD is on C:) — guard against it so a cross-drive
+    --config doesn't abort the whole ingest over a cosmetic provenance string.
     """
     if not config_path:
         return ""
@@ -41,9 +45,15 @@ def relative_config_path(config_path):
         repo_root = result.stdout.strip()
         if repo_root:
             return os.path.relpath(abs_path, repo_root).replace("\\", "/")
+    except ValueError:
+        # Config on a different drive than the repo (Windows) — use absolute.
+        return abs_path.replace("\\", "/")
     except Exception:
         pass
-    return os.path.relpath(abs_path).replace("\\", "/")
+    try:
+        return os.path.relpath(abs_path).replace("\\", "/")
+    except ValueError:
+        return abs_path.replace("\\", "/")
 
 try:
     from tqdm import tqdm

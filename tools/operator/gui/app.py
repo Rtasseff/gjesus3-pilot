@@ -81,6 +81,13 @@ INSTRUMENT_LABELS = {
 # How many real files to show in the builder's live discovered.* grid.
 BUILDER_GRID_LIMIT = 25
 
+# Default NAS root pre-filled in the GUI when the operator hasn't saved one. The
+# GUI runs on the microscopy operators' Windows machines, which reach the NAS
+# over SMB at this UNC — the shared env default (`/mnt/gjesus3`) is the WSL/Linux
+# data-office path and wrong here. The operator's saved choice and an explicit
+# $GJESUS3_ROOT both still win (see load_saved_nas_root).
+GUI_DEFAULT_NAS_ROOT = r"\\gjesus3\gjesus3\gjesus3-data"
+
 # Controlled sample_type vocabulary — 06_REGISTRIES §2.4 (DRAFT, REG-07). Operators
 # pick one verbatim; a new kind is a vocab-extension decision, not an ad-hoc value.
 # Keep this list in sync with that table (value + a short operator-facing gloss).
@@ -230,7 +237,13 @@ def _nas_state_path():
 
 
 def load_saved_nas_root():
-    """Return the persisted NAS root, or the env/default resolution."""
+    """Return the persisted NAS root, or the GUI default.
+
+    Precedence: the operator's saved choice > $GJESUS3_ROOT > GUI_DEFAULT_NAS_ROOT
+    (the Windows-SMB UNC). We do NOT fall back to env.resolve_nas_root()'s
+    `/mnt/gjesus3` default, which is the WSL/Linux data-office path — wrong for a
+    Windows GUI operator who has never set one.
+    """
     try:
         with open(_nas_state_path(), "r", encoding="utf-8") as f:
             val = f.read().strip()
@@ -238,7 +251,7 @@ def load_saved_nas_root():
             return val
     except OSError:
         pass
-    return env.resolve_nas_root()
+    return os.environ.get("GJESUS3_ROOT") or GUI_DEFAULT_NAS_ROOT
 
 
 def save_nas_root(value):
