@@ -512,6 +512,9 @@ function buildRequiredGrid() {
     row.append(lab, val);
     grid.appendChild(row);
   });
+  // Project link name is critical and must never be left blank — default it to
+  // the always-present original_name (operators can change it).
+  builderFields["link_filename"].setValue("${original_name}");
 }
 
 // ---- folder levels (section 1) ----
@@ -830,6 +833,9 @@ async function loadTemplateDefaults() {
     setTF("registry.session_id", reg.session_id);
     setTF("registry.notes", reg.notes);
     setTF("link_filename", t.link_filename);
+    if (!builderFields["link_filename"].serialize().trim()) {
+      builderFields["link_filename"].setValue("${original_name}");  // never blank
+    }
     $("#b-auto-create").checked = !!(t.ingest || {}).auto_create_projects;
     renderOverrideJSON();
     updateBuilderExamples();
@@ -888,3 +894,4 @@ $("#b-save").addEventListener("click", async () => {
 buildRequiredGrid();
 renderLevels();
 renderOverrideJSON();
+updateBuilderExamples();
