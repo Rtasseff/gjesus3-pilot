@@ -168,8 +168,6 @@
       </div>
       <div id="b-errors" class="errbox"></div>
       <div id="b-dropped" class="dropbox"></div>
-      <p id="b-palette-hint" class="muted" hidden>Your layout produces these metadata labels — click or drag them into the filter or the values below.</p>
-      <div id="b-palette" class="palette"></div>
       <div id="b-grid-wrap" class="table-wrap"></div>
     </fieldset>
 
@@ -184,7 +182,9 @@
     <!-- 3 · VALUES TO RECORD -->
     <fieldset>
       <legend>3 · Set the values to record</legend>
-      <p class="muted">Type a value, or click/drag a metadata label from section 1. <span class="star">★</span> = high priority. Each shows a live example from the first file.</p>
+      <p class="muted">Type a value, or click/drag one of your metadata labels. <span class="star">★</span> = high priority. Each shows a live example from the first file.</p>
+      <p id="b-palette-hint" class="muted" hidden>Your metadata labels (from section 1) — click or drag one into any value box below:</p>
+      <div id="b-palette" class="palette"></div>
       <div id="b-required" class="reqgrid"></div>
       <label class="check"><input id="b-auto-create" type="checkbox" checked> Auto-create the project if the project hint doesn't exist yet</label>
       <div class="row">
