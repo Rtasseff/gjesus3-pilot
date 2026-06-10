@@ -605,16 +605,21 @@ const builderSelects = {};      // field key -> <select> (controlled-vocab rows)
 // all-control or all-case). It's captured per-run in the Runner instead; the
 // per-acquisition "derive is_control from a metadata label" rule is a planned
 // next revision (tasks/BACKLOG.md).
+// `gap: true` marks the fields that are SELF-CONTAINED in the recipe: the builder
+// saves them explicitly (value OR an explicit blank), so leaving one blank is a
+// real blank that the Runner prompts for per batch — it does NOT silently fall
+// back to the template default. Must match the backend CRITICAL_FIELDS keys.
+// Non-gap fields (acq date / session / notes) still fall back to the template.
 const REQUIRED_FIELDS = [
-  { key: "registry.researcher",           label: "Researcher",       star: true, hint: "who ran the study" },
-  { key: "operator",                      label: "Operator",         star: true, hint: "who ran the equipment" },
-  { key: "registry.sample_id",            label: "Sample ID",        star: true },
-  { key: "registry.sample_type",          label: "Sample type",      type: "select" },
+  { key: "registry.researcher",           label: "Researcher",       star: true, hint: "who ran the study", gap: true },
+  { key: "operator",                      label: "Operator",         star: true, hint: "who ran the equipment", gap: true },
+  { key: "registry.sample_id",            label: "Sample ID",        star: true, gap: true },
+  { key: "registry.sample_type",          label: "Sample type",      type: "select", gap: true },
   { key: "registry.acquisition_datetime", label: "Acquisition date" },
-  { key: "registry.project_hint",         label: "Project hint" },
+  { key: "registry.project_hint",         label: "Project hint",     gap: true },
   { key: "registry.session_id",           label: "Session ID" },
   { key: "registry.notes",                label: "Notes" },
-  { key: "link_filename",                 label: "Project link name" },
+  { key: "link_filename",                 label: "Project link name", gap: true },
 ];
 
 // Build the "values to record" rows once (all token-fields).
@@ -836,17 +841,20 @@ function builderOverrides() {
   const filter = builderFilterUI.collect();
   if (Object.keys(filter).length) ov["auto_discover.filter"] = filter;
 
-  // values to record (study-design metadata is captured per-run in the Runner,
-  // not baked into a recipe — see REQUIRED_FIELDS note)
+  // values to record. gap fields are SELF-CONTAINED: emitted explicitly even when
+  // blank (an explicit "" overrides the template default -> a real blank the
+  // Runner prompts for). Non-gap fields are emitted only when filled (else they
+  // fall back to the template default).
   REQUIRED_FIELDS.forEach((f) => {
+    let v;
     if (f.type === "select") {
       const sel = builderSelects[f.key];
-      if (sel && sel.value) ov[f.key] = sel.value;
-      return;
+      v = sel ? sel.value : "";
+    } else {
+      const tf = builderFields[f.key];
+      v = tf ? tf.serialize().trim() : "";
     }
-    const tf = builderFields[f.key];
-    const v = tf ? tf.serialize().trim() : "";
-    if (v) ov[f.key] = v;
+    if (v || f.gap) ov[f.key] = v;
   });
 
   ov["ingest.auto_create_projects"] = $("#b-auto-create").checked;
@@ -997,6 +1005,9 @@ async function loadTemplateDefaults() {
   }
 }
 $("#b-load-template").addEventListener("click", loadTemplateDefaults);
+// Start from the instrument's convention so blanking a field is a DELIBERATE
+// choice (-> prompt in the Runner), not the default state of an empty builder.
+bInstrument.addEventListener("change", loadTemplateDefaults);
 
 // ---- "Preview example" (section 3) ----
 async function builderPreview() {
@@ -1048,3 +1059,4 @@ buildRequiredGrid();
 renderLevels();
 renderOverrideJSON();
 updateBuilderExamples();
+loadTemplateDefaults();   // seed from the default instrument's convention
