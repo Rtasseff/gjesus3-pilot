@@ -50,23 +50,22 @@
       <button id="r-preview" type="button" class="primary">Preview</button>
     </div>
 
-    <!-- Researcher (the person who ran the study) -> registry. The operator (the
-         tech who ran the scope) comes from the filename. -->
-    <div class="row">
-      <label class="grow">Researcher <span class="muted">— who ran the study (goes in the registry)</span>
-        <input id="r-researcher" type="text"
-               placeholder="e.g. Laura   (AxioScan: set this; cells: leave blank to use the folder name)">
-      </label>
-    </div>
-
-    <!-- Sample type — shown + REQUIRED only when the chosen recipe doesn't set
-         one (controlled vocabulary, 06_REGISTRIES §2.4). Options injected from
-         window.SAMPLE_TYPES. -->
-    <div class="row" id="r-sampletype-wrap" hidden>
-      <label class="grow">Sample type <span class="muted">— required: the chosen recipe doesn't set one</span>
-        <select id="r-sampletype"><option value="">— pick a sample type —</option></select>
-      </label>
-    </div>
+    <!-- Critical fields the chosen recipe leaves blank are "pushed" here and are
+         REQUIRED per batch. The runner adapts: it asks /api/recipe_gaps which
+         CRITICAL_FIELDS are unset in the recipe, then renders a token-field
+         (metadata-label + text) — or the sample_type dropdown — for each. -->
+    <fieldset id="r-gaps" hidden>
+      <legend>Fill in for this batch <span class="muted">— the recipe leaves these blank; required before ingest</span></legend>
+      <div id="r-gaps-grid" class="reqgrid"></div>
+      <details>
+        <summary>Use a value from the CZI name / folders</summary>
+        <p class="muted">Click or drag a metadata label into a box above; it resolves per file at ingest. Set the folder + NAS root, then show them.</p>
+        <div class="row">
+          <button id="r-gaps-load" type="button">Show metadata labels from the folder</button>
+        </div>
+        <div id="r-gaps-palette" class="palette"></div>
+      </details>
+    </fieldset>
 
     <!-- Per-run study metadata (condition block). Shown only for instruments
          whose template carries a condition: block (AxioScan tissue). -->

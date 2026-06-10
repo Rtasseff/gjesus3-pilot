@@ -92,6 +92,38 @@ SAMPLE_TYPES = [
     {"value": "phantom",  "label": "phantom — imaging calibration object"},
 ]
 
+# Critical fields that MUST end up populated. A recipe may set them (stable per
+# convention) or leave them blank; whatever it leaves blank is "pushed to the
+# runner" — shown there as a required per-batch input (token-field, or the
+# sample_type dropdown). See /api/recipe_gaps. `kind`: "token" (metadata-label +
+# text) or "sampletype" (controlled vocabulary).
+CRITICAL_FIELDS = [
+    {"key": "registry.researcher",   "label": "Researcher",  "kind": "token",      "hint": "who ran the study"},
+    {"key": "operator",              "label": "Operator",    "kind": "token",      "hint": "who ran the equipment"},
+    {"key": "registry.sample_id",    "label": "Sample ID",   "kind": "token",      "hint": ""},
+    {"key": "registry.sample_type",  "label": "Sample type", "kind": "sampletype", "hint": "controlled vocabulary"},
+]
+
+
+def _effective_value(cfg, key):
+    """The effective config value for a critical-field key (template+overrides)."""
+    if key.startswith("registry."):
+        return (cfg.get("registry") or {}).get(key.split(".", 1)[1])
+    return cfg.get(key)   # top-level keys: operator, link_filename, …
+
+
+def _is_gap(val):
+    """True when a value is effectively unset: empty / NA / a <placeholder>.
+    A ${...} reference or a real literal is NOT a gap (it resolves at ingest)."""
+    if val is None:
+        return True
+    s = str(val).strip()
+    if s == "" or s.upper() == "NA":
+        return True
+    if s.startswith("<") and s.endswith(">"):   # e.g. "<set per batch>"
+        return True
+    return False
+
 
 # --------------------------------------------------------------------- recipes
 
@@ -382,6 +414,27 @@ def api_listdir():
     except OSError as ex:
         out["error"] = str(ex)
     return jsonify(out)
+
+
+@app.route("/api/recipe_gaps", methods=["POST"])
+def api_recipe_gaps():
+    """Which CRITICAL_FIELDS does this recipe leave blank? The runner renders a
+    required per-batch input for each one returned. Computed on the EFFECTIVE
+    config (template + recipe overrides), so a value the template supplies (even
+    if the recipe doesn't override it) is not reported as a gap.
+    """
+    data = request.get_json(silent=True) or {}
+    instrument = (data.get("instrument") or "").upper()
+    overrides = data.get("overrides") or {}
+    if instrument not in MICROSCOPY_KEYS:
+        return jsonify({"gaps": []})
+    try:
+        template = templates.load_template(instrument)
+        cfg = config_builder.build_config(template, overrides)
+    except Exception as e:  # noqa: BLE001 — a bad recipe shouldn't 500 the runner
+        return jsonify({"gaps": [], "error": str(e)})
+    gaps = [f for f in CRITICAL_FIELDS if _is_gap(_effective_value(cfg, f["key"]))]
+    return jsonify({"gaps": gaps})
 
 
 @app.route("/api/sample_layout", methods=["POST"])

@@ -173,13 +173,13 @@ async function loadRecipes() {
     recipesCache.map((r) =>
       `<option value="${esc(r.file)}">${esc(r.name)}</option>`).join("");
   $("#r-recipe-desc").textContent = "";
-  updateSampleTypeReq();
+  loadGaps();
 }
 rInstrument.addEventListener("change", loadRecipes);
 rRecipe.addEventListener("change", () => {
   const rec = recipesCache.find((r) => r.file === rRecipe.value);
   $("#r-recipe-desc").textContent = rec ? rec.description : "";
-  updateSampleTypeReq();
+  loadGaps();
 });
 
 function currentRecipeOverrides() {
@@ -187,21 +187,108 @@ function currentRecipeOverrides() {
   return rec ? (rec.overrides || {}) : {};
 }
 
-// Sample type is REQUIRED in the runner only when the chosen recipe doesn't set
-// it (controlled vocabulary, §2.4). Populate options + show/hide accordingly.
-$("#r-sampletype").innerHTML =
-  '<option value="">— pick a sample type —</option>' + sampleTypeOptions();
-function updateSampleTypeReq() {
-  $("#r-sampletype-wrap").hidden = "registry.sample_type" in currentRecipeOverrides();
+// ---- recipe gaps: critical fields the recipe leaves blank, filled per batch --
+// The runner asks the backend which CRITICAL_FIELDS are unset in the chosen
+// recipe and renders a REQUIRED input for each — a token-field (metadata labels
+// + free text), or the sample_type dropdown — filled per batch.
+let runnerDiscoveredRow = {};    // first parsed row, shared for live examples
+let runnerGapMeta = [];          // [{key,label,kind,hint}] from /api/recipe_gaps
+const runnerGapFields = {};      // key -> TokenField
+const runnerGapSelects = {};     // key -> <select> (sample_type)
+
+async function loadGaps() {
+  const grid = $("#r-gaps-grid");
+  Object.keys(runnerGapFields).forEach((k) => delete runnerGapFields[k]);
+  Object.keys(runnerGapSelects).forEach((k) => delete runnerGapSelects[k]);
+  try {
+    const data = await postJSON("/api/recipe_gaps", {
+      instrument: rInstrument.value, overrides: currentRecipeOverrides(),
+    });
+    runnerGapMeta = data.gaps || [];
+  } catch (e) { runnerGapMeta = []; }
+
+  if (!runnerGapMeta.length) { $("#r-gaps").hidden = true; grid.innerHTML = ""; return; }
+  $("#r-gaps").hidden = false;
+  grid.innerHTML = "";
+  runnerGapMeta.forEach((f) => {
+    const row = document.createElement("div");
+    row.className = "req-row"; row.dataset.key = f.key;
+    const lab = document.createElement("div"); lab.className = "req-label";
+    lab.innerHTML = `<span class="star">★</span> ${esc(f.label)}` +
+      (f.hint ? ` <span class="muted">— ${esc(f.hint)}</span>` : "");
+    const val = document.createElement("div"); val.className = "req-val";
+    if (f.kind === "sampletype") {
+      const sel = document.createElement("select");
+      sel.innerHTML = '<option value="">— pick a sample type —</option>' + sampleTypeOptions();
+      runnerGapSelects[f.key] = sel; val.append(sel);
+    } else {
+      const tfEl = document.createElement("div");
+      const ex = document.createElement("span"); ex.className = "example";
+      val.append(tfEl, ex);
+      runnerGapFields[f.key] = new TokenField(tfEl, { onChange: updateGapExamples });
+    }
+    row.append(lab, val); grid.appendChild(row);
+  });
+  updateGapExamples();
 }
-function runnerSampleType() {
-  if ($("#r-sampletype-wrap").hidden) return {};
-  const v = $("#r-sampletype").value;
-  return v ? { "registry.sample_type": v } : {};
+
+function runnerGapOverrides() {
+  const ov = {};
+  runnerGapMeta.forEach((f) => {
+    if (f.kind === "sampletype") {
+      const sel = runnerGapSelects[f.key];
+      if (sel && sel.value) ov[f.key] = sel.value;
+    } else {
+      const tf = runnerGapFields[f.key];
+      const v = tf ? tf.serialize().trim() : "";
+      if (v) ov[f.key] = v;
+    }
+  });
+  return ov;
 }
-function sampleTypeMissing() {
-  return !$("#r-sampletype-wrap").hidden && !$("#r-sampletype").value;
+
+function gapsMissing() {
+  return runnerGapMeta.some((f) => {
+    if (f.kind === "sampletype") {
+      const sel = runnerGapSelects[f.key];
+      return !(sel && sel.value);
+    }
+    const tf = runnerGapFields[f.key];
+    return !(tf && tf.serialize().trim());
+  });
 }
+
+function updateGapExamples() {
+  const ctx = runnerDiscoveredRow || {};
+  $$("#r-gaps-grid .req-row").forEach((row) => {
+    const tf = runnerGapFields[row.dataset.key];
+    const ex = row.querySelector(".example");
+    if (!tf || !ex) return;
+    const val = tf.serialize();
+    if (!val.includes("${")) { ex.textContent = ""; ex.classList.remove("bad"); return; }
+    const { text, unresolved } = resolveExample(val, ctx, {});
+    ex.textContent = "→ " + text;
+    ex.classList.toggle("bad", unresolved);
+  });
+}
+
+async function loadGapFields() {
+  $("#r-gaps-palette").innerHTML = "Loading…";
+  try {
+    const data = await postJSON("/api/discovered", {
+      instrument: rInstrument.value, overrides: currentRecipeOverrides(),
+      staging_path: $("#r-staging").value, nas_root: nasRoot(), limit: 5,
+    });
+    runnerDiscoveredRow = (data.rows && data.rows[0]) ? data.rows[0].discovered : {};
+    renderPalette($("#r-gaps-palette"), paletteEntries(data.keys || []),
+                  Object.values(runnerGapFields)[0]);
+    updateGapExamples();
+  } catch (e) {
+    $("#r-gaps-palette").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
+  }
+}
+$("#r-gaps-load").addEventListener("click", loadGapFields);
+
 loadRecipes();
 
 // ---- per-run study metadata (condition block) ----------------------------
@@ -210,7 +297,6 @@ loadRecipes();
 // applied to EVERY acquisition in the run — the GUI equivalent of the
 // ni/mri-ingest --is-control / --disease-* flags.
 const rIsControl = $("#r-is-control");
-let runnerDiscoveredRow = {};
 // disease_model / disease_state are token-fields: free text + atomic field chips.
 const dmField = new TokenField($("#r-disease-model"), { onChange: updateMetaExamples });
 const dsField = new TokenField($("#r-disease-state"), { onChange: updateMetaExamples });
@@ -247,19 +333,10 @@ function runnerMetaOverrides() {
   return ov;                               // "" -> {} (skip, non-blocking)
 }
 
-// The Researcher box -> registry.researcher (the experiment owner). Blank = use
-// the template default (cells resolve it from discovered.researcher; AxioScan
-// has only a placeholder, so it should be set here).
-function runnerResearcher() {
-  const el = $("#r-researcher");
-  const v = (el && el.value || "").trim();
-  return v ? { "registry.researcher": v } : {};
-}
-
-// Recipe overrides + per-run researcher + condition (later wins on overlap).
+// Recipe overrides + the per-batch gap fills + condition (later wins on overlap).
 function runnerOverrides() {
-  return Object.assign({}, currentRecipeOverrides(), runnerResearcher(),
-                       runnerSampleType(), runnerMetaOverrides());
+  return Object.assign({}, currentRecipeOverrides(), runnerGapOverrides(),
+                       runnerMetaOverrides());
 }
 
 async function loadMetaFields() {
@@ -363,8 +440,8 @@ async function runnerPreview() {
   $("#r-errors").textContent = "";
   $("#r-summary").innerHTML = "";
   $("#r-dropped").innerHTML = "";
-  if (sampleTypeMissing()) {
-    $("#r-errors").textContent = "Pick a sample type first — the chosen recipe doesn't set one.";
+  if (gapsMissing()) {
+    $("#r-errors").textContent = "Fill in the required per-batch values first (the recipe leaves some blank).";
     $("#r-table-wrap").innerHTML = "";
     return;
   }
@@ -404,8 +481,8 @@ function appendLog(pre, level, msg) {
 }
 
 async function runnerIngest() {
-  if (sampleTypeMissing()) {
-    $("#r-errors").textContent = "Pick a sample type first — the chosen recipe doesn't set one.";
+  if (gapsMissing()) {
+    $("#r-errors").textContent = "Fill in the required per-batch values first (the recipe leaves some blank).";
     return;
   }
   const dry = $("#r-dry").checked;
