@@ -144,6 +144,63 @@ The global researcher/operator/tech/user rename ([06_REGISTRIES §2.3a-bis](../m
 - [ ] **AxioScan researcher REQUIRED in the GUI** (parallel to MRI `--operator`). Today the GUI Researcher box is optional (blank → template placeholder for AxioScan). For AxioScan tissue the researcher isn't in the filename, so the GUI should require it before Ingest. (Handle during the GUI test pass.)
 - [ ] **Normalize the NI curated `animal_id`.** `ni.subject.animal_id` is the raw protocol.txt value `0525_m13` (project_animal); the registry `sample_id` is `m13_0525` (animal_project). Optionally derive a consistent curated `animal_id` while keeping the raw value in `_raw_metadata`.
 
+## Nuclear Imaging — live-machine import (Unai + Irene, 2026-06-10)
+
+Archive-mode NI ingest is done and accepted (round 8 — 84 acqs from `.tgz`). The
+**live-machine** path is the remaining gap, and is **post-launch** (archive mode
+covers the exhibition data). Intel gathered 2026-06-10:
+
+- [ ] **Access strategy for the live machine.** Saw it with Platform Manager
+  **Unai** — the acquisition console is a **Mac** (the import tooling would run /
+  be driven from a Mac, not Windows/WSL). It is **heavily in use for scans**, so
+  hands-on access is hard; we need a low-impact way in (a scheduled window, a
+  read-only pull off the machine, or a network/SMB path to its output folder)
+  rather than occupying the console.
+- [ ] **Characterize + handle the live folder structure.** The live output
+  layout **differs from the archive `.tgz`** shape round 8 ingests. Capture the
+  real on-machine structure (likely per-session DICOM/NIfTI exports, not a
+  pre-made `.tgz`), then author **`molecubes_ni_live.yaml`** + one detector
+  branch in `ni_ingest.py` (the live branch is already scaffolded, pending this
+  template). Decide tgz-aware vs live-folder staging.
+- [ ] **Fold in Irene's early-adopter notes.** Irene (NI operator, our first
+  early-adopter user) gave Ryan notes on the live NI import workflow — *Ryan to
+  paste the specifics here*; address them as part of the live-mode design.
+
+Supersedes the live-mode items previously tracked in `tasks.md` §0 / §4.7
+(`molecubes_ni_live.yaml`, the Unai naming-convention question). Archive-vs-live
+design context: `equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`.
+
+## Independent / second-stage tooling (moved from tasks.md 2026-06-10)
+
+Tooling that improves the system but is **not** required for the operator
+hand-off or the true-production restart. Detailed descriptions remain at their
+original `tasks.md` locations (§3.1 / §3.2) as history; this is the active home.
+
+- [ ] **`create_publication`** — formal publication-folder creation tool
+  (requirements defined; not implemented). `tasks.md` §3.2.
+- [ ] **`log_activity`** — provenance helper (requirements defined; not
+  implemented). `tasks.md` §3.2.
+- [ ] **Excel → study-metadata importer** (researcher-facing) — reads a
+  per-project `study.xlsx` (study + biosamples + optional per-acq sheets),
+  validates against a schema, writes `/projects/<proj>/metadata/*.json`. Unblocks
+  researchers contributing REMBI study/biosample context. Schema needs design.
+  `tasks.md` §3.2.
+- [ ] **Project-level NIfTI generation tool** — `dcm2niix` / `bruker2nifti` per
+  acquisition into `/projects/<proj>/derived_nifti/` (derivatives live in
+  projects, not `/raw/`, per [13_GJESUS3_ROLE](../mfb-rdm-docs/13_GJESUS3_ROLE.md)).
+  `tasks.md` §3.2.
+- [ ] **DICOM full-mode metadata extraction for collaborator XMRI** — curated
+  `discovered.dicom_*` + structured `dicom:` sidecar block + full `pydicom` dump,
+  mirroring the `.czi` pattern. Prototype against the 75 existing XMRI acqs.
+  `tasks.md` §3.1 / §3.2.
+- [ ] **`--lightweight` ingest mode + `backfill_metadata` utility** — sparse
+  registry entry (`extended_metadata_present=N`, no sidecar) for a fast first
+  pass; `backfill_metadata` later upgrades a lightweight ingest to full. `tasks.md`
+  §3.1.
+- [ ] **NIfTI handling at ingest** (only if the NI/MRI platforms actually emit
+  NIfTI we want at `/raw/`) — single file, no archive, limited header metadata.
+  `tasks.md` §3.1 / §4.8.
+
 ## Misc
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)
