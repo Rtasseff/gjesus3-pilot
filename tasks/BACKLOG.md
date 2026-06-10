@@ -64,6 +64,35 @@ raw value preserved in `_raw_metadata`). What's left are the *entry* mechanisms:
   a GUI field — ideally auto-mapped from the `sample_short` organ letter (the "B"
   in "ID13B") via a lab letter→UBERON table — would let operators set it inline.
 
+### GUI operator-feedback rework (2026-06-09/10) — follow-ups
+
+The first operator test pass drove a 3-phase rework (runner polish + the
+skip-vs-already-ingested fix; the atomic token widget; the rebuilt Builder).
+Landed on branch `operator-ingest-tooling`. Deferred from it:
+
+- [ ] **Filter OR support.** The new Builder filter section (label = value rows)
+  is **AND-only**, because the backend `auto_discover.filter` is an exact-match
+  dict (implicit AND). The operator asked for OR/AND with `+` (#15). Adding OR
+  needs `expand_batch`'s filter logic to accept a list-of-conditions / per-field
+  value sets — a pipeline change, not just GUI. Until then the GUI offers AND only.
+- [ ] **Make the runner Researcher box REQUIRED for AxioScan** (see the parallel
+  role-rename item below). The Builder now stars Researcher as high-priority, but
+  the **runner** still lets a blank through to the template placeholder. For
+  AxioScan tissue the researcher isn't in the filename, so the runner should block
+  Ingest until it's set.
+- [ ] **Bundle `tkinter` in the PyInstaller freeze.** The new native "Browse…"
+  folder picker (`/api/browse_folder`) uses `tkinter`; the frozen `.exe`
+  (`microscopy_ingest.spec`) must include it (hiddenimports / collect) or Browse
+  silently degrades to type-it-yourself. Verify when the freeze is next built.
+- [ ] **Refresh `gui/README.md` + `TESTING.md` for the rebuilt Builder + token
+  widget + the `operator` column** — held until the operator accepts the new GUI
+  (avoid documenting a UI still in flux).
+- [ ] **Builder `is_control` as a recipe default.** "Animal role" can be baked
+  into a recipe (e.g. a controls-only folder), but it's usually per-run. Consider
+  a clearer "default (set per run)" affordance vs a baked value, and confirm the
+  runner's per-run panel always wins on overlap (it does today — runner overrides
+  apply after recipe overrides).
+
 ## Person/role rename — residual cleanup (core done 2026-06-09)
 
 The global researcher/operator/tech/user rename ([06_REGISTRIES §2.3a-bis](../mfb-rdm-docs/06_REGISTRIES.md)) landed in the code, schema, templates, configs, CLIs, GUI, and the authoritative docs. Residual, non-blocking:
