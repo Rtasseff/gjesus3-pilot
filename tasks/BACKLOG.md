@@ -89,8 +89,8 @@ Landed on branch `operator-ingest-tooling`. Deferred from it:
   saved as YAML to a configurable folder defaulting to `<NAS>/recipes`** (was JSON
   in the repo `tools/operator/recipes/`; that dir is now only a read-only seed
   source) — held until the operator accepts the new GUI (avoid documenting a UI
-  still in flux). Consider migrating the existing repo JSON recipes to the NAS +
-  a NAS `recipes/` permission grant (operators need write there).
+  still in flux). (The *pre-launch* recipe steps — NAS `recipes/` permission grant
+  + migrating the existing repo recipes — are in [`tasks.md §0`](tasks.md), not here.)
 - [x] ~~Builder `is_control` as a recipe default.~~ **Resolved 2026-06-10** —
   removed the study-metadata trio (Animal role / `is_control`, `disease_model`,
   `disease_state`) from the **Builder** entirely. A recipe describes a stable
