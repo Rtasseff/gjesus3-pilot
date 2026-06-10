@@ -82,8 +82,10 @@ legend { font-weight: 600; padding: 0 .4rem; }
   padding: .5rem .7rem; border-radius: 6px; margin: .5rem 0; white-space: pre-wrap; }
 
 /* Tables live in their own scroll box: a long/wide table scrolls left-right and
-   up-down INSIDE this frame instead of stretching the page (#16/#19). */
-.table-wrap { overflow: auto; max-height: 60vh; width: 100%; max-width: 100%;
+   up-down INSIDE this frame instead of stretching the page (#16/#19). Capped at
+   ~10 rows tall (sticky header) so a long batch doesn't run off the screen —
+   the rest is reached with the panel's own vertical scrollbar. */
+.table-wrap { overflow: auto; max-height: 20rem; width: 100%; max-width: 100%;
   border: 1px solid var(--border); border-radius: 6px; }
 .table-wrap:empty { display: none; }
 table { border-collapse: collapse; width: 100%; font-size: .8rem; }

@@ -74,7 +74,7 @@
       </div>
       <div id="r-meta-case" class="row" hidden>
         <label class="grow">disease_model
-          <div id="r-disease-model" class="tokenfield is-empty" data-placeholder="e.g. EAE  (type, or drop a field below)"></div>
+          <div id="r-disease-model" class="tokenfield is-empty" data-placeholder="e.g. EAE  (type, or drop a metadata label below)"></div>
           <span class="example" id="r-dm-ex"></span>
         </label>
         <label class="grow">disease_state
@@ -84,10 +84,10 @@
       </div>
       <details>
         <summary>Use a value from the CZI name / folders</summary>
-        <p class="muted">Click or drag a field into a box above; it resolves per
-          file at ingest. Set the folder + NAS root, then show fields.</p>
+        <p class="muted">Click or drag a metadata label into a box above; it
+          resolves per file at ingest. Set the folder + NAS root, then show them.</p>
         <div class="row">
-          <button id="r-meta-load-fields" type="button">Show fields from the folder</button>
+          <button id="r-meta-load-fields" type="button">Show metadata labels from the folder</button>
         </div>
         <div id="r-meta-chips" class="palette"></div>
       </details>
@@ -162,11 +162,11 @@
       </div>
 
       <div class="row">
-        <button id="b-refresh-grid" type="button" class="primary">Show the fields this produces</button>
+        <button id="b-refresh-grid" type="button" class="primary">Show the metadata labels this produces</button>
       </div>
       <div id="b-errors" class="errbox"></div>
       <div id="b-dropped" class="dropbox"></div>
-      <p id="b-palette-hint" class="muted" hidden>Your layout produces these fields — click or drag them into the filter or the values below.</p>
+      <p id="b-palette-hint" class="muted" hidden>Your layout produces these metadata labels — click or drag them into the filter or the values below.</p>
       <div id="b-palette" class="palette"></div>
       <div id="b-grid-wrap" class="table-wrap"></div>
     </fieldset>
@@ -182,7 +182,7 @@
     <!-- 3 · VALUES TO RECORD -->
     <fieldset>
       <legend>3 · Set the values to record</legend>
-      <p class="muted">Type a value, or click/drag a field from section 1. <span class="star">★</span> = high priority. Each shows a live example from the first file.</p>
+      <p class="muted">Type a value, or click/drag a metadata label from section 1. <span class="star">★</span> = high priority. Each shows a live example from the first file.</p>
       <div id="b-required" class="reqgrid"></div>
       <label class="check"><input id="b-auto-create" type="checkbox" checked> Auto-create the project if the project hint doesn't exist yet</label>
       <div class="row">

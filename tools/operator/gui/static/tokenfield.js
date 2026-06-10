@@ -222,7 +222,7 @@ if (typeof document !== "undefined") {
   function renderPalette(container, entries, fallbackField) {
     container.innerHTML = "";
     if (!entries.length) {
-      container.innerHTML = "<span class='muted'>No fields yet — set the source folder and Show fields.</span>";
+      container.innerHTML = "<span class='muted'>No metadata labels yet — set the source folder and Show metadata labels.</span>";
       return;
     }
     entries.forEach(({ token, label }) => {

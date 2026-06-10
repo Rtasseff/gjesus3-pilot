@@ -284,19 +284,26 @@ function renderSummary(el, data) {
   el.innerHTML = s;
 }
 
-// Files dropped by a parse/filter/validate error — shown prominently, not buried
-// in the collapsed log, so the operator sees WHY nothing ingested (#6).
+// Files dropped by a parse/filter/validate error — shown prominently (not buried
+// in the collapsed log) so the operator sees WHY nothing ingested (#6). Summarised
+// BY REASON (the same reason usually repeats across many files) rather than
+// listing every file; the full per-file list stays in the Warnings / log.
 function renderDropped(el, data) {
   if (!el) return;
   const dropped = data.dropped || [];
   if (!dropped.length) { el.innerHTML = ""; return; }
-  const shown = dropped.slice(0, 50).map((d) =>
-    `<li><code>${esc(d.name)}</code> — ${esc(d.reason)}</li>`).join("");
-  const more = dropped.length > 50
-    ? `<li>…and ${dropped.length - 50} more</li>` : "";
+  const byReason = new Map();
+  dropped.forEach((d) => byReason.set(d.reason, (byReason.get(d.reason) || 0) + 1));
+  const reasons = [...byReason.entries()].sort((a, b) => b[1] - a[1]);
+  const shown = reasons.slice(0, 5).map(([reason, n]) =>
+    `<li>${n} × ${esc(reason)}</li>`).join("");
+  const more = reasons.length > 5
+    ? `<li>…and ${reasons.length - 5} more reason(s)</li>` : "";
   el.innerHTML =
-    `<h4>${dropped.length} file(s) skipped because of a parse / filter error ` +
-    `— these are NOT already ingested:</h4><ul>${shown}${more}</ul>`;
+    `<h4>${dropped.length} file(s) skipped because of a parse / filter error — ` +
+    `these are NOT already ingested. ` +
+    `<span class="muted">Full per-file list in Warnings / log.</span></h4>` +
+    `<ul>${shown}${more}</ul>`;
 }
 
 function renderCasesTable(cases) {
@@ -550,8 +557,8 @@ $("#b-levels-count").addEventListener("input", renderLevels);
 
 // ---- filter rows (section 2) ----
 function filterFieldOptions(selected) {
-  if (!builderKeys.length) return `<option value="">(show fields first)</option>`;
-  return `<option value="">— pick a field —</option>` + builderKeys.map((k) =>
+  if (!builderKeys.length) return `<option value="">(show metadata labels first)</option>`;
+  return `<option value="">— pick a metadata label —</option>` + builderKeys.map((k) =>
     `<option value="${esc(k)}"${k === selected ? " selected" : ""}>${esc(tfHumanizeRef(k))}</option>`).join("");
 }
 function addFilterRow(field, value) {
