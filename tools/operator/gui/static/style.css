@@ -11,6 +11,10 @@
   --chip: #eef2ff;
 }
 * { box-sizing: border-box; }
+/* The `hidden` attribute must win over display rules like `.row{display:flex}`
+   (equal specificity, author beats the UA [hidden] rule) — otherwise JS-hidden
+   rows (e.g. the disease fields gated on Animal role = case) still show. */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   font: 14px/1.45 system-ui, "Segoe UI", Arial, sans-serif;
