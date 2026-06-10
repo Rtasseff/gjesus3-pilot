@@ -28,6 +28,13 @@ function getJSON(url) {
   return fetch(url).then((r) => r.json());
 }
 
+// Controlled sample_type vocabulary <option>s, injected by the page from
+// window.SAMPLE_TYPES (06_REGISTRIES §2.4).
+function sampleTypeOptions() {
+  return (window.SAMPLE_TYPES || []).map((s) =>
+    `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join("");
+}
+
 // ---------------------------------------------------------------- tabs
 $$(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -166,18 +173,36 @@ async function loadRecipes() {
     recipesCache.map((r) =>
       `<option value="${esc(r.file)}">${esc(r.name)}</option>`).join("");
   $("#r-recipe-desc").textContent = "";
+  updateSampleTypeReq();
 }
 rInstrument.addEventListener("change", loadRecipes);
 rRecipe.addEventListener("change", () => {
   const rec = recipesCache.find((r) => r.file === rRecipe.value);
   $("#r-recipe-desc").textContent = rec ? rec.description : "";
+  updateSampleTypeReq();
 });
-loadRecipes();
 
 function currentRecipeOverrides() {
   const rec = recipesCache.find((r) => r.file === rRecipe.value);
   return rec ? (rec.overrides || {}) : {};
 }
+
+// Sample type is REQUIRED in the runner only when the chosen recipe doesn't set
+// it (controlled vocabulary, §2.4). Populate options + show/hide accordingly.
+$("#r-sampletype").innerHTML =
+  '<option value="">— pick a sample type —</option>' + sampleTypeOptions();
+function updateSampleTypeReq() {
+  $("#r-sampletype-wrap").hidden = "registry.sample_type" in currentRecipeOverrides();
+}
+function runnerSampleType() {
+  if ($("#r-sampletype-wrap").hidden) return {};
+  const v = $("#r-sampletype").value;
+  return v ? { "registry.sample_type": v } : {};
+}
+function sampleTypeMissing() {
+  return !$("#r-sampletype-wrap").hidden && !$("#r-sampletype").value;
+}
+loadRecipes();
 
 // ---- per-run study metadata (condition block) ----------------------------
 // Shown only for instruments whose template carries a condition: block
@@ -234,7 +259,7 @@ function runnerResearcher() {
 // Recipe overrides + per-run researcher + condition (later wins on overlap).
 function runnerOverrides() {
   return Object.assign({}, currentRecipeOverrides(), runnerResearcher(),
-                       runnerMetaOverrides());
+                       runnerSampleType(), runnerMetaOverrides());
 }
 
 async function loadMetaFields() {
@@ -338,6 +363,11 @@ async function runnerPreview() {
   $("#r-errors").textContent = "";
   $("#r-summary").innerHTML = "";
   $("#r-dropped").innerHTML = "";
+  if (sampleTypeMissing()) {
+    $("#r-errors").textContent = "Pick a sample type first — the chosen recipe doesn't set one.";
+    $("#r-table-wrap").innerHTML = "";
+    return;
+  }
   $("#r-table-wrap").innerHTML = "Previewing…";
   $("#r-ingest").disabled = true;
   try {
@@ -374,6 +404,10 @@ function appendLog(pre, level, msg) {
 }
 
 async function runnerIngest() {
+  if (sampleTypeMissing()) {
+    $("#r-errors").textContent = "Pick a sample type first — the chosen recipe doesn't set one.";
+    return;
+  }
   const dry = $("#r-dry").checked;
   $("#r-log-wrap").hidden = false;
   const logEl = $("#r-log");
@@ -465,6 +499,7 @@ const bInstrument = $("#b-instrument");
 let builderKeys = [];           // discovered keys from the last "Show fields"
 let builderDiscoveredRow = {};  // first parsed row, for live "→ example" lines
 const builderFields = {};       // field key -> TokenField (token rows only)
+const builderSelects = {};      // field key -> <select> (controlled-vocab rows)
 
 // "3 · Set the values to record" — the values we have a priority to capture.
 // ★ high-priority = the registry person columns + sample id.
@@ -479,7 +514,7 @@ const REQUIRED_FIELDS = [
   { key: "registry.researcher",           label: "Researcher",       star: true, hint: "who ran the study" },
   { key: "operator",                      label: "Operator",         star: true, hint: "who ran the equipment" },
   { key: "registry.sample_id",            label: "Sample ID",        star: true },
-  { key: "registry.sample_type",          label: "Sample type" },
+  { key: "registry.sample_type",          label: "Sample type",      type: "select" },
   { key: "registry.acquisition_datetime", label: "Acquisition date" },
   { key: "registry.project_hint",         label: "Project hint" },
   { key: "registry.session_id",           label: "Session ID" },
@@ -502,13 +537,22 @@ function buildRequiredGrid() {
     lab.innerHTML = `${star}${esc(f.label)}${hint}`;
     const val = document.createElement("div");
     val.className = "req-val";
-    const tfEl = document.createElement("div");
-    const ex = document.createElement("span");
-    ex.className = "example";
-    val.append(tfEl, ex);
-    builderFields[f.key] = new TokenField(tfEl, {
-      onChange: () => { renderOverrideJSON(); updateBuilderExamples(); },
-    });
+    if (f.type === "select") {
+      // controlled vocabulary (sample_type) — skip or pick, never free text
+      const sel = document.createElement("select");
+      sel.innerHTML = '<option value="">— skip / leave blank —</option>' + sampleTypeOptions();
+      sel.addEventListener("change", renderOverrideJSON);
+      builderSelects[f.key] = sel;
+      val.append(sel);
+    } else {
+      const tfEl = document.createElement("div");
+      const ex = document.createElement("span");
+      ex.className = "example";
+      val.append(tfEl, ex);
+      builderFields[f.key] = new TokenField(tfEl, {
+        onChange: () => { renderOverrideJSON(); updateBuilderExamples(); },
+      });
+    }
     row.append(lab, val);
     grid.appendChild(row);
   });
@@ -695,6 +739,11 @@ function builderOverrides() {
   // values to record (study-design metadata is captured per-run in the Runner,
   // not baked into a recipe — see REQUIRED_FIELDS note)
   REQUIRED_FIELDS.forEach((f) => {
+    if (f.type === "select") {
+      const sel = builderSelects[f.key];
+      if (sel && sel.value) ov[f.key] = sel.value;
+      return;
+    }
     const tf = builderFields[f.key];
     const v = tf ? tf.serialize().trim() : "";
     if (v) ov[f.key] = v;
@@ -798,6 +847,10 @@ function setTF(key, val) {
   if (/^<.*>$/.test(s.trim())) s = "";   // a "<set per batch>" placeholder -> empty
   tf.setValue(s);
 }
+function setSelect(key, val) {
+  const sel = builderSelects[key];
+  if (sel) sel.value = (val == null) ? "" : String(val);  // non-vocab -> stays skip
+}
 async function loadTemplateDefaults() {
   $("#b-errors").textContent = "";
   try {
@@ -827,7 +880,7 @@ async function loadTemplateDefaults() {
     setTF("registry.researcher", reg.researcher);
     setTF("operator", t.operator);
     setTF("registry.sample_id", reg.sample_id);
-    setTF("registry.sample_type", reg.sample_type);
+    setSelect("registry.sample_type", reg.sample_type);
     setTF("registry.acquisition_datetime", reg.acquisition_datetime);
     setTF("registry.project_hint", reg.project_hint);
     setTF("registry.session_id", reg.session_id);

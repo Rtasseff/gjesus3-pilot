@@ -59,6 +59,15 @@
       </label>
     </div>
 
+    <!-- Sample type — shown + REQUIRED only when the chosen recipe doesn't set
+         one (controlled vocabulary, 06_REGISTRIES §2.4). Options injected from
+         window.SAMPLE_TYPES. -->
+    <div class="row" id="r-sampletype-wrap" hidden>
+      <label class="grow">Sample type <span class="muted">— required: the chosen recipe doesn't set one</span>
+        <select id="r-sampletype"><option value="">— pick a sample type —</option></select>
+      </label>
+    </div>
+
     <!-- Per-run study metadata (condition block). Shown only for instruments
          whose template carries a condition: block (AxioScan tissue). -->
     <fieldset id="r-meta" hidden>
@@ -243,6 +252,7 @@
     </div>
   </div>
 
+  <script>window.SAMPLE_TYPES = {{ sample_types|tojson }};</script>
   <script src="{{ url_for('static', filename='tokenfield.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

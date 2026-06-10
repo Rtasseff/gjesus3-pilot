@@ -81,6 +81,17 @@ INSTRUMENT_LABELS = {
 # How many real files to show in the builder's live discovered.* grid.
 BUILDER_GRID_LIMIT = 25
 
+# Controlled sample_type vocabulary — 06_REGISTRIES §2.4 (DRAFT, REG-07). Operators
+# pick one verbatim; a new kind is a vocab-extension decision, not an ad-hoc value.
+# Keep this list in sync with that table (value + a short operator-facing gloss).
+SAMPLE_TYPES = [
+    {"value": "tissue",   "label": "tissue — excised material (sections, slices, biopsies)"},
+    {"value": "organism", "label": "organism — whole live or post-mortem animal"},
+    {"value": "cells",    "label": "cells — cultured or isolated cell preparations"},
+    {"value": "material", "label": "material — non-biological (nanoparticles, contrast agents)"},
+    {"value": "phantom",  "label": "phantom — imaging calibration object"},
+]
+
 
 # --------------------------------------------------------------------- recipes
 
@@ -249,6 +260,7 @@ def index():
             {"key": k, "label": INSTRUMENT_LABELS[k]} for k in MICROSCOPY_KEYS
         ],
         nas_root=load_saved_nas_root(),
+        sample_types=SAMPLE_TYPES,
     )
 
 
