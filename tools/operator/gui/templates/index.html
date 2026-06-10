@@ -55,7 +55,7 @@
          CRITICAL_FIELDS are unset in the recipe, then renders a token-field
          (metadata-label + text) — or the sample_type dropdown — for each. -->
     <fieldset id="r-gaps" hidden>
-      <legend>Fill in for this batch <span class="muted">— the recipe leaves these blank; required before ingest</span></legend>
+      <legend>Fill in for this batch <span class="muted">— values the recipe leaves blank; <span class="star">★</span> required before ingest, others optional</span></legend>
       <div id="r-gaps-grid" class="reqgrid"></div>
       <details>
         <summary>Use a value from the CZI name / folders</summary>
@@ -65,6 +65,15 @@
         </div>
         <div id="r-gaps-palette" class="palette"></div>
       </details>
+    </fieldset>
+
+    <!-- Filter — shown only when the recipe sets none. Same UI as the builder
+         (label = value rows, AND). Lets the operator scope this batch. -->
+    <fieldset id="r-filter" hidden>
+      <legend>Filter <span class="muted">— the recipe sets none; only ingest files that match (optional)</span></legend>
+      <p class="muted">Add label = value conditions to scope this batch (e.g. one group); leave empty to ingest everything. Click "Show metadata labels from the folder" above to fill the label list.</p>
+      <div id="r-filter-rows"></div>
+      <button id="r-filter-add" type="button">+ Add condition</button>
     </fieldset>
 
     <!-- Per-run study metadata (condition block). Shown only for instruments

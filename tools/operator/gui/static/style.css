@@ -227,7 +227,7 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
 /* filter: label = value rows, joined by AND, with +/× */
 .filter-row { display: flex; gap: .4rem; align-items: center; margin: .35rem 0; }
 .filter-row select { width: auto; min-width: 10rem; }
-.filter-row .b-filter-val { width: auto; flex: 1 1 12rem; }
+.filter-row input[type=text] { width: auto; flex: 1 1 12rem; }
 .filter-row .rm { padding: .25rem .55rem; color: var(--bad); }
 
 /* example-layout preview: the operator's REAL folder tree + file-name split */

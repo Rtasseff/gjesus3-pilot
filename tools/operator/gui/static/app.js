@@ -193,10 +193,12 @@ function currentRecipeOverrides() {
 // + free text), or the sample_type dropdown — filled per batch.
 let runnerDiscoveredRow = {};    // first parsed row, shared for live examples
 let runnerGapMeta = [];          // [{key,label,kind,hint}] from /api/recipe_gaps
+let runnerKeys = [];             // discovered keys (for the runner filter dropdown)
 const runnerGapFields = {};      // key -> TokenField
 const runnerGapSelects = {};     // key -> <select> (sample_type)
 
 async function loadGaps() {
+  updateFilterPanel();   // show/hide the runner filter for this recipe
   const grid = $("#r-gaps-grid");
   Object.keys(runnerGapFields).forEach((k) => delete runnerGapFields[k]);
   Object.keys(runnerGapSelects).forEach((k) => delete runnerGapSelects[k]);
@@ -214,12 +216,14 @@ async function loadGaps() {
     const row = document.createElement("div");
     row.className = "req-row"; row.dataset.key = f.key;
     const lab = document.createElement("div"); lab.className = "req-label";
-    lab.innerHTML = `<span class="star">★</span> ${esc(f.label)}` +
-      (f.hint ? ` <span class="muted">— ${esc(f.hint)}</span>` : "");
+    lab.innerHTML = (f.required ? '<span class="star">★</span> ' : "") + esc(f.label) +
+      (f.hint ? ` <span class="muted">— ${esc(f.hint)}</span>` : "") +
+      (f.required ? "" : ' <span class="muted">(optional)</span>');
     const val = document.createElement("div"); val.className = "req-val";
     if (f.kind === "sampletype") {
       const sel = document.createElement("select");
-      sel.innerHTML = '<option value="">— pick a sample type —</option>' + sampleTypeOptions();
+      const skip = f.required ? "— pick a sample type —" : "— skip / leave blank —";
+      sel.innerHTML = `<option value="">${skip}</option>` + sampleTypeOptions();
       runnerGapSelects[f.key] = sel; val.append(sel);
     } else {
       const tfEl = document.createElement("div");
@@ -249,6 +253,7 @@ function runnerGapOverrides() {
 
 function gapsMissing() {
   return runnerGapMeta.some((f) => {
+    if (!f.required) return false;          // optional gaps never block ingest
     if (f.kind === "sampletype") {
       const sel = runnerGapSelects[f.key];
       return !(sel && sel.value);
@@ -280,14 +285,27 @@ async function loadGapFields() {
       staging_path: $("#r-staging").value, nas_root: nasRoot(), limit: 5,
     });
     runnerDiscoveredRow = (data.rows && data.rows[0]) ? data.rows[0].discovered : {};
-    renderPalette($("#r-gaps-palette"), paletteEntries(data.keys || []),
+    runnerKeys = data.keys || [];
+    renderPalette($("#r-gaps-palette"), paletteEntries(runnerKeys),
                   Object.values(runnerGapFields)[0]);
+    runnerFilterUI.refresh();   // populate the filter field dropdowns too
     updateGapExamples();
   } catch (e) {
     $("#r-gaps-palette").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
   }
 }
 $("#r-gaps-load").addEventListener("click", loadGapFields);
+
+// runner filter — same UI as the builder, shown only when the recipe sets none.
+const runnerFilterUI = makeFilterBuilder("#r-filter-rows", () => runnerKeys, null);
+$("#r-filter-add").addEventListener("click", () => runnerFilterUI.addRow());
+function updateFilterPanel() {
+  $("#r-filter").hidden = "auto_discover.filter" in currentRecipeOverrides();
+}
+function runnerFilter() {
+  const f = runnerFilterUI.collect();
+  return Object.keys(f).length ? { "auto_discover.filter": f } : {};
+}
 
 loadRecipes();
 
@@ -333,10 +351,10 @@ function runnerMetaOverrides() {
   return ov;                               // "" -> {} (skip, non-blocking)
 }
 
-// Recipe overrides + the per-batch gap fills + condition (later wins on overlap).
+// Recipe overrides + per-batch gap fills + per-batch filter + condition.
 function runnerOverrides() {
   return Object.assign({}, currentRecipeOverrides(), runnerGapOverrides(),
-                       runnerMetaOverrides());
+                       runnerFilter(), runnerMetaOverrides());
 }
 
 async function loadMetaFields() {
@@ -665,47 +683,52 @@ function builderLevelLabels() {
 }
 $("#b-levels-count").addEventListener("input", () => { renderLevels(); loadLayoutDebounced(); });
 
-// ---- filter rows (section 2) ----
-function filterFieldOptions(selected) {
-  if (!builderKeys.length) return `<option value="">(show metadata labels first)</option>`;
-  return `<option value="">— pick a metadata label —</option>` + builderKeys.map((k) =>
-    `<option value="${esc(k)}"${k === selected ? " selected" : ""}>${esc(tfHumanizeRef(k))}</option>`).join("");
+// ---- shared filter builder (Builder section 2 + Runner when the recipe sets no
+// filter). label = value rows joined by AND, with + / ×. getKeys() supplies the
+// available metadata-label keys; onChange (optional) fires on any edit.
+function makeFilterBuilder(rowsSel, getKeys, onChange) {
+  const fire = () => { if (onChange) onChange(); };
+  function fieldOptions(selected) {
+    const keys = getKeys() || [];
+    if (!keys.length) return '<option value="">(show metadata labels first)</option>';
+    return '<option value="">— pick a metadata label —</option>' + keys.map((k) =>
+      `<option value="${esc(k)}"${k === selected ? " selected" : ""}>${esc(tfHumanizeRef(k))}</option>`).join("");
+  }
+  function addRow(field, value) {
+    const row = document.createElement("div"); row.className = "filter-row";
+    const sel = document.createElement("select"); sel.className = "f-field";
+    sel.innerHTML = fieldOptions(field);
+    const eq = document.createElement("span"); eq.textContent = "=";
+    const val = document.createElement("input");
+    val.type = "text"; val.className = "f-val"; val.placeholder = "value";
+    if (value != null) val.value = value;
+    const rm = document.createElement("button");
+    rm.type = "button"; rm.className = "rm"; rm.textContent = "×"; rm.title = "remove";
+    rm.addEventListener("click", () => { row.remove(); fire(); });
+    [sel, val].forEach((el) => el.addEventListener("input", fire));
+    row.append(sel, eq, val, rm);
+    $(rowsSel).appendChild(row);
+  }
+  function refresh() {
+    $$(`${rowsSel} .f-field`).forEach((sel) => {
+      const cur = sel.value; sel.innerHTML = fieldOptions(cur); sel.value = cur;
+    });
+  }
+  function collect() {
+    const out = {};
+    $$(`${rowsSel} .filter-row`).forEach((row) => {
+      const k = row.querySelector(".f-field").value.trim();
+      const v = row.querySelector(".f-val").value.trim();
+      if (k) out[k] = v;
+    });
+    return out;
+  }
+  function clear() { $(rowsSel).innerHTML = ""; }
+  return { addRow, refresh, collect, clear };
 }
-function addFilterRow(field, value) {
-  const wrap = $("#b-filter-rows");
-  const row = document.createElement("div");
-  row.className = "filter-row";
-  const sel = document.createElement("select");
-  sel.className = "b-filter-field";
-  sel.innerHTML = filterFieldOptions(field);
-  const eq = document.createElement("span"); eq.textContent = "=";
-  const val = document.createElement("input");
-  val.type = "text"; val.className = "b-filter-val"; val.placeholder = "value";
-  if (value != null) val.value = value;
-  const rm = document.createElement("button");
-  rm.type = "button"; rm.className = "rm"; rm.textContent = "×"; rm.title = "remove";
-  rm.addEventListener("click", () => { row.remove(); renderOverrideJSON(); });
-  [sel, val].forEach((el) => el.addEventListener("input", renderOverrideJSON));
-  row.append(sel, eq, val, rm);
-  wrap.appendChild(row);
-}
-function refreshFilterFieldOptions() {
-  $$("#b-filter-rows .b-filter-field").forEach((sel) => {
-    const cur = sel.value;
-    sel.innerHTML = filterFieldOptions(cur);
-    sel.value = cur;
-  });
-}
-function builderFilter() {
-  const out = {};
-  $$("#b-filter-rows .filter-row").forEach((row) => {
-    const k = row.querySelector(".b-filter-field").value.trim();
-    const v = row.querySelector(".b-filter-val").value.trim();
-    if (k) out[k] = v;
-  });
-  return out;
-}
-$("#b-filter-add").addEventListener("click", () => addFilterRow());
+
+const builderFilterUI = makeFilterBuilder("#b-filter-rows", () => builderKeys, renderOverrideJSON);
+$("#b-filter-add").addEventListener("click", () => builderFilterUI.addRow());
 
 // ---- example-layout preview (section 1): show the operator their REAL folders ----
 // Probes the example source folder ANCHORED to the chosen "Folder levels" count
@@ -810,7 +833,7 @@ function builderOverrides() {
     ov["auto_discover.path_parse"] = { levels: builderLevelLabels() };
     ov["auto_discover.pattern"] = "**/*.czi";
   }
-  const filter = builderFilter();
+  const filter = builderFilterUI.collect();
   if (Object.keys(filter).length) ov["auto_discover.filter"] = filter;
 
   // values to record (study-design metadata is captured per-run in the Runner,
@@ -907,7 +930,7 @@ async function refreshGrid() {
       paletteEntries(builderKeys, ["${acq_id}", "${acq_date}", "${original_name}"]),
       builderFields["registry.sample_id"]);
     $("#b-palette-hint").hidden = !builderKeys.length;
-    refreshFilterFieldOptions();
+    builderFilterUI.refresh();
     updateBuilderExamples();
   } catch (e) {
     $("#b-grid-wrap").innerHTML = "";
@@ -950,8 +973,8 @@ async function loadTemplateDefaults() {
     renderLevels();
     $$("#b-levels .level-label").forEach((inp, i) => { if (levels[i]) inp.value = levels[i]; });
     // filter
-    $("#b-filter-rows").innerHTML = "";
-    Object.entries(ad.filter || {}).forEach(([k, v]) => addFilterRow(k, v));
+    builderFilterUI.clear();
+    Object.entries(ad.filter || {}).forEach(([k, v]) => builderFilterUI.addRow(k, v));
     // values to record
     const reg = t.registry || {};
     setTF("registry.researcher", reg.researcher);

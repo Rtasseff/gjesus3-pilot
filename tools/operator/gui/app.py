@@ -98,10 +98,12 @@ SAMPLE_TYPES = [
 # sample_type dropdown). See /api/recipe_gaps. `kind`: "token" (metadata-label +
 # text) or "sampletype" (controlled vocabulary).
 CRITICAL_FIELDS = [
-    {"key": "registry.researcher",   "label": "Researcher",  "kind": "token",      "hint": "who ran the study"},
-    {"key": "operator",              "label": "Operator",    "kind": "token",      "hint": "who ran the equipment"},
-    {"key": "registry.sample_id",    "label": "Sample ID",   "kind": "token",      "hint": ""},
-    {"key": "registry.sample_type",  "label": "Sample type", "kind": "sampletype", "hint": "controlled vocabulary"},
+    {"key": "registry.researcher",   "label": "Researcher",       "kind": "token",      "hint": "who ran the study",        "required": True},
+    {"key": "registry.sample_id",    "label": "Sample ID",        "kind": "token",      "hint": "",                         "required": True},
+    {"key": "registry.sample_type",  "label": "Sample type",      "kind": "sampletype", "hint": "controlled vocabulary",    "required": True},
+    {"key": "operator",              "label": "Operator",         "kind": "token",      "hint": "who ran the equipment",    "required": False},
+    {"key": "registry.project_hint", "label": "Project hint",     "kind": "token",      "hint": "link to a project",        "required": False},
+    {"key": "link_filename",         "label": "Project link name", "kind": "token",     "hint": "the file name if left blank", "required": False},
 ]
 
 
