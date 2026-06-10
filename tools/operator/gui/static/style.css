@@ -253,6 +253,13 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
   border-radius: 4px; padding: 0 .35rem; font-size: .8rem; }
 .fe-split .sep { color: var(--muted); padding: 0 .1rem; font-family: ui-monospace, Consolas, monospace; }
 
+/* callout note (e.g. the preclinical project/sample_short convention reminder) */
+.note { font-size: .82rem; line-height: 1.5; padding: .5rem .7rem; border-radius: 6px;
+  border: 1px solid var(--border); background: #f8fafc; margin: .5rem 0; }
+.note.preclin { border-color: #bfdbfe; background: #eff6ff; }
+.note code { background: #e0e7ff; padding: 0 .2rem; border-radius: 3px;
+  font-size: .92em; }
+
 /* values to record: label | value(+example), high-priority starred */
 .reqgrid { display: grid; gap: .5rem; margin: .5rem 0; }
 .req-row { display: grid; grid-template-columns: 200px 1fr; gap: .25rem .8rem;

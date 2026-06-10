@@ -129,14 +129,32 @@ auto_discover:
   # later recovery (NON-BLOCKING, 08_METADATA §4.4.6). See tools/animal_db.py.
   subject_from_db: true
   subject_lookup:
-    # How to build the DB key from discovered.* fields. project_alias is the
-    # NNNN animal-protocol code; animal_code is the bare animal number. The
-    # enrichment layer strips the "ID" decoration AND the trailing organ
-    # letter before the lookup: sample_short "ID13B" -> animal_code 13 (the
-    # organ "B" is a SAMPLE-level anatomical_entity, NOT part of the subject
-    # id and NOT part of the DB key).
-    project_alias: "${discovered.project}"        # e.g. "0423"
-    animal_code:   "${discovered.sample_short}"   # e.g. "ID13B" (-> 13, organ B dropped)
+    # --- HOW THE SOURCE ANIMAL IS LOOKED UP (automatic; no operator input) ---
+    # The enrichment writer builds the animal-facility DB key from two
+    # discovered.* fields and fills metadata.json.subject (species / strain / sex
+    # / date_of_birth -> derived age / procedures), tying the slide to its source
+    # animal.
+    #
+    # REQUIREMENT for a NEW convention: keep a metadata label named `project`
+    # carrying the animal-protocol code (the NNNN), and one named `sample_short`
+    # carrying the animal number. If your convention uses different label names,
+    # change the two ${discovered.*} refs below to point at them — otherwise the
+    # lookup simply won't fire (the acq still ingests, just with no subject:).
+    #
+    # PARSE (tools/ingest/subject_id.py — pure string parser, unit-tested):
+    #   sample_short "ID137Lu"
+    #       strip leading "ID"/"m" + zeros  ->  animal_code  137
+    #       trailing letters "Lu"           ->  organ (lung)  [kept SEPARATELY as a
+    #         sample-level anatomical_entity / anatomy.region — NOT part of the
+    #         animal code and NOT part of the DB key]
+    #   project      "1123"                 ->  project_alias 1123
+    #   DB key       (project_alias 1123, animal_code 137)
+    #   subject id   137-AE-biomaGUNE-1123  (via animal_db.compose_subject_id;
+    #                                         reused verbatim as the canonical id)
+    #   Other accepted short codes: "ID13B" -> 13 (+organ B); "m13" -> 13; bare
+    #   "14" -> 14. Non-numeric (e.g. "phantom" / "qc") -> no lookup (unknown).
+    project_alias: "${discovered.project}"        # the NNNN animal-protocol code, e.g. "1123"
+    animal_code:   "${discovered.sample_short}"   # carries the animal number, e.g. "ID137Lu"
 
 registry:
   instrument:           ZWSI

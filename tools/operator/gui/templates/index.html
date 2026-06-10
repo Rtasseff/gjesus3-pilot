@@ -172,6 +172,16 @@
     <fieldset>
       <legend>1 · Where the metadata lives in your folders &amp; names</legend>
 
+      <p class="note preclin"><strong>Preclinical / animal samples:</strong> the
+        <code>project</code> and <code>sample_short</code> metadata labels are used to
+        look up the source animal in the facility database, under protocol
+        <code>AE-biomaGUNE-&lt;project&gt;</code>. If these are preclinical samples,
+        make <code>project</code> a real animal-protocol code (e.g. <code>1123</code>)
+        and have <code>sample_short</code> contain the animal number (e.g.
+        <code>ID137Lu</code>) so it parses to an animal ID
+        (<code>ID137Lu &rarr; 137 &rarr; 137-AE-biomaGUNE-1123</code>). This is
+        automatic &mdash; nothing extra to fill in.</p>
+
       <div class="row">
         <label>Folder levels before the files
           <input id="b-levels-count" type="number" min="0" max="8" value="0">
