@@ -80,10 +80,10 @@ Landed on branch `operator-ingest-tooling`. Deferred from it:
   the **runner** still lets a blank through to the template placeholder. For
   AxioScan tissue the researcher isn't in the filename, so the runner should block
   Ingest until it's set.
-- [ ] **Bundle `tkinter` in the PyInstaller freeze.** The new native "Browse…"
-  folder picker (`/api/browse_folder`) uses `tkinter`; the frozen `.exe`
-  (`microscopy_ingest.spec`) must include it (hiddenimports / collect) or Browse
-  silently degrades to type-it-yourself. Verify when the freeze is next built.
+- [x] ~~Bundle `tkinter` in the PyInstaller freeze.~~ **Obsolete** — the tkinter
+  folder-only OS dialog confused operators (every folder looked empty, since it
+  hides files), so it was replaced by an **in-page folder browser** (`/api/listdir`
+  + a modal) that shows folders AND greyed files for context. No extra freeze deps.
 - [ ] **Refresh `gui/README.md` + `TESTING.md` for the rebuilt Builder + token
   widget + the `operator` column** — held until the operator accepts the new GUI
   (avoid documenting a UI still in flux).

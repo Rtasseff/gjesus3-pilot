@@ -58,27 +58,96 @@ getJSON("/api/nas_root").then((d) => { setNasStatus(d.valid); });
 function nasRoot() { return nasInput.value.trim(); }
 
 // ---------------------------------------------------------------- folder browse
-// A browser <input> can't return a real local path, but this is a LOCAL app, so
-// the server pops the OS-native folder picker and hands the path back here.
-async function browseInto(input, title) {
+// In-page folder browser. Unlike the OS folder-only dialog (which made every
+// folder look empty), this shows folders AND greyed files for context: click a
+// folder to open it, then "Use this folder". A LOCAL app, so /api/listdir lists
+// the local filesystem.
+const fb = {
+  overlay: $("#fb-overlay"), list: $("#fb-list"), pathInp: $("#fb-path"),
+  drives: $("#fb-drives"), err: $("#fb-error"), title: $("#fb-title"),
+  target: null, cur: "", parent: null, onPick: null,
+};
+
+function browseInto(input, title, onPick) {
   if (!input) return;
-  try {
-    const data = await postJSON("/api/browse_folder", {
-      initial: input.value.trim(), title: title || "",
-    });
-    if (data.path) {
-      input.value = data.path;
-      input.dispatchEvent(new Event("input"));
-      input.dispatchEvent(new Event("change"));
-    } else if (data.error) {
-      input.placeholder = data.error;   // headless box: operator types it
-    }
-  } catch (e) { /* non-fatal — typing the path still works */ }
+  fb.target = input;
+  fb.onPick = onPick || null;
+  fb.title.textContent = title || "Select a folder";
+  fb.err.textContent = "";
+  fb.overlay.hidden = false;
+  fbLoad(input.value.trim() || "");
 }
-$("#nas-browse").addEventListener("click", async () => {
-  await browseInto(nasInput, "Select the destination NAS root (gjesus3-data)");
-  if (nasInput.value.trim()) saveNas();
-});
+
+function joinPath(base, name) {
+  if (!base) return name;
+  const sep = base.includes("\\") ? "\\" : "/";
+  return base.replace(/[\\/]+$/, "") + sep + name;
+}
+
+async function fbLoad(path) {
+  fb.err.textContent = "";
+  fb.list.innerHTML = "<div class='fb-empty'>Loading…</div>";
+  let data;
+  try {
+    data = await postJSON("/api/listdir", { path });
+  } catch (e) {
+    fb.list.innerHTML = "";
+    fb.err.textContent = e.message;
+    return;
+  }
+  fb.cur = data.path;
+  fb.parent = data.parent || null;
+  fb.pathInp.value = data.path;
+  $("#fb-up").disabled = !fb.parent;
+
+  fb.drives.innerHTML = (data.drives || []).map((d) =>
+    `<span class="fb-drive" data-path="${esc(d)}">${esc(d)}</span>`).join("");
+  $$("#fb-drives .fb-drive").forEach((el) =>
+    el.addEventListener("click", () => fbLoad(el.dataset.path)));
+
+  const items = [];
+  if (fb.parent) {
+    items.push(`<div class="fb-item dir" data-path="${esc(fb.parent)}"><span class="ic">↑</span><span>.. (up)</span></div>`);
+  }
+  (data.entries || []).forEach((e) => {
+    if (e.is_dir) {
+      items.push(`<div class="fb-item dir" data-name="${esc(e.name)}"><span class="ic">📁</span><span>${esc(e.name)}</span></div>`);
+    } else {
+      items.push(`<div class="fb-item file"><span class="ic">📄</span><span>${esc(e.name)}</span></div>`);
+    }
+  });
+  fb.list.innerHTML = items.length ? items.join("") : "<div class='fb-empty'>(empty folder)</div>";
+  if (data.truncated) fb.list.insertAdjacentHTML("beforeend", "<div class='fb-empty'>…list truncated (very large folder).</div>");
+
+  $$("#fb-list .fb-item.dir").forEach((el) => {
+    el.addEventListener("click", () =>
+      fbLoad(el.dataset.path || joinPath(fb.cur, el.dataset.name)));
+  });
+  if (data.error) fb.err.textContent = data.error;
+}
+
+function fbClose() { fb.overlay.hidden = true; fb.target = null; fb.onPick = null; }
+function fbSelect() {
+  const chosen = fb.cur, input = fb.target, cb = fb.onPick;
+  fbClose();
+  if (input) {
+    input.value = chosen;
+    input.dispatchEvent(new Event("input"));
+    input.dispatchEvent(new Event("change"));
+  }
+  if (cb) cb(chosen);
+}
+
+$("#fb-up").addEventListener("click", () => { if (fb.parent) fbLoad(fb.parent); });
+$("#fb-go").addEventListener("click", () => fbLoad(fb.pathInp.value.trim()));
+fb.pathInp.addEventListener("keydown", (e) => { if (e.key === "Enter") fbLoad(fb.pathInp.value.trim()); });
+$("#fb-select").addEventListener("click", fbSelect);
+$("#fb-close").addEventListener("click", fbClose);
+$("#fb-cancel").addEventListener("click", fbClose);
+fb.overlay.addEventListener("click", (e) => { if (e.target === fb.overlay) fbClose(); });
+
+$("#nas-browse").addEventListener("click", () =>
+  browseInto(nasInput, "Select the destination NAS root (gjesus3-data)", () => saveNas()));
 $("#r-browse").addEventListener("click", () =>
   browseInto($("#r-staging"), "Select the source folder to ingest"));
 $("#b-browse").addEventListener("click", () =>

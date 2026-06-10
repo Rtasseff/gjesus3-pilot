@@ -310,56 +310,66 @@ def api_nas_root():
     })
 
 
-def _native_pick_folder(title, initial):
-    """Pop the OS-native "Select Folder" dialog and return the chosen abspath.
+# Names that are never an ingest target and only clutter the browser.
+_BROWSE_HIDE = {"system volume information", "$recycle.bin", "$recycle.bin"}
 
-    A browser <input> can't hand us a real local path (the browser sandboxes
-    file paths), but this GUI runs locally on the operator's own machine, so we
-    can show the familiar native picker via tkinter and return the absolute path.
-    Returns "" if the operator cancels. Raises if no GUI toolkit is available.
-    """
-    import tkinter
-    from tkinter import filedialog
-    root = tkinter.Tk()
-    root.withdraw()
-    try:
-        root.attributes("-topmost", True)   # surface above the browser window
-    except Exception:  # noqa: BLE001 — attribute is platform-best-effort
-        pass
-    try:
-        kw = {"title": title or "Select a folder", "mustexist": True}
-        if initial and os.path.isdir(initial):
-            kw["initialdir"] = initial
-        path = filedialog.askdirectory(**kw)
-    finally:
-        try:
-            root.update()
-        finally:
-            root.destroy()
-    # os.path.abspath normalises to backslashes on Windows (the path style the
-    # operators expect — see the windows-path-style convention).
-    return os.path.abspath(path) if path else ""
+# Cap the entries returned for one folder (a huge data dir would bloat the page).
+_BROWSE_LIMIT = 3000
 
 
-@app.route("/api/browse_folder", methods=["POST"])
-def api_browse_folder():
-    """Open a native folder picker and return the chosen path to the page.
+def _list_drives():
+    """Available drive roots (Windows) or '/' (POSIX), for the browser's jump bar."""
+    if os.name == "nt":
+        import string
+        return [f"{c}:\\" for c in string.ascii_uppercase if os.path.exists(f"{c}:\\")]
+    return ["/"]
 
-    Best-effort: on a headless/test box with no GUI toolkit this returns a clear
-    message (HTTP 200, no path) so the operator just types the path instead —
-    the picker is a convenience, never a hard dependency.
+
+@app.route("/api/listdir", methods=["POST"])
+def api_listdir():
+    """List one local folder for the in-page folder browser.
+
+    The tkinter directory chooser shows ONLY folders (so every folder looks
+    empty, which confused operators). Instead we render our own browser: this
+    returns the folder's subfolders AND files (files are shown greyed, for
+    context only), plus the parent + drive list to navigate. Local app, so
+    listing the local filesystem is fine.
     """
     data = request.get_json(silent=True) or {}
-    initial = (data.get("initial") or "").strip()
-    title = (data.get("title") or "").strip()
+    raw = (data.get("path") or "").strip()
+    path = os.path.abspath(raw) if raw else os.path.expanduser("~")
+
+    out = {"path": path, "parent": None, "entries": [],
+           "drives": _list_drives(), "error": None, "truncated": False}
+
+    if not os.path.isdir(path):
+        out["error"] = f"Not a folder: {path}"
+        path = os.path.expanduser("~")
+        out["path"] = path
+
+    parent = os.path.dirname(path)
+    out["parent"] = parent if parent and os.path.normpath(parent) != os.path.normpath(path) else None
+
     try:
-        path = _native_pick_folder(title, initial)
-    except Exception as e:  # noqa: BLE001 — degrade to type-it-yourself
-        return jsonify({
-            "path": "",
-            "error": f"Folder picker unavailable ({e}). Type or paste the path.",
-        })
-    return jsonify({"path": path})
+        entries = []
+        with os.scandir(path) as it:
+            for e in it:
+                if e.name.lower() in _BROWSE_HIDE:
+                    continue
+                try:
+                    is_dir = e.is_dir()
+                except OSError:
+                    is_dir = False
+                entries.append({"name": e.name, "is_dir": is_dir})
+        # folders first, then files; case-insensitive name order
+        entries.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+        if len(entries) > _BROWSE_LIMIT:
+            out["truncated"] = True
+            entries = entries[:_BROWSE_LIMIT]
+        out["entries"] = entries
+    except OSError as ex:
+        out["error"] = str(ex)
+    return jsonify(out)
 
 
 @app.route("/api/preview", methods=["POST"])

@@ -213,6 +213,34 @@
   </section>
   </main>
 
+  <!-- In-page folder browser (the Browse… buttons). Shows folders AND files
+       (files greyed, for context) so operators can see they're in the right
+       place, then click "Use this folder". -->
+  <div id="fb-overlay" class="fb-overlay" hidden>
+    <div class="fb-modal">
+      <header class="fb-head">
+        <strong id="fb-title">Select a folder</strong>
+        <button id="fb-close" type="button" class="fb-x" title="Cancel">×</button>
+      </header>
+      <div class="fb-bar">
+        <button id="fb-up" type="button" title="Up one level">↑ Up</button>
+        <input id="fb-path" type="text" class="fb-path" spellcheck="false"
+               placeholder="path — type and press Go, or browse below">
+        <button id="fb-go" type="button">Go</button>
+      </div>
+      <div id="fb-drives" class="fb-drives"></div>
+      <div id="fb-list" class="fb-list"></div>
+      <div id="fb-error" class="errbox"></div>
+      <footer class="fb-foot">
+        <span class="muted">Click a folder to open it. Files are shown greyed for context — you select the folder, not a file.</span>
+        <span class="fb-foot-actions">
+          <button id="fb-cancel" type="button">Cancel</button>
+          <button id="fb-select" type="button" class="go">Use this folder</button>
+        </span>
+      </footer>
+    </div>
+  </div>
+
   <script src="{{ url_for('static', filename='tokenfield.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
