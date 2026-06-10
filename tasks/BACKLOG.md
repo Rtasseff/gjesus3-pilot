@@ -87,11 +87,46 @@ Landed on branch `operator-ingest-tooling`. Deferred from it:
 - [ ] **Refresh `gui/README.md` + `TESTING.md` for the rebuilt Builder + token
   widget + the `operator` column** — held until the operator accepts the new GUI
   (avoid documenting a UI still in flux).
-- [ ] **Builder `is_control` as a recipe default.** "Animal role" can be baked
-  into a recipe (e.g. a controls-only folder), but it's usually per-run. Consider
-  a clearer "default (set per run)" affordance vs a baked value, and confirm the
-  runner's per-run panel always wins on overlap (it does today — runner overrides
-  apply after recipe overrides).
+- [x] ~~Builder `is_control` as a recipe default.~~ **Resolved 2026-06-10** —
+  removed the study-metadata trio (Animal role / `is_control`, `disease_model`,
+  `disease_state`) from the **Builder** entirely. A recipe describes a stable
+  naming convention; `is_control` is per-animal study design, so a recipe-level
+  value is wrong for any mixed cohort. Clean split now: **Builder = how to read
+  the files; Runner = this batch's study metadata.** Per-run capture stays in the
+  Runner (homogeneous-per-run assumption noted in its panel; scope each group as
+  a separate run for a mixed cohort). Superseded by the derive-from-label rule:
+
+- [ ] **Per-acquisition condition derivation — "derive `is_control` (and disease
+  fields) from a metadata label" (next-revision feature).** The real fix for a
+  **mixed cohort in one ingest**: a filter-like rule that sets condition fields
+  *per acquisition* from a discovered metadata label, instead of one value for the
+  whole run.
+  - *Why it's not just a GUI change:* today `condition.is_control` is resolved as
+    a literal tri-state (`resolver.to_tristate(b.get("is_control"))`,
+    [`tools/ingest/resolver.py`](../tools/ingest/resolver.py)). Derivation needs
+    the resolver/enrichment writer ([`tools/ingest/enrichment.py`](../tools/ingest/enrichment.py))
+    to evaluate a **value-map against `discovered.*` per acquisition**.
+  - *Proposed config shape* (a new optional block, resolver-evaluated per case):
+    ```yaml
+    condition:
+      is_control:
+        from: ${discovered.group}      # the metadata label to read
+        control_values: [CTRL, WT, sham]
+        case_values:    [EAE, KO]      # anything else -> null (unknown), non-blocking
+      disease_model:
+        from: ${discovered.group}
+        map: { EAE: "EAE", KO: "Cx43-KO" }   # value -> label; unmatched -> ""
+    ```
+    Keep the literal form working (back-compat); a `dict` value means "derive".
+  - *Generalises* to `disease_state` / `treatment` / `study_arm` as value-maps,
+    and the same idea could drive `anatomy.region` from an organ-letter label.
+  - *GUI:* a "condition rule" builder mirroring the Filter UI (pick a metadata
+    label, list which values are control vs case, map values to disease labels),
+    with a live preview of how the example files would be classified.
+  - *Note:* the animal-facility DB can't supply `is_control` (study design, not an
+    animal property — `animals.exp_group` is unpopulated), so an operator-defined
+    rule is the only path. Stays non-blocking: unmatched values -> `null` + WARN,
+    backfilled later. New META open question when picked up.
 
 ## Person/role rename — residual cleanup (core done 2026-06-09)
 

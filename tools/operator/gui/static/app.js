@@ -467,14 +467,18 @@ let builderDiscoveredRow = {};  // first parsed row, for live "→ example" line
 const builderFields = {};       // field key -> TokenField (token rows only)
 
 // "3 · Set the values to record" — the values we have a priority to capture.
-// ★ high-priority = the registry person columns + sample id + study metadata.
+// ★ high-priority = the registry person columns + sample id.
+//
+// NOTE: study-design metadata (Animal role / is_control, disease_model,
+// disease_state) is deliberately NOT here. It varies per animal/group, so it
+// can't be baked into a reusable naming-convention recipe (a cohort is rarely
+// all-control or all-case). It's captured per-run in the Runner instead; the
+// per-acquisition "derive is_control from a metadata label" rule is a planned
+// next revision (tasks/BACKLOG.md).
 const REQUIRED_FIELDS = [
   { key: "registry.researcher",           label: "Researcher",       star: true, hint: "who ran the study" },
   { key: "operator",                      label: "Operator",         star: true, hint: "who ran the equipment" },
   { key: "registry.sample_id",            label: "Sample ID",        star: true },
-  { key: "_animal_role",                  label: "Animal role",      star: true, type: "select" },
-  { key: "condition.disease_model",       label: "disease_model",    star: true, caseOnly: true },
-  { key: "condition.disease_state",       label: "disease_state",    star: true, caseOnly: true },
   { key: "registry.sample_type",          label: "Sample type" },
   { key: "registry.acquisition_datetime", label: "Acquisition date" },
   { key: "registry.project_hint",         label: "Project hint" },
@@ -483,13 +487,13 @@ const REQUIRED_FIELDS = [
   { key: "link_filename",                 label: "Project link name" },
 ];
 
-// Build the "values to record" rows once (token-fields + the Animal-role select).
+// Build the "values to record" rows once (all token-fields).
 function buildRequiredGrid() {
   const grid = $("#b-required");
   grid.innerHTML = "";
   REQUIRED_FIELDS.forEach((f) => {
     const row = document.createElement("div");
-    row.className = "req-row" + (f.caseOnly ? " case-only" : "");
+    row.className = "req-row";
     row.dataset.key = f.key;
     const star = f.star ? '<span class="star">★</span> ' : "";
     const hint = f.hint ? ` <span class="muted">— ${esc(f.hint)}</span>` : "";
@@ -498,34 +502,16 @@ function buildRequiredGrid() {
     lab.innerHTML = `${star}${esc(f.label)}${hint}`;
     const val = document.createElement("div");
     val.className = "req-val";
-    if (f.type === "select") {
-      val.innerHTML =
-        `<select id="b-is-control">` +
-        `<option value="">— skip (set per run) —</option>` +
-        `<option value="true">control — no disease model / perturbation / intervention</option>` +
-        `<option value="false">case</option></select>`;
-    } else {
-      const tfEl = document.createElement("div");
-      const ex = document.createElement("span");
-      ex.className = "example";
-      val.append(tfEl, ex);
-      const tf = new TokenField(tfEl, {
-        onChange: () => { renderOverrideJSON(); updateBuilderExamples(); },
-      });
-      builderFields[f.key] = tf;
-    }
+    const tfEl = document.createElement("div");
+    const ex = document.createElement("span");
+    ex.className = "example";
+    val.append(tfEl, ex);
+    builderFields[f.key] = new TokenField(tfEl, {
+      onChange: () => { renderOverrideJSON(); updateBuilderExamples(); },
+    });
     row.append(lab, val);
     grid.appendChild(row);
   });
-  const ic = $("#b-is-control");
-  if (ic) {
-    ic.addEventListener("change", () => { toggleCaseRows(); renderOverrideJSON(); });
-    toggleCaseRows();
-  }
-}
-function toggleCaseRows() {
-  const show = $("#b-is-control") && $("#b-is-control").value === "false";
-  $$("#b-required .case-only").forEach((r) => { r.hidden = !show; });
 }
 
 // ---- folder levels (section 1) ----
@@ -703,17 +689,13 @@ function builderOverrides() {
   const filter = builderFilter();
   if (Object.keys(filter).length) ov["auto_discover.filter"] = filter;
 
-  // values to record
-  const ic = $("#b-is-control") ? $("#b-is-control").value : "";
+  // values to record (study-design metadata is captured per-run in the Runner,
+  // not baked into a recipe — see REQUIRED_FIELDS note)
   REQUIRED_FIELDS.forEach((f) => {
-    if (f.type === "select") return;
-    if (f.caseOnly && ic !== "false") return;   // disease only meaningful for a case
     const tf = builderFields[f.key];
     const v = tf ? tf.serialize().trim() : "";
     if (v) ov[f.key] = v;
   });
-  if (ic === "true") ov["condition.is_control"] = true;
-  else if (ic === "false") ov["condition.is_control"] = false;
 
   ov["ingest.auto_create_projects"] = $("#b-auto-create").checked;
   return ov;
