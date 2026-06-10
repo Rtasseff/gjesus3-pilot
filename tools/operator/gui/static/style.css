@@ -63,7 +63,11 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
 button.go { background: var(--go); color: #fff; border-color: var(--go); }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
-fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; padding: .8rem 1rem; background: var(--panel); }
+/* min-width:0 overrides the fieldset's intrinsic min-width:min-content, which
+   would otherwise let a wide child table expand the fieldset past the page
+   instead of scrolling inside its own .table-wrap (the runner's tables work
+   because they're not wrapped in a fieldset). */
+fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; padding: .8rem 1rem; background: var(--panel); min-width: 0; }
 legend { font-weight: 600; padding: 0 .4rem; }
 
 .muted { color: var(--muted); }
