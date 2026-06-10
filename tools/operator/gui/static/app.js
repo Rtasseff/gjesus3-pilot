@@ -57,12 +57,43 @@ async function saveNas() {
   try {
     const data = await postJSON("/api/nas_root", { nas_root: nasInput.value });
     setNasStatus(data.valid);
+    loadRecipesDir();   // the default recipes folder (<NAS>/recipes) follows the NAS
   } catch (e) { setNasStatus(false); }
 }
 $("#nas-save").addEventListener("click", saveNas);
 getJSON("/api/nas_root").then((d) => { setNasStatus(d.valid); });
 
 function nasRoot() { return nasInput.value.trim(); }
+
+// ---------------------------------------------------------------- recipes folder
+// Where saved recipes (YAML) live. Defaults to <NAS>/recipes on shared storage so
+// every operator reads/writes the same set; persisted + overridable.
+const recipesDirInput = $("#recipes-dir");
+const recipesStatus = $("#recipes-status");
+function setRecipesStatus(d) {
+  recipesStatus.textContent = d.is_default ? "default" : (d.exists ? "set" : "new");
+  recipesStatus.className = "pill " + (d.exists ? "ok" : "");
+}
+async function loadRecipesDir() {
+  try {
+    const d = await getJSON("/api/recipes_dir");
+    recipesDirInput.value = d.recipes_dir || "";
+    recipesDirInput.placeholder = d.default || "<NAS>\\recipes";
+    setRecipesStatus(d);
+  } catch (e) { /* non-fatal */ }
+}
+async function saveRecipesDir() {
+  try {
+    const d = await postJSON("/api/recipes_dir", { recipes_dir: recipesDirInput.value });
+    recipesDirInput.value = d.recipes_dir || "";
+    setRecipesStatus(d);
+    loadRecipes();   // re-list recipes from the new location
+  } catch (e) { /* non-fatal */ }
+}
+$("#recipes-save").addEventListener("click", saveRecipesDir);
+$("#recipes-browse").addEventListener("click", () =>
+  browseInto(recipesDirInput, "Select the folder to keep recipes in", () => saveRecipesDir()));
+loadRecipesDir();
 
 // ---------------------------------------------------------------- folder browse
 // In-page folder browser. Unlike the OS folder-only dialog (which made every
@@ -512,7 +543,7 @@ async function runnerIngest() {
   $("#r-preview").disabled = true;
 
   const rec = recipesCache.find((r) => r.file === rRecipe.value);
-  const recipePath = rec ? `tools/operator/recipes/${rec.file}` : "";
+  const recipePath = rec ? (rec.path || rec.file) : "";
 
   // SSE via fetch + ReadableStream (POST body needed -> can't use EventSource).
   let resp;

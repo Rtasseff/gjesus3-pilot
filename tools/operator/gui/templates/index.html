@@ -11,12 +11,19 @@
     <h1>Microscopy Ingest</h1>
     <div class="nasbar">
       <label>Destination NAS <span class="muted">— where files are ingested to</span>
-        <input id="nas-root" type="text" value="{{ nas_root }}" size="24"
+        <input id="nas-root" type="text" value="{{ nas_root }}" size="22"
                placeholder="J:\gjesus3-data">
       </label>
       <button id="nas-browse" type="button" class="browse">Browse…</button>
       <button id="nas-save" type="button">Set</button>
       <span id="nas-status" class="pill"></span>
+
+      <label>Recipes folder <span class="muted">— where saved recipes live (default: on the NAS)</span>
+        <input id="recipes-dir" type="text" size="22" placeholder="<NAS>\recipes">
+      </label>
+      <button id="recipes-browse" type="button" class="browse">Browse…</button>
+      <button id="recipes-save" type="button">Set</button>
+      <span id="recipes-status" class="pill"></span>
     </div>
   </header>
 

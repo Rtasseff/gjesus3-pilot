@@ -129,11 +129,10 @@ def _is_gap(val):
 
 # --------------------------------------------------------------------- recipes
 
-def recipes_dir():
-    """Absolute path to the recipes directory (repo + frozen aware).
-
-    Mirrors templates._candidate_dirs ordering: a frozen bundle's copy first,
-    then the repo checkout at tools/operator/recipes/.
+def _legacy_recipes_dir():
+    """The original bundled/repo recipes location — kept as a read-only SEED
+    source so recipes that shipped with the tool still appear after the default
+    moved to the NAS. (frozen _MEIPASS-aware; else the repo tools/operator/recipes.)
     """
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
@@ -145,6 +144,24 @@ def recipes_dir():
             if os.path.isdir(cand):
                 return cand
     return os.path.join(_PKG_DIR, "recipes")
+
+
+def default_recipes_dir():
+    """Default recipes location: <nas_root>/recipes on shared primary storage, so
+    every operator (who no longer has the repo checkout) reads + writes the same
+    shared, self-documenting set. Falls back to a per-user local dir when no NAS
+    is set yet, so Save never hard-fails.
+    """
+    nas = load_saved_nas_root()
+    if nas and os.path.isdir(nas):
+        return os.path.normpath(os.path.join(nas, "recipes"))
+    return os.path.normpath(os.path.join(_state_dir(), "recipes"))
+
+
+def recipes_dir():
+    """Where recipes are SAVED (and primarily listed): the operator's persisted
+    choice, else the NAS default (<nas_root>/recipes)."""
+    return load_saved_recipes_dir() or default_recipes_dir()
 
 
 def _load_recipe_file(path):
@@ -161,24 +178,33 @@ def _load_recipe_file(path):
 
 
 def list_recipes():
-    """Return [{file, name, instrument, description}] for all valid recipes."""
+    """Return [{file, path, name, instrument, description, overrides}] for all
+    valid recipes — from the configured (NAS) dir first, then the bundled seed
+    dir (de-duped by filename; the configured dir wins)."""
     out = []
-    rdir = recipes_dir()
-    if not os.path.isdir(rdir):
-        return out
-    for fn in sorted(os.listdir(rdir)):
-        if not fn.lower().endswith((".json", ".yaml", ".yml")):
+    seen = set()
+    dirs = [recipes_dir(), _legacy_recipes_dir()]
+    for rdir in dirs:
+        if not rdir or not os.path.isdir(rdir):
             continue
-        rec = _load_recipe_file(os.path.join(rdir, fn))
-        if not isinstance(rec, dict):
-            continue
-        out.append({
-            "file": fn,
-            "name": rec.get("name") or fn,
-            "instrument": (rec.get("instrument") or "").upper(),
-            "description": rec.get("description") or "",
-            "overrides": rec.get("overrides") or {},
-        })
+        for fn in sorted(os.listdir(rdir)):
+            if not fn.lower().endswith((".json", ".yaml", ".yml")):
+                continue
+            if fn in seen:
+                continue
+            rec = _load_recipe_file(os.path.join(rdir, fn))
+            if not isinstance(rec, dict):
+                continue
+            seen.add(fn)
+            out.append({
+                "file": fn,
+                "path": os.path.join(rdir, fn),
+                "name": rec.get("name") or fn,
+                "instrument": (rec.get("instrument") or "").upper(),
+                "description": rec.get("description") or "",
+                "overrides": rec.get("overrides") or {},
+            })
+    out.sort(key=lambda r: r["name"].lower())
     return out
 
 
@@ -219,6 +245,30 @@ def save_nas_root(value):
     try:
         with open(_nas_state_path(), "w", encoding="utf-8") as f:
             f.write((value or "").strip())
+    except OSError:
+        pass
+
+
+def _recipes_dir_state_path():
+    return os.path.join(_state_dir(), "recipes_dir.txt")
+
+
+def load_saved_recipes_dir():
+    """The operator's persisted recipes folder, or "" (use the NAS default)."""
+    try:
+        with open(_recipes_dir_state_path(), "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def save_recipes_dir(value):
+    v = (value or "").strip()
+    if v:
+        v = os.path.normpath(v)   # consistent separators (J:\… not J:/…)
+    try:
+        with open(_recipes_dir_state_path(), "w", encoding="utf-8") as f:
+            f.write(v)
     except OSError:
         pass
 
@@ -353,6 +403,23 @@ def api_nas_root():
     return jsonify({
         "nas_root": nas_root,
         "valid": env.is_valid_nas_root(nas_root),
+    })
+
+
+@app.route("/api/recipes_dir", methods=["GET", "POST"])
+def api_recipes_dir():
+    """View / set the recipes folder. POST with empty value resets to the NAS
+    default. The effective folder is where recipes are saved + primarily listed.
+    """
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        save_recipes_dir((data.get("recipes_dir") or "").strip())
+    rdir = recipes_dir()
+    return jsonify({
+        "recipes_dir": rdir,
+        "default": default_recipes_dir(),
+        "is_default": not load_saved_recipes_dir(),
+        "exists": os.path.isdir(rdir),
     })
 
 
@@ -607,9 +674,8 @@ def api_discovered():
 
 @app.route("/api/save_recipe", methods=["POST"])
 def api_save_recipe():
-    """Persist a recipe (instrument + name + override dict) to recipes_dir().
-
-    Writes JSON. Refuses to write outside recipes_dir() (basename only).
+    """Persist a recipe to recipes_dir() as a human-readable YAML file (so it
+    doubles as documentation of how a batch was loaded). Basename-only target.
     """
     data = request.get_json(silent=True) or {}
     instrument = (data.get("instrument") or "").upper()
@@ -626,12 +692,12 @@ def api_save_recipe():
     safe = "".join(
         c if (c.isalnum() or c in "-_") else "_" for c in name.lower()
     ).strip("_") or "recipe"
-    fname = f"{safe}.json"
+    fname = f"{safe}.yaml"
     rdir = recipes_dir()
     try:
         os.makedirs(rdir, exist_ok=True)
     except OSError as e:
-        return jsonify({"error": f"Cannot create recipes folder: {e}"}), 500
+        return jsonify({"error": f"Cannot create recipes folder ({rdir}): {e}"}), 500
 
     target = os.path.join(rdir, os.path.basename(fname))
     payload = {
@@ -642,9 +708,16 @@ def api_save_recipe():
         "overrides": overrides,
     }
     try:
+        import yaml
         with open(target, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
-            f.write("\n")
+            f.write(f"# gjesus3 operator recipe — {name}\n")
+            f.write(f"# instrument: {instrument}\n")
+            if description:
+                f.write(f"# {description}\n")
+            f.write("#\n# How a batch of this convention is read into the registry."
+                    " Saved by the microscopy GUI; edit by hand if you know YAML.\n")
+            yaml.safe_dump(payload, f, sort_keys=False, allow_unicode=True,
+                           default_flow_style=False)
     except OSError as e:
         return jsonify({"error": f"Cannot write recipe: {e}"}), 500
 

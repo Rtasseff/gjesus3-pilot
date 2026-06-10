@@ -84,9 +84,13 @@ Landed on branch `operator-ingest-tooling`. Deferred from it:
   folder-only OS dialog confused operators (every folder looked empty, since it
   hides files), so it was replaced by an **in-page folder browser** (`/api/listdir`
   + a modal) that shows folders AND greyed files for context. No extra freeze deps.
-- [ ] **Refresh `gui/README.md` + `TESTING.md` for the rebuilt Builder + token
-  widget + the `operator` column** — held until the operator accepts the new GUI
-  (avoid documenting a UI still in flux).
+- [ ] **Refresh `gui/README.md` + `TESTING.md` + `microscopy_ingest.spec` comment**
+  for the rebuilt Builder + token widget + the `operator` column + **recipes now
+  saved as YAML to a configurable folder defaulting to `<NAS>/recipes`** (was JSON
+  in the repo `tools/operator/recipes/`; that dir is now only a read-only seed
+  source) — held until the operator accepts the new GUI (avoid documenting a UI
+  still in flux). Consider migrating the existing repo JSON recipes to the NAS +
+  a NAS `recipes/` permission grant (operators need write there).
 - [x] ~~Builder `is_control` as a recipe default.~~ **Resolved 2026-06-10** —
   removed the study-metadata trio (Animal role / `is_control`, `disease_model`,
   `disease_state`) from the **Builder** entirely. A recipe describes a stable
