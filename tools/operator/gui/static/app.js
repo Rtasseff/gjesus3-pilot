@@ -597,6 +597,75 @@ function builderFilter() {
 }
 $("#b-filter-add").addEventListener("click", () => addFilterRow());
 
+// ---- example-layout preview (section 1): show the operator their REAL folders ----
+// Probes the example source folder and renders the actual folder structure (a real
+// name at each level, capped at 3 deep) + example file names split into chunks, so
+// "Folder levels" and "File-name metadata labels" are grounded in their own data.
+let builderLayout = null;
+
+async function loadLayout() {
+  const path = $("#b-staging").value.trim();
+  const box = $("#b-layout");
+  if (!path) { box.innerHTML = ""; builderLayout = null; renderFileExamples(); return; }
+  box.innerHTML = "<span class='muted'>Reading example folder…</span>";
+  try {
+    const data = await postJSON("/api/sample_layout", { path, instrument: bInstrument.value });
+    builderLayout = data;
+    renderLayout();
+    renderFileExamples();
+  } catch (e) {
+    box.innerHTML = `<span class="bad">${esc(e.message)}</span>`;
+    builderLayout = null; renderFileExamples();
+  }
+}
+
+function renderLayout() {
+  const box = $("#b-layout");
+  const d = builderLayout;
+  if (!d) { box.innerHTML = ""; return; }
+  if (d.error) { box.innerHTML = `<span class="muted">${esc(d.error)}</span>`; return; }
+  const lines = [
+    `<div class="lt-row"><span class="lt-ic">📁</span><strong>${esc(d.root)}</strong> <span class="muted">— your source folder</span></div>`,
+  ];
+  d.chain.forEach((name, i) => {
+    lines.push(`<div class="lt-row" style="padding-left:${(i + 1) * 1.2}rem">` +
+      `<span class="lt-ic">📁</span>${esc(name)} <span class="muted">— sub-folder ${i + 1}</span></div>`);
+  });
+  const filesIndent = (d.chain.length + 1) * 1.2;
+  (d.files || []).forEach((f) => {
+    lines.push(`<div class="lt-row lt-file" style="padding-left:${filesIndent}rem">` +
+      `<span class="lt-ic">📄</span>${esc(f)}</div>`);
+  });
+  let note;
+  if (d.depth_capped) note = `…your files are actually ${d.depth} folders deep (showing the first 3).`;
+  else if (d.depth === 0) note = `Files are directly in the source folder → set "Folder levels before the files" to 0.`;
+  else note = `Files are ${d.depth} folder${d.depth > 1 ? "s" : ""} deep → set "Folder levels before the files" to ${d.depth}.`;
+  box.innerHTML = `<div class="layout-tree">${lines.join("")}</div><div class="muted lt-note">${note}</div>`;
+}
+
+function renderFileExamples() {
+  const box = $("#b-file-examples");
+  if (!box) return;
+  const d = builderLayout;
+  if (!d || d.error || !(d.files || []).length) { box.innerHTML = ""; return; }
+  const sep = $("#b-separator").value || "_";
+  const rows = d.files.map((f) => {
+    const base = f.replace(/\.[^.]+$/, "");
+    const parts = sep ? base.split(sep) : [base];
+    const chips = parts.map((p) => `<span class="chunk">${esc(p)}</span>`)
+      .join(`<span class="sep">${esc(sep)}</span>`);
+    return `<div class="fe-row"><code>${esc(f)}</code>` +
+      `<div class="fe-split">${chips} <span class="muted">(${parts.length} chunk${parts.length > 1 ? "s" : ""})</span></div></div>`;
+  }).join("");
+  box.innerHTML =
+    `<div class="muted">Example files split on "<code>${esc(sep)}</code>" — give one metadata label per chunk:</div>${rows}`;
+}
+
+$("#b-staging").addEventListener("change", loadLayout);
+$("#b-separator").addEventListener("input", () => { renderFileExamples(); renderOverrideJSON(); });
+$("#b-fields").addEventListener("input", renderOverrideJSON);
+bInstrument.addEventListener("change", () => { if ($("#b-staging").value.trim()) loadLayout(); });
+
 // ---- assemble the override dict ----
 function builderOverrides() {
   const ov = {};

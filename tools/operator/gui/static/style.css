@@ -226,6 +226,24 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
 .filter-row .b-filter-val { width: auto; flex: 1 1 12rem; }
 .filter-row .rm { padding: .25rem .55rem; color: var(--bad); }
 
+/* example-layout preview: the operator's REAL folder tree + file-name split */
+.layoutbox:empty, .fileex:empty { display: none; }
+.layoutbox { margin: .5rem 0; }
+.layout-tree { background: #f8fafc; border: 1px solid var(--border);
+  border-radius: 6px; padding: .5rem .6rem; font-size: .85rem; overflow-x: auto; }
+.lt-row { padding: .12rem 0; white-space: nowrap; }
+.lt-ic { margin-right: .35rem; opacity: .85; }
+.lt-file { color: var(--muted); }
+.lt-note { margin: .3rem 0 0; font-size: .82rem; }
+
+.fileex { margin: .35rem 0 .2rem; font-size: .85rem; }
+.fe-row { margin: .25rem 0; }
+.fe-row > code { font-size: .82rem; }
+.fe-split { margin: .1rem 0 .3rem; display: flex; flex-wrap: wrap; align-items: center; gap: .1rem; }
+.fe-split .chunk { background: #e0e7ff; border: 1px solid #a5b4fc; color: #312e81;
+  border-radius: 4px; padding: 0 .35rem; font-size: .8rem; }
+.fe-split .sep { color: var(--muted); padding: 0 .1rem; font-family: ui-monospace, Consolas, monospace; }
+
 /* values to record: label | value(+example), high-priority starred */
 .reqgrid { display: grid; gap: .5rem; margin: .5rem 0; }
 .req-row { display: grid; grid-template-columns: 200px 1fr; gap: .25rem .8rem;
