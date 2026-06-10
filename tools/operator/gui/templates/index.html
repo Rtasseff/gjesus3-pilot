@@ -74,22 +74,22 @@
       </div>
       <div id="r-meta-case" class="row" hidden>
         <label class="grow">disease_model
-          <input id="r-disease-model" type="text" placeholder="e.g. EAE  (or ${discovered.stain})">
+          <div id="r-disease-model" class="tokenfield is-empty" data-placeholder="e.g. EAE  (type, or drop a field below)"></div>
           <span class="example" id="r-dm-ex"></span>
         </label>
         <label class="grow">disease_state
-          <input id="r-disease-state" type="text" placeholder="e.g. acute">
+          <div id="r-disease-state" class="tokenfield is-empty" data-placeholder="e.g. acute"></div>
           <span class="example" id="r-ds-ex"></span>
         </label>
       </div>
       <details>
-        <summary>Pull a value from the CZI name / folders (discovered fields)</summary>
-        <p class="muted">Click a chip to insert a token into the focused box; it
-          resolves per file at ingest. Set the folder + NAS root, then load.</p>
+        <summary>Use a value from the CZI name / folders</summary>
+        <p class="muted">Click or drag a field into a box above; it resolves per
+          file at ingest. Set the folder + NAS root, then show fields.</p>
         <div class="row">
-          <button id="r-meta-load-fields" type="button">Load discovered fields from the folder</button>
+          <button id="r-meta-load-fields" type="button">Show fields from the folder</button>
         </div>
-        <div id="r-meta-chips" class="chips"></div>
+        <div id="r-meta-chips" class="palette"></div>
       </details>
     </fieldset>
 
@@ -116,10 +116,10 @@
   <!-- =========================================================== BUILDER -->
   <section id="tab-builder" class="tabpane">
     <p class="muted">
-      Builder mode is a working scaffold: edit the parse rules and field
-      mappings, watch the live <code>discovered.*</code> grid and resolved
-      examples update, then save as a recipe. It re-runs the same read-only
-      preview as the runner.
+      Build a recipe for a naming convention: tell the GUI where the metadata
+      lives in your folders and file names, then set the values to record. Save
+      it and operators can pick it on the <strong>Run a recipe</strong> tab. It
+      runs the same read-only preview as the runner.
     </p>
 
     <div class="row">
@@ -139,102 +139,63 @@
       <button id="b-browse" type="button" class="browse">Browse…</button>
     </div>
 
-    <!-- (a) PARSE RULES -->
+    <!-- 1 · WHERE THE METADATA LIVES -->
     <fieldset>
-      <legend>(a) Where the metadata lives in the names</legend>
-      <div class="row">
-        <label>Parse mode
-          <select id="b-parse-mode">
-            <option value="positional">Positional (separator + ordered fields)</option>
-            <option value="regex">Regex (named groups)</option>
-          </select>
-        </label>
-        <label id="b-source-wrap">Parse source
-          <select id="b-source">
-            <option value="name">file/folder name</option>
-            <option value="parent_name">parent folder name</option>
-          </select>
-        </label>
-      </div>
+      <legend>1 · Where the metadata lives in your folders &amp; names</legend>
 
-      <div id="b-positional" class="parse-block">
-        <label>Separator
+      <div class="row">
+        <label>Folder levels before the files
+          <input id="b-levels-count" type="number" min="0" max="8" value="0">
+        </label>
+        <span class="muted selfend">0 = the files sit directly in the source folder. Each level becomes a metadata label below.</span>
+      </div>
+      <div id="b-levels" class="levelgrid"></div>
+
+      <div class="row">
+        <label>File-name separator
           <input id="b-separator" type="text" value="_" size="3">
         </label>
-        <label class="grow">Ordered fields (comma-separated, left to right)
+        <label class="grow">File-name metadata labels <span class="muted">— left-to-right, split on the separator</span>
           <input id="b-fields" type="text"
-                 placeholder="group_code, operator, project, sample_short, section, stain, magnification">
-        </label>
-      </div>
-
-      <div id="b-regex" class="parse-block" hidden>
-        <label class="grow">Regex with named groups (each <code>(?P&lt;name&gt;...)</code> becomes a discovered field)
-          <input id="b-regex-pat" type="text"
-                 placeholder="^(?P<researcher>[^_]+)_(?P<experiment>.+)_(?P<cell_line>[^_]+)$">
+                 placeholder="group, operator, project, sample, stain, magnification">
         </label>
       </div>
 
       <div class="row">
-        <label class="grow">Path levels (folders between staging dir and the file; comma-separated; needs a recursive <code>**</code> pattern)
-          <input id="b-path-levels" type="text" placeholder="researcher, cell_line, experiment">
-        </label>
+        <button id="b-refresh-grid" type="button" class="primary">Show the fields this produces</button>
       </div>
-      <div class="row">
-        <label class="grow">Filter (<code>field=value</code> pairs, comma-separated; only matching files are in scope)
-          <input id="b-filter" type="text" placeholder="group_code=MFB">
-        </label>
-        <button id="b-refresh-grid" type="button" class="primary">Refresh discovered grid</button>
-      </div>
-
       <div id="b-errors" class="errbox"></div>
+      <div id="b-dropped" class="dropbox"></div>
+      <p id="b-palette-hint" class="muted" hidden>Your layout produces these fields — click or drag them into the filter or the values below.</p>
+      <div id="b-palette" class="palette"></div>
       <div id="b-grid-wrap" class="table-wrap"></div>
     </fieldset>
 
-    <!-- (b) FIELD MAPPING via token chips -->
+    <!-- 2 · FILTER -->
     <fieldset>
-      <legend>(b) Map registry fields &amp; names</legend>
-      <p class="muted">
-        Click a chip to insert a token into the focused field. Each field shows
-        a live resolved example from the first file; unresolved
-        <code>${…}</code> tokens flag <span class="bad">red</span>.
-      </p>
-      <div id="b-chips" class="chips"></div>
+      <legend>2 · Filter — only ingest files that match <span class="muted">(optional)</span></legend>
+      <p class="muted">Add one or more <em>label = value</em> conditions; a file must match all of them. Leave empty to ingest every file.</p>
+      <div id="b-filter-rows"></div>
+      <button id="b-filter-add" type="button">+ Add condition</button>
+    </fieldset>
 
-      <div class="mapgrid">
-        <label>project_hint
-          <input class="b-map" data-key="registry.project_hint" type="text">
-          <span class="example"></span>
-        </label>
-        <label>sample_id
-          <input class="b-map" data-key="registry.sample_id" type="text">
-          <span class="example"></span>
-        </label>
-        <label>operator
-          <input class="b-map" data-key="registry.operator" type="text">
-          <span class="example"></span>
-        </label>
-        <label>notes
-          <input class="b-map" data-key="registry.notes" type="text">
-          <span class="example"></span>
-        </label>
-        <label>link_filename
-          <input class="b-map" data-key="link_filename" type="text">
-          <span class="example"></span>
-        </label>
-        <label class="check">
-          <input id="b-auto-create" type="checkbox" checked> auto_create_project
-        </label>
-      </div>
+    <!-- 3 · VALUES TO RECORD -->
+    <fieldset>
+      <legend>3 · Set the values to record</legend>
+      <p class="muted">Type a value, or click/drag a field from section 1. <span class="star">★</span> = high priority. Each shows a live example from the first file.</p>
+      <div id="b-required" class="reqgrid"></div>
+      <label class="check"><input id="b-auto-create" type="checkbox" checked> Auto-create the project if the project hint doesn't exist yet</label>
       <div class="row">
-        <button id="b-preview" type="button" class="primary">Preview with these mappings</button>
+        <button id="b-preview" type="button" class="primary">Preview example</button>
       </div>
       <div id="b-map-summary" class="summary"></div>
+      <div id="b-map-dropped" class="dropbox"></div>
       <div id="b-map-table-wrap" class="table-wrap"></div>
     </fieldset>
 
-    <!-- SAVE -->
+    <!-- 4 · SAVE -->
     <fieldset>
-      <legend>Save as recipe</legend>
+      <legend>4 · Save as recipe</legend>
       <div class="row">
         <label class="grow">Recipe name
           <input id="b-recipe-name" type="text" placeholder="AxioScan 7 - my convention">
@@ -245,13 +206,14 @@
         <input id="b-recipe-desc" type="text" placeholder="what this convention is for">
       </label>
       <div id="b-save-status" class="summary"></div>
-      <details><summary>Override dict that will be saved</summary>
+      <details><summary>Advanced: the recipe override dict</summary>
         <pre id="b-override-json"></pre>
       </details>
     </fieldset>
   </section>
   </main>
 
+  <script src="{{ url_for('static', filename='tokenfield.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

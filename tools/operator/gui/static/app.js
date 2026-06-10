@@ -117,7 +117,9 @@ function currentRecipeOverrides() {
 // ni/mri-ingest --is-control / --disease-* flags.
 const rIsControl = $("#r-is-control");
 let runnerDiscoveredRow = {};
-let focusedMetaInput = null;
+// disease_model / disease_state are token-fields: free text + atomic field chips.
+const dmField = new TokenField($("#r-disease-model"), { onChange: updateMetaExamples });
+const dsField = new TokenField($("#r-disease-state"), { onChange: updateMetaExamples });
 
 async function updateMetaPanel() {
   try {
@@ -143,8 +145,8 @@ function runnerMetaOverrides() {
     ov["condition.is_control"] = true;    // control -> no disease fields
   } else if (ic === "false") {
     ov["condition.is_control"] = false;
-    const dm = $("#r-disease-model").value.trim();
-    const ds = $("#r-disease-state").value.trim();
+    const dm = dmField.serialize().trim();
+    const ds = dsField.serialize().trim();
     if (dm) ov["condition.disease_model"] = dm;
     if (ds) ov["condition.disease_state"] = ds;
   }
@@ -166,11 +168,6 @@ function runnerOverrides() {
                        runnerMetaOverrides());
 }
 
-$$("#r-meta input[type=text]").forEach((inp) => {
-  inp.addEventListener("focus", () => { focusedMetaInput = inp; });
-  inp.addEventListener("input", updateMetaExamples);
-});
-
 async function loadMetaFields() {
   $("#r-meta-chips").innerHTML = "Loading…";
   try {
@@ -182,13 +179,7 @@ async function loadMetaFields() {
       limit: 5,
     });
     runnerDiscoveredRow = (data.rows && data.rows[0]) ? data.rows[0].discovered : {};
-    const keys = data.keys || [];
-    $("#r-meta-chips").innerHTML = keys.length
-      ? keys.map((k) =>
-          `<span class="chip" data-token="\${discovered.${esc(k)}}">\${discovered.${esc(k)}}</span>`).join("")
-      : "<span class='muted'>No discovered fields parsed for this folder.</span>";
-    $$("#r-meta-chips .chip").forEach((chip) =>
-      chip.addEventListener("click", () => insertMetaToken(chip.dataset.token)));
+    renderPalette($("#r-meta-chips"), paletteEntries(data.keys || []), dmField);
     updateMetaExamples();
   } catch (e) {
     $("#r-meta-chips").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
@@ -196,26 +187,15 @@ async function loadMetaFields() {
 }
 $("#r-meta-load-fields").addEventListener("click", loadMetaFields);
 
-function insertMetaToken(token) {
-  const inp = focusedMetaInput || $("#r-disease-model");
-  if (!inp) return;
-  const s = inp.selectionStart ?? inp.value.length;
-  const e = inp.selectionEnd ?? inp.value.length;
-  inp.value = inp.value.slice(0, s) + token + inp.value.slice(e);
-  inp.focus();
-  const pos = s + token.length;
-  inp.setSelectionRange(pos, pos);
-  updateMetaExamples();
-}
-
-// Live resolved example, shown only for token values (reuses resolveExample).
+// Live resolved example for the disease token-fields (reuses resolveExample).
 function updateMetaExamples() {
   const ctx = runnerDiscoveredRow || {};
-  [["#r-disease-model", "#r-dm-ex"], ["#r-disease-state", "#r-ds-ex"]].forEach(([inSel, exSel]) => {
-    const inp = $(inSel), ex = $(exSel);
-    if (!inp || !ex) return;
-    if (!inp.value.includes("${")) { ex.textContent = ""; ex.classList.remove("bad"); return; }
-    const { text, unresolved } = resolveExample(inp.value, ctx, {});
+  [[dmField, "#r-dm-ex"], [dsField, "#r-ds-ex"]].forEach(([fld, exSel]) => {
+    const ex = $(exSel);
+    if (!fld || !ex) return;
+    const val = fld.serialize();
+    if (!val.includes("${")) { ex.textContent = ""; ex.classList.remove("bad"); return; }
+    const { text, unresolved } = resolveExample(val, ctx, {});
     ex.textContent = "→ " + text;
     ex.classList.toggle("bad", unresolved);
   });
@@ -406,49 +386,168 @@ updateDryState();
 
 // ================================================================ BUILDER
 const bInstrument = $("#b-instrument");
+let builderKeys = [];           // discovered keys from the last "Show fields"
+let builderDiscoveredRow = {};  // first parsed row, for live "→ example" lines
+const builderFields = {};       // field key -> TokenField (token rows only)
 
-// ---- parse-mode toggle ----
-$("#b-parse-mode").addEventListener("change", () => {
-  const regex = $("#b-parse-mode").value === "regex";
-  $("#b-positional").hidden = regex;
-  $("#b-regex").hidden = !regex;
-});
+// "3 · Set the values to record" — the values we have a priority to capture.
+// ★ high-priority = the registry person columns + sample id + study metadata.
+const REQUIRED_FIELDS = [
+  { key: "registry.researcher",           label: "Researcher",       star: true, hint: "who ran the study" },
+  { key: "operator",                      label: "Operator",         star: true, hint: "who ran the equipment" },
+  { key: "registry.sample_id",            label: "Sample ID",        star: true },
+  { key: "_animal_role",                  label: "Animal role",      star: true, type: "select" },
+  { key: "condition.disease_model",       label: "disease_model",    star: true, caseOnly: true },
+  { key: "condition.disease_state",       label: "disease_state",    star: true, caseOnly: true },
+  { key: "registry.sample_type",          label: "Sample type" },
+  { key: "registry.acquisition_datetime", label: "Acquisition date" },
+  { key: "registry.project_hint",         label: "Project hint" },
+  { key: "registry.session_id",           label: "Session ID" },
+  { key: "registry.notes",                label: "Notes" },
+  { key: "link_filename",                 label: "Project link name" },
+];
 
-// ---- build the override dict from the builder form ----
+// Build the "values to record" rows once (token-fields + the Animal-role select).
+function buildRequiredGrid() {
+  const grid = $("#b-required");
+  grid.innerHTML = "";
+  REQUIRED_FIELDS.forEach((f) => {
+    const row = document.createElement("div");
+    row.className = "req-row" + (f.caseOnly ? " case-only" : "");
+    row.dataset.key = f.key;
+    const star = f.star ? '<span class="star">★</span> ' : "";
+    const hint = f.hint ? ` <span class="muted">— ${esc(f.hint)}</span>` : "";
+    const lab = document.createElement("div");
+    lab.className = "req-label";
+    lab.innerHTML = `${star}${esc(f.label)}${hint}`;
+    const val = document.createElement("div");
+    val.className = "req-val";
+    if (f.type === "select") {
+      val.innerHTML =
+        `<select id="b-is-control">` +
+        `<option value="">— skip (set per run) —</option>` +
+        `<option value="true">control — no disease model / perturbation / intervention</option>` +
+        `<option value="false">case</option></select>`;
+    } else {
+      const tfEl = document.createElement("div");
+      const ex = document.createElement("span");
+      ex.className = "example";
+      val.append(tfEl, ex);
+      const tf = new TokenField(tfEl, {
+        onChange: () => { renderOverrideJSON(); updateBuilderExamples(); },
+      });
+      builderFields[f.key] = tf;
+    }
+    row.append(lab, val);
+    grid.appendChild(row);
+  });
+  const ic = $("#b-is-control");
+  if (ic) {
+    ic.addEventListener("change", () => { toggleCaseRows(); renderOverrideJSON(); });
+    toggleCaseRows();
+  }
+}
+function toggleCaseRows() {
+  const show = $("#b-is-control") && $("#b-is-control").value === "false";
+  $$("#b-required .case-only").forEach((r) => { r.hidden = !show; });
+}
+
+// ---- folder levels (section 1) ----
+function renderLevels() {
+  const n = Math.max(0, Math.min(8, parseInt($("#b-levels-count").value, 10) || 0));
+  const wrap = $("#b-levels");
+  const prev = $$("#b-levels .level-label").map((inp) => inp.value);  // preserve
+  wrap.innerHTML = "";
+  for (let i = 0; i < n; i++) {
+    const lab = document.createElement("label");
+    lab.textContent = `metadata label for sub-folder ${i + 1}`;
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "level-label";
+    inp.placeholder = "e.g. researcher / cell_line / experiment";
+    if (prev[i]) inp.value = prev[i];
+    inp.addEventListener("input", renderOverrideJSON);
+    lab.appendChild(inp);
+    wrap.appendChild(lab);
+  }
+  renderOverrideJSON();
+}
+// Level names for path_parse: blanks become folder_N so the LEVEL COUNT always
+// matches the folder depth (a mismatched count is what the preview flags).
+function builderLevelLabels() {
+  return $$("#b-levels .level-label").map((inp, i) => inp.value.trim() || `folder_${i + 1}`);
+}
+$("#b-levels-count").addEventListener("input", renderLevels);
+
+// ---- filter rows (section 2) ----
+function filterFieldOptions(selected) {
+  if (!builderKeys.length) return `<option value="">(show fields first)</option>`;
+  return `<option value="">— pick a field —</option>` + builderKeys.map((k) =>
+    `<option value="${esc(k)}"${k === selected ? " selected" : ""}>${esc(tfHumanizeRef(k))}</option>`).join("");
+}
+function addFilterRow(field, value) {
+  const wrap = $("#b-filter-rows");
+  const row = document.createElement("div");
+  row.className = "filter-row";
+  const sel = document.createElement("select");
+  sel.className = "b-filter-field";
+  sel.innerHTML = filterFieldOptions(field);
+  const eq = document.createElement("span"); eq.textContent = "=";
+  const val = document.createElement("input");
+  val.type = "text"; val.className = "b-filter-val"; val.placeholder = "value";
+  if (value != null) val.value = value;
+  const rm = document.createElement("button");
+  rm.type = "button"; rm.className = "rm"; rm.textContent = "×"; rm.title = "remove";
+  rm.addEventListener("click", () => { row.remove(); renderOverrideJSON(); });
+  [sel, val].forEach((el) => el.addEventListener("input", renderOverrideJSON));
+  row.append(sel, eq, val, rm);
+  wrap.appendChild(row);
+}
+function refreshFilterFieldOptions() {
+  $$("#b-filter-rows .b-filter-field").forEach((sel) => {
+    const cur = sel.value;
+    sel.innerHTML = filterFieldOptions(cur);
+    sel.value = cur;
+  });
+}
+function builderFilter() {
+  const out = {};
+  $$("#b-filter-rows .filter-row").forEach((row) => {
+    const k = row.querySelector(".b-filter-field").value.trim();
+    const v = row.querySelector(".b-filter-val").value.trim();
+    if (k) out[k] = v;
+  });
+  return out;
+}
+$("#b-filter-add").addEventListener("click", () => addFilterRow());
+
+// ---- assemble the override dict ----
 function builderOverrides() {
   const ov = {};
-  const mode = $("#b-parse-mode").value;
-  const source = $("#b-source").value;
-
-  if (mode === "positional") {
-    const fields = $("#b-fields").value.split(",").map((s) => s.trim()).filter(Boolean);
-    const fp = { separator: $("#b-separator").value || "_", fields };
-    if (source === "parent_name") fp.source = "parent_name";
-    if (fields.length) ov["auto_discover.filename_parse"] = fp;
-  } else {
-    const pat = $("#b-regex-pat").value.trim();
-    if (pat) {
-      const fp = { regex: pat };
-      fp.source = source; // regex usually pairs with a source choice
-      ov["auto_discover.filename_parse"] = fp;
-    }
+  // file-name labels -> positional filename_parse (regex dropped from the GUI)
+  const fields = $("#b-fields").value.split(",").map((s) => s.trim()).filter(Boolean);
+  if (fields.length) {
+    ov["auto_discover.filename_parse"] = { separator: $("#b-separator").value || "_", fields };
   }
+  // folder levels -> path_parse; pin a recursive pattern so deep files are found
+  if ($$("#b-levels .level-label").length > 0) {
+    ov["auto_discover.path_parse"] = { levels: builderLevelLabels() };
+    ov["auto_discover.pattern"] = "**/*.czi";
+  }
+  const filter = builderFilter();
+  if (Object.keys(filter).length) ov["auto_discover.filter"] = filter;
 
-  const levels = $("#b-path-levels").value.split(",").map((s) => s.trim()).filter(Boolean);
-  if (levels.length) ov["auto_discover.path_parse"] = { levels };
-
-  const filterPairs = {};
-  $("#b-filter").value.split(",").map((s) => s.trim()).filter(Boolean).forEach((p) => {
-    const eq = p.indexOf("=");
-    if (eq > 0) filterPairs[p.slice(0, eq).trim()] = p.slice(eq + 1).trim();
+  // values to record
+  const ic = $("#b-is-control") ? $("#b-is-control").value : "";
+  REQUIRED_FIELDS.forEach((f) => {
+    if (f.type === "select") return;
+    if (f.caseOnly && ic !== "false") return;   // disease only meaningful for a case
+    const tf = builderFields[f.key];
+    const v = tf ? tf.serialize().trim() : "";
+    if (v) ov[f.key] = v;
   });
-  if (Object.keys(filterPairs).length) ov["auto_discover.filter"] = filterPairs;
-
-  // field mappings
-  $$(".b-map").forEach((inp) => {
-    const v = inp.value.trim();
-    if (v) ov[inp.dataset.key] = v;
-  });
+  if (ic === "true") ov["condition.is_control"] = true;
+  else if (ic === "false") ov["condition.is_control"] = false;
 
   ov["ingest.auto_create_projects"] = $("#b-auto-create").checked;
   return ov;
@@ -458,82 +557,9 @@ function renderOverrideJSON() {
   $("#b-override-json").textContent = JSON.stringify(builderOverrides(), null, 2);
 }
 
-// ---- discovered.* live grid (a) ----
-async function refreshGrid() {
-  $("#b-errors").textContent = "";
-  $("#b-grid-wrap").innerHTML = "Loading…";
-  renderOverrideJSON();
-  try {
-    const data = await postJSON("/api/discovered", {
-      instrument: bInstrument.value,
-      overrides: builderOverrides(),
-      staging_path: $("#b-staging").value,
-      nas_root: nasRoot(),
-      limit: 25,
-    });
-    const keys = data.keys || [];
-    if (!data.rows.length) {
-      $("#b-grid-wrap").innerHTML = "<p class='muted'>No files matched / parsed. Adjust the parse rules.</p>";
-    } else {
-      const head = "<tr><th>original_name</th>" +
-        keys.map((k) => `<th>discovered.${esc(k)}</th>`).join("") + "</tr>";
-      const rows = data.rows.map((row) =>
-        "<tr><td>" + esc(row.original_name) + "</td>" +
-        keys.map((k) => `<td>${esc(row.discovered[k] ?? "")}</td>`).join("") +
-        "</tr>").join("");
-      $("#b-grid-wrap").innerHTML = `<table>${head}${rows}</table>`;
-    }
-    // refresh the chip palette + live examples off the first row
-    buildChips(keys);
-    updateExamples(data.rows[0] ? data.rows[0].discovered : {});
-  } catch (e) {
-    $("#b-grid-wrap").innerHTML = "";
-    $("#b-errors").textContent = e.message;
-  }
-}
-$("#b-refresh-grid").addEventListener("click", refreshGrid);
-
-// ---- token chips (b) ----
-let lastDiscoveredKeys = [];
-function buildChips(keys) {
-  lastDiscoveredKeys = keys.slice();
-  const tokens = keys.map((k) => `\${discovered.${k}}`)
-    .concat(["${instrument}", "${acq_id}", "${acq_date}", "${original_name}", "${sample_id}"]);
-  $("#b-chips").innerHTML = tokens.map((t) =>
-    `<span class="chip" data-token="${esc(t)}">${esc(t)}</span>`).join("");
-  $$("#b-chips .chip").forEach((chip) => {
-    chip.addEventListener("click", () => insertToken(chip.dataset.token));
-  });
-}
-
-let focusedMapInput = null;
-$$(".b-map").forEach((inp) => {
-  inp.addEventListener("focus", () => { focusedMapInput = inp; });
-  inp.addEventListener("input", () => {
-    renderOverrideJSON();
-    updateExamples(null); // re-evaluate with last-known discovered row
-  });
-});
-
-function insertToken(token) {
-  const inp = focusedMapInput || $('.b-map[data-key="link_filename"]');
-  if (!inp) return;
-  const start = inp.selectionStart ?? inp.value.length;
-  const end = inp.selectionEnd ?? inp.value.length;
-  inp.value = inp.value.slice(0, start) + token + inp.value.slice(end);
-  inp.focus();
-  const pos = start + token.length;
-  inp.setSelectionRange(pos, pos);
-  renderOverrideJSON();
-  updateExamples(null);
-}
-
-// ---- client-side example resolver (best-effort, mirrors ${...} interpolation)
-let lastDiscoveredRow = {};
-function updateExamples(discoveredRow) {
-  if (discoveredRow) lastDiscoveredRow = discoveredRow;
-  const ctx = Object.assign({}, lastDiscoveredRow);
-  // synthetic example values for resolver-supplied tokens
+// ---- live "→ example" lines for the value boxes ----
+function updateBuilderExamples() {
+  const ctx = Object.assign({}, builderDiscoveredRow);
   const synth = {
     instrument: bInstrument.value,
     acq_id: `ACQ-YYYYMMDD-${bInstrument.value}-001`,
@@ -541,11 +567,13 @@ function updateExamples(discoveredRow) {
     original_name: ctx.filename || ctx.folder_name || "<original_name>",
     sample_id: "<sample_id>",
   };
-  $$(".b-map").forEach((inp) => {
-    const ex = inp.parentElement.querySelector(".example");
-    if (!ex) return;
-    const { text, unresolved } = resolveExample(inp.value, ctx, synth);
-    if (!inp.value.trim()) { ex.textContent = ""; ex.classList.remove("bad"); return; }
+  $$("#b-required .req-row").forEach((row) => {
+    const tf = builderFields[row.dataset.key];
+    const ex = row.querySelector(".example");
+    if (!tf || !ex) return;
+    const val = tf.serialize();
+    if (!val.trim()) { ex.textContent = ""; ex.classList.remove("bad"); return; }
+    const { text, unresolved } = resolveExample(val, ctx, synth);
     ex.textContent = "→ " + text;
     ex.classList.toggle("bad", unresolved);
   });
@@ -554,7 +582,6 @@ function updateExamples(discoveredRow) {
 function resolveExample(template, ctx, synth) {
   if (!template) return { text: "", unresolved: false };
   let unresolved = false;
-  // ${discovered.x} | ${x}
   const out = template.replace(/\$\{([^}]+)\}/g, (m, ref) => {
     ref = ref.trim();
     if (ref.startsWith("discovered.")) {
@@ -569,7 +596,57 @@ function resolveExample(template, ctx, synth) {
   return { text: out, unresolved };
 }
 
-// ---- load template defaults into the builder form ----
+// ---- "Show the fields this produces" (section 1) ----
+async function refreshGrid() {
+  $("#b-errors").textContent = "";
+  $("#b-dropped").innerHTML = "";
+  $("#b-grid-wrap").innerHTML = "Loading…";
+  renderOverrideJSON();
+  try {
+    const data = await postJSON("/api/discovered", {
+      instrument: bInstrument.value,
+      overrides: builderOverrides(),
+      staging_path: $("#b-staging").value,
+      nas_root: nasRoot(),
+      limit: 25,
+    });
+    builderKeys = data.keys || [];
+    builderDiscoveredRow = data.rows[0] ? data.rows[0].discovered : {};
+    renderDropped($("#b-dropped"), data);   // path-level / parse problems, up top
+    if (!data.rows.length) {
+      $("#b-grid-wrap").innerHTML =
+        "<p class='muted'>No files parsed. Check the folder levels + labels against your example folder (the box above lists why files were skipped).</p>";
+    } else {
+      const head = "<tr><th>file</th>" +
+        builderKeys.map((k) => `<th>${esc(tfHumanizeRef(k))}</th>`).join("") + "</tr>";
+      const rows = data.rows.map((row) =>
+        "<tr><td>" + esc(row.original_name) + "</td>" +
+        builderKeys.map((k) => `<td>${esc(row.discovered[k] ?? "")}</td>`).join("") +
+        "</tr>").join("");
+      $("#b-grid-wrap").innerHTML = `<table>${head}${rows}</table>`;
+    }
+    // palette of friendly field chips + resolver extras; refresh dependent UIs
+    renderPalette($("#b-palette"),
+      paletteEntries(builderKeys, ["${acq_id}", "${acq_date}", "${original_name}"]),
+      builderFields["registry.sample_id"]);
+    $("#b-palette-hint").hidden = !builderKeys.length;
+    refreshFilterFieldOptions();
+    updateBuilderExamples();
+  } catch (e) {
+    $("#b-grid-wrap").innerHTML = "";
+    $("#b-errors").textContent = e.message;
+  }
+}
+$("#b-refresh-grid").addEventListener("click", refreshGrid);
+
+// ---- load template defaults into the builder ----
+function setTF(key, val) {
+  const tf = builderFields[key];
+  if (!tf) return;
+  let s = (val == null) ? "" : String(val);
+  if (/^<.*>$/.test(s.trim())) s = "";   // a "<set per batch>" placeholder -> empty
+  tf.setValue(s);
+}
 async function loadTemplateDefaults() {
   $("#b-errors").textContent = "";
   try {
@@ -578,40 +655,46 @@ async function loadTemplateDefaults() {
     const ad = t.auto_discover || {};
     const fp = ad.filename_parse || {};
     if (fp.regex) {
-      $("#b-parse-mode").value = "regex";
-      $("#b-regex-pat").value = fp.regex;
+      $("#b-fields").value = "";
+      $("#b-errors").textContent =
+        "Note: this template parses names with a regex, which the builder doesn't edit. " +
+        "The values below are still loaded; describe the name layout with the separator + labels above to change it.";
     } else {
-      $("#b-parse-mode").value = "positional";
       $("#b-separator").value = fp.separator || "_";
       $("#b-fields").value = (fp.fields || []).join(", ");
     }
-    $("#b-parse-mode").dispatchEvent(new Event("change"));
-    $("#b-source").value = fp.source || "name";
-    $("#b-path-levels").value = ((ad.path_parse || {}).levels || []).join(", ");
-    $("#b-filter").value = Object.entries(ad.filter || {})
-      .map(([k, v]) => `${k}=${v}`).join(", ");
-
+    // folder levels
+    const levels = (ad.path_parse || {}).levels || [];
+    $("#b-levels-count").value = levels.length;
+    renderLevels();
+    $$("#b-levels .level-label").forEach((inp, i) => { if (levels[i]) inp.value = levels[i]; });
+    // filter
+    $("#b-filter-rows").innerHTML = "";
+    Object.entries(ad.filter || {}).forEach(([k, v]) => addFilterRow(k, v));
+    // values to record
     const reg = t.registry || {};
-    setMap("registry.project_hint", reg.project_hint);
-    setMap("registry.sample_id", reg.sample_id);
-    setMap("registry.operator", reg.operator);
-    setMap("registry.notes", reg.notes);
-    setMap("link_filename", t.link_filename);
+    setTF("registry.researcher", reg.researcher);
+    setTF("operator", t.operator);
+    setTF("registry.sample_id", reg.sample_id);
+    setTF("registry.sample_type", reg.sample_type);
+    setTF("registry.acquisition_datetime", reg.acquisition_datetime);
+    setTF("registry.project_hint", reg.project_hint);
+    setTF("registry.session_id", reg.session_id);
+    setTF("registry.notes", reg.notes);
+    setTF("link_filename", t.link_filename);
     $("#b-auto-create").checked = !!(t.ingest || {}).auto_create_projects;
     renderOverrideJSON();
+    updateBuilderExamples();
   } catch (e) {
     $("#b-errors").textContent = e.message;
   }
 }
-function setMap(key, val) {
-  const inp = $(`.b-map[data-key="${key}"]`);
-  if (inp) inp.value = val == null ? "" : String(val);
-}
 $("#b-load-template").addEventListener("click", loadTemplateDefaults);
 
-// ---- builder full preview (b) ----
+// ---- "Preview example" (section 3) ----
 async function builderPreview() {
   $("#b-map-summary").innerHTML = "";
+  $("#b-map-dropped").innerHTML = "";
   $("#b-map-table-wrap").innerHTML = "Previewing…";
   renderOverrideJSON();
   try {
@@ -622,11 +705,12 @@ async function builderPreview() {
       nas_root: nasRoot(),
     });
     renderSummary($("#b-map-summary"), data);
+    renderDropped($("#b-map-dropped"), data);
     if (data.blocking_errors && data.blocking_errors.length) {
       $("#b-errors").textContent = data.blocking_errors.join("\n");
     }
     $("#b-map-table-wrap").innerHTML = renderCasesTable(data.cases);
-    if (data.cases[0]) updateExamples(data.cases[0].discovered);
+    if (data.cases[0]) { builderDiscoveredRow = data.cases[0].discovered; updateBuilderExamples(); }
   } catch (e) {
     $("#b-map-table-wrap").innerHTML = "";
     $("#b-errors").textContent = e.message;
@@ -646,12 +730,13 @@ $("#b-save").addEventListener("click", async () => {
     });
     $("#b-save-status").innerHTML =
       `<span class="new">Saved</span> ${esc(data.file)} → ${esc(data.path)}`;
-    // refresh the runner recipe dropdown so it shows up immediately
     if (rInstrument.value === bInstrument.value) loadRecipes();
   } catch (e) {
     $("#b-save-status").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
   }
 });
 
-// initial builder paint
+// ---- initial builder paint ----
+buildRequiredGrid();
+renderLevels();
 renderOverrideJSON();

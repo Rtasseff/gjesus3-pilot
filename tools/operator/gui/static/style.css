@@ -136,9 +136,61 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
 }
 .chip:hover { background: #e0e7ff; }
 
-.mapgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .6rem; margin: .6rem 0; }
-.mapgrid label { gap: .25rem; }
+/* ---- token widget (tokenfield.js): atomic field chips in a value box ---- */
+/* The palette of available fields — friendly names, click or drag to insert. */
+.palette { display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0; }
+.palette-chip {
+  background: #eef2ff; border: 1px solid #c7d2fe; color: #3730a3;
+  border-radius: 6px; padding: .12rem .5rem; font-size: .8rem; cursor: grab;
+  user-select: none; font-weight: 500;
+}
+.palette-chip:hover { background: #e0e7ff; }
+.palette-chip:active { cursor: grabbing; }
+
+/* A value box that mixes free text with atomic field chips. Looks like an input. */
+.tokenfield {
+  font: inherit; font-weight: 400; min-height: 2rem; padding: .3rem .45rem;
+  border: 1px solid var(--border); border-radius: 5px; background: #fff;
+  color: var(--ink); width: 100%; line-height: 1.7;
+}
+.tokenfield:focus { outline: 2px solid #bfdbfe; outline-offset: -1px; border-color: var(--accent); }
+.tokenfield.is-empty::before {
+  content: attr(data-placeholder); color: var(--muted); pointer-events: none;
+}
+.tokenfield.drop-target { background: #eff6ff; border-color: var(--accent); }
+/* The atomic chip: a solid object you insert/drop and that deletes as a unit. */
+.token {
+  display: inline-block; background: #e0e7ff; border: 1px solid #a5b4fc;
+  color: #312e81; border-radius: 5px; padding: 0 .35rem; margin: 0 .1rem;
+  font-size: .82rem; font-weight: 500; white-space: nowrap; cursor: default;
+  user-select: none;
+}
+.token::before { content: "◈ "; opacity: .5; font-size: .7em; }
+
 .example { font-size: .75rem; color: var(--go); font-family: ui-monospace, Consolas, monospace; min-height: 1em; }
 .example.bad { color: var(--bad); }
 
-.parse-block { display: flex; gap: .6rem; flex-wrap: wrap; align-items: flex-end; }
+/* ---- rebuilt builder (folder levels / filter rows / values to record) ---- */
+.selfend { align-self: flex-end; padding-bottom: .45rem; }
+
+/* one "metadata label for sub-folder N" box per declared folder level */
+.levelgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: .5rem; margin: .5rem 0; }
+.levelgrid:empty { display: none; }
+.levelgrid label { background: #f8fafc; border: 1px dashed var(--border);
+  border-radius: 6px; padding: .35rem .5rem; }
+
+/* filter: label = value rows, joined by AND, with +/× */
+.filter-row { display: flex; gap: .4rem; align-items: center; margin: .35rem 0; }
+.filter-row select { width: auto; min-width: 10rem; }
+.filter-row .b-filter-val { width: auto; flex: 1 1 12rem; }
+.filter-row .rm { padding: .25rem .55rem; color: var(--bad); }
+
+/* values to record: label | value(+example), high-priority starred */
+.reqgrid { display: grid; gap: .5rem; margin: .5rem 0; }
+.req-row { display: grid; grid-template-columns: 200px 1fr; gap: .25rem .8rem;
+  align-items: start; }
+.req-row[hidden] { display: none; }
+.req-label { font-weight: 600; padding-top: .4rem; }
+.req-val { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.star { color: var(--warn); }

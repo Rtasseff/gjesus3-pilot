@@ -282,6 +282,7 @@ def api_template():
         "instrument": inst,
         "auto_discover": tpl.get("auto_discover") or {},
         "registry": tpl.get("registry") or {},
+        "operator": tpl.get("operator") or "",   # top-level acquisition operator
         "link_filename": tpl.get("link_filename") or "",
         "auto_create_project": tpl.get("auto_create_project") or {},
         "ingest": tpl.get("ingest") or {},
@@ -464,6 +465,9 @@ def api_discovered():
         "pattern": pattern,
         "n_matched": result.n_matched,
         "n_new": result.n_new,
+        "n_already_ingested": result.n_already_ingested,
+        "n_dropped": result.n_dropped,
+        "dropped": result.dropped,
         "keys": seen_keys,
         "rows": rows,
         "warnings": result.warnings,
