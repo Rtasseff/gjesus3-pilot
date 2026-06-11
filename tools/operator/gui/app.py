@@ -40,10 +40,19 @@ import threading
 import webbrowser
 
 # --- locate + load the operator core via its loader (stdlib-collision-safe) ---
-# This file lives at tools/operator/gui/app.py; the package dir is its parent.
-_GUI_DIR = os.path.dirname(os.path.abspath(__file__))
-_PKG_DIR = os.path.dirname(_GUI_DIR)            # tools/operator/
-_TOOLS_DIR = os.path.dirname(_PKG_DIR)          # tools/
+# Source layout: this file lives at tools/operator/gui/app.py, so the package
+# dir is its parent's parent. Frozen (PyInstaller): __file__ points at the exe
+# dir, NOT under tools/operator/gui/, so the source-relative derivation would
+# look for _loader.py beside the exe and fail. The spec maps the whole tree
+# under sys._MEIPASS/tools/..., so derive the dirs from _MEIPASS when frozen.
+if getattr(sys, "frozen", False):
+    _TOOLS_DIR = os.path.join(sys._MEIPASS, "tools")          # <bundle>/tools
+    _PKG_DIR = os.path.join(_TOOLS_DIR, "operator")           # tools/operator/
+    _GUI_DIR = os.path.join(_PKG_DIR, "gui")                  # tools/operator/gui/
+else:
+    _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
+    _PKG_DIR = os.path.dirname(_GUI_DIR)            # tools/operator/
+    _TOOLS_DIR = os.path.dirname(_PKG_DIR)          # tools/
 
 
 def _load_core():
@@ -68,7 +77,15 @@ env = core.env
 # does not mask a core-import problem.
 from flask import Flask, jsonify, render_template, request, Response  # noqa: E402
 
-app = Flask(__name__)
+# Point Flask at the bundled templates/static explicitly so render_template /
+# url_for resolve in BOTH source and frozen runs (in the frozen bundle they
+# live under <_MEIPASS>/tools/operator/gui/, not beside the exe). In source mode
+# _GUI_DIR is the real gui dir, so this matches Flask's default.
+app = Flask(
+    __name__,
+    template_folder=os.path.join(_GUI_DIR, "templates"),
+    static_folder=os.path.join(_GUI_DIR, "static"),
+)
 
 # Microscopy instruments this GUI serves. NI/MRI have their own Linux scripts.
 MICROSCOPY_KEYS = ["ZWSI", "CELL", "LSM9"]

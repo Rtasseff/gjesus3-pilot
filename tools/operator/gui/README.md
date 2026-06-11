@@ -80,8 +80,25 @@ the core's `templates.template_path()` and the GUI's `recipes_dir()` look in
 first. Verify the frozen exe by previewing **and** dry-run-ingesting a real
 `.czi` batch (the dry-run exercises `czifile`/`numpy`/`tifffile`).
 
-> The freeze itself is a documented build step and is **not** executed by the
-> build pass that created this GUI; only the Python-run path is verified.
+> **Built & verified 2026-06-11 (Python 3.13, Windows, PyInstaller 6.18).** The
+> freeze runs clean and the frozen exe launches, serves the UI (dry-run ON by
+> default, banner shown), and loads the CELL/LSM9 seed recipes from the bundle.
+>
+> **Frozen-path fix that was required:** in the bundle `app.py.__file__` points
+> at the exe dir, not `tools/operator/gui/`, so the source-relative derivation of
+> `_PKG_DIR`/`_GUI_DIR` looked for `_loader.py` (and Flask's templates/static)
+> beside the exe and crashed. `app.py` now derives those dirs from
+> `sys._MEIPASS` when `sys.frozen` is set, and Flask is given explicit
+> `template_folder`/`static_folder`. Source-mode runs are unchanged.
+>
+> **Still pending a real sample:** the end-to-end `.czi` read in the frozen
+> build (the actual `czifile`/`tifffile`/`numpy` extraction) was not exercised —
+> it needs a representative `.czi` on the build machine. Run a dry-run preview +
+> ingest of one `.czi` batch on the microscopy machine to close that out.
+>
+> Build note: this repo lives under OneDrive; building into the repo `dist/` can
+> hit sync locks on rebuild. Build into a non-OneDrive `--distpath` (e.g. a temp
+> dir) if cleanup fails. `dist/` and `build/` are git-ignored.
 
 ## How it talks to the core
 
