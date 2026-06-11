@@ -461,7 +461,7 @@ This ensures metadata is captured while fresh and prevents accumulation of unreg
 
 ## 8. Linking Raw to Projects and Publications
 
-> **✅ DECIDED — Windows-first, deliberately:** Cross-references from project (and, in future, publication) folders back into raw use **Windows `.lnk` shell shortcuts**. This is a pilot-specific choice driven by the MFB Windows user base and constraints on the QNAP (no working SSH access to create server-side symlinks). It is **not** the recommended default for future RDM deployments — see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision) for the full rationale, tradeoffs, and a porting guide for Linux/WSL or SSH-capable environments.
+> **✅ DECIDED — NTFS/SMB hard links (2026-06-02; supersedes the original Windows `.lnk` choice):** Cross-references from project (and, in future, publication) folders back into raw use **NTFS/SMB hard links** — the project copy is a real file sharing raw's inode (zero extra storage; raw's read-only descriptor carries through). The original Windows `.lnk` shell shortcuts remain the cross-platform porting seam. Still a pilot-specific choice (MFB Windows user base; no SSH-to-NAS for server-side symlinks) and **not** the recommended default for future RDM deployments — see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts) for the full rationale, tradeoffs, and porting guide.
 
 **Behavior at ingest time:** When `ingest_raw.py` is run with `--project <PROJ-ID>`, full-mode ingest creates a shortcut at `/projects/<project_folder>/raw_linked/<original_archive_name>.lnk` pointing at the canonical archive on the NAS via UNC path. Idempotent — re-running ingest skips any shortcut already in place.
 
