@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
-    metadata_sidecar, provenance, resolver, enrichment,
+    metadata_sidecar, provenance, resolver, enrichment, locking,
 )
 import create_project as create_project_mod
 
@@ -689,8 +689,19 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             )
 
     # --- Step 4: Generate ACQ-ID ---
+    # Allocate under the registry lock with a durable high-water reservation so
+    # a concurrent ingest can't mint the same id during the file copy that
+    # follows (the lock is brief and is NOT held across the copy — locking.py).
+    # Dry-run previews registry-only (no reservation; a dry run writes nothing).
     registry_path = os.path.join(nas_root, "registries", "registry_raw.csv")
-    acq_id_str = acq_id.generate_acq_id(acq_date, instrument, registry_path)
+    registries_dir = os.path.join(nas_root, "registries")
+    if dry_run:
+        acq_id_str = acq_id.generate_acq_id(acq_date, instrument, registry_path)
+    else:
+        with locking.registry_lock(registries_dir):
+            acq_id_str = acq_id.allocate_acq_id(
+                acq_date, instrument, registry_path, registries_dir,
+            )
     log(f"Generated ACQ-ID: {acq_id_str}")
 
     # --- Step 5: Determine destination path + canonical primary file name ---
@@ -1084,10 +1095,13 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     "WARN",
                 )
 
-    # --- Step 10: Update registry ---
+    # --- Step 10: Update registry (the commit point) ---
+    # Serialize the append under the same registry lock (torn-line safety over
+    # SMB). Brief hold — just the append.
     reg_dt = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt)
-    registry.append_row(registry_path, row)
+    with locking.registry_lock(registries_dir):
+        registry.append_row(registry_path, row)
     log(f"Appended to registry: {registry_path}")
 
     # --- Step 11: Manifest entry (always) ---
