@@ -402,7 +402,9 @@ Notes:
 - Per-modality acquisition fields are populated when present (e.g. `isotope`/`activity_MBq` for PET; empty for CT — the bucket handles missing fields gracefully by emitting `""`).
 - Curated `discovered.ni_*` subset (surfaced for YAML reference) is documented in `tools/ingest/ni_metadata.py::EXPOSED_FIELDS` and mirrored in [09_MODALITIES](09_MODALITIES.md) NI section per the CLAUDE.md cross-reference rule.
 
-### 4.4 `subject:` Block — Preclinical Subject Metadata (DRAFT 2026-05-29)
+### 4.4 `subject:` Block — Preclinical Subject Metadata (✅ DECIDED 2026-06-11 — promoted from DRAFT 2026-05-29)
+
+> **✅ DECIDED 2026-06-11 (S2).** This block is in production (written at ingest since 2026-06-03) and is no longer a draft: its structure, the `sample_type` gating, and the non-blocking §4.7 model are adopted by the Data Office. Finer open sub-items (e.g. the `subject.source` enum, the `procedure_tags` layer in §4.4.7) keep their own status markers below.
 
 > **🔶 DRAFT (2026-05-29; extended 2026-06-02 after animal-facility-DB access; identity model + DB exploration 2026-06-03).** New top-level `subject:` block in `metadata.json` for acquisitions whose subject is an organism or organism-derived tissue. The **required fields** (`species` / `strain` / `sex` / `date_of_birth` → derived `age_at_acquisition`) are **✅ DECIDED** — universal preclinical reporting standards (ARRIVE 2.0, EU Directive 2010/63/EU, NIH Sex-As-Biological-Variable policy). They are sourced from the **animal-facility DB** (`animal_facility` MariaDB schema, explored 2026-06-02). `facility_animal_id` is the **subject identifier** — the facility's canonical `<animal_code>-AE-biomaGUNE-<NNNN>` reused verbatim (the Subject/Sample identity model is in [06_REGISTRIES §2.3](06_REGISTRIES.md)). `procedures` is a **structured `[{type,date}]` list** from the DB's controlled vocabulary, not free text (§4.4.7). **Required-eventually, not at-ingest:** because the DB may lag the acquisition or credentials may be absent, a DB miss WARNs and queues the acquisition for superuser recovery rather than failing the ingest — the deferred-recovery mechanism is §4.4.6.
 
@@ -550,7 +552,9 @@ This is a forward-only mechanism: the historical/archival backfills in progress 
 
 **Residual (small):** if a *free-text procedural note* is ever wanted beyond the controlled vocab, the candidate source is `animal_observations` (13,329 rows) — a separate, genuinely free-text table not pulled today. Only then would the manual-vs-LLM-tagging discussion reopen; until a concrete need arises it stays out of scope. The verbatim controlled-vocab list remains canonical (same preserve-then-interpret principle as the REMBI projection deferral, §3.5).
 
-### 4.5 `condition:` Block — Disease State and Experimental Role (DRAFT 2026-05-29)
+### 4.5 `condition:` Block — Disease State and Experimental Role (✅ DECIDED 2026-06-11 — promoted from DRAFT 2026-05-29)
+
+> **✅ DECIDED 2026-06-11 (S2).** In production since 2026-06-03 (extended to `cells` 2026-06-09); the block structure + `sample_type` gating + non-blocking §4.7 model are adopted. Finer free-text vocabularies keep their own (now suggested-not-enforced) status — see [§4.8 Suggested vocabularies](#48-suggested-vocabularies-optional).
 
 > **🔶 DRAFT (2026-05-29; non-blocking model adopted 2026-06-03; extended to cells 2026-06-09).** New top-level `condition:` block in `metadata.json` capturing the disease/control state of each acquisition. Sister block to §4.4 `subject:`. **Trigger: `sample_type ∈ {organism, tissue, cells}`** — any biological sample can be control-vs-case (a disease-model cell line vs a wild-type control, a treated vs vehicle well), so `condition:` is written for `cells` too (2026-06-09); `subject:` stays `{organism, tissue}` (DB-linked animals only — cell lines aren't in the animal-facility DB), and `anatomy:` stays `{organism}` (in-vivo only).
 >
@@ -636,7 +640,9 @@ If none supply it, the block is still written with `is_control: null` + `source:
 
 Until the writer ships, operators may include a `condition:` block in YAML configs as forward-compatible documentation; the loader will pick it up once Phase 3 lands.
 
-### 4.6 `anatomy:` Block — Anatomical Coverage and Region (DRAFT 2026-06-03)
+### 4.6 `anatomy:` Block — Anatomical Coverage and Region (✅ DECIDED 2026-06-11 — promoted from DRAFT 2026-06-03)
+
+> **✅ DECIDED 2026-06-11 (S2).** In production since 2026-06-03 (extended to ex-vivo `tissue` 2026-06-09); the block structure (`is_whole_body` tri-state + UBERON `region`), gating, and non-blocking §4.7 model are adopted. UBERON remains the suggested ontology for `region` — see [§4.8 Suggested vocabularies](#48-suggested-vocabularies-optional).
 
 > **🔶 DRAFT (2026-06-03; extended to tissue 2026-06-09).** New top-level `anatomy:` block in `metadata.json` capturing **what part of the body an acquisition concerns**. Two cases, one UBERON-coded `region` field:
 > - **In-vivo (`sample_type = organism`** — internal MRI + Nuclear Imaging): the scan's **coverage** — *"is this a full-body scan or a region of interest?"* (`is_whole_body` boolean) plus the ontology-coded `region` for the detail.
@@ -757,6 +763,24 @@ A hard-block on a field that no automation can supply and that the operator may 
 #### 4.7.5 What this means for the existing 365+ acquisitions
 
 They ingest cleanly today: `subject:` auto-fills from the DB, `condition.disease_model` gets a project-name seed, everything else is `null`/`unknown` + WARN. Nothing is lost, nothing is blocked, and the completeness report + Excel importer drive enrichment at the post-exhibition true-production restart (Phase 4).
+
+---
+
+### 4.8 Suggested vocabularies (optional)
+
+> **🔶 GUIDANCE 2026-06-11 (S3) — suggest, don't enforce (yet).** The free-text enrichment fields stay **free entry** for now: forcing a controlled vocabulary without point-of-capture help kills adoption. The table below names the **domain-standard vocabulary to prefer** for each field and links a resolver, so values converge voluntarily and a future *soft* enforcement (with autocomplete / suggest-list) has a target. Until that assistance ships (a backlog item — `tasks/BACKLOG.md`), these are recommendations, not validation.
+
+| Field | Suggested standard | Resolver / notes |
+|---|---|---|
+| `subject.species` | **NCBI Taxonomy** | The docs already normalize to `Mus musculus` / `Rattus norvegicus` ([NCBI Taxonomy](https://www.ncbi.nlm.nih.gov/taxonomy)). |
+| `subject.strain` | **IMSR / MGI** (mouse), **RGD** (rat) | [IMSR](https://www.findmice.org/) · [MGI](https://www.informatics.jax.org/) · [RGD](https://rgd.mcw.edu/). |
+| `condition.disease_model` / `condition.disease_state` | **MONDO** (disease ontology) | [MONDO](https://mondo.monarchinitiative.org/); DOID / EFO acceptable alternates. |
+| cell line (microscopy `discovered.cell_line` / project metadata) | **Cellosaurus** | [Cellosaurus](https://www.cellosaurus.org/) — RRID-style `CVCL_` ids. |
+| `anatomy.region` (+ tissue `anatomical_entity`) | **UBERON** | **Already in use** — the model to follow ([UBERON](https://obophenotype.github.io/uberon/)); cross-species. |
+| `sample_type` | already a controlled 5-value REMBI-aligned vocab (§4.x / [06_REGISTRIES §2.4](06_REGISTRIES.md)) | The existing in-house example of a controlled field. |
+| imaging method / modality | **REMBI "imaging method"** / **FBbi** | [FBbi biological imaging methods](https://www.ebi.ac.uk/ols4/ontologies/fbbi). |
+
+Cross-ref: [06_REGISTRIES §2.4](06_REGISTRIES.md) (sample_type vocab). Per-instrument template comment headers carry a one-line pointer to this section.
 
 ---
 

@@ -68,10 +68,10 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `operator` | String | 🔶 Recommended | Ingest (top-level) | **The person who ran the equipment** for this acquisition. ADDED BACK 2026-06-09 (decision #4.2): recorded as a column on **every** acquisition (≈ half the time identical to `researcher`) so operators can find their own scans in the registry without opening sidecars. Populated from the **top-level `operator:` config key** (NOT the `registry:` block) and written identically to the sidecar `user_supplied.operator`. See §2.3a-bis. |
 | `data_source` | String | ✅ Yes | User | `internal` or `collaborator:<name>`. |
 | `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. See §2.3 for the recommended composite format. |
-| `sample_type` | String | 🔶 Recommended | User | Category of biological material. Use the controlled vocabulary in §2.4 (DRAFT). |
+| `sample_type` | String | 🔶 Recommended | User | Category of biological material. Use the controlled vocabulary in §2.4 (✅ DECIDED 2026-06-11). |
 | `subject_id` | String | 🔶 Recommended | Auto | **DECIDED 2026-06-11 (S1).** The canonical reused facility animal id (`<animal_code>-AE-biomaGUNE-<NNNN>`) — identical to the sidecar `subject.facility_animal_id` and the future XNAT/OMERO join key. Auto-populated from the Step-8.4 enrichment subject block (`ingest_raw.py` → `build_row`). **Empty** for non-animal samples (cells / material / phantom) and **best-effort** (may be empty when the DB lookup misses — non-blocking, consistent with the enrichment model). Lets the registry answer "all acquisitions of animal X" without opening sidecars (`sample_id` is overloaded and changes meaning per sample type). See §2.3. |
-| `session_id` | String | 🔶 Recommended (DRAFT) | User | DRAFT 2026-05-20. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc251016_m17_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. Status open (REG-08) pending a Data Office decision (user input welcome; this project has no PI sign-off gate). |
-| `primary_kind` | String | ✅ Yes (DRAFT) | Auto | DRAFT 2026-05-20. One of `file` \| `archive` \| `folder` — the shape of the primary entity on disk. `file` = single canonical file (microscopy `.czi`). `archive` = compressed archive (legacy collaborator DICOM `.zip`). `folder` = the acquisition folder itself is the unit (internal MRI ParaVision bundle). See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
+| `session_id` | String | 🔶 Recommended | User | In use since 2026-05-20; **✅ DECIDED 2026-06-11 (S2)**. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc251016_m17_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. |
+| `primary_kind` | String | ✅ Yes | Auto | In use since 2026-05-20; **✅ DECIDED 2026-06-11 (S2)**. One of `file` \| `archive` \| `folder` — the shape of the primary entity on disk. `file` = single canonical file (microscopy `.czi`). `archive` = compressed archive (legacy collaborator DICOM `.zip`). `folder` = the acquisition folder itself is the unit (internal MRI ParaVision bundle). See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
 | `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary entity. When `primary_kind` = `file` or `archive`, this is a filename (`<ACQ-ID>.czi`, `<ACQ-ID>.zip`). When `primary_kind` = `folder`, this is the folder name (`<ACQ-ID>`) — the unit IS the folder, see [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
 | `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
 | `file_format` | String | ✅ Yes | Auto | File extension/format (e.g., `.czi`, `.zip`). |
@@ -104,9 +104,9 @@ Authoritative record of all raw acquisitions deposited in the system.
 - **Microscopy:** usually different. The `operator` is in the AxioScan filename (`discovered.operator`) / the ZEN account (`discovered.czi_user`) and is what the GUI uses to **filter a folder to one tech's scans**; the `researcher` is a per-batch field (YAML / GUI).
 - The **`researcher` registry column** values logged before 2026-06-09 are mislabelled (they held the old `operator` value) and are corrected at the post-exhibition purge + re-ingest.
 
-### 2.3a ISA Terminology Mapping (DRAFT)
+### 2.3a ISA Terminology Mapping (DECIDED 2026-06-11)
 
-> **🔶 DRAFT pilot guidance (2026-05-20).** The MFB workflow maps cleanly onto **ISA** (Investigation / Study / Assay) terminology. Adopting that vocabulary in the registry makes the data more compatible with REMBI-style metadata standards and any future migration to XNAT / OMERO / institutional platforms. Status open (REG-09) pending a Data Office decision (user input welcome; this project has no PI sign-off gate).
+> **✅ DECIDED 2026-06-11 (S2 — promoted from DRAFT).** The implemented, in-production convention is no longer a draft: the Data Office (this project's decision authority — there is no PI sign-off gate) has adopted the ISA mapping below. The MFB workflow maps cleanly onto **ISA** (Investigation / Study / Assay) terminology; adopting that vocabulary makes the data more compatible with REMBI-style metadata standards and any future migration to XNAT / OMERO / institutional platforms. (Original DRAFT note 2026-05-20, REG-09; retained for history.)
 
 | ISA term | gjesus3 equivalent | Where recorded | Example |
 |---|---|---|---|
@@ -122,9 +122,9 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 **Implementation:** `session_id` is User-populated via the YAML `registry:` block (literal, `discovered.<field>`, or NA). Existing rows are not backfilled; pre-cutover acquisitions hold empty `session_id`.
 
-### 2.3 Subject and Sample Identity (DRAFT — refines REG-01)
+### 2.3 Subject and Sample Identity (DECIDED 2026-06-11 — refines REG-01)
 
-> **🔶 DRAFT pilot guidance, re-grounded 2026-06-03 in FAIR / ISA / REMBI / BIDS / XNAT.** Status open (REG-01) pending a Data Office decision (user input welcome; this project has no PI sign-off gate). Supersedes the earlier bare `<short_project>_<short_sample>` recommendation. Per **Option B**: the model below is adopted now and carried in the `metadata.json` sidecar; the dedicated registry `subject_id` column was **added 2026-06-11 (S1)** — auto-populated from the sidecar `facility_animal_id`, empty for non-animal samples (§2.2). (The denormalized `anatomical_entity` column remains deferred to the true-production restart.)
+> **✅ DECIDED 2026-06-11 (S2 — promoted from DRAFT), re-grounded 2026-06-03 in FAIR / ISA / REMBI / BIDS / XNAT.** The two-tier subject/sample identity model (Option B) is the adopted in-production convention; the Data Office (this project's decision authority — no PI sign-off gate) has accepted it. Supersedes the earlier bare `<short_project>_<short_sample>` recommendation. (Original DRAFT note, REG-01; retained for history.) Per **Option B**: the model below is adopted now and carried in the `metadata.json` sidecar; the dedicated registry `subject_id` column was **added 2026-06-11 (S1)** — auto-populated from the sidecar `facility_animal_id`, empty for non-animal samples (§2.2). (The denormalized `anatomical_entity` column remains deferred to the true-production restart.)
 
 **Two distinct entities, two identifiers.** Every standard we align to models the **subject** (the animal) and the **sample** (the physical thing imaged) as *separate* entities, each with its own identifier, joined by an explicit reference — never collapsed into one overloaded string:
 
@@ -167,9 +167,9 @@ The subject ID is carried in the per-acquisition `metadata.json` **`subject:` bl
 
 The instrument short code embeds `animal_code` with instrument-specific decoration: NI `m14`→`14`, MRI `m13`→`13`, AxioScan `ID13B`→`13` + organ `B`. The ingest tools must parse it into `animal_code` (+ `anatomical_entity` for tissue), derive the project alias from `project_hint` (`ae-biomegune-NNNN` → `NNNN`), and compose the canonical subject ID / DB lookup key. Tracked in `tasks/tasks.md §3.2`. Current per-instrument templates carry an illustrative `facility_animal_id` that predates this and is corrected to the canonical form.
 
-### 2.4 Sample Type Vocabulary (DRAFT)
+### 2.4 Sample Type Vocabulary (DECIDED 2026-06-11)
 
-> **🔶 DRAFT pilot guidance.** `sample_type` is the category of biological material in REMBI terms — *not* the species and *not* the anatomy. Status open (REG-07) pending a Data Office decision (user input welcome; this project has no PI sign-off gate).
+> **✅ DECIDED 2026-06-11 (S2 — promoted from DRAFT).** The 5-value vocabulary (`organism` / `tissue` / `cells` / `material` / `phantom`) is the adopted in-production convention, accepted by the Data Office (no PI sign-off gate). `sample_type` is the category of biological material in REMBI terms — *not* the species and *not* the anatomy. (Original DRAFT note, REG-07; retained for history. **Still open separately:** the future split of species / anatomy into dedicated registry columns — that remains DRAFT, see REG-07 in the open-questions table.)
 
 REMBI separates concerns: **sample type** (the kind of biological material), **organism/species**, **anatomical entity**, **preparation**, and **imaging mode**. In the current registry only one of these has its own column (`sample_type`); the others ride along in `sample_id` / `notes` for now (see future split tracked in `tasks/tasks.md` §3.1).
 

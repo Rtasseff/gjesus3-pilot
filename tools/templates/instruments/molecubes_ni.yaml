@@ -165,6 +165,11 @@
 #     created from short_project, reuse across modalities)
 #
 # Extends the universal starter at tools/templates/ingest_template.yaml.
+#
+# Field vocabularies (suggested, NOT enforced): see 08_METADATA §4.8 for the
+# domain standards to prefer — species (NCBI Taxonomy) / strain (IMSR/MGI/RGD) /
+# disease_model + disease_state (MONDO) / cell_line (Cellosaurus) / anatomy (UBERON).
+#
 # Structural reference: tools/templates/instruments/mri_bruker.yaml
 # (folder-as-primary + modality-as-instrument).
 #

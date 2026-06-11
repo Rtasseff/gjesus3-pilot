@@ -113,6 +113,11 @@
 #   - `ingest.auto_create_projects` (default true)
 #
 # Extends the universal starter at tools/templates/ingest_template.yaml.
+#
+# Field vocabularies (suggested, NOT enforced): see 08_METADATA §4.8 for the
+# domain standards to prefer — species (NCBI Taxonomy) / strain (IMSR/MGI/RGD) /
+# disease_model + disease_state (MONDO) / cell_line (Cellosaurus) / anatomy (UBERON).
+#
 # Structural template was Cell Observer cells-mode
 # (`cell_observer_cells.yaml`).
 #
