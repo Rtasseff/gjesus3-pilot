@@ -818,6 +818,27 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     if summary.get("modality"):
         log(f"  DICOM Mod:   {summary['modality']}")
 
+    # Guard (F item 6): an empty / junk source for a data-requiring DICOM
+    # layout must fail loudly, not register an empty acquisition with a real
+    # ACQ-ID. Common when crawling semi-ordered historical drives. The folder
+    # layout (NI/MRI) guards itself per copy-strategy — and MRI legitimately
+    # allows a no-DICOM `.data/` placeholder — so it is excluded here;
+    # microscopy requires a single file; archive is guarded by
+    # _resolve_archive_primary. The legacy `series` / generic directory-walk
+    # path is the one that would otherwise copy nothing and "succeed".
+    # Fires in dry-run too, so a preview surfaces the junk folder.
+    if (
+        data_ecosystem == "DICOM"
+        and acquisition_layout not in ("folder", "archive")
+        and summary.get("file_count", 0) == 0
+    ):
+        log(
+            f"Refusing to ingest empty source (0 primary/DICOM files): "
+            f"{source_path}. Nothing to register — check this folder.",
+            "ERROR",
+        )
+        return acq_id_str, False
+
     if dry_run:
         log("[DRY RUN] Would create folder and copy files. Skipping.")
         return acq_id_str, True
