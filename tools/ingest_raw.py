@@ -750,8 +750,16 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         cfg_single["primary_kind"] = "archive"
         cfg_single["file_format"] = archive_ext
         cfg_single["archive_src"] = archive_src
-        # original_name reflects the true source archive (e.g. LEONE_1.01.zip)
-        cfg_single["original_name"] = os.path.basename(archive_src)
+        # NOTE (F item 4): do NOT overwrite original_name with the archive
+        # basename here. The registry's original_name is the dedup key
+        # (config._build_dedupe_index keys on (acq_date, original_name)), and
+        # expand_batch set it to the staging-relative path (e.g. "LEONE_1.01").
+        # Overwriting it with the archive file's basename ("LEONE_1.01.zip")
+        # made the key written at ingest differ from the key recomputed on a
+        # re-run, so an archive batch re-ingested every case with fresh
+        # ACQ-IDs + duplicate rows. The archive's display name remains
+        # available via archive_src / primary_file_name; original_name stays
+        # dedup-stable.
     elif data_ecosystem == "DICOM":
         # Legacy collaborator DICOM: files copied into a series/ subfolder.
         # (compress-on-ingest is queued in §3.1; today the series/ tree
