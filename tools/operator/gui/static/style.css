@@ -112,8 +112,19 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
 .log-wrap .WARN { color: #fcd34d; }
 .log-wrap .OK { color: #86efac; }
 
-/* Commit row: dry-run is OFF by default (#8), so make the live-vs-safe state
-   loud — a small grey checkbox in the corner was too easy to miss. */
+/* Dry-run banner: persistent, high-contrast strip at the top of the run panel
+   whenever dry-run is ON (toggled by app.js updateDryState). */
+.dry-banner { margin: 0 0 1rem; padding: .7rem .9rem; border-radius: 8px;
+  background: #fef9c3; border: 2px solid #eab308; color: #713f12;
+  font-weight: 600; }
+/* Loud, mode-distinct end-of-run summaries. */
+.summary.dry-done { background: #f0f9ff; border: 1px solid #bae6fd;
+  padding: .6rem .8rem; border-radius: 8px; }
+.summary.live-done { background: #ecfdf5; border: 1px solid #6ee7b7;
+  padding: .6rem .8rem; border-radius: 8px; }
+
+/* Commit row: make the live-vs-safe state loud — a small grey checkbox in the
+   corner was too easy to miss. Dry-run defaults ON during testing. */
 .commit-row { margin-top: 1rem; padding: .7rem .8rem; border-radius: 8px;
   display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
   border: 1px solid var(--border); background: #fff; }

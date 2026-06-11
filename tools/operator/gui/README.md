@@ -15,6 +15,12 @@ Phase 4 of [`tasks/operator_ingest_tooling_plan.md`](../../../tasks/operator_ing
   (a read-only "what will happen" table: acq_id, project, link name, resolved
   registry row, *X new / Y already-ingested*, warnings) → **Ingest** with a live
   streaming log. A *Dry-run* checkbox (default on) writes nothing.
+  - **Dry-run default (testing period).** Dry-run defaults **ON** so operators
+    learn the tool with no risk of an accidental write; a high-contrast banner
+    shows while it is on, and a dry run ends with a clear "NOTHING was written"
+    summary. **Once the testing period is over, flip the default to OFF** —
+    remove `checked` from `#r-dry` in `templates/index.html` (the
+    `TODO(dry-run-default)` marker flags the exact spot).
   - **Researcher field** — a text box → `registry.researcher` (the person who set
     up the experiment; renamed from `operator` 2026-06-09, 06_REGISTRIES §2.3a-bis).
     Blank = the template default (cells resolve it from `discovered.researcher`;

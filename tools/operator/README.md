@@ -201,7 +201,12 @@ Python install, no admin rights needed.
      project, link name, the resolved registry row, and *X new / Y
      already-ingested*. Check it.
    - Click **Ingest**. A live log streams the progress. (A *Dry-run* checkbox,
-     on by default, lets you do a no-write rehearsal first.)
+     on by default, lets you do a no-write rehearsal first; a banner shows while
+     it is on and the run ends with a clear "NOTHING was written" summary.)
+     **Dry-run default (testing period):** it defaults ON so operators learn the
+     tool safely; **flip it to OFF once testing is complete** — remove `checked`
+     from `#r-dry` in `gui/templates/index.html` (`TODO(dry-run-default)` marks
+     the spot).
 4. **Build a recipe** (only when defining a brand-new naming convention): the
    builder tab lets you set how filenames/folders are parsed, see a live
    `discovered.*` grid over your real files, map those values into the registry

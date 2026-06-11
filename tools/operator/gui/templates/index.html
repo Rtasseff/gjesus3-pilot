@@ -35,6 +35,13 @@
 
   <!-- ====================================================== RECIPE RUNNER -->
   <section id="tab-runner" class="tabpane active">
+    <!-- Dry-run banner — shown by app.js updateDryState() whenever dry-run is
+         ON. High-contrast so an operator can never mistake a test for a real
+         run (operators sometimes don't realise a run was a dry run). -->
+    <div id="r-dry-banner" class="dry-banner" hidden>
+      DRY RUN — preview only. <strong>Nothing will be written to the NAS.</strong>
+      Uncheck “Dry-run” at the bottom to ingest for real.
+    </div>
     <div class="row">
       <label>Instrument
         <select id="r-instrument">
@@ -131,7 +138,11 @@
     </details>
 
     <div class="commit-row" id="r-commit">
-      <label class="check"><input id="r-dry" type="checkbox"> Dry-run (test only — writes nothing)</label>
+      <!-- TODO(dry-run-default): dry-run defaults ON (checked) during the
+           testing period so operators learn the tool safely. Flip to OFF
+           (remove `checked`) once testing is complete — see the matching note
+           in gui/README.md, operator/README.md, and 11_OPERATIONS.md §3.3. -->
+      <label class="check"><input id="r-dry" type="checkbox" checked> Dry-run (test only — writes nothing)</label>
       <span class="state" id="r-dry-state"></span>
       <button id="r-ingest" type="button" class="go" disabled>Ingest</button>
     </div>
