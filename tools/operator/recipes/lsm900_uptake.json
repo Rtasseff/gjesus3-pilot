@@ -1,0 +1,10 @@
+{
+  "schema": "gjesus3.operator.recipe/v1",
+  "name": "LSM 900 — confocal (researcher_experiment_cellline folder)",
+  "instrument": "LSM9",
+  "description": "LSM 900 confocal batch where the BATCH FOLDER name encodes <researcher>_<experiment-with-internal-underscores>_<cell_line> (e.g. LAURA_UPTAKE_LP-IONP-doxo_MDA) and the .czi files sit directly inside it; a parent-folder regex extracts the three values. Mirrors tools/configs/lsm900_laura_uptake_TEST.yaml (round 7). This is the LSM 900 template default — pick it, point at the CONFOCAL LSM 900 root (or directly at the batch folder), preview, then ingest.",
+  "based_on": "tools/configs/lsm900_laura_uptake_TEST.yaml",
+  "overrides": {
+    "registry.notes": "LSM 900 confocal of ${discovered.cell_line} cells; experiment ${discovered.experiment}; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na} ${discovered.czi_acquisition_mode}"
+  }
+}

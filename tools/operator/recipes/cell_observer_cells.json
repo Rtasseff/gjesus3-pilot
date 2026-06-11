@@ -1,0 +1,10 @@
+{
+  "schema": "gjesus3.operator.recipe/v1",
+  "name": "Cell Observer — cells (standard filename)",
+  "instrument": "CELL",
+  "description": "Cell Observer cells-mode batch with the FULL naming convention: folders <researcher>/<cell_line>/<experiment>/ and filenames <cell_line>_<experiment>_<magnification>_<condition>_<image_num>.czi (5 underscore chunks). Mirrors tools/configs/cell_observer_itziar_alphasma_TEST.yaml (round 5). This is the Cell Observer template default — pick it, point at the CELL OBSERVER root (the folder above <researcher>), preview, then ingest. If your filenames carry ONLY <condition>_<image_num> (the rest living in the folders), use the 'abbreviated filename' recipe instead.",
+  "based_on": "tools/configs/cell_observer_itziar_alphasma_TEST.yaml",
+  "overrides": {
+    "registry.notes": "Cell Observer cells-mode (${discovered.cell_line} / ${discovered.experiment}): ${discovered.condition}, image ${discovered.image_num}; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na}"
+  }
+}
