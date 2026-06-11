@@ -179,11 +179,16 @@ def test_tissue_and_cells():
         base_case("tissue"), acq_id="ACQ-T", acq_date="20251027",
         log=log, lookup_fn=make_lookup("found"))
     check(subj is not None and cond is not None, "tissue gets subject + condition")
-    check(anat is None, "tissue gets NO anatomy block")
+    # 2026-06-09: anatomy: extended to ex-vivo tissue (region-only; is_whole_body
+    # N/A). See 08_METADATA §4.6 / 09_MODALITIES.
+    check(anat is not None, "tissue gets an anatomy block (region-only) — 2026-06-09")
     s2, c2, a2 = enrichment.build_enrichment(
         {"sample_type": "cells", "discovered": {}}, acq_id="ACQ-C",
         acq_date="20251027", log=log, lookup_fn=make_lookup("found"))
-    check(s2 is None and c2 is None and a2 is None, "cells gets no enrichment blocks")
+    # 2026-06-09: condition: written for cells too (control-vs-case applies to a
+    # disease-model line vs a wild-type/untreated control); subject/anatomy stay off.
+    check(s2 is None and c2 is not None and a2 is None,
+          "cells gets condition only (no subject / no anatomy) — 2026-06-09")
 
 
 def test_unknown_source():
