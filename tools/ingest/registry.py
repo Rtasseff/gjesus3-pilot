@@ -3,6 +3,8 @@
 import csv
 import os
 
+from . import csv_safe
+
 
 # Field order must match 06_REGISTRIES.md schema. The `ingest_config`
 # column records the YAML config that produced each row (relative path
@@ -86,8 +88,9 @@ def append_row(registry_path, row_dict):
     file_exists = os.path.exists(registry_path)
 
     if file_exists:
-        with open(registry_path, "r", encoding="utf-8", newline="") as f:
-            existing = next(csv.reader(f), [])
+        # BOM-tolerant header read (csv_safe): an Excel "Save As CSV UTF-8"
+        # BOM must not make the header compare unequal and refuse every append.
+        existing = csv_safe.read_header(registry_path)
         if existing != REGISTRY_FIELDS:
             raise RuntimeError(
                 f"registry header mismatch in {registry_path}\n"
@@ -100,6 +103,9 @@ def append_row(registry_path, row_dict):
     # Ensure all fields present (fill missing with empty string)
     row = {field: row_dict.get(field, "") for field in REGISTRY_FIELDS}
 
+    # Guard against a missing trailing newline (Excel round-trip / hand edit),
+    # which would otherwise concatenate this row onto the previous last row.
+    csv_safe.ensure_trailing_newline(registry_path)
     with open(registry_path, "a", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=REGISTRY_FIELDS)
         if not file_exists:

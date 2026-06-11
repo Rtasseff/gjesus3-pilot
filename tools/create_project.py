@@ -21,6 +21,7 @@ from pathlib import Path
 # (this script, ingest_raw.py Step 12, future Excel-importer, close-out
 # tool) shares one source of truth.
 from ingest import provenance as provenance_mod
+from ingest import csv_safe
 
 
 # --- Constants ---
@@ -66,7 +67,9 @@ def read_project_registry(registry_path):
     """Read project registry and return list of row dicts."""
     if not os.path.exists(registry_path):
         return []
-    with open(registry_path, "r", newline="") as f:
+    # utf-8-sig: tolerate an Excel BOM so the first column key stays
+    # "project_id" for uniqueness / next-id checks.
+    with open(registry_path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         return list(reader)
 
@@ -210,7 +213,8 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
         "notes": notes,
     }
 
-    with open(registry_path, "a", newline="") as f:
+    csv_safe.ensure_trailing_newline(registry_path)
+    with open(registry_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=PROJECT_REGISTRY_FIELDS)
         if not file_exists:
             writer.writeheader()

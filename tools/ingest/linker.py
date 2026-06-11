@@ -22,6 +22,8 @@ import os
 import subprocess
 import sys
 
+from . import csv_safe
+
 
 def create_manifest_entry(manifest_path, acq_id, original_name, canonical_path):
     """Append an entry to the ingest manifest CSV.
@@ -32,7 +34,10 @@ def create_manifest_entry(manifest_path, acq_id, original_name, canonical_path):
     file_exists = os.path.exists(manifest_path)
 
     fieldnames = ["acq_id", "original_name", "canonical_path"]
-    with open(manifest_path, "a", newline="") as f:
+    # Trailing-newline guard (csv_safe): never concatenate onto a last row that
+    # lost its newline through an Excel round-trip.
+    csv_safe.ensure_trailing_newline(manifest_path)
+    with open(manifest_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         if not file_exists:
             writer.writeheader()
@@ -51,7 +56,9 @@ def lookup_project_folder(projects_registry_path, project_id):
     """
     if not project_id or not os.path.exists(projects_registry_path):
         return None
-    with open(projects_registry_path, "r", newline="") as f:
+    # utf-8-sig: tolerate an Excel BOM so the first column key stays
+    # "project_id" (not "﻿project_id"), else lookups silently miss.
+    with open(projects_registry_path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row.get("project_id") == project_id:
@@ -74,7 +81,7 @@ def resolve_project(projects_registry_path, hint):
     if not hint or not os.path.exists(projects_registry_path):
         return None, None
     hint_lower = hint.lower()
-    with open(projects_registry_path, "r", newline="") as f:
+    with open(projects_registry_path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row.get("project_id") == hint:

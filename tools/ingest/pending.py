@@ -17,6 +17,8 @@ import csv
 import os
 from datetime import datetime, timezone
 
+from . import csv_safe
+
 
 PENDING_FILENAME = "pending_subject_metadata.csv"
 
@@ -46,7 +48,8 @@ def read_pending(path):
     """Read the pending list -> list of row dicts (empty if absent)."""
     if not os.path.exists(path):
         return []
-    with open(path, "r", encoding="utf-8", newline="") as f:
+    # utf-8-sig: BOM-tolerant (Excel round-trip), matching csv_safe.read_header.
+    with open(path, "r", encoding="utf-8-sig", newline="") as f:
         return list(csv.DictReader(f))
 
 
@@ -54,8 +57,7 @@ def _assert_header(path):
     """Raise RuntimeError if an existing file's header != PENDING_FIELDS."""
     if not os.path.exists(path):
         return
-    with open(path, "r", encoding="utf-8", newline="") as f:
-        existing = next(csv.reader(f), [])
+    existing = csv_safe.read_header(path)  # BOM-tolerant
     if existing and existing != PENDING_FIELDS:
         raise RuntimeError(
             f"pending-list header mismatch in {path}\n"
