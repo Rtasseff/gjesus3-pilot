@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft  
-**Last Updated:** 2026-06-03 (**Phase 3 enrichment writer IMPLEMENTED** — `subject:`/`condition:`/`anatomy:` are now written at ingest Step 8.4 via `tools/ingest/enrichment.py` + `metadata_sidecar.build_sidecar`, non-blocking per §4.7; deferred-recovery pending list `registries/pending_subject_metadata.csv` (`tools/ingest/pending.py`) + superuser recovery `tools/recover_subject_metadata.py`; standalone read-only tools `gather_metadata.py` / `validate_registries.py` / `verify_checksums.py` / `metadata_completeness.py`. Status tables §4.4.5/§4.5.5/§4.6.4 + §4.7.4 flipped to IMPLEMENTED; backfill + registry `subject_id`/`anatomical_entity` columns stay deferred. Earlier same-day: **Non-blocking metadata model §4.7** — `subject:`/`condition:`/`anatomy:` NEVER block ingest; `is_control` + `is_whole_body` softened from hard-required to tri-state recommended-WARN (`true`/`false`/`null`), set-once-per-batch propagation, best-effort auto, bulk enrichment later, archive data ingests with guesses/unknown. NEW `anatomy:` §4.6 (`is_whole_body` + UBERON `region`); animal-DB explored + Subject/Sample identity model → `subject:` §4.4 (`facility_animal_id` reused subject id, `procedures` STRUCTURED, META-07 retired); identity model in [06_REGISTRIES §2.3](06_REGISTRIES.md). Prior: 2026-06-02 DOB + deferred-recovery §4.4.6)
+**Last Updated:** 2026-06-11 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: Phase-3 enrichment writer (`subject:`/`condition:`/`anatomy:` sidecar blocks, non-blocking §4.7); the registry `subject_id` column added 2026-06-11 (S1) — auto from `subject.facility_animal_id` (§4.4).
 
 ---
 

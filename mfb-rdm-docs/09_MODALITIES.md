@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-06-09 (**`condition:` now written for `sample_type = cells`** — Cell Observer + LSM 900; cell cultures are control-vs-case too — AND **`anatomy:` extended to `tissue`**: AxioScan sections now record the UBERON `region` the section was cut from (`is_whole_body` N/A), the same UBERON field as in-vivo scan region (corrects the earlier "anatomy is organism-only / `anatomical_entity` = REMBI 'Location within biosample'" — that REMBI field is spatial, §2.3 fixed). `subject:` stays tissue/organism-only. §4.5/§4.6 + the per-instrument rows below. Prior 2026-06-03: per-instrument subject + condition + anatomy metadata — `subject:` §4.4 / `condition:` §4.5 / `anatomy:` §4.6; **non-blocking model §4.7** — `is_control` + `is_whole_body` are highly-recommended tri-state, WARN-not-block; **the enrichment writer is now IMPLEMENTED** — Phase 3, fires at ingest for `sample_type ∈ {organism, tissue}`, see [10_TOOLS §2.1.6](10_TOOLS.md))
+**Last Updated:** 2026-06-11 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_id` column added (S1).
 
 ---
 

@@ -138,6 +138,9 @@ gjesus3-pilot/
 
 ## Key Entry Points
 
+- **▶ Operators / techs start here:** [`START_HERE.md`](START_HERE.md) — one page: pick your front-end, set `GJESUS3_ROOT`, dry-run first.
+- **Glossary:** [`GLOSSARY.md`](GLOSSARY.md) — REMBI / ISA / UBERON / "sidecar" / `discovered.*` / ACQ-ID and the other terms a newcomer hits undefined.
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md) — the single narrative history of design + tooling decisions.
 - **Reframe (why gjesus3 looks the way it does):** [`13_GJESUS3_ROLE`](mfb-rdm-docs/13_GJESUS3_ROLE.md)
 - **Design docs:** [`mfb-rdm-docs/00_INDEX.md`](mfb-rdm-docs/00_INDEX.md) — full index with status of each module
 - **Background:** [`01_OVERVIEW.md`](mfb-rdm-docs/01_OVERVIEW.md) — why this system exists and what it does

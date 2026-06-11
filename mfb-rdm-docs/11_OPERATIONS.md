@@ -1,8 +1,8 @@
 # 11 — Operations
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** 📋 Planned  
-**Last Updated:** 2026-05-11
+**Status:** 🔶 Draft / In use  
+**Last Updated:** 2026-06-11
 
 ---
 
@@ -132,6 +132,8 @@ The conceptual model above is now applied on the live container. **IT will not c
 6. **Access granted** (NAS credentials)
 
 ### 3.2 Quick Start Guide
+
+> **Most operators want [§3.3 Operator self-service ingest (no-YAML path)](#33-operator-self-service-ingest-no-yaml-path) instead** — the microscopy GUI and the `ni-ingest` / `mri-ingest` scripts, no config files. Start there (and at the one-page [`START_HERE.md`](../START_HERE.md)). §3.2 below is the YAML/data-office path for batch ingests and new conventions.
 
 Daily flow for depositing a new acquisition. This is the operational view — what to do and in what order. For the underlying command syntax and flags, see [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md).
 
