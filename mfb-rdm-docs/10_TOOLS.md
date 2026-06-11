@@ -369,6 +369,8 @@ anatomy:                         # organism only
 12. Append entry to `registries/ingest_manifest.csv` (always); if `--project` is set (or `project_hint` resolves), also create a hard link in `<project>/raw_linked/` to the raw primary — a single hard link for a file primary, or a real folder of per-file hard links for a `<ACQ-ID>.data` folder primary (see §2.1.1)
 13. Report summary
 
+> **Registry integrity (2026-06-11).** Step 5 (ACQ-ID allocation) and step 11 (registry append) are each serialized by an atomic lockfile mutex (`tools/ingest/locking.py`; `registries/.registry.lock` + the `.acq_id_seq.json` high-water reservation) so concurrent ingests can't mint a duplicate ACQ-ID or tear a CSV line — the lock is held briefly, **never across the copy**. The **registry append is the commit point**: any failure between the copy and the append rolls back the partially-written acquisition folder so a re-run starts clean, and `--delete-source` runs only *after* the append succeeds. Every CSV append (registry, manifest, provenance, pending) routes through the BOM-tolerant, trailing-newline-safe `tools/ingest/csv_safe.py`. See [06_REGISTRIES §2.7](06_REGISTRIES.md).
+
 **Lightweight Mode (`--lightweight`) — per acquisition:**
 1. Load + validate config (fewer required fields)
 2. Generate ACQ-ID
