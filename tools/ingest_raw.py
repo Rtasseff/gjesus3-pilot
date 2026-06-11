@@ -40,10 +40,22 @@ def relative_config_path(config_path):
         )
         repo_root = result.stdout.strip()
         if repo_root:
-            return os.path.relpath(abs_path, repo_root).replace("\\", "/")
+            try:
+                return os.path.relpath(abs_path, repo_root).replace("\\", "/")
+            except ValueError:
+                # config on a different Windows drive than the repo — a
+                # relative path is impossible; record the absolute path.
+                return abs_path.replace("\\", "/")
     except Exception:
         pass
-    return os.path.relpath(abs_path).replace("\\", "/")
+    try:
+        return os.path.relpath(abs_path).replace("\\", "/")
+    except ValueError:
+        # On Windows, os.path.relpath raises ValueError when abs_path and the
+        # CWD are on different drives (e.g. config on J:, repo/CWD on C:).
+        # A non-relative ingest_config value is fine; a crash before any
+        # ingest is not. Fall back to the absolute forward-slash path.
+        return abs_path.replace("\\", "/")
 
 try:
     from tqdm import tqdm
