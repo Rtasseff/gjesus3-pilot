@@ -105,6 +105,8 @@ AUTO_COLUMNS = {
     "extended_metadata_present",
     "original_name",
     "ingest_config",
+    "subject_id",   # DECIDED 2026-06-11 — auto from the enrichment subject
+                    # block (facility_animal_id); never operator-set in registry:
 }
 
 

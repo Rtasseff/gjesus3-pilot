@@ -35,6 +35,15 @@ REGISTRY_FIELDS = [
     "data_source",
     "sample_id",
     "sample_type",
+    "subject_id",        # DECIDED 2026-06-11 — Auto. The canonical reused
+                         # facility animal id (<animal_code>-AE-biomaGUNE-<NNNN>),
+                         # == sidecar subject.facility_animal_id and the future
+                         # XNAT/OMERO join key. EMPTY for non-animal samples
+                         # (cells/material/phantom) and best-effort (may be empty
+                         # when the DB lookup misses — non-blocking). Lets the
+                         # registry answer "all acquisitions of animal X" without
+                         # opening sidecars (sample_id is overloaded per sample
+                         # type). See 06_REGISTRIES §2.2.
     "session_id",        # DRAFT 2026-05-20
     "primary_kind",      # DRAFT 2026-05-20
     "primary_file_name",
@@ -153,6 +162,10 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt):
         "data_source": cfg.get("data_source", ""),
         "sample_id": cfg.get("sample_id", ""),
         "sample_type": cfg.get("sample_type", ""),
+        # subject_id: stashed onto cfg_single in ingest_raw.py from the
+        # enrichment subject block's facility_animal_id (empty for non-animal
+        # / DB-miss). See 06_REGISTRIES §2.2.
+        "subject_id": cfg.get("subject_id", ""),
         "session_id": cfg.get("session_id", ""),
         "primary_kind": cfg.get("primary_kind", ""),
         "primary_file_name": primary_file,

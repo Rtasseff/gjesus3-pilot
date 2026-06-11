@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
-"""One-shot migration: add `session_id` and `primary_kind` columns to
-the existing registry_raw.csv.
+"""One-shot migration: bring an existing registry_raw.csv up to the current
+REGISTRY_FIELDS column layout.
 
-Run this once when REGISTRY_FIELDS in tools/ingest/registry.py gains
-new columns; the defensive header check in `append_row()` will refuse
-to write until this migration runs.
+Generic — it auto-detects whichever columns REGISTRY_FIELDS in
+tools/ingest/registry.py has gained since the file was written and inserts them
+at their canonical positions. (Past additions: session_id + primary_kind on
+2026-05-20; subject_id on 2026-06-11.) Run it once after REGISTRY_FIELDS
+changes; the defensive header check in `append_row()` refuses to write until
+the on-disk header matches.
 
 Approach:
-  1. Read the existing CSV (any header layout).
-  2. Insert the new columns at their canonical positions (defined by
-     REGISTRY_FIELDS in registry.py).
-  3. Backfill empty strings for new columns on existing rows.
-  4. Backup the original to <path>.bak.<timestamp> before overwriting.
+  1. Read the existing CSV (any header layout; BOM-tolerant).
+  2. Re-emit each row in the canonical REGISTRY_FIELDS order, padding new
+     columns with empty strings (matched by column NAME, so reordering and
+     insertion are both handled). Aborts if the file has columns NOT in the
+     target schema (a rename/removal needs a human).
+  3. Backup the original to <path>.bak.<timestamp> before overwriting.
 
 Usage:
     python tools/migrate_registry_columns.py [--registry <path>] [--dry-run]
 
-Defaults to the registry under GJESUS3_ROOT or /mnt/gjesus3.
+Defaults to the registry under GJESUS3_ROOT or /mnt/gjesus3. Run with --dry-run
+first; verify the first-row preview; then run live.
 """
 
 import argparse
@@ -37,7 +42,9 @@ def migrate(registry_path, dry_run=False):
         print(f"ERROR: registry not found: {registry_path}")
         return 1
 
-    with open(registry_path, "r", encoding="utf-8", newline="") as f:
+    # utf-8-sig: tolerate an Excel BOM on the existing header (matches the
+    # BOM-tolerant readers in ingest/csv_safe.py).
+    with open(registry_path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.reader(f)
         rows = list(reader)
 

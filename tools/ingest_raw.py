@@ -1045,6 +1045,14 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             log=log,
         )
 
+        # F item S1: stash subject_id (the canonical reused facility animal id)
+        # onto the config so build_row writes it to the registry — the queryable
+        # join key that answers "all acquisitions of animal X" without opening
+        # sidecars. Empty for non-animal samples (subject_block is None) and
+        # best-effort (the placeholder's facility_animal_id may be "" on a DB
+        # miss). Mirrors sidecar subject.facility_animal_id.
+        cfg_single["subject_id"] = (subject_block or {}).get("facility_animal_id", "")
+
         sidecar_dict = metadata_sidecar.build_sidecar(
             acq_id_str,
             cfg_single,
