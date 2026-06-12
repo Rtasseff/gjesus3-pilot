@@ -48,34 +48,35 @@ Each `…/data/nmr/<exam>` is a ParaVision exam folder (the per-exam layout + pa
 [`mri-platform/internal_mri_data_handling_workflow_notes.md`](mri-platform/internal_mri_data_handling_workflow_notes.md)).
 Round 6 used `tools/ftp_mirror.py` (SFTP) for the FTP-from-workstation pull.
 
-### Credential handling — how to save the password for scripts (recommended approach)
+### Credential handling — DECIDED 2026-06-12: simple password in a local file
 
-**Preferred: passwordless SSH key (no stored password at all).** Generate a key pair on the machine
-that will run the sync, install the public key on the server, keep the private key local and
-protected (never in the repo or OneDrive):
+The host is **behind the work firewall** (not the open internet) and the `mriuser` password is
+short/widely-known on-site, so sensitivity is low. The sync runs on a **shared machine we do not
+reconfigure**, so SSH keys / `authorized_keys` edits are out — we use a plain **password file**,
+scoped to this project.
 
-1. `ssh-keygen -t ed25519 -f ~/.ssh/kenia_mri -C "gjesus3 mri sync"` (set a passphrase or leave empty
-   for unattended scripts).
-2. Install the public key: `ssh-copy-id -i ~/.ssh/kenia_mri.pub mriuser@kenia.cicbiomagune.int`
-   (or paste `kenia_mri.pub` into the server's `~/.ssh/authorized_keys`).
-3. Scripts then authenticate with the key — `paramiko`/`pysftp` `key_filename=~/.ssh/kenia_mri`, or
-   `sftp -i ~/.ssh/kenia_mri`, or `rsync -e "ssh -i ~/.ssh/kenia_mri"`. **No password in any file.**
-4. Optionally pin it in `~/.ssh/config` so the host/user/key are implicit:
-   ```
-   Host kenia-mri
-       HostName kenia.cicbiomagune.int
-       User mriuser
-       IdentityFile ~/.ssh/kenia_mri
-   ```
+**Exact file** (user profile — NOT the repo, NOT OneDrive):
 
-**If the server only allows password auth** (no keys): store it **outside git and OneDrive** —
-- Windows: **Windows Credential Manager**, retrieved in Python via the `keyring` library; or
-- a permission-restricted file in the user profile (e.g. `C:\Users\<you>\.ssh\kenia_mri.cred` or a
-  `~/.netrc` entry), referenced by an **env var** — the same philosophy as the existing animal-DB
-  `~/.my.cnf` (`GJESUS3_MYCNF`): sensitive, not committed, machine-local, on-network only.
+`C:\Users\<you>\.ssh\gjesus3_mri.cred`
 
-**Never** put the password in the repo, OneDrive-synced folders, or logs. (The executor/agent will not
-have it — install it out-of-band on the sync machine.)
+**Exact contents** (INI — a future script reads it with one `configparser` call):
+
+    [mri]
+    host = kenia.cicbiomagune.int
+    user = mriuser
+    password = <the password>
+
+**Why there, and not the obvious alternatives:**
+- **Not `.my.cnf`** — that is the MySQL/animal-DB config (read by pymysql); different tool, keep
+  separate so neither breaks.
+- **Not inside the project folder** — the repo is pushed to GitHub *and* the folder is OneDrive-synced;
+  even a trivial password must not land in either. `C:\Users\<you>\.ssh\` is local-profile only.
+- `.ssh\` already exists and is user-protected; the `.cred` name + `[mri]` section make it clearly a
+  credentials file, distinct from the SSH key files beside it.
+
+Optional (low priority given low sensitivity) lock-down:
+`icacls "%USERPROFILE%\.ssh\gjesus3_mri.cred" /inheritance:r /grant:r "%USERNAME%:R"`.
+The agent does not have the password — it is pasted in out-of-band on the sync machine.
 
 ---
 
