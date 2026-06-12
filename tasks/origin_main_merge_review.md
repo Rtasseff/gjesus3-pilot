@@ -47,49 +47,64 @@ The user is **fine with the new subjects table**.
 (items 4/5/6), CELL+LSM9 recipes (3), `os.link` diagnostic (11), frozen-GUI path fix (2),
 `START_HERE.md` / `GLOSSARY.md` / `CHANGELOG.md` + de-bloat (D1–D4), suggested vocabularies (S3).
 
-## 3. The `subject_id` (singular) ⨉ `subject_ids` (plural) tension — **NI-LIVE-08**
+## 3. Subject / sample data shape — **DECIDED 2026-06-12 (user)**
 
-The designer flagged this themselves (NI-LIVE-08, §8 of the new doc): the registry has a **singular
-`subject_id`** column (their `23df602`, and my S1), but a multi-animal scan references **1–4** subjects.
-*How does the single column represent N>1 — a list? a primary + the others in the table?*
+> NI-LIVE-08 (singular `subject_id` vs plural `subject_ids`) is **resolved: packed plural**. This is a
+> **data-capture** decision; the **query layer is explicitly deferred** (flat tables / our own DB /
+> XNAT / OMERO — undecided, revisit after we have data). Guiding principle (user): converge what the
+> org has into one place, **stop expanding the model**, capture the right data for one small group (3–6
+> people, 12–18 months back), *then* build access/query/retrieval.
 
-§3B/§3C already imply the answer; this just makes it explicit. **Recommended resolution (for the user /
-designer to confirm):**
+1. **Acquisition registry (`registry_raw.csv`) → packed `subject_ids` column.** `;`-joined facility
+   animal ids, **always a list** (length 1 in the ~99% single-animal case, so single- and multi- are one
+   uniform shape). It is the scan→animal link **and** makes multiplicity visible to a registry-only
+   reader (the filenames already set that expectation). It is a **human-readable summary**, not a join
+   key — exact lookups use the subject table. **Replaces** the singular `subject_id` (designer's
+   `23df602` + correction-pass S1). `sample_organism` / `anatomical_entity` stay singular (uniform across
+   an all-organism scan). **`sample_type`, `sample_id`, and every GUI are UNTOUCHED** — many subjects ⇒
+   many samples, but **one `sample_type`** (the category, e.g. `organism`), so nothing cascades.
+2. **Sidecar (`metadata.json`) → minimal subject subset.** For an animal: facility animal id, species,
+   sex, age-at-acquisition (+ a `subjects:[…]` array for a multi-animal scan). A deliberate **hedge** —
+   if only the raw archives survive, minimal subject context travels with them. **Not** the full record.
+3. **Subject table (`registry_subjects.csv`) → a TRUE subject table: one row per subject.** The subject
+   facts we can grab now (facility id, species, sex, age-at-acq, …), brought into gjesus3 from the
+   otherwise-isolated facility DB as needed. **Updatable / back-fillable** (subject data is mutable; the
+   DB lags; only the data office has creds and access reliability is unknown). The **static-vs-dynamic**
+   refinement (e.g. disease models — animals are *manipulated*, not born that way) is a **FUTURE** issue
+   to take from ISA / other data models — **not now**. Now: grab-what-we-can, one entry per subject.
+4. **Deferred recovery / the immutability "cheat" — ALREADY BUILT (Phase 3, 2026-06-03; confirmed).** A
+   DB-miss / no-credentials ingest does not block: it writes `source:"pending-db"` and **queues the acq
+   to `registries/pending_subject_metadata.csv`** (flags the data office). The data office later runs
+   **`tools/recover_subject_metadata.py`** (creds + sidecar-write) to **update the JSON sidecars in
+   place** — the controlled, data-office-only exception to `/raw/` immutability ([08_METADATA §4.4.6 /
+   §4.7](../mfb-rdm-docs/08_METADATA.md)). This is *the* path; document it as such.
+5. **NO mapping / junction table ("Acquisition registry", one row per `acq × subject`) now.** The
+   multiplicity is already captured by the packed `subject_ids` column + the sidecar `subjects:[…]`. A
+   per-`(acq, subject)` table is a **query-layer** optimization — **documented as a FUTURE option**, to
+   revisit when we build access/query (it answers exact "all scans of animal X" without a substring
+   filter; not needed to *capture* the data). Not built now.
 
-- **Keep `subject_id` SINGULAR as the registry column** = the **primary** subject (the single animal in
-  the 99% case; `scan_position 1` for a multi-animal scan). It stays atomic, the queryable join key, and
-  matches the post-restart schema + both implementations. → this is NI-LIVE-08's *"primary + others in
-  the table"* option.
-- **`registry_subjects.csv` (the new subjects table) is the authoritative N>1** — one row per
-  `(acq_id, animal, position)`. This is where the *plural* relationship lives, **as rows**, not as a
-  packed column. The sidecar `subjects: [...]` array mirrors the minimal subset.
-- **Do NOT add a plural `subject_ids` registry COLUMN.** The `subject_ids` semicolon-string the doc
-  mentions is a **denormalized human-readable convenience** (sidecar, or an optional non-key display
-  field) — never the key. A packed plural column would break atomicity, the join, and the singular
-  post-restart schema for the sake of the ≤1% multi-animal case the table already handles.
-
-Net shape: `subject_id` (singular column = primary) **+** `registry_subjects.csv` (authoritative table)
-**+** sidecar `subjects:[…]`. Singular naming is preserved; multi-animal fidelity lives in the table.
-**Alternatives if the user prefers** (document the choice): (a) packed `subject_id` = `id1;id2;…` (atomic-breaking);
-(b) rename the column to plural `subject_ids` always-a-list (breaks the singular join + restart schema).
-Recommendation is to keep singular + table.
-
-## 4. Proposed merge approach (after the NI-LIVE-08 decision + go-ahead)
+## 4. Merge approach (after go-ahead; design now DECIDED in §3)
 
 1. **Merge `origin/main` into `fix/correction-pass-2026-06`** (one integration pass; the overlap is
    concentrated, so resolving once beats an 18-commit rebase).
-2. Conflict resolution rules: **registry schema → take the designer's 3-column `build_row(subject=,
-   anatomy=)`** and delete my single-column S1 wiring (the `cfg_single["subject_id"]` stash in
-   `ingest_raw.py` + my `build_row` `subject_id` line); **relpath → keep one copy**; **GUI/tasks/docs →
-   union** (keep both features / both backlog lists; fold my S1 doc text into their 3-column text).
-   Keep all my unique work (§2) intact.
-3. **Re-run the full test suite + the sandbox harnesses** (lock, csv_safe, archive-rerun, orphan,
-   empty-folder, + a build_row test updated for the 3 columns). Update `test_registry_fields.py` to the
-   3-column schema.
+2. Conflict resolution, applying §3:
+   - **Registry schema → adopt the designer's `build_row(subject=, anatomy=)` projection** and their
+     `sample_organism` / `anatomical_entity` columns; **rename the singular `subject_id` → packed
+     `subject_ids`** (both the designer's `23df602` column and the correction-pass S1 column collapse to
+     the one packed column; `subject_ids` = `;`-joined `subject.facility_animal_id`, length-1 in the
+     common case). Drop my S1 `cfg_single["subject_id"]` stash. `sample_type`/`sample_id`/GUIs untouched.
+   - **relpath → keep one copy** (functionally identical). **GUI / tasks / docs → union** (both features;
+     both backlog lists; fold my S1 doc text into the packed-`subject_ids` text).
+   - Keep all my unique work (§2) intact.
+3. **Re-run the full test suite + sandbox harnesses** (lock, csv_safe, archive-rerun, orphan,
+   empty-folder). Update `test_registry_fields.py` to `subject_ids` (packed) + `sample_organism` +
+   `anatomical_entity`.
 4. **Review again** (the user's "review again" step) before the user pushes.
-5. The new `registry_subjects.csv` writer + the multi-animal list handling is **the designer's
-   Stage-A/B NI-live work** (tracked in their doc / BACKLOG) — *not* part of this merge; the merge only
-   has to not conflict with the singular `subject_id` column.
+5. **Not in this merge** (the designer's NI-live Stage-A/B work; coordinate): the `registry_subjects.csv`
+   **true subject table** writer (one row per subject — note this is a **reshape** from the designer's
+   current mapping-shape table), the multi-animal `subject_ids` list assembly, and the minimal sidecar
+   `subjects:[…]`. The merge only has to land the packed `subject_ids` column + keep §2 intact.
 
 ## 5. External deps still on the user (carried from the correction pass)
 
@@ -99,7 +114,12 @@ Recommendation is to keep singular + table.
 - [ ] Optional: install `~/.my.cnf` on a trusted machine to enable animal-DB auto-fill (item 10 — an optimization, not required).
 - [ ] **Push** `fix/correction-pass-2026-06` interactively (`git push -u origin fix/correction-pass-2026-06`) — the agent push hangs on the GCM dialog.
 
-## 6. Decisions needed from the user
+## 6. Status / next step
 
-- **NI-LIVE-08** — confirm the §3 reconciliation: **singular `subject_id` column (primary) + `registry_subjects.csv` table + sidecar `subjects:[…]`**, no plural registry column. (Or pick alternative (a)/(b).)
-- **Go-ahead to execute the merge** (§4) once NI-LIVE-08 is set.
+- **§3 design is DECIDED (user, 2026-06-12).** NI-LIVE-08 resolved: packed `subject_ids` + true
+  one-row-per-subject table + minimal sidecar; no mapping table now; query layer deferred.
+- **Coordinate with the designer** (they own `registry_subjects.csv` + the schema on `origin/main`): the
+  table reshapes mapping → true subject table; the singular `subject_id` becomes packed `subject_ids`.
+- **Open: who executes the consolidation** — (a) the agent runs the merge per §4 on the
+  `fix/correction-pass-2026-06` branch now, or (b) hand these decisions to the designer to apply on
+  `origin/main` first, then merge. Awaiting the user's call.
