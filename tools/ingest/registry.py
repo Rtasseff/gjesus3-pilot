@@ -35,15 +35,20 @@ REGISTRY_FIELDS = [
     "data_source",
     "sample_id",
     "sample_type",
-    "subject_id",        # DECIDED 2026-06-11 — Auto. The canonical reused
-                         # facility animal id (<animal_code>-AE-biomaGUNE-<NNNN>),
-                         # == sidecar subject.facility_animal_id and the future
-                         # XNAT/OMERO join key. EMPTY for non-animal samples
-                         # (cells/material/phantom) and best-effort (may be empty
-                         # when the DB lookup misses — non-blocking). Lets the
-                         # registry answer "all acquisitions of animal X" without
-                         # opening sidecars (sample_id is overloaded per sample
-                         # type). See 06_REGISTRIES §2.2.
+    "sample_organism",   # NEW 2026-06-10 (REG-07) — binomial species, e.g.
+                         # "Mus musculus". Projection of the enrichment
+                         # subject.species (animal DB). Blank for non-animal
+                         # samples. AUTO (pipeline-derived, not a registry: key).
+    "subject_id",        # NEW 2026-06-10 (REG-01 Option B) — canonical
+                         # <animal_code>-AE-biomaGUNE-<NNNN> (= subject.
+                         # facility_animal_id). Blank for non-animal samples. AUTO.
+                         # NOTE (NI-LIVE-08, DECIDED 2026-06-12): for the imminent
+                         # multi-animal NI work this becomes the packed `subject_ids`
+                         # (;-joined, always-a-list) — the designer's redesign; left
+                         # singular here. See tasks/origin_main_merge_review.md §3.
+    "anatomical_entity", # NEW 2026-06-10 (REG-07 / META-09) — UBERON organ/region
+                         # label, projection of anatomy.region.label. Blank when
+                         # whole-body / unset / non-animal. AUTO.
     "session_id",        # DRAFT 2026-05-20
     "primary_kind",      # DRAFT 2026-05-20
     "primary_file_name",
@@ -122,7 +127,8 @@ def append_row(registry_path, row_dict):
         writer.writerow(row)
 
 
-def build_row(acq_id, cfg, summary, dest_path, registration_dt):
+def build_row(acq_id, cfg, summary, dest_path, registration_dt,
+              subject=None, anatomy=None):
     """Build a registry row dict from config and analysis results.
 
     Args:
@@ -131,6 +137,11 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt):
         summary: Source summary dict from dicom_utils.summarize_source.
         dest_path: Canonical path to the acquisition folder.
         registration_dt: ISO datetime string for registration_datetime.
+        subject: the non-blocking enrichment subject block (or None for
+            non-animal samples) — sources sample_organism + subject_id.
+        anatomy: the enrichment anatomy block (or None) — sources
+            anatomical_entity from anatomy.region.label. Both blocks are built
+            at ingest Step 8.4, before this row, so the values are in hand here.
 
     Returns:
         Dict with all REGISTRY_FIELDS populated.
@@ -149,6 +160,14 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt):
     # always win.
     modalities = cfg.get("modalities_in_study", "") or summary.get("modality", "") or ""
 
+    # The three preclinical descriptor columns are projections of the
+    # non-blocking enrichment blocks (built at Step 8.4, before this row). They
+    # are pipeline-derived (AUTO), not registry: keys, and blank for non-animal
+    # samples (subject/anatomy are None for cells/material/phantom).
+    subject = subject or {}
+    anatomy = anatomy or {}
+    region = anatomy.get("region") or {}
+
     return {
         "acq_id": acq_id,
         "registration_datetime": registration_dt,
@@ -162,10 +181,13 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt):
         "data_source": cfg.get("data_source", ""),
         "sample_id": cfg.get("sample_id", ""),
         "sample_type": cfg.get("sample_type", ""),
-        # subject_id: stashed onto cfg_single in ingest_raw.py from the
-        # enrichment subject block's facility_animal_id (empty for non-animal
-        # / DB-miss). See 06_REGISTRIES §2.2.
-        "subject_id": cfg.get("subject_id", ""),
+        # Projections of the enrichment blocks (built at Step 8.4, passed in via
+        # subject=/anatomy=). AUTO; blank for non-animal samples. (The
+        # correction-pass S1 added subject_id via a cfg stash; superseded by this
+        # direct projection.)
+        "sample_organism": subject.get("species", "") or "",
+        "subject_id": subject.get("facility_animal_id", "") or "",
+        "anatomical_entity": (region.get("label", "") if isinstance(region, dict) else "") or "",
         "session_id": cfg.get("session_id", ""),
         "primary_kind": cfg.get("primary_kind", ""),
         "primary_file_name": primary_file,

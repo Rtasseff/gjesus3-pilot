@@ -27,35 +27,43 @@ def check(cond, msg):
 
 def test_position():
     print("[schema position]")
-    i = registry.REGISTRY_FIELDS.index("subject_id")
-    check(registry.REGISTRY_FIELDS[i - 1] == "sample_type",
-          "subject_id immediately follows sample_type")
-    check(registry.REGISTRY_FIELDS[i + 1] == "session_id",
-          "subject_id immediately precedes session_id")
+    # The three enrichment-projection columns sit together between sample_type
+    # and session_id (designer's restart schema; consolidated with S1).
+    fields = registry.REGISTRY_FIELDS
+    i = fields.index("subject_id")
+    check(fields[i - 1] == "sample_organism", "subject_id follows sample_organism")
+    check(fields[i + 1] == "anatomical_entity", "subject_id precedes anatomical_entity")
+    st = fields.index("sample_type")
+    se = fields.index("session_id")
+    check(st < fields.index("sample_organism") < i < fields.index("anatomical_entity") < se,
+          "sample_organism / subject_id / anatomical_entity sit between sample_type and session_id")
 
 
 def test_build_row():
-    print("[build_row populates subject_id]")
-    cfg = {
-        "instrument": "MRI", "data_ecosystem": "DICOM",
-        "sample_type": "organism",
-        "subject_id": "13-AE-biomaGUNE-0423",
-    }
+    print("[build_row projects subject/anatomy -> 3 columns]")
     summary = {"file_count": 1, "total_size_mb": 1.0}
-    row = registry.build_row("ACQ-20260101-MRI-001", cfg, summary, "/raw/x/", "2026-06-11T00:00:00Z")
-    check(row["subject_id"] == "13-AE-biomaGUNE-0423", "subject_id flows cfg -> row")
-    # Non-animal / missing -> empty string, never KeyError.
+    cfg = {"instrument": "MRI", "data_ecosystem": "DICOM", "sample_type": "organism"}
+    # build_row projects straight from the enrichment blocks (subject=/anatomy=).
+    row = registry.build_row(
+        "ACQ-20260101-MRI-001", cfg, summary, "/raw/x/", "2026-06-12T00:00:00Z",
+        subject={"facility_animal_id": "13-AE-biomaGUNE-0423", "species": "Mus musculus"},
+        anatomy={"region": {"label": "heart"}},
+    )
+    check(row["subject_id"] == "13-AE-biomaGUNE-0423", "subject_id <- subject.facility_animal_id")
+    check(row["sample_organism"] == "Mus musculus", "sample_organism <- subject.species")
+    check(row["anatomical_entity"] == "heart", "anatomical_entity <- anatomy.region.label")
+    # Non-animal: subject=None / anatomy=None -> all three blank, no KeyError.
     row2 = registry.build_row("ACQ-20260101-CELL-001", {"sample_type": "cells"}, summary, "/raw/y/", "z")
-    check(row2["subject_id"] == "", "subject_id empty when cfg has none (non-animal)")
-    # Every REGISTRY_FIELD present in the row (full-width).
+    check(row2["subject_id"] == "" and row2["sample_organism"] == "" and row2["anatomical_entity"] == "",
+          "all three blank for a non-animal sample (no subject/anatomy)")
     check(set(row.keys()) == set(registry.REGISTRY_FIELDS), "row has exactly REGISTRY_FIELDS keys")
 
 
 def test_auto_classification():
     print("[auto-populated, not operator-set]")
-    check("subject_id" in resolver.AUTO_COLUMNS, "subject_id is in AUTO_COLUMNS")
-    check("subject_id" not in resolver.USER_CONTROLLABLE_COLUMNS,
-          "subject_id is NOT user-controllable")
+    for col in ("subject_id", "sample_organism", "anatomical_entity"):
+        check(col in resolver.AUTO_COLUMNS, f"{col} is in AUTO_COLUMNS")
+        check(col not in resolver.USER_CONTROLLABLE_COLUMNS, f"{col} is NOT user-controllable")
     # A registry: block that sets subject_id must be rejected.
     errs = resolver.validate_registry_block({
         "instrument": "MRI", "data_ecosystem": "DICOM", "researcher": "RT",

@@ -27,7 +27,11 @@ import create_project as create_project_mod
 def relative_config_path(config_path):
     """Return config_path as a forward-slash path relative to the git repo root.
 
-    Falls back to a CWD-relative path if not in a git repo.
+    Falls back to a CWD-relative path if not in a git repo, and to the absolute
+    path if even that is impossible. On Windows, os.path.relpath raises
+    ValueError when the two paths live on different drives (e.g. a batch config
+    on D: while the repo/CWD is on C:) — guard against it so a cross-drive
+    --config doesn't abort the whole ingest over a cosmetic provenance string.
     """
     if not config_path:
         return ""
@@ -1045,13 +1049,10 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             log=log,
         )
 
-        # F item S1: stash subject_id (the canonical reused facility animal id)
-        # onto the config so build_row writes it to the registry — the queryable
-        # join key that answers "all acquisitions of animal X" without opening
-        # sidecars. Empty for non-animal samples (subject_block is None) and
-        # best-effort (the placeholder's facility_animal_id may be "" on a DB
-        # miss). Mirrors sidecar subject.facility_animal_id.
-        cfg_single["subject_id"] = (subject_block or {}).get("facility_animal_id", "")
+        # (The correction-pass S1 stashed cfg_single["subject_id"] here; the
+        # merged build_row now projects subject_id / sample_organism /
+        # anatomical_entity straight from subject_block / anatomy_block — passed
+        # to build_row at Step 10 — so the stash is no longer needed.)
 
         sidecar_dict = metadata_sidecar.build_sidecar(
             acq_id_str,
@@ -1149,9 +1150,12 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
 
         # --- Step 10: Update registry (the commit point) ---
         # Serialize the append under the registry lock (torn-line safety over
-        # SMB). Brief hold — just the append.
+        # SMB). Brief hold — just the append. subject_block / anatomy_block were
+        # built at Step 8.4 (above); pass them so build_row projects
+        # sample_organism / subject_id / anatomical_entity.
         reg_dt = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt)
+        row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt,
+                                 subject=subject_block, anatomy=anatomy_block)
         with locking.registry_lock(registries_dir):
             registry.append_row(registry_path, row)
         committed = True

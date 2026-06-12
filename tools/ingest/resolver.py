@@ -105,8 +105,10 @@ AUTO_COLUMNS = {
     "extended_metadata_present",
     "original_name",
     "ingest_config",
-    "subject_id",   # DECIDED 2026-06-11 — auto from the enrichment subject
-                    # block (facility_animal_id); never operator-set in registry:
+    "sample_organism",     # NEW 2026-06-10 — projection of enrichment subject.species
+    "subject_id",          # NEW 2026-06-10 — projection of subject.facility_animal_id
+                           # (correction-pass S1 added the same column; superseded here)
+    "anatomical_entity",   # NEW 2026-06-10 — projection of anatomy.region.label
 }
 
 

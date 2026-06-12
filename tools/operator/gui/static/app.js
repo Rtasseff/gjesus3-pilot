@@ -1070,6 +1070,85 @@ $("#b-load-template").addEventListener("click", loadTemplateDefaults);
 // choice (-> prompt in the Runner), not the default state of an empty builder.
 bInstrument.addEventListener("change", loadTemplateDefaults);
 
+// ---- start from an existing recipe (builder) ----
+// Apply a saved recipe's flat override dict onto the builder widgets, ON TOP of
+// the already-loaded template defaults — so the builder shows the recipe's
+// EFFECTIVE config: template values for anything the recipe doesn't override, and
+// the recipe's own values (including a deliberate blank gap -> "prompt in runner")
+// for what it does. Only keys actually present in the override dict are touched,
+// which mirrors how config_builder merges template + overrides at ingest time.
+function applyOverridesToBuilder(ov) {
+  ov = ov || {};
+  if ("auto_discover.filename_parse" in ov) {
+    const fp = ov["auto_discover.filename_parse"] || {};
+    if (fp.regex) {
+      $("#b-fields").value = "";
+      $("#b-errors").textContent =
+        "Note: this recipe parses names with a regex, which the builder doesn't edit. " +
+        "Describe the name layout with the separator + labels above to change it.";
+    } else {
+      $("#b-separator").value = fp.separator || "_";
+      $("#b-fields").value = (fp.fields || []).join(", ");
+    }
+  }
+  if ("auto_discover.path_parse" in ov) {
+    const levels = (ov["auto_discover.path_parse"] || {}).levels || [];
+    $("#b-levels-count").value = levels.length;
+    renderLevels();
+    $$("#b-levels .level-label").forEach((inp, i) => { if (levels[i]) inp.value = levels[i]; });
+  }
+  if ("auto_discover.filter" in ov) {
+    builderFilterUI.clear();
+    Object.entries(ov["auto_discover.filter"] || {}).forEach(([k, v]) => builderFilterUI.addRow(k, v));
+  }
+  REQUIRED_FIELDS.forEach((f) => {
+    if (!(f.key in ov)) return;                 // omitted -> keep the template default
+    if (f.type === "select") setSelect(f.key, ov[f.key]);
+    else setTF(f.key, ov[f.key]);               // explicit "" -> a real blank (gap)
+  });
+  if ("ingest.auto_create_projects" in ov) {
+    $("#b-auto-create").checked = !!ov["ingest.auto_create_projects"];
+  }
+  renderOverrideJSON();
+  updateBuilderExamples();
+}
+
+const bRecipe = $("#b-recipe");
+let builderRecipesCache = [];
+
+async function loadBuilderRecipes() {
+  const cur = bRecipe.value;
+  try {
+    builderRecipesCache = await getJSON(
+      `/api/recipes?instrument=${encodeURIComponent(bInstrument.value)}`);
+  } catch (e) { builderRecipesCache = []; }
+  bRecipe.innerHTML = '<option value="">— none —</option>' +
+    builderRecipesCache.map((r) =>
+      `<option value="${esc(r.file)}">${esc(r.name)}</option>`).join("");
+  // Keep the selection if it survived a reload (e.g. after a re-save).
+  if (builderRecipesCache.some((r) => r.file === cur)) bRecipe.value = cur;
+}
+
+async function loadRecipeIntoBuilder() {
+  const rec = builderRecipesCache.find((r) => r.file === bRecipe.value);
+  if (!rec) {
+    $("#b-save-status").innerHTML = '<span class="muted">Pick a recipe to load first.</span>';
+    return;
+  }
+  await loadTemplateDefaults();                   // base = the locked instrument convention
+  applyOverridesToBuilder(rec.overrides || {});   // overlay the recipe on top
+  $("#b-recipe-name").value = rec.name || "";
+  $("#b-recipe-desc").value = rec.description || "";
+  $("#b-save-status").innerHTML =
+    `<span class="new">Loaded</span> <code>${esc(rec.file)}</code> — edit and re-save ` +
+    "(keep the name to overwrite it, or rename to save a copy).";
+  if ($("#b-staging").value.trim()) loadLayout();
+}
+$("#b-load-recipe").addEventListener("click", loadRecipeIntoBuilder);
+// Refresh the builder's recipe list when the instrument changes (it's filtered
+// by instrument, same as the runner's).
+bInstrument.addEventListener("change", loadBuilderRecipes);
+
 // ---- "Preview example" (section 3) ----
 async function builderPreview() {
   $("#b-map-summary").innerHTML = "";
@@ -1110,6 +1189,7 @@ $("#b-save").addEventListener("click", async () => {
     $("#b-save-status").innerHTML =
       `<span class="new">Saved</span> ${esc(data.file)} → ${esc(data.path)}`;
     if (rInstrument.value === bInstrument.value) loadRecipes();
+    loadBuilderRecipes();   // surface the new/updated recipe in the builder picker
   } catch (e) {
     $("#b-save-status").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
   }
@@ -1121,3 +1201,4 @@ renderLevels();
 renderOverrideJSON();
 updateBuilderExamples();
 loadTemplateDefaults();   // seed from the default instrument's convention
+loadBuilderRecipes();     // populate the "start from a saved recipe" picker

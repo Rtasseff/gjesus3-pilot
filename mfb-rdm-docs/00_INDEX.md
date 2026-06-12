@@ -3,7 +3,7 @@
 **System Purpose:** Research-facing working layer for MFB group imaging data in the 5-year active window — organised, searchable, directly viewable. Complements (does not replace) the platforms' own deep-archive of raw bytes. See [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) for the two-tier framing.
 **Infrastructure:** QNAP TS-864eU NAS (6 × 20 TB, RAID 5, ~100 TB system / ~63 TB user-available after snapshot reservation)
 **Status:** Pilot development
-**Last Updated:** 2026-06-11 — post-first-review correction pass: registry lock + CSV-append safety, archive-rerun / crash-orphan / empty-folder fixes, the auto `subject_id` column (S1), dry-run-default-ON GUI, CELL/LSM9 seed recipes, the `os.link` diagnostic, and the doc-clarity files (`START_HERE.md` / `GLOSSARY.md` / `CHANGELOG.md`). **Full dated history → [CHANGELOG.md](../CHANGELOG.md).**
+**Last Updated:** 2026-06-12 — **true-production restart** (2026-06-10: quasi-prod purged; fresh registry schema adds the `sample_organism` + `subject_id` + `anatomical_entity` Auto columns, projections of the enrichment blocks via `registry.build_row`) **+ the post-first-review correction pass** (registry lock + CSV-append safety, archive-rerun / crash-orphan / empty-folder fixes, dry-run-default-ON GUI, CELL/LSM9 recipes, the `os.link` diagnostic, doc front-doors) **+ the NI multi-animal decision** (NI-LIVE-08: packed `subject_ids` + a one-row-per-subject `registry_subjects.csv`). **Full dated history → [CHANGELOG.md](../CHANGELOG.md).**
 **Newcomer pointers:** [START_HERE.md](../START_HERE.md) (operators) · [GLOSSARY.md](../GLOSSARY.md) (terms) · [CHANGELOG.md](../CHANGELOG.md) (history).
 
 ---
