@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""test_registry_fields.py — registry schema + subject_id wiring (S1, 2026-06-11).
+"""test_registry_fields.py — registry schema + subject_ids wiring (S1, 2026-06-11).
 
-Checks the subject_id column is positioned, populated by build_row, and
+Checks the subject_ids column is positioned, populated by build_row, and
 correctly classified as auto-populated (never operator-set in a registry: block).
 
 Run:  PYTHONPATH=tools python tools/ingest/test_registry_fields.py
@@ -30,13 +30,13 @@ def test_position():
     # The three enrichment-projection columns sit together between sample_type
     # and session_id (designer's restart schema; consolidated with S1).
     fields = registry.REGISTRY_FIELDS
-    i = fields.index("subject_id")
-    check(fields[i - 1] == "sample_organism", "subject_id follows sample_organism")
-    check(fields[i + 1] == "anatomical_entity", "subject_id precedes anatomical_entity")
+    i = fields.index("subject_ids")
+    check(fields[i - 1] == "sample_organism", "subject_ids follows sample_organism")
+    check(fields[i + 1] == "anatomical_entity", "subject_ids precedes anatomical_entity")
     st = fields.index("sample_type")
     se = fields.index("session_id")
     check(st < fields.index("sample_organism") < i < fields.index("anatomical_entity") < se,
-          "sample_organism / subject_id / anatomical_entity sit between sample_type and session_id")
+          "sample_organism / subject_ids / anatomical_entity sit between sample_type and session_id")
 
 
 def test_build_row():
@@ -49,28 +49,28 @@ def test_build_row():
         subject={"facility_animal_id": "13-AE-biomaGUNE-0423", "species": "Mus musculus"},
         anatomy={"region": {"label": "heart"}},
     )
-    check(row["subject_id"] == "13-AE-biomaGUNE-0423", "subject_id <- subject.facility_animal_id")
+    check(row["subject_ids"] == "13-AE-biomaGUNE-0423", "subject_ids <- subject.facility_animal_id")
     check(row["sample_organism"] == "Mus musculus", "sample_organism <- subject.species")
     check(row["anatomical_entity"] == "heart", "anatomical_entity <- anatomy.region.label")
     # Non-animal: subject=None / anatomy=None -> all three blank, no KeyError.
     row2 = registry.build_row("ACQ-20260101-CELL-001", {"sample_type": "cells"}, summary, "/raw/y/", "z")
-    check(row2["subject_id"] == "" and row2["sample_organism"] == "" and row2["anatomical_entity"] == "",
+    check(row2["subject_ids"] == "" and row2["sample_organism"] == "" and row2["anatomical_entity"] == "",
           "all three blank for a non-animal sample (no subject/anatomy)")
     check(set(row.keys()) == set(registry.REGISTRY_FIELDS), "row has exactly REGISTRY_FIELDS keys")
 
 
 def test_auto_classification():
     print("[auto-populated, not operator-set]")
-    for col in ("subject_id", "sample_organism", "anatomical_entity"):
+    for col in ("subject_ids", "sample_organism", "anatomical_entity"):
         check(col in resolver.AUTO_COLUMNS, f"{col} is in AUTO_COLUMNS")
         check(col not in resolver.USER_CONTROLLABLE_COLUMNS, f"{col} is NOT user-controllable")
-    # A registry: block that sets subject_id must be rejected.
+    # A registry: block that sets subject_ids must be rejected.
     errs = resolver.validate_registry_block({
         "instrument": "MRI", "data_ecosystem": "DICOM", "researcher": "RT",
-        "data_source": "internal", "subject_id": "x",
+        "data_source": "internal", "subject_ids": "x",
     })
-    check(any("subject_id" in e for e in errs),
-          "validate_registry_block rejects an operator-set subject_id")
+    check(any("subject_ids" in e for e in errs),
+          "validate_registry_block rejects an operator-set subject_ids")
 
 
 def main():
@@ -83,7 +83,7 @@ def main():
         for m in FAILS:
             print(f"  - {m}")
         return 1
-    print("ALL PASS (registry subject_id wiring)")
+    print("ALL PASS (registry subject_ids wiring)")
     return 0
 
 

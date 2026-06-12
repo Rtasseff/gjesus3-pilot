@@ -82,20 +82,22 @@ parallel with chasing Unai.
 ## 4. Step 2 — the split + the interface contract (so two lanes don't collide on shared registry code)
 
 ### Lane A — shared schema reshape (designer; touches the correction-pass integrity code → follow its rules)
-- **A1. Rename the AUTO column `subject_id` → `subject_ids`** across `REGISTRY_FIELDS` (`registry.py`),
-  `AUTO_COLUMNS` (`resolver.py`), the defensive header check, `06_REGISTRIES §2.2`, `08_METADATA`, and **every**
-  per-instrument template. For the 97% single-animal instruments (DICOM/MRI/microscopy) `subject_ids` is just the
-  1-element value (no semicolon) — **existing values stay valid**, so this is a pure header rename of data.
+- **A1. ✅ DONE 2026-06-12 — Renamed the AUTO column `subject_id` → `subject_ids`** across `REGISTRY_FIELDS`
+  (`registry.py`), `build_row`, `AUTO_COLUMNS` (`resolver.py`), `test_registry_fields.py` (green), the defensive
+  header check (rides on `REGISTRY_FIELDS`), and the spec docs. For the 97% single-animal instruments
+  (DICOM/MRI/microscopy) `subject_ids` is just the 1-element value (no semicolon) — existing values stay valid.
 - **A2. Evolve `build_row` to take a LIST of subjects** → `subject_ids = ";".join(facility_animal_id)`;
-  `sample_organism` = the common species; `anatomical_entity` unchanged (one FOV). Single-subject callers pass a
-  1-element list. **This signature is Lane B's only dependency on Lane A.**
+  `sample_organism` = the common species; `anatomical_entity` unchanged (one FOV). **STILL PENDING — this is the
+  multi-animal packing, intentionally left in the glue (Lane B), not part of the rename.** Today `build_row`
+  keeps its single-subject signature and emits the one id (a length-1 list); the glue joins the 1–4 ids before
+  calling it (or extends the signature). **This is Lane B's only dependency on Lane A.**
 - **A3. `registry_subjects.csv` writer = UPSERT keyed by `facility_id`** (read-modify-write under the **same**
   `registry_lock`; write via `csv_safe` — new CSV writers MUST use it, per `06_REGISTRIES §2.7`). Holds only the
-  static fields (D1). An animal seen in N scans → still **one** row.
-- **A4. Migration (lockstep with A1).** Use the `migrate_registry_columns.py` pattern (back up → migrate →
-  register the `.bak`) to rename the header on **every existing registry** (live + sandbox). This MUST run with
-  A1 because `registry.append_row`'s **defensive header check rejects appends the instant `REGISTRY_FIELDS`
-  changes** and the on-disk header still says `subject_id`.
+  static fields (D1). An animal seen in N scans → still **one** row. **STILL PENDING (designer/Lane A).**
+- **A4. ✅ DONE 2026-06-12 — Migration.** `migrate_registry_columns.py` is now **rename-aware** (`COLUMN_RENAMES`,
+  back up → migrate → preserve the column's data under the new name). The **sandbox header is migrated**
+  (`J:\gjesus3-sandbox`, 28 cols, `subject_ids`, `.bak` saved); production has **no** registry yet (purged) so it
+  is born with the new schema. The defensive header check now accepts the migrated header.
 
 ### Lane B — live-NI glue (separable; depends only on A2's signature)
 - **B1. `molecubes_ni_live.yaml`** — live variant of `molecubes_ni.yaml`: source = folder tree (no archive-name

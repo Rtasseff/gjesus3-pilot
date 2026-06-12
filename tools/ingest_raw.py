@@ -1050,7 +1050,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         )
 
         # (The correction-pass S1 stashed cfg_single["subject_id"] here; the
-        # merged build_row now projects subject_id / sample_organism /
+        # merged build_row now projects subject_ids / sample_organism /
         # anatomical_entity straight from subject_block / anatomy_block — passed
         # to build_row at Step 10 — so the stash is no longer needed.)
 
@@ -1152,7 +1152,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         # Serialize the append under the registry lock (torn-line safety over
         # SMB). Brief hold — just the append. subject_block / anatomy_block were
         # built at Step 8.4 (above); pass them so build_row projects
-        # sample_organism / subject_id / anatomical_entity.
+        # sample_organism / subject_ids / anatomical_entity.
         reg_dt = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt,
                                  subject=subject_block, anatomy=anatomy_block)

@@ -509,8 +509,9 @@ from a clean filename (R4), (3) the date tie-break/flag (R5), and (4) the idempo
 > **Now DECIDED (NI-LIVE-08, 2026-06-12):** packed `subject_ids` (`;`-joined, always-a-list) replaces
 > singular `subject_id`; a TRUE one-row-per-subject `registry_subjects.csv`; minimal sidecar
 > `subjects:[…]`; **no** mapping/junction table; query layer deferred. Steer: *stop expanding the
-> model; capture the small group's data; then build query.* Still greenfield: the `subject_id`→
-> `subject_ids` rename, the subjects-table writer, the multi-animal list assembly, `molecubes_ni_live.yaml`.
+> model; capture the small group's data; then build query.* **The `subject_id`→`subject_ids` rename is
+> ✅ DONE 2026-06-12** (code + sandbox header; rename-aware migrator). Still greenfield: the subjects-table
+> writer, the multi-animal list assembly (glue), `molecubes_ni_live.yaml`.
 >
 > **Step 1 BUILT: `tools/ni_live_discover.py`** (read-only discovery dry-run). Validated against the
 > snapshot — **254/262 (97%) of MFB NI scans parse to a DB-keyable `(project, animal)`**; only **7**
@@ -530,8 +531,8 @@ from a clean filename (R4), (3) the date tie-break/flag (R5), and (4) the idempo
 > **Leaner plan:** **Gate 0** — run `test_oslink.py` on the Mac (push-from-Mac feasibility) + confirm
 > host/layout with Unai. **Step 1** — `ni_live_discover.py` (done; review the table, `--csv` for full).
 > **Step 2** — `molecubes_ni_live.yaml` + multi-animal wiring (animal list → per-animal DB lookup →
-> packed `subject_ids` + `registry_subjects.csv` rows + sidecar array; land the `subject_id`→
-> `subject_ids` rename). **Step 3** — vetted one-shot to `J:\gjesus3-sandbox`. **PARKED:** Program B
+> packed `subject_ids` + `registry_subjects.csv` rows + sidecar array). The `subject_id`→`subject_ids`
+> rename is ✅ DONE (2026-06-12). **Step 3** — vetted one-shot to `J:\gjesus3-sandbox`. **PARKED:** Program B
 > forward standard, the mapping table, per-animal splitting, the query layer.
 >
 > **Path forward (2026-06-12 — proposed division of labor; Step 1 is DONE + tested + reviewed by both).**
@@ -544,9 +545,10 @@ from a clean filename (R4), (3) the date tie-break/flag (R5), and (4) the idempo
 >   which code wins? (proposed: keep the subject prefix per §3A but route the 12 flagged acqs through the
 >   `pending_subject_metadata.csv` review queue before the DB key is trusted — "flag, don't guess");
 >   **NI-LIVE-07** — confirm "dashes are explicit lists; flag gap>1 (`possible-range`)" as the rule.
-> - **Step 2 split:** the **designer owns the shared schema reshape** (their `23df602`/`build_row`
->   territory) — the `subject_id`→`subject_ids` packing in `registry.py`/`build_row` + the
->   `registry_subjects.csv` writer; **the live-NI glue is separable** — `molecubes_ni_live.yaml` + the
+> - **Step 2 split:** the `subject_id`→`subject_ids` column rename in `registry.py`/`resolver.py` is
+>   ✅ DONE (2026-06-12, data office); the **designer still owns the rest of the schema reshape** — the
+>   multi-animal list-packing in `build_row` + the `registry_subjects.csv` writer; **the live-NI glue is
+>   separable** — `molecubes_ni_live.yaml` + the
 >   discovery→ingest wiring that assembles the 1–4 animal list, calls the existing per-animal
 >   `animal_db` lookup, and emits the packed `subject_ids` + sidecar `subjects:[…]`. Each stays in its
 >   lane → no conflicts on shared registry code. Sequence: decisions → designer lands the schema →

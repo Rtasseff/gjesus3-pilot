@@ -5,17 +5,20 @@ REGISTRY_FIELDS column layout.
 Generic — it auto-detects whichever columns REGISTRY_FIELDS in
 tools/ingest/registry.py has gained since the file was written and inserts them
 at their canonical positions. (Past additions: session_id + primary_kind on
-2026-05-20; subject_id on 2026-06-11.) Run it once after REGISTRY_FIELDS
-changes; the defensive header check in `append_row()` refuses to write until
-the on-disk header matches.
+2026-05-20; subject_id on 2026-06-11. Rename: subject_id -> subject_ids on
+2026-06-12, NI-LIVE-08.) Run it once after REGISTRY_FIELDS changes; the
+defensive header check in `append_row()` refuses to write until the on-disk
+header matches.
 
 Approach:
   1. Read the existing CSV (any header layout; BOM-tolerant).
-  2. Re-emit each row in the canonical REGISTRY_FIELDS order, padding new
+  2. Apply known column RENAMES (COLUMN_RENAMES) to the on-disk header first, so
+     a renamed column's DATA carries over to its new name (not dropped).
+  3. Re-emit each row in the canonical REGISTRY_FIELDS order, padding new
      columns with empty strings (matched by column NAME, so reordering and
-     insertion are both handled). Aborts if the file has columns NOT in the
-     target schema (a rename/removal needs a human).
-  3. Backup the original to <path>.bak.<timestamp> before overwriting.
+     insertion are both handled). Aborts if, after renames, the file still has
+     columns NOT in the target schema (an unknown rename/removal needs a human).
+  4. Backup the original to <path>.bak.<timestamp> before overwriting.
 
 Usage:
     python tools/migrate_registry_columns.py [--registry <path>] [--dry-run]
@@ -35,6 +38,15 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ingest.registry import REGISTRY_FIELDS  # noqa: E402
 
+# Known column renames (old on-disk name -> new schema name). A pure rename
+# preserves the column's DATA under the new name; without this map the generic
+# add/drop logic below would treat the old name as an "extra" column, abort, and
+# (if forced) drop its data. Add an entry whenever a REGISTRY_FIELDS column is
+# renamed rather than added.
+COLUMN_RENAMES = {
+    "subject_id": "subject_ids",   # 2026-06-12, NI-LIVE-08 — singular -> packed list
+}
+
 
 def migrate(registry_path, dry_run=False):
     """Migrate the registry CSV to the current REGISTRY_FIELDS layout."""
@@ -52,10 +64,17 @@ def migrate(registry_path, dry_run=False):
         print("ERROR: registry is empty")
         return 1
 
-    existing_header = rows[0]
+    raw_header = rows[0]
     data_rows = rows[1:]
 
-    if existing_header == REGISTRY_FIELDS:
+    # Apply known renames to the on-disk header FIRST so a renamed column's data
+    # carries over to its new name (zip(existing_header, row) below keys on this).
+    existing_header = [COLUMN_RENAMES.get(c, c) for c in raw_header]
+    applied_renames = {o: COLUMN_RENAMES[o] for o in raw_header if o in COLUMN_RENAMES}
+    if applied_renames:
+        print(f"Applying column renames: {applied_renames}")
+
+    if existing_header == REGISTRY_FIELDS and not applied_renames:
         print(
             f"Registry already at current schema "
             f"({len(REGISTRY_FIELDS)} columns); no migration needed."

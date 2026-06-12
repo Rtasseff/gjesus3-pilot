@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-06-11 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_id` column added (S1).
+**Last Updated:** 2026-06-12 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
 
 ---
 
@@ -46,7 +46,7 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 > - **`subject:`** — animal-facility-DB (authoritative; **access granted 2026-06-02 and the lookup is implemented + live** in `tools/animal_db.py`, called from `ingest/enrichment.py` Step 8.4). Whether a given machine auto-fills `subject:` depends on whether it holds the read-only `~/.my.cnf` credentials (on-network/VPN) — **not on the OS**; a no-credentials or DB-miss ingest still succeeds, writes a `source: "pending-db"` placeholder, and queues for superuser recovery (§4.4.6). Then > study-level YAML at `/projects/<proj>/metadata/subjects.yaml` > instrument auto-extracts (often partial).
 > - **`condition:`** — operator-entered only (per-batch YAML `condition:` block, or per-acquisition `/projects/<proj>/metadata/<acq_id>.json`, or via the Excel importer when it ships). The DB does NOT know disease state; it's a property of the study design, not the animal.
 >
-> **✅ Writer IMPLEMENTED (Phase 3, 2026-06-03).** The enrichment writer that produces these blocks now fires at ingest for every acquisition with `sample_type ∈ {organism, tissue}` (`anatomy:` for `organism` only) — **non-blocking** (§4.7): unknowns are written as explicit sentinels + a WARN, never an aborted ingest. The YAML surface that drives it (`auto_discover.subject_from_db` + `subject_lookup`, and the top-level `condition:` / `anatomy:` / `subject:` blocks) is documented in [10_TOOLS §2.1.6](10_TOOLS.md); the field contract stays in [08_METADATA §4.4-4.7](08_METADATA.md). The registry **`subject_id` column was added 2026-06-11 (S1)** — auto-populated from the sidecar `subject.facility_animal_id` (empty for non-animal samples; [06_REGISTRIES §2.2](06_REGISTRIES.md)). The `anatomical_entity` column remains **deferred** to the true-production restart — that block lives in the sidecar only.
+> **✅ Writer IMPLEMENTED (Phase 3, 2026-06-03).** The enrichment writer that produces these blocks now fires at ingest for every acquisition with `sample_type ∈ {organism, tissue}` (`anatomy:` for `organism` only) — **non-blocking** (§4.7): unknowns are written as explicit sentinels + a WARN, never an aborted ingest. The YAML surface that drives it (`auto_discover.subject_from_db` + `subject_lookup`, and the top-level `condition:` / `anatomy:` / `subject:` blocks) is documented in [10_TOOLS §2.1.6](10_TOOLS.md); the field contract stays in [08_METADATA §4.4-4.7](08_METADATA.md). The registry **`subject_id` column was added 2026-06-11 (S1)** — auto-populated from the sidecar `subject.facility_animal_id` (empty for non-animal samples; [06_REGISTRIES §2.2](06_REGISTRIES.md)) — and **renamed to packed `subject_ids` 2026-06-12 (NI-LIVE-08)**. The `anatomical_entity` column remains **deferred** to the true-production restart — that block lives in the sidecar only.
 
 ---
 

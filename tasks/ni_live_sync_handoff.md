@@ -56,11 +56,13 @@ designer's input.
       always taken from the DB.
 
 ### Step 2a — schema reshape — **DESIGNER owns** (their `23df602`/`build_row` territory)
-- [ ] Rename singular `subject_id` → **packed `subject_ids`** in `tools/ingest/registry.py`
-      (`REGISTRY_FIELDS`), `build_row` (project `subject.facility_animal_id` as a `;`-joined length-1+
-      list), `resolver.py` (`AUTO_COLUMNS`), `test_registry_fields.py`, and `06_REGISTRIES.md` §2.2.
-      The code comment at `registry.py:45` already marks this as pending. **Do this on the fresh/empty
-      production registry BEFORE bulk ingest** (cheap; avoids migrating populated rows).
+- [x] ✅ **DONE 2026-06-12 (data office).** Renamed singular `subject_id` → **packed `subject_ids`** in
+      `tools/ingest/registry.py` (`REGISTRY_FIELDS` + `build_row`, single-subject projects a length-1
+      list = the bare id), `resolver.py` (`AUTO_COLUMNS`), `test_registry_fields.py` (green), and
+      `06_REGISTRIES.md`. `migrate_registry_columns.py` is now **rename-aware** (`COLUMN_RENAMES`) and the
+      **sandbox header is migrated** (`J:\gjesus3-sandbox`, 28 cols, `subject_ids`); the empty production
+      registry is born with it. **Multi-animal list-packing (joining the 1–4 ids) is NOT done here — it
+      stays in the live-sync glue (Step 2b)**; `build_row`'s single-subject path is unchanged.
 - [ ] Add the **`registry_subjects.csv` writer** — **one row per SUBJECT** (PK `facility_id`;
       **upsert**, so an animal in N scans = **one** row), holding only *static* per-animal fields
       (`facility_id`, `project_alias`, `animal_code`, species, sex, strain, DOB, provenance);
@@ -142,8 +144,9 @@ multi-animal is open.
    from the archive*, confirm a multi-animal scan's `.tgz` still recovers all animals — else the
    **live-box path is the authoritative source for the animal list**. A parsing detail, not the model.
 
-**Later (user, 2026-06-12):** the `subject_id`→`subject_ids` rename can be done later (migrate with the
-existing `migrate_registry_columns.py` pattern) — not a preload gate.
+**✅ DONE (2026-06-12):** the `subject_id`→`subject_ids` rename is applied (code + sandbox header; the
+rename-aware `migrate_registry_columns.py` `COLUMN_RENAMES` pattern). It was never a preload gate, and
+single-animal historical rows are just length-1 lists.
 
 **Bottom line:** MRI + microscopy + **NI archive-mode** historical preload into the production NAS can
 start now (existing tested pipeline), once the dedup key is aligned (#1) and the archive multi-animal

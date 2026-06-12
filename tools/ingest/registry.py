@@ -39,13 +39,12 @@ REGISTRY_FIELDS = [
                          # "Mus musculus". Projection of the enrichment
                          # subject.species (animal DB). Blank for non-animal
                          # samples. AUTO (pipeline-derived, not a registry: key).
-    "subject_id",        # NEW 2026-06-10 (REG-01 Option B) — canonical
-                         # <animal_code>-AE-biomaGUNE-<NNNN> (= subject.
-                         # facility_animal_id). Blank for non-animal samples. AUTO.
-                         # NOTE (NI-LIVE-08, DECIDED 2026-06-12): for the imminent
-                         # multi-animal NI work this becomes the packed `subject_ids`
-                         # (;-joined, always-a-list) — the designer's redesign; left
-                         # singular here. See tasks/origin_main_merge_review.md §3.
+    "subject_ids",       # NEW 2026-06-10 (REG-01 Option B); RENAMED subject_id ->
+                         # subject_ids 2026-06-12 (NI-LIVE-08). Packed, ;-joined,
+                         # ALWAYS-A-LIST of canonical <animal_code>-AE-biomaGUNE-<NNNN>
+                         # facility ids (= subject.facility_animal_id). A single-animal
+                         # scan is a length-1 list (the bare id, no ';'); a multi-animal
+                         # NI scan packs its 1–4 ids. Blank for non-animal samples. AUTO.
     "anatomical_entity", # NEW 2026-06-10 (REG-07 / META-09) — UBERON organ/region
                          # label, projection of anatomy.region.label. Blank when
                          # whole-body / unset / non-animal. AUTO.
@@ -138,7 +137,7 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt,
         dest_path: Canonical path to the acquisition folder.
         registration_dt: ISO datetime string for registration_datetime.
         subject: the non-blocking enrichment subject block (or None for
-            non-animal samples) — sources sample_organism + subject_id.
+            non-animal samples) — sources sample_organism + subject_ids.
         anatomy: the enrichment anatomy block (or None) — sources
             anatomical_entity from anatomy.region.label. Both blocks are built
             at ingest Step 8.4, before this row, so the values are in hand here.
@@ -182,11 +181,14 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt,
         "sample_id": cfg.get("sample_id", ""),
         "sample_type": cfg.get("sample_type", ""),
         # Projections of the enrichment blocks (built at Step 8.4, passed in via
-        # subject=/anatomy=). AUTO; blank for non-animal samples. (The
-        # correction-pass S1 added subject_id via a cfg stash; superseded by this
-        # direct projection.)
+        # subject=/anatomy=). AUTO; blank for non-animal samples.
         "sample_organism": subject.get("species", "") or "",
-        "subject_id": subject.get("facility_animal_id", "") or "",
+        # subject_ids is a packed, ;-joined, ALWAYS-A-LIST column (NI-LIVE-08,
+        # renamed from subject_id 2026-06-12). The single-subject ingest path
+        # projects the one facility id here — a length-1 list (the bare id, no ';').
+        # Multi-animal NI packing (joining the 1–4 ids) is done by the live-sync
+        # glue before it calls build_row; this single-subject projection is unchanged.
+        "subject_ids": subject.get("facility_animal_id", "") or "",
         "anatomical_entity": (region.get("label", "") if isinstance(region, dict) else "") or "",
         "session_id": cfg.get("session_id", ""),
         "primary_kind": cfg.get("primary_kind", ""),

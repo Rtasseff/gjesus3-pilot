@@ -106,8 +106,9 @@ AUTO_COLUMNS = {
     "original_name",
     "ingest_config",
     "sample_organism",     # NEW 2026-06-10 — projection of enrichment subject.species
-    "subject_id",          # NEW 2026-06-10 — projection of subject.facility_animal_id
-                           # (correction-pass S1 added the same column; superseded here)
+    "subject_ids",         # NEW 2026-06-10; RENAMED subject_id -> subject_ids 2026-06-12
+                           # (NI-LIVE-08). Packed ;-joined always-a-list projection of
+                           # subject.facility_animal_id. AUTO — never an operator registry: key.
     "anatomical_entity",   # NEW 2026-06-10 — projection of anatomy.region.label
 }
 
