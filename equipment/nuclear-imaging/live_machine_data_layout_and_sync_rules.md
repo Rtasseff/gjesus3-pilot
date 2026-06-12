@@ -515,6 +515,24 @@ from a clean filename (R4), (3) the date tie-break/flag (R5), and (4) the idempo
 > packed `subject_ids` + `registry_subjects.csv` rows + sidecar array; land the `subject_id`→
 > `subject_ids` rename). **Step 3** — vetted one-shot to `J:\gjesus3-sandbox`. **PARKED:** Program B
 > forward standard, the mapping table, per-animal splitting, the query layer.
+>
+> **Path forward (2026-06-12 — proposed division of labor; Step 1 is DONE + tested + reviewed by both).**
+> The remaining pre-ingest work is two external gates and a clean split of Step 2 so we don't both edit
+> the shared registry code:
+> - **Gate 0 (external, the real unblock — on the user):** run `tools/diagnostics/test_oslink.py` on the
+>   Mac (push-from-Mac hard-link feasibility) and confirm host/layout + the forward standard with Unai.
+>   Gates a *real* ingest (Step 3), not Step-2 coding.
+> - **Two decisions Step 2 needs (small):** **NI-LIVE-09 resolution** — on a `project-conflict` flag,
+>   which code wins? (proposed: keep the subject prefix per §3A but route the 12 flagged acqs through the
+>   `pending_subject_metadata.csv` review queue before the DB key is trusted — "flag, don't guess");
+>   **NI-LIVE-07** — confirm "dashes are explicit lists; flag gap>1 (`possible-range`)" as the rule.
+> - **Step 2 split:** the **designer owns the shared schema reshape** (their `23df602`/`build_row`
+>   territory) — the `subject_id`→`subject_ids` packing in `registry.py`/`build_row` + the
+>   `registry_subjects.csv` writer; **the live-NI glue is separable** — `molecubes_ni_live.yaml` + the
+>   discovery→ingest wiring that assembles the 1–4 animal list, calls the existing per-animal
+>   `animal_db` lookup, and emits the packed `subject_ids` + sidecar `subjects:[…]`. Each stays in its
+>   lane → no conflicts on shared registry code. Sequence: decisions → designer lands the schema →
+>   live-NI glue wires onto it → Step 3 one-shot once Gate 0 clears.
 
 
 **DECIDED direction (user, 2026-06-11):** split the problem in two so the *ongoing* tool stays simple.
@@ -595,7 +613,6 @@ is shared and mostly **already exists**.
 | NI-LIVE-09 | ⚠️ **PARTIAL (2026-06-12)** — `ni_live_discover.py` now **flags** the typo-shaped near-miss (`project-conflict:<parent>`, e.g. subject `1015_…` under parent `1025`) instead of silently picking; wholesale series≠protocol differences are left unflagged by design. **Still open:** the *resolution rule* — on a confirmed conflict, which code wins? And when the subject is a bare number, is "parent series leading digits" the right project source for the DB join, given series_id (funded) ≠ animal-protocol code? |
 | NI-LIVE-10 | §3B: confirm a multi-mouse scan is **one shared-FOV reconstruction** (all mice in one volume) so hard-link-same-DICOM is exactly right — vs. the platform ever exporting per-mouse cropped images. |
 | NI-LIVE-11 | §3B: the **position-numbering standard** — how is "which mouse is in slot N" determined and recorded (researcher-entered? bed geometry? a fixed head-first / left-to-right convention)? For historical data position is usually unknown → record animal, flag position. |
-| NI-LIVE-12 | §3C: is the full subject/sample table **our own NAS registry** (`registry_subjects.csv`, Excel-bound, back-fillable) or do we treat the **facility DB as the table** and only cache the minimal subset in our registry? Which fields are the "minimal convenience subset" beyond species/sex/age-at-acq? |
 | NI-LIVE-13 | §7 Program B: who **enforces the forward naming standard** — researchers typing folders (then B still needs defensive parse + dry-run), or a platform-side acquisition template that emits regular names? |
 
 ---
