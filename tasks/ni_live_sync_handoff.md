@@ -31,6 +31,11 @@ designer's input.
   `enrichment.py`) + `pending_subject_metadata.csv` + `recover_subject_metadata.py`.
 - **Decisions:** NI-LIVE-08 (packed `subject_ids` + true `registry_subjects.csv` + minimal sidecar; no
   mapping table; query deferred) and NI-LIVE-12 (our own NAS subjects table) — **RESOLVED**.
+- **⚠️ Spec reconciled 2026-06-12 (data office):** the §3B/§3C "one row per `(acq_id, animal)`" wording
+  (a **junction table**) was **corrected to one-row-per-subject** to match NI-LIVE-08 — the Step-2a
+  writer below MUST be **one row per animal**, never per scan. Rationale + the static-vs-acq-relative
+  split: [`tasks/ni_live_step2_plan.md`](ni_live_step2_plan.md) §2; spec: `…sync_rules.md` §3C +
+  [`06_REGISTRIES §2.3`](../mfb-rdm-docs/06_REGISTRIES.md).
 
 ## What is LEFT — Step 2 (build) + Step 3 (ingest), with the division of labor
 
@@ -56,9 +61,13 @@ designer's input.
       list), `resolver.py` (`AUTO_COLUMNS`), `test_registry_fields.py`, and `06_REGISTRIES.md` §2.2.
       The code comment at `registry.py:45` already marks this as pending. **Do this on the fresh/empty
       production registry BEFORE bulk ingest** (cheap; avoids migrating populated rows).
-- [ ] Add the **`registry_subjects.csv` writer** — one row per `(acq_id, project, animal,
-      facility_id, scan_position)`; updatable/back-fillable; goes through `csv_safe`. Document in
-      `06_REGISTRIES.md` (new table) + `08_METADATA.md` (sidecar `subjects:[…]` minimal subset).
+- [ ] Add the **`registry_subjects.csv` writer** — **one row per SUBJECT** (PK `facility_id`;
+      **upsert**, so an animal in N scans = **one** row), holding only *static* per-animal fields
+      (`facility_id`, `project_alias`, `animal_code`, species, sex, strain, DOB, provenance);
+      updatable/back-fillable; through `csv_safe` + the registry lock. **NOT** a `(acq_id, animal)`
+      junction table (vetoed — NI-LIVE-08). The scan→animal link is the packed `subject_ids` column;
+      per-(scan, animal) `scan_position`/age-at-acq go to the **sidecar `subjects:[…]`**, not this
+      table. Document in `06_REGISTRIES.md` (new table) + `08_METADATA.md` (sidecar `subjects:[…]` shape).
 
 ### Step 2b — live-NI glue — **separable; the fresh session does this** (no shared-registry edits)
 - [ ] **`tools/templates/instruments/molecubes_ni_live.yaml`** — copy `molecubes_ni.yaml`, drop the
@@ -70,7 +79,8 @@ designer's input.
       sidecar `subjects:[…]`. Reuse `copy_ni_acquisition` + `ni_metadata.py` + the project hard-link
       (one per scan) + `locking` + `csv_safe` **unchanged**. Idempotency key stays `(timestamp,
       modality)` (Model 1 — one entry per scan).
-- [ ] Per-animal **scan_position**: record when known; historical = flag unknown (NI-LIVE-11).
+- [ ] Per-animal **scan_position** → into the **sidecar `subjects:[…]`** element (NOT the subjects
+      table — it's a per-(scan, animal) fact): record when known; historical = flag unknown (NI-LIVE-11).
 
 ### Step 3 — vetted one-shot (after Gate 0 + Step 2)
 - [ ] Run the discovery dry-run → **human reviews the table** (esp. the `no-project` + `project-conflict`
