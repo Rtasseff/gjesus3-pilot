@@ -201,7 +201,12 @@ Python install, no admin rights needed.
      project, link name, the resolved registry row, and *X new / Y
      already-ingested*. Check it.
    - Click **Ingest**. A live log streams the progress. (A *Dry-run* checkbox,
-     on by default, lets you do a no-write rehearsal first.)
+     on by default, lets you do a no-write rehearsal first; a banner shows while
+     it is on and the run ends with a clear "NOTHING was written" summary.)
+     **Dry-run default (testing period):** it defaults ON so operators learn the
+     tool safely; **flip it to OFF once testing is complete** — remove `checked`
+     from `#r-dry` in `gui/templates/index.html` (`TODO(dry-run-default)` marks
+     the spot).
 4. **Build a recipe** (only when defining a brand-new naming convention): the
    builder tab lets you set how filenames/folders are parsed, see a live
    `discovered.*` grid over your real files, map those values into the registry
@@ -242,6 +247,40 @@ endpoint map are in [`gui/README.md`](gui/README.md).
   preview safely, and if it still looks wrong, contact the Data Management Lead.
   The source files on the instrument are preserved by default; nothing is
   deleted unless you explicitly opt in.
+
+---
+
+## Optional: animal-facility DB credentials (auto-fill `subject:`)
+
+For **organism / tissue** ingests, the pipeline can auto-fill the `subject:`
+metadata block (species / strain / sex / DOB → age, structured procedures)
+straight from the institutional animal-facility database. **This is an
+optimization, not a requirement:** without credentials the ingest still
+succeeds — it writes a `source: "pending-db"` placeholder and queues the
+acquisition to `registries/pending_subject_metadata.csv` for the Data Office to
+back-fill later with `tools/recover_subject_metadata.py`. So you only need this
+on a *trusted* machine where you want the auto-fill to happen at ingest time.
+
+DB access was granted 2026-06-02; the lookup (`tools/animal_db.py`) is live.
+Whether a machine auto-fills depends on whether it **has credentials**, not on
+the OS. To install them on a trusted machine (manual, one-time):
+
+1. `pip install "pymysql>=1.1"` (pure-Python; installs fine on Windows).
+2. Obtain the read-only `.my.cnf` from the Data Office **out-of-band** — it is
+   sensitive and intentionally **not** in git, so it won't be on a fresh
+   checkout. Place it in your user profile (`~/.my.cnf`; on Windows
+   `C:\Users\<you>\.my.cnf`), protected by the profile's NTFS ACLs. **Never** put
+   it in OneDrive, this repo, env vars, or logs.
+3. For a non-default location, set `GJESUS3_MYCNF` to the file path (and
+   `GJESUS3_ANIMALDB_USER` if the DB user differs from the one in the file).
+4. On-network / VPN only. Verify with:
+   ```sh
+   python tools/animal_db.py --check
+   ```
+
+Without credentials (or off-network) `lookup()` returns `unreachable`, the
+ingest WARNs and queues the record — nothing fails. See
+[08_METADATA §4.4 / §4.4.6](../../mfb-rdm-docs/08_METADATA.md).
 
 ---
 

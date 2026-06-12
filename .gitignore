@@ -16,6 +16,11 @@ desktop.ini
 __pycache__/
 *.pyc
 
+# PyInstaller build artifacts (microscopy GUI exe — built locally, never committed)
+/build/
+/dist/
+*.spec.bak
+
 # Claude Code personal config
 .claude/settings.local.json
 

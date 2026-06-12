@@ -3,6 +3,8 @@
 import csv
 import os
 
+from . import csv_safe
+
 
 # Field order must match 06_REGISTRIES.md schema. The `ingest_config`
 # column records the YAML config that produced each row (relative path
@@ -40,6 +42,10 @@ REGISTRY_FIELDS = [
     "subject_id",        # NEW 2026-06-10 (REG-01 Option B) — canonical
                          # <animal_code>-AE-biomaGUNE-<NNNN> (= subject.
                          # facility_animal_id). Blank for non-animal samples. AUTO.
+                         # NOTE (NI-LIVE-08, DECIDED 2026-06-12): for the imminent
+                         # multi-animal NI work this becomes the packed `subject_ids`
+                         # (;-joined, always-a-list) — the designer's redesign; left
+                         # singular here. See tasks/origin_main_merge_review.md §3.
     "anatomical_entity", # NEW 2026-06-10 (REG-07 / META-09) — UBERON organ/region
                          # label, projection of anatomy.region.label. Blank when
                          # whole-body / unset / non-animal. AUTO.
@@ -96,8 +102,9 @@ def append_row(registry_path, row_dict):
     file_exists = os.path.exists(registry_path)
 
     if file_exists:
-        with open(registry_path, "r", encoding="utf-8", newline="") as f:
-            existing = next(csv.reader(f), [])
+        # BOM-tolerant header read (csv_safe): an Excel "Save As CSV UTF-8"
+        # BOM must not make the header compare unequal and refuse every append.
+        existing = csv_safe.read_header(registry_path)
         if existing != REGISTRY_FIELDS:
             raise RuntimeError(
                 f"registry header mismatch in {registry_path}\n"
@@ -110,6 +117,9 @@ def append_row(registry_path, row_dict):
     # Ensure all fields present (fill missing with empty string)
     row = {field: row_dict.get(field, "") for field in REGISTRY_FIELDS}
 
+    # Guard against a missing trailing newline (Excel round-trip / hand edit),
+    # which would otherwise concatenate this row onto the previous last row.
+    csv_safe.ensure_trailing_newline(registry_path)
     with open(registry_path, "a", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=REGISTRY_FIELDS)
         if not file_exists:
@@ -171,6 +181,10 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt,
         "data_source": cfg.get("data_source", ""),
         "sample_id": cfg.get("sample_id", ""),
         "sample_type": cfg.get("sample_type", ""),
+        # Projections of the enrichment blocks (built at Step 8.4, passed in via
+        # subject=/anatomy=). AUTO; blank for non-animal samples. (The
+        # correction-pass S1 added subject_id via a cfg stash; superseded by this
+        # direct projection.)
         "sample_organism": subject.get("species", "") or "",
         "subject_id": subject.get("facility_animal_id", "") or "",
         "anatomical_entity": (region.get("label", "") if isinstance(region, dict) else "") or "",

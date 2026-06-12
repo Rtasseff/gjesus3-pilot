@@ -205,3 +205,39 @@ original `tasks.md` locations (§3.1 / §3.2) as history; this is the active hom
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)
   and NI `--user` (override the parsed user), once the person-home above exists.
+
+## Metadata vocabularies & search (correction pass 2026-06-11)
+
+- [ ] **Assisted controlled-vocab entry (suggest-list / autocomplete at point of
+  capture).** S3 (2026-06-11) decided free-text enrichment fields stay free entry
+  *for now* — forcing a controlled vocabulary without help kills adoption. The
+  suggested standards are documented ([08_METADATA §4.8](../mfb-rdm-docs/08_METADATA.md)).
+  The improvement: offer the vocabulary **at the point of capture** — autocomplete /
+  suggest-list in the CLI prompts (`tools/operator/metadata_prompt.py`) and the
+  microscopy GUI Study-metadata panel — so a future *soft* enforcement doesn't add
+  friction. Pair any later enforcement with this assistance, never enforce bare.
+  Per-field targets: species → NCBI Taxonomy, strain → IMSR/MGI/RGD, disease →
+  MONDO, cell_line → Cellosaurus, anatomy → UBERON (already in use).
+- [ ] **Metadata-only search DB (intermediate / stepping-stone to OMERO/XNAT).** A
+  small read-only index (e.g. SQLite + Datasette, or similar) over the flat
+  registries + the nested JSON sidecars, pointing at the images on the NAS. Two
+  wins: (a) the **searchable face** on the NAS *now*, before any platform
+  migration (the cheap "get value out" win — ties to the value-loop finding); and
+  (b) it accommodates the **nested** sidecar JSON better than the flat key-value
+  import XNAT/OMERO expect. Evaluate as an intermediate; **XNAT (DICOM) and OMERO
+  (microscopy) remain the lead destinations** ([13_GJESUS3_ROLE](../mfb-rdm-docs/13_GJESUS3_ROLE.md)).
+  Prep is already in place: keep the flat registry clean and keep DICOM UIDs
+  captured (done) — that's what makes the eventual platform import frictionless.
+
+## True-production restart — subsystem review (correction pass 2026-06-11)
+
+- [ ] **Review which pilot subsystems carry forward vs. are replaced by
+  platform-native equivalents.** At the post-exhibition true-production restart,
+  decide per subsystem whether it stays or is superseded by an XNAT/OMERO-native
+  capability (e.g. XNAT prearchive + custom-variable tooling vs. the local
+  enrichment/deferred-recovery machinery; the metadata-DB above vs. the platforms'
+  own search). Nothing is removed now — the enrichment + deferred-recovery
+  apparatus was built for genuinely different source systems, works, and gates the
+  imminent historical-data ingest (the earlier "trim the recovery apparatus"
+  suggestion is withdrawn; the queue is the intended design). Decide at the
+  restart, not before.

@@ -68,12 +68,12 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `operator` | String | 🔶 Recommended | Ingest (top-level) | **The person who ran the equipment** for this acquisition. ADDED BACK 2026-06-09 (decision #4.2): recorded as a column on **every** acquisition (≈ half the time identical to `researcher`) so operators can find their own scans in the registry without opening sidecars. Populated from the **top-level `operator:` config key** (NOT the `registry:` block) and written identically to the sidecar `user_supplied.operator`. See §2.3a-bis. |
 | `data_source` | String | ✅ Yes | User | `internal` or `collaborator:<name>`. |
 | `sample_id` | String | 🔶 Recommended | User | Sample or animal identifier. See §2.3 for the recommended composite format. |
-| `sample_type` | String | 🔶 Recommended | User | Category of biological material. Use the controlled vocabulary in §2.4 (DRAFT). |
+| `sample_type` | String | 🔶 Recommended | User | Category of biological material. Use the controlled vocabulary in §2.4 (✅ DECIDED 2026-06-11). |
 | `sample_organism` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 (REG-07). Binomial species, e.g. `Mus musculus`. **Projection of the `subject:` block's `species`** ([08_METADATA §4.4](08_METADATA.md)), sourced from the animal-facility DB. Blank for non-animal samples (`cells`/`material`/`phantom`) and where the subject is unresolved. Pipeline-derived — NOT a `registry:` key. |
-| `subject_id` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 (REG-01 Option B, §2.3.2). The canonical facility subject id `<animal_code>-AE-biomaGUNE-<NNNN>` — **projection of `subject:`.`facility_animal_id`**. Same value across every acquisition of that animal, so cohort queries ride on the column instead of the sidecar. Blank for non-animal samples. Pipeline-derived. |
+| `subject_id` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 (REG-01 Option B, §2.3.2). The canonical facility subject id `<animal_code>-AE-biomaGUNE-<NNNN>` — **projection of `subject:`.`facility_animal_id`**. Same value across every acquisition of that animal, so cohort queries ride on the column instead of the sidecar. Blank for non-animal samples. Pipeline-derived. **NI-LIVE-08 (DECIDED 2026-06-12):** for the imminent multi-animal NI work this becomes the packed **`subject_ids`** (`;`-joined facility ids, always-a-list) — a visible-multiplicity summary, with the authoritative one-to-many in `registry_subjects.csv`; singular here for now (the designer's redesign). See [origin_main_merge_review.md §3](../tasks/origin_main_merge_review.md). |
 | `anatomical_entity` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 (REG-07 / META-09). UBERON organ/region label (e.g. `heart`) — **projection of `anatomy:`.`region.label`** ([08_METADATA §4.6](08_METADATA.md)). For in-vivo `organism` scans the region imaged (blank when whole-body), and for ex-vivo `tissue` the organ the section was cut from. Blank when unset / non-animal. Pipeline-derived. |
-| `session_id` | String | 🔶 Recommended (DRAFT) | User | DRAFT 2026-05-20. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc251016_m17_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. Status open (REG-08) pending a Data Office decision (user input welcome; this project has no PI sign-off gate). |
-| `primary_kind` | String | ✅ Yes (DRAFT) | Auto | DRAFT 2026-05-20. One of `file` \| `archive` \| `folder` — the shape of the primary entity on disk. `file` = single canonical file (microscopy `.czi`). `archive` = compressed archive (legacy collaborator DICOM `.zip`). `folder` = the acquisition folder itself is the unit (internal MRI ParaVision bundle). See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
+| `session_id` | String | 🔶 Recommended | User | In use since 2026-05-20; **✅ DECIDED 2026-06-11 (S2)**. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc251016_m17_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. |
+| `primary_kind` | String | ✅ Yes | Auto | In use since 2026-05-20; **✅ DECIDED 2026-06-11 (S2)**. One of `file` \| `archive` \| `folder` — the shape of the primary entity on disk. `file` = single canonical file (microscopy `.czi`). `archive` = compressed archive (legacy collaborator DICOM `.zip`). `folder` = the acquisition folder itself is the unit (internal MRI ParaVision bundle). See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
 | `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary entity. When `primary_kind` = `file` or `archive`, this is a filename (`<ACQ-ID>.czi`, `<ACQ-ID>.zip`). When `primary_kind` = `folder`, this is the folder name (`<ACQ-ID>`) — the unit IS the folder, see [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
 | `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
 | `file_format` | String | ✅ Yes | Auto | File extension/format (e.g., `.czi`, `.zip`). |
@@ -106,9 +106,9 @@ Authoritative record of all raw acquisitions deposited in the system.
 - **Microscopy:** usually different. The `operator` is in the AxioScan filename (`discovered.operator`) / the ZEN account (`discovered.czi_user`) and is what the GUI uses to **filter a folder to one tech's scans**; the `researcher` is a per-batch field (YAML / GUI).
 - The **`researcher` registry column** values logged before 2026-06-09 are mislabelled (they held the old `operator` value) and are corrected at the post-exhibition purge + re-ingest.
 
-### 2.3a ISA Terminology Mapping (DRAFT)
+### 2.3a ISA Terminology Mapping (DECIDED 2026-06-11)
 
-> **🔶 DRAFT pilot guidance (2026-05-20).** The MFB workflow maps cleanly onto **ISA** (Investigation / Study / Assay) terminology. Adopting that vocabulary in the registry makes the data more compatible with REMBI-style metadata standards and any future migration to XNAT / OMERO / institutional platforms. Status open (REG-09) pending a Data Office decision (user input welcome; this project has no PI sign-off gate).
+> **✅ DECIDED 2026-06-11 (S2 — promoted from DRAFT).** The implemented, in-production convention is no longer a draft: the Data Office (this project's decision authority — there is no PI sign-off gate) has adopted the ISA mapping below. The MFB workflow maps cleanly onto **ISA** (Investigation / Study / Assay) terminology; adopting that vocabulary makes the data more compatible with REMBI-style metadata standards and any future migration to XNAT / OMERO / institutional platforms. (Original DRAFT note 2026-05-20, REG-09; retained for history.)
 
 | ISA term | gjesus3 equivalent | Where recorded | Example |
 |---|---|---|---|
@@ -124,9 +124,9 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 **Implementation:** `session_id` is User-populated via the YAML `registry:` block (literal, `discovered.<field>`, or NA). Existing rows are not backfilled; pre-cutover acquisitions hold empty `session_id`.
 
-### 2.3 Subject and Sample Identity (DRAFT — refines REG-01)
+### 2.3 Subject and Sample Identity (DECIDED 2026-06-11 — refines REG-01)
 
-> **🔶 DRAFT pilot guidance, re-grounded 2026-06-03 in FAIR / ISA / REMBI / BIDS / XNAT.** Status open (REG-01) pending a Data Office decision (user input welcome; this project has no PI sign-off gate). Supersedes the earlier bare `<short_project>_<short_sample>` recommendation. Per **Option B**: the model below is adopted now and carried in the `metadata.json` sidecar; the dedicated registry `subject_id` column is **deferred to the post-exhibition true-production restart** (no quasi-prod migration).
+> **✅ DECIDED 2026-06-11 (S2 — promoted from DRAFT), re-grounded 2026-06-03 in FAIR / ISA / REMBI / BIDS / XNAT.** The two-tier subject/sample identity model (Option B) is the adopted in-production convention; the Data Office (this project's decision authority — no PI sign-off gate) has accepted it. Supersedes the earlier bare `<short_project>_<short_sample>` recommendation. (Original DRAFT note, REG-01; retained for history.) Per **Option B**: the model below is adopted now and carried in the `metadata.json` sidecar; the dedicated registry `subject_id` column was **added 2026-06-11 (S1)** — auto-populated from the sidecar `facility_animal_id`, empty for non-animal samples (§2.2). (The denormalized `anatomical_entity` column remains deferred to the true-production restart.)
 
 **Two distinct entities, two identifiers.** Every standard we align to models the **subject** (the animal) and the **sample** (the physical thing imaged) as *separate* entities, each with its own identifier, joined by an explicit reference — never collapsed into one overloaded string:
 
@@ -151,7 +151,7 @@ We **reuse** the facility's own identifier rather than mint a parallel one (FAIR
 
 #### 2.3.2 Where the subject ID lives (Option B)
 
-The subject ID is carried in the per-acquisition `metadata.json` **`subject:` block** as `facility_animal_id` ([08_METADATA §4.4](08_METADATA.md)). A dedicated **registry `subject_id` column was ADDED at the true-production restart (2026-06-10)** — an Auto projection of `subject:`.`facility_animal_id` (§2 schema). The restart was the natural point to add it on a fresh header without migrating quasi-prod rows. Registry-level cohort grouping now rides on the `subject_id` column directly.
+The subject ID is carried in the per-acquisition `metadata.json` **`subject:` block** as `facility_animal_id` ([08_METADATA §4.4](08_METADATA.md)). A dedicated **registry `subject_id` column was ADDED at the true-production restart (2026-06-10)** — an Auto projection of `subject:`.`facility_animal_id` (§2 schema; the correction-pass S1 added the same column independently, now consolidated). The restart was the natural point to add it on a fresh header without migrating quasi-prod rows. Registry-level cohort grouping now rides on the `subject_id` column directly. **NI-LIVE-08 (DECIDED 2026-06-12):** the imminent multi-animal NI work evolves this to a packed **`subject_ids`** column (`;`-joined, always-a-list) + a true one-row-per-subject `registry_subjects.csv` for the one-to-many — see [origin_main_merge_review.md §3](../tasks/origin_main_merge_review.md).
 
 #### 2.3.3 `sample_id` rules
 
@@ -169,9 +169,9 @@ The subject ID is carried in the per-acquisition `metadata.json` **`subject:` bl
 
 The instrument short code embeds `animal_code` with instrument-specific decoration: NI `m14`→`14`, MRI `m13`→`13`, AxioScan `ID13B`→`13` + organ `B`. The ingest tools must parse it into `animal_code` (+ `anatomical_entity` for tissue), derive the project alias from `project_hint` (`ae-biomegune-NNNN` → `NNNN`), and compose the canonical subject ID / DB lookup key. Tracked in `tasks/tasks.md §3.2`. Current per-instrument templates carry an illustrative `facility_animal_id` that predates this and is corrected to the canonical form.
 
-### 2.4 Sample Type Vocabulary (DRAFT)
+### 2.4 Sample Type Vocabulary (DECIDED 2026-06-11)
 
-> **🔶 DRAFT pilot guidance.** `sample_type` is the category of biological material in REMBI terms — *not* the species and *not* the anatomy. Status open (REG-07) pending a Data Office decision (user input welcome; this project has no PI sign-off gate).
+> **✅ DECIDED 2026-06-11 (S2 — promoted from DRAFT).** The 5-value vocabulary (`organism` / `tissue` / `cells` / `material` / `phantom`) is the adopted in-production convention, accepted by the Data Office (no PI sign-off gate). `sample_type` is the category of biological material in REMBI terms — *not* the species and *not* the anatomy. (Original DRAFT note, REG-07; retained for history. **Still open separately:** the future split of species / anatomy into dedicated registry columns — that remains DRAFT, see REG-07 in the open-questions table.)
 
 REMBI separates concerns: **sample type** (the kind of biological material), **organism/species**, **anatomical entity**, **preparation**, and **imaging mode**. As of the 2026-06-10 restart, three of these have their own columns — `sample_type`, `sample_organism`, and `anatomical_entity` (the last two Auto projections of the enrichment blocks, §2 schema); `preparation` / `imaging mode` still ride along in `sample_id` / `notes` / the sidecar.
 
@@ -221,6 +221,15 @@ ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HP
 | Correct metadata | ✅ Yes | Admin | If error discovered (log correction) |
 | Delete entry | ❌ No | — | Entries are permanent |
 | Modify after deposit | ⚠️ Limited | Admin | Only to fix errors, not change facts |
+
+### 2.7 Concurrency, locking & CSV-append safety (2026-06-11)
+
+The raw registry is operator-visible, Excel-bound, and may be written by more than one ingest at once (two operators, or two batches). Two protections keep it from corrupting:
+
+- **Registry lock (F item 8).** ACQ-ID allocation and the row append are each serialized by an atomic lockfile mutex — `registries/.registry.lock` (`tools/ingest/locking.py::registry_lock`). Allocation also persists a per-prefix high-water reservation in `registries/.acq_id_seq.json` so an in-flight ACQ-ID can't be re-minted during the file copy between allocation and append. Effect: no two concurrent ingests mint the same ACQ-ID, and no torn CSV line is written over SMB. The lock is held briefly (**never** across the copy), self-breaks a stale lock, and is always released. A failed ingest leaves its reserved seq unused (a harmless gap); purging `registries/` resets the high-water marks. **`.registry.lock` and `.acq_id_seq.json` are bookkeeping, not data** — leave them be (a stray `.registry.lock` left by a crash is reclaimed automatically, or may be deleted by hand when no ingest is running).
+- **CSV-append safety (F item 9).** Every registry/CSV appender routes through `tools/ingest/csv_safe.py`: a **BOM-tolerant** header read (so an Excel "Save As CSV UTF-8" BOM can't make the defensive header check refuse every append) and a **trailing-newline guard** (so a last line that lost its newline through an Excel round-trip can't concatenate the next row onto it). New CSV writers MUST use it. Applies to `registry_raw.csv`, `ingest_manifest.csv`, project `provenance.csv`, `pending_subject_metadata.csv`, and `registry_projects.csv`.
+
+See [10_TOOLS](10_TOOLS.md) (ingest flow) and `CLAUDE.md` (registry-integrity rules).
 
 ---
 

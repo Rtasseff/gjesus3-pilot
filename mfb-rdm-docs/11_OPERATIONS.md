@@ -1,8 +1,8 @@
 # 11 — Operations
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** 📋 Planned  
-**Last Updated:** 2026-05-11
+**Status:** 🔶 Draft / In use  
+**Last Updated:** 2026-06-11
 
 ---
 
@@ -133,6 +133,8 @@ The conceptual model above is now applied on the live container. **IT will not c
 
 ### 3.2 Quick Start Guide
 
+> **Most operators want [§3.3 Operator self-service ingest (no-YAML path)](#33-operator-self-service-ingest-no-yaml-path) instead** — the microscopy GUI and the `ni-ingest` / `mri-ingest` scripts, no config files. Start there (and at the one-page [`START_HERE.md`](../START_HERE.md)). §3.2 below is the YAML/data-office path for batch ingests and new conventions.
+
 Daily flow for depositing a new acquisition. This is the operational view — what to do and in what order. For the underlying command syntax and flags, see [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md).
 
 The workflow is **the same four beats for every instrument** — only the share path, the expected filename/folder pattern, and the template you copy differ. Section A is the instrument-agnostic flow; Section B is the per-instrument cheat-sheet you read alongside it.
@@ -212,6 +214,7 @@ For operators running ingest themselves on the acquisition machines there is now
 
 - The Linux scripts and the GUI find the NAS the same way `ingest_raw.py` does — `--nas-root` > `$GJESUS3_ROOT` > `/mnt/gjesus3`, validated for a `registries/` subfolder (the GUI persists the choice). MRI's optional `--ftp-remote` SFTP-pull uses the `GJESUS3_FTP_*` env vars (same as [`tools/ftp_mirror.py`](../tools/ftp_mirror.py)).
 - The microscopy GUI is **recipes + builder**: operators normally pick a saved recipe; the builder is for defining a new naming convention with a live `discovered.*` preview. It freezes to a single PyInstaller `.exe` so the locked-down Windows microscopy machine needs no Python install (build step in [`tools/operator/gui/README.md`](../tools/operator/gui/README.md)).
+- **Dry-run default (testing period).** Every front-end previews before it writes. The microscopy GUI's *Dry-run* checkbox defaults **ON** during the testing period (a high-contrast banner shows while it is on; a dry run ends with a clear "NOTHING was written" summary); the Linux scripts preview-then-prompt and their `--dry-run` likewise ends with "nothing was written". **Once the testing period is over, flip the GUI default to OFF** — remove `checked` from `#r-dry` in `gui/templates/index.html` (the `TODO(dry-run-default)` marker flags the spot). This is deliberately a testing-period safety default, not the permanent one.
 - **NI live-machine note:** archive-mode NI ingest works today (extract the `.tgz` first with [`tools/extract_ni_archives.py`](../tools/extract_ni_archives.py)). Live (on-the-machine, non-archive) ingest is not wired up yet — only the live-folder-layout template (`molecubes_ni_live.yaml`) remains; deployment itself is unblocked (the NI server runs Linux and a script can be installed there — confirmed by Platform Manager Unai 2026-06-03).
 
 ---

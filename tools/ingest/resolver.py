@@ -107,6 +107,7 @@ AUTO_COLUMNS = {
     "ingest_config",
     "sample_organism",     # NEW 2026-06-10 — projection of enrichment subject.species
     "subject_id",          # NEW 2026-06-10 — projection of subject.facility_animal_id
+                           # (correction-pass S1 added the same column; superseded here)
     "anatomical_entity",   # NEW 2026-06-10 — projection of anatomy.region.label
 }
 

@@ -1,0 +1,14 @@
+{
+  "schema": "gjesus3.operator.recipe/v1",
+  "name": "Cell Observer — cells (abbreviated filename)",
+  "instrument": "CELL",
+  "description": "Cell Observer cells-mode VARIANT where the filename carries only <condition>_<image_num> (2 chunks) and the folders <researcher>/<cell_line>/<experiment>/ carry the rest. Mirrors tools/configs/cell_observer_itziar_colageno_perm_TEST.yaml (round 5, Colageno_permeabilizado batch). Use the 'standard filename' recipe if your filenames carry the full 5-chunk convention. Point at the CELL OBSERVER root (the folder above <researcher>), preview, then ingest. Note: if the <experiment> folder name has underscores or capitals it won't auto-create a valid project short_name — set a hyphenated project_hint per batch (PROJ-05).",
+  "based_on": "tools/configs/cell_observer_itziar_colageno_perm_TEST.yaml",
+  "overrides": {
+    "auto_discover.filename_parse": {
+      "separator": "_",
+      "fields": ["condition", "image_num"]
+    },
+    "registry.notes": "Cell Observer cells-mode, abbreviated filename (${discovered.cell_line} / ${discovered.experiment}): ${discovered.condition} #${discovered.image_num}"
+  }
+}

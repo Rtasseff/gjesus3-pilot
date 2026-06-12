@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
-    metadata_sidecar, provenance, resolver, enrichment,
+    metadata_sidecar, provenance, resolver, enrichment, locking,
 )
 import create_project as create_project_mod
 
@@ -44,15 +44,21 @@ def relative_config_path(config_path):
         )
         repo_root = result.stdout.strip()
         if repo_root:
-            return os.path.relpath(abs_path, repo_root).replace("\\", "/")
-    except ValueError:
-        # Config on a different drive than the repo (Windows) — use absolute.
-        return abs_path.replace("\\", "/")
+            try:
+                return os.path.relpath(abs_path, repo_root).replace("\\", "/")
+            except ValueError:
+                # config on a different Windows drive than the repo — a
+                # relative path is impossible; record the absolute path.
+                return abs_path.replace("\\", "/")
     except Exception:
         pass
     try:
         return os.path.relpath(abs_path).replace("\\", "/")
     except ValueError:
+        # On Windows, os.path.relpath raises ValueError when abs_path and the
+        # CWD are on different drives (e.g. config on J:, repo/CWD on C:).
+        # A non-relative ingest_config value is fine; a crash before any
+        # ingest is not. Fall back to the absolute forward-slash path.
         return abs_path.replace("\\", "/")
 
 try:
@@ -93,6 +99,27 @@ def copy_files(src_dir, dst_dir):
         count += 1
 
     return count
+
+
+def _rollback_uncommitted(dest_dir, log_fn=log):
+    """Remove a partially-written acquisition folder after a pre-commit failure.
+
+    The registry append is the ingest commit point (F item 5). If an exception
+    fires after the raw folder is created but before its registry row is
+    written, the folder is an orphan the dedup index can't see — a re-run would
+    copy it again under a fresh ACQ-ID. Remove it so a re-run starts clean.
+    Best-effort: a failure to roll back is logged, never raised.
+    """
+    try:
+        if dest_dir and os.path.isdir(dest_dir):
+            shutil.rmtree(dest_dir)
+            log_fn(
+                f"Rolled back partial acquisition folder (no registry row "
+                f"written): {dest_dir}",
+                "WARN",
+            )
+    except Exception as e:
+        log_fn(f"Could not roll back {dest_dir}: {e}", "WARN")
 
 
 def _normalize_reconstructions(value):
@@ -687,8 +714,19 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             )
 
     # --- Step 4: Generate ACQ-ID ---
+    # Allocate under the registry lock with a durable high-water reservation so
+    # a concurrent ingest can't mint the same id during the file copy that
+    # follows (the lock is brief and is NOT held across the copy — locking.py).
+    # Dry-run previews registry-only (no reservation; a dry run writes nothing).
     registry_path = os.path.join(nas_root, "registries", "registry_raw.csv")
-    acq_id_str = acq_id.generate_acq_id(acq_date, instrument, registry_path)
+    registries_dir = os.path.join(nas_root, "registries")
+    if dry_run:
+        acq_id_str = acq_id.generate_acq_id(acq_date, instrument, registry_path)
+    else:
+        with locking.registry_lock(registries_dir):
+            acq_id_str = acq_id.allocate_acq_id(
+                acq_date, instrument, registry_path, registries_dir,
+            )
     log(f"Generated ACQ-ID: {acq_id_str}")
 
     # --- Step 5: Determine destination path + canonical primary file name ---
@@ -737,8 +775,16 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         cfg_single["primary_kind"] = "archive"
         cfg_single["file_format"] = archive_ext
         cfg_single["archive_src"] = archive_src
-        # original_name reflects the true source archive (e.g. LEONE_1.01.zip)
-        cfg_single["original_name"] = os.path.basename(archive_src)
+        # NOTE (F item 4): do NOT overwrite original_name with the archive
+        # basename here. The registry's original_name is the dedup key
+        # (config._build_dedupe_index keys on (acq_date, original_name)), and
+        # expand_batch set it to the staging-relative path (e.g. "LEONE_1.01").
+        # Overwriting it with the archive file's basename ("LEONE_1.01.zip")
+        # made the key written at ingest differ from the key recomputed on a
+        # re-run, so an archive batch re-ingested every case with fresh
+        # ACQ-IDs + duplicate rows. The archive's display name remains
+        # available via archive_src / primary_file_name; original_name stays
+        # dedup-stable.
     elif data_ecosystem == "DICOM":
         # Legacy collaborator DICOM: files copied into a series/ subfolder.
         # (compress-on-ingest is queued in §3.1; today the series/ tree
@@ -775,6 +821,27 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     log(f"  Destination: {dest_dir}")
     if summary.get("modality"):
         log(f"  DICOM Mod:   {summary['modality']}")
+
+    # Guard (F item 6): an empty / junk source for a data-requiring DICOM
+    # layout must fail loudly, not register an empty acquisition with a real
+    # ACQ-ID. Common when crawling semi-ordered historical drives. The folder
+    # layout (NI/MRI) guards itself per copy-strategy — and MRI legitimately
+    # allows a no-DICOM `.data/` placeholder — so it is excluded here;
+    # microscopy requires a single file; archive is guarded by
+    # _resolve_archive_primary. The legacy `series` / generic directory-walk
+    # path is the one that would otherwise copy nothing and "succeed".
+    # Fires in dry-run too, so a preview surfaces the junk folder.
+    if (
+        data_ecosystem == "DICOM"
+        and acquisition_layout not in ("folder", "archive")
+        and summary.get("file_count", 0) == 0
+    ):
+        log(
+            f"Refusing to ingest empty source (0 primary/DICOM files): "
+            f"{source_path}. Nothing to register — check this folder.",
+            "ERROR",
+        )
+        return acq_id_str, False
 
     if dry_run:
         log("[DRY RUN] Would create folder and copy files. Skipping.")
@@ -945,155 +1012,181 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 log(f"  {m}", "ERROR")
             return acq_id_str, False
 
-    # --- Step 8b: Optional delete-source (cross-instrument) ---
-    effective_delete = bool(delete_source) or bool(
-        cfg_single.get("delete_source_after_ingest")
-    )
-    if effective_delete:
-        try:
-            if os.path.isfile(source_path):
-                os.remove(source_path)
-                log(f"Deleted source file: {source_path}")
-            elif os.path.isdir(source_path):
-                shutil.rmtree(source_path)
-                log(f"Deleted source directory: {source_path}")
-        except Exception as e:
-            log(f"Could not delete source: {e}", "WARN")
+    # --- Steps 8.4-10: enrichment, sidecar, README, project, registry append ---
+    # The registry append is the COMMIT POINT (F item 5): an acquisition only
+    # "counts" once its row is written. If anything between the copy and the
+    # append raises, roll back the partially-written dest folder so a re-run
+    # starts clean (no orphan the dedup index can't see). --delete-source is
+    # deferred to AFTER the commit (end of this function), so the source is
+    # never removed unless the row exists.
+    committed = False
+    try:
+        # --- Step 8.5: Write metadata.json sidecar ---
+        # Section name defaults to lowercased ecosystem ("dicom", "microscopy")
+        # but can be overridden by the extractor's 3-tuple return form (e.g.
+        # ParaVision data lives under metadata.json.mri even though ecosystem
+        # is DICOM, since the contents are ParaVision-specific not generic
+        # DICOM headers). See config._extract_dicom_embedded.
+        eco_section_name = (
+            cfg_single.get("ecosystem_section_name")
+            or (data_ecosystem.lower() if data_ecosystem else "")
+        )
+        eco_section = cfg_single.get("ecosystem_section") or {}
 
-    # --- Step 8.5: Write metadata.json sidecar ---
-    # Section name defaults to lowercased ecosystem ("dicom", "microscopy")
-    # but can be overridden by the extractor's 3-tuple return form (e.g.
-    # ParaVision data lives under metadata.json.mri even though ecosystem
-    # is DICOM, since the contents are ParaVision-specific not generic
-    # DICOM headers). See config._extract_dicom_embedded.
-    eco_section_name = (
-        cfg_single.get("ecosystem_section_name")
-        or (data_ecosystem.lower() if data_ecosystem else "")
-    )
-    eco_section = cfg_single.get("ecosystem_section") or {}
+        # --- Step 8.4: Preclinical enrichment blocks (non-blocking) ---
+        # subject/condition/anatomy for organism|tissue acquisitions
+        # (08_METADATA §4.4–4.7). Never raises: a DB miss WARNs, writes a
+        # source="pending-db" placeholder, and queues the acq to
+        # registries/pending_subject_metadata.csv for later recovery.
+        subject_block, condition_block, anatomy_block = enrichment.build_enrichment(
+            cfg_single,
+            acq_id=acq_id_str,
+            acq_date=acq_date,
+            acq_dt_iso=acq_dt_iso,
+            canonical_path=canonical_path,
+            registries_dir=os.path.join(nas_root, "registries"),
+            dry_run=dry_run,
+            log=log,
+        )
 
-    # --- Step 8.4: Preclinical enrichment blocks (non-blocking) ---
-    # subject/condition/anatomy for organism|tissue acquisitions
-    # (08_METADATA §4.4–4.7). Never raises: a DB miss WARNs, writes a
-    # source="pending-db" placeholder, and queues the acq to
-    # registries/pending_subject_metadata.csv for later recovery.
-    subject_block, condition_block, anatomy_block = enrichment.build_enrichment(
-        cfg_single,
-        acq_id=acq_id_str,
-        acq_date=acq_date,
-        acq_dt_iso=acq_dt_iso,
-        canonical_path=canonical_path,
-        registries_dir=os.path.join(nas_root, "registries"),
-        dry_run=dry_run,
-        log=log,
-    )
+        # (The correction-pass S1 stashed cfg_single["subject_id"] here; the
+        # merged build_row now projects subject_id / sample_organism /
+        # anatomical_entity straight from subject_block / anatomy_block — passed
+        # to build_row at Step 10 — so the stash is no longer needed.)
 
-    sidecar_dict = metadata_sidecar.build_sidecar(
-        acq_id_str,
-        cfg_single,
-        ecosystem_section_name=eco_section_name,
-        ecosystem_section=eco_section,
-        subject=subject_block,
-        condition=condition_block,
-        anatomy=anatomy_block,
-    )
-    sidecar_path = metadata_sidecar.write_sidecar(dest_dir, sidecar_dict)
-    cfg_single["extended_metadata_present"] = "Y"
-    log(f"Wrote {os.path.basename(sidecar_path)}")
+        sidecar_dict = metadata_sidecar.build_sidecar(
+            acq_id_str,
+            cfg_single,
+            ecosystem_section_name=eco_section_name,
+            ecosystem_section=eco_section,
+            subject=subject_block,
+            condition=condition_block,
+            anatomy=anatomy_block,
+        )
+        sidecar_path = metadata_sidecar.write_sidecar(dest_dir, sidecar_dict)
+        cfg_single["extended_metadata_present"] = "Y"
+        log(f"Wrote {os.path.basename(sidecar_path)}")
 
-    # --- Step 9: Generate README ---
-    readme.generate_readme(acq_id_str, cfg_single, summary, dest_dir)
-    log("Wrote README.txt")
+        # --- Step 9: Generate README ---
+        readme.generate_readme(acq_id_str, cfg_single, summary, dest_dir)
+        log("Wrote README.txt")
 
-    # --- Step 9.5: Resolve project_hint (canonicalize; optional auto-create) ---
-    # Runs before the registry append so the row records the canonical
-    # PROJ-XXXX, not whatever raw hint came in. Step 12 (.lnk) reads the
-    # resolved value too.
-    project_hint = cfg_single.get("project_hint", "").strip()
-    if project_hint:
-        projects_registry = os.path.join(nas_root, "registries", "registry_projects.csv")
-        proj_id, _proj_folder = linker.resolve_project(projects_registry, project_hint)
-        if proj_id:
-            if proj_id != project_hint:
-                log(f"Resolved project_hint '{project_hint}' -> {proj_id} (by short_name)")
-            # First-write-wins: if the YAML config supplied an
-            # auto_create_project: block but the project already exists,
-            # the block is silently ignored — log an INFO line so the
-            # operator sees it didn't apply.
-            if cfg_single.get("auto_create_project"):
-                log(
-                    f"Project '{proj_id}' already exists; auto_create_project "
-                    f"block ignored (first-write-wins). Edit "
-                    f"_project.yaml directly if you need to update."
-                )
-            cfg_single["project_hint"] = proj_id
-        else:
-            ingest_block = cfg_single.get("ingest") or {}
-            if ingest_block.get("auto_create_projects"):
-                short_name_norm = project_hint.lower()
-
-                # Resolve the optional auto_create_project: block against
-                # this case's discovered fields. The block is the new
-                # canonical source for owner/description/notes; legacy
-                # fallback values are used only if the block didn't
-                # supply them (empty / unsupplied).
-                acp_resolved = resolver.resolve_auto_create_project_block(
-                    cfg_single.get("auto_create_project"),
-                    cfg_single.get("discovered") or {},
-                )
-                owner = acp_resolved.get("owner") or cfg_single.get("operator", "") or "?"
-                desc = acp_resolved.get("description") or (
-                    f"Auto-created during ingest of "
-                    f"{cfg_single.get('original_name', '?')} "
-                    f"(hint='{project_hint}')"
-                )
-                notes_for_proj = (
-                    acp_resolved.get("notes") or "auto-created by ingest_raw.py"
-                )
-
-                if not owner or owner == "?":
+        # --- Step 9.5: Resolve project_hint (canonicalize; optional auto-create) ---
+        # Runs before the registry append so the row records the canonical
+        # PROJ-XXXX, not whatever raw hint came in. Step 12 (.lnk) reads the
+        # resolved value too.
+        project_hint = cfg_single.get("project_hint", "").strip()
+        if project_hint:
+            projects_registry = os.path.join(nas_root, "registries", "registry_projects.csv")
+            proj_id, _proj_folder = linker.resolve_project(projects_registry, project_hint)
+            if proj_id:
+                if proj_id != project_hint:
+                    log(f"Resolved project_hint '{project_hint}' -> {proj_id} (by short_name)")
+                # First-write-wins: if the YAML config supplied an
+                # auto_create_project: block but the project already exists,
+                # the block is silently ignored — log an INFO line so the
+                # operator sees it didn't apply.
+                if cfg_single.get("auto_create_project"):
                     log(
-                        f"Auto-creating project '{short_name_norm}' with "
-                        f"empty/unknown owner. Edit "
-                        f"projects/proj-{short_name_norm}/_project.yaml "
-                        f"after creation to set ownership.",
-                        "WARN",
+                        f"Project '{proj_id}' already exists; auto_create_project "
+                        f"block ignored (first-write-wins). Edit "
+                        f"_project.yaml directly if you need to update."
+                    )
+                cfg_single["project_hint"] = proj_id
+            else:
+                ingest_block = cfg_single.get("ingest") or {}
+                if ingest_block.get("auto_create_projects"):
+                    short_name_norm = project_hint.lower()
+
+                    # Resolve the optional auto_create_project: block against
+                    # this case's discovered fields. The block is the new
+                    # canonical source for owner/description/notes; legacy
+                    # fallback values are used only if the block didn't
+                    # supply them (empty / unsupplied).
+                    acp_resolved = resolver.resolve_auto_create_project_block(
+                        cfg_single.get("auto_create_project"),
+                        cfg_single.get("discovered") or {},
+                    )
+                    owner = acp_resolved.get("owner") or cfg_single.get("operator", "") or "?"
+                    desc = acp_resolved.get("description") or (
+                        f"Auto-created during ingest of "
+                        f"{cfg_single.get('original_name', '?')} "
+                        f"(hint='{project_hint}')"
+                    )
+                    notes_for_proj = (
+                        acp_resolved.get("notes") or "auto-created by ingest_raw.py"
                     )
 
-                log(f"Auto-creating project: short_name='{short_name_norm}', owner='{owner}'")
-                new_id, ok = create_project_mod.create_project(
-                    short_name_norm, desc, owner, nas_root,
-                    dry_run=False,
-                    notes=notes_for_proj,
-                )
-                if ok and new_id:
-                    cfg_single["project_hint"] = new_id
+                    if not owner or owner == "?":
+                        log(
+                            f"Auto-creating project '{short_name_norm}' with "
+                            f"empty/unknown owner. Edit "
+                            f"projects/proj-{short_name_norm}/_project.yaml "
+                            f"after creation to set ownership.",
+                            "WARN",
+                        )
+
+                    log(f"Auto-creating project: short_name='{short_name_norm}', owner='{owner}'")
+                    new_id, ok = create_project_mod.create_project(
+                        short_name_norm, desc, owner, nas_root,
+                        dry_run=False,
+                        notes=notes_for_proj,
+                    )
+                    if ok and new_id:
+                        cfg_single["project_hint"] = new_id
+                    else:
+                        log(
+                            f"Project auto-create failed for hint='{project_hint}'; "
+                            f"leaving registry project_hint as the raw value",
+                            "WARN",
+                        )
                 else:
                     log(
-                        f"Project auto-create failed for hint='{project_hint}'; "
-                        f"leaving registry project_hint as the raw value",
+                        f"project_hint='{project_hint}' not found in registry and "
+                        f"ingest.auto_create_projects is false; leaving registry "
+                        f"project_hint as the raw value",
                         "WARN",
                     )
-            else:
-                log(
-                    f"project_hint='{project_hint}' not found in registry and "
-                    f"ingest.auto_create_projects is false; leaving registry "
-                    f"project_hint as the raw value",
-                    "WARN",
-                )
 
-    # --- Step 10: Update registry ---
-    # subject_block / anatomy_block were built at Step 8.4 (above); pass them so
-    # build_row can project sample_organism / subject_id / anatomical_entity.
-    reg_dt = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt,
-                             subject=subject_block, anatomy=anatomy_block)
-    registry.append_row(registry_path, row)
-    log(f"Appended to registry: {registry_path}")
+        # --- Step 10: Update registry (the commit point) ---
+        # Serialize the append under the registry lock (torn-line safety over
+        # SMB). Brief hold — just the append. subject_block / anatomy_block were
+        # built at Step 8.4 (above); pass them so build_row projects
+        # sample_organism / subject_id / anatomical_entity.
+        reg_dt = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt,
+                                 subject=subject_block, anatomy=anatomy_block)
+        with locking.registry_lock(registries_dir):
+            registry.append_row(registry_path, row)
+        committed = True
+        log(f"Appended to registry: {registry_path}")
+    except Exception as e:
+        # Any failure between the copy and the registry commit: report the case
+        # as failed; the finally rolls back the partial dest (below).
+        log(
+            f"Ingest failed after copy, before the registry commit "
+            f"({acq_id_str}): {e}",
+            "ERROR",
+        )
+        return acq_id_str, False
+    finally:
+        # Roll back the partial dest on ANY exit without a commit — an exception
+        # handled above, or a KeyboardInterrupt/abort that bypasses the except —
+        # so a re-run never meets an orphan the dedup index can't see.
+        # Best-effort + idempotent; a clean commit (committed=True) is a no-op.
+        if not committed:
+            _rollback_uncommitted(dest_dir, log)
 
-    # --- Step 11: Manifest entry (always) ---
+    # --- Step 11: Manifest entry (post-commit; non-fatal) ---
     manifest_path = os.path.join(nas_root, "registries", "ingest_manifest.csv")
-    linker.create_manifest_entry(manifest_path, acq_id_str, original_name, canonical_path)
+    try:
+        linker.create_manifest_entry(manifest_path, acq_id_str, original_name, canonical_path)
+    except Exception as e:
+        log(
+            f"Could not write manifest entry (non-fatal — registry row already "
+            f"committed): {e}",
+            "WARN",
+        )
 
     # --- Step 12: Project hard link (if project_hint set) ---
     # Replaces the legacy .lnk shortcut (2026-06-02): the project copy is a
@@ -1197,6 +1290,25 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 log(f"Could not create hard link: {e}", "WARN")
             except Exception as e:
                 log(f"Unexpected error creating hard link: {e}", "WARN")
+
+    # --- Step 13: Optional delete-source (cross-instrument) ---
+    # MOVED to after the registry commit (F item 5): the source is removed only
+    # once the row exists, so a crash before the commit can never destroy the
+    # source while leaving an unrecorded copy. The parent of source_path is
+    # never touched.
+    effective_delete = bool(delete_source) or bool(
+        cfg_single.get("delete_source_after_ingest")
+    )
+    if effective_delete:
+        try:
+            if os.path.isfile(source_path):
+                os.remove(source_path)
+                log(f"Deleted source file: {source_path}")
+            elif os.path.isdir(source_path):
+                shutil.rmtree(source_path)
+                log(f"Deleted source directory: {source_path}")
+        except Exception as e:
+            log(f"Could not delete source: {e}", "WARN")
 
     log(f"DONE: {acq_id_str}")
     return acq_id_str, True

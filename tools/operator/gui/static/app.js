@@ -608,9 +608,21 @@ async function runnerIngest() {
         appendLog(logEl, "ERROR", evt.msg);
       } else if (evt.kind === "done") {
         const r = JSON.parse(evt.msg);
-        $("#r-result").innerHTML =
-          `<span class="new">${r.ok}/${r.total} ${r.dry_run ? "would ingest" : "ingested"}</span>` +
-          (r.dry_run ? " (dry-run — nothing written)" : "");
+        const resEl = $("#r-result");
+        // Loud, mode-distinct end-of-run summary so a dry run is never mistaken
+        // for a real ingest (and vice-versa).
+        if (r.dry_run) {
+          resEl.className = "summary dry-done";
+          resEl.innerHTML =
+            `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the NAS.</strong> ` +
+            `${r.ok}/${r.total} acquisitions WOULD be ingested. ` +
+            `To actually ingest, uncheck “Dry-run” and run again.`;
+        } else {
+          resEl.className = "summary live-done";
+          resEl.innerHTML =
+            `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} acquisitions written</strong> ` +
+            `to ${nasRoot() || "the NAS"}.`;
+        }
       }
     }
   }
@@ -619,10 +631,13 @@ async function runnerIngest() {
 }
 $("#r-ingest").addEventListener("click", runnerIngest);
 
-// ---- dry-run state (OFF by default; make LIVE-vs-SAFE loud) (#8) ----
+// ---- dry-run state (ON by default during testing; make LIVE-vs-SAFE loud) ----
+// TODO(dry-run-default): the checkbox defaults ON (checked) in index.html for
+// the testing period. Flip to OFF there once testing is complete.
 const rDry = $("#r-dry");
 const rCommit = $("#r-commit");
 const rDryState = $("#r-dry-state");
+const rDryBanner = $("#r-dry-banner");
 function updateDryState() {
   const dry = rDry.checked;
   rCommit.classList.toggle("safe", dry);
@@ -630,6 +645,7 @@ function updateDryState() {
   rDryState.textContent = dry
     ? "Safe — nothing will be written."
     : "LIVE — Ingest will write to the NAS.";
+  if (rDryBanner) rDryBanner.hidden = !dry;  // persistent top-of-panel banner
 }
 rDry.addEventListener("change", updateDryState);
 updateDryState();

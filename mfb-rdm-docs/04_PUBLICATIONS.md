@@ -172,7 +172,7 @@ The `raw_linked/` folder creates a clear connection between this publication and
 
 ### 5.2 Method — Windows `.lnk` shell shortcuts
 
-> **✅ DECIDED — Windows-first, deliberately:** Links use Windows `.lnk` shell shortcuts created via PowerShell's `WScript.Shell` COM. Same convention as projects (see [05_PROJECTS](05_PROJECTS.md) and [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision)). This is a **pilot-specific** choice for the gjesus3 environment (Windows user base, no SSH-into-NAS); see the full rationale and porting guide in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision).
+> **✅ DECIDED — NTFS/SMB hard links (2026-06-02; supersedes the original Windows `.lnk` choice):** Links use **NTFS/SMB hard links** (the project copy is a real shared-inode file). Same convention as projects (see [05_PROJECTS](05_PROJECTS.md) and [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts)); the original `.lnk` shell shortcuts remain the porting seam. This is a **pilot-specific** choice for the gjesus3 environment (Windows user base, no SSH-into-NAS); see the full rationale and porting guide in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts). (The publications linking tool is future work — `create_publication`; it will follow the same hard-link mechanism.)
 
 For each linked acquisition, `raw_linked/` contains one `.lnk` file named with the original archive name (e.g. `LEONE_1.01.zip.lnk`), targeting the canonical archive on the NAS via UNC path. Windows users browsing via SMB see familiar names with the right icon and can double-click to open. Scripts and non-Windows tooling should consume the canonical paths via `registry_raw.csv` (or the per-publication provenance log) rather than following `.lnk` files.
 
@@ -296,4 +296,4 @@ If space becomes constrained:
 | PUB-02 | Closure checklist and automation | Data Mgmt Lead | 🔶 Draft |
 | PUB-03 | Zenodo workflow integration | Data Mgmt Lead | 📋 Future |
 | PUB-04 | How to handle publication packages that grow very large? | PI | 🔶 Draft |
-| ~~PUB-05~~ | ~~Raw data linking method: symlinks, hard links, or text reference list?~~ | — | ✅ Resolved: Windows `.lnk` shortcuts (Windows-first pilot choice; see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--windows-first-design-decision)) |
+| ~~PUB-05~~ | ~~Raw data linking method: symlinks, hard links, or text reference list?~~ | — | ✅ Resolved: **NTFS/SMB hard links** (2026-06-02; superseded the original `.lnk` pilot choice; see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts)) |

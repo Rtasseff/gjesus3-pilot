@@ -96,6 +96,15 @@ The design principle this drives:
 
 Even if XNAT never arrives, the same principles make the data more usable today.
 
+### 4.1 Very-near-future: image servers (sharpened 2026-06-11, S4)
+
+The image-server step is no longer just an aspiration — it is the **lead, imminent** next destination, split by data type:
+
+- **Microscopy → OMERO** (OME ecosystem; vendor image files like `.czi`).
+- **DICOM (preclinical MRI + Nuclear Imaging) → XNAT** (Subject → Session → Scan).
+
+Both ingest metadata as a **flat key-value import**. gjesus3 already keeps what makes that frictionless: a clean flat registry and captured DICOM UIDs. One wrinkle the platforms share — they expect flat key-value metadata, whereas the gjesus3 sidecar is **nested** JSON; a lighter **metadata-only index** (e.g. SQLite/Datasette over the registries + sidecars) is being weighed as an intermediate that is both the searchable face on the NAS *now* and a better fit for the nested sidecar (backlog: `tasks/BACKLOG.md` → "Metadata vocabularies & search"). XNAT/OMERO stay the lead destinations regardless.
+
 ---
 
 ## 5. Implications for design

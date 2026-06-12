@@ -15,6 +15,8 @@ import csv
 import os
 import subprocess
 
+from . import csv_safe
+
 
 PROVENANCE_HEADERS = [
     "file_id",
@@ -88,6 +90,8 @@ def append_entry(prov_path, entry):
 
     file_exists = os.path.exists(prov_path) and os.path.getsize(prov_path) > 0
     os.makedirs(os.path.dirname(prov_path), exist_ok=True)
+    # Trailing-newline guard (csv_safe) before the append.
+    csv_safe.ensure_trailing_newline(prov_path)
     with open(prov_path, "a", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=PROVENANCE_HEADERS, extrasaction="ignore")
         if not file_exists:
