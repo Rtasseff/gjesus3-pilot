@@ -19,12 +19,19 @@ when adding new pulse sequences / acquisition matrices to verify the
 "always swap" rule still holds.
 
 Usage (from inside WSL with the dicomifier-pilot env active):
-    python tools/validate_dicomifier_pixelspacing.py
+    # Operator post-ingest sanity check — point at one or more ingested
+    # <ACQ-ID>.data/ folders of regenerated DICOMs. PASS = every anisotropic
+    # series reads "matches_unswapped" (Bruker-correct) and NONE read
+    # "matches_swapped" (which would mean the regen workaround didn't apply):
+    python tools/validate_dicomifier_pixelspacing.py \
+        /mnt/gjesus3/raw/DICOM/2025/2025-10/ACQ-20251016-MRI-001/ACQ-20251016-MRI-001.data
 
-Edit the DICO_M13 / DICO_M17 / BRUKER_NAS paths below if testing on
-different sources.
+    # No arguments -> the built-in m13/m17 dev validation paths (DICO_* /
+    # BRUKER_NAS constants below; edit those for other dev sources).
 """
+import argparse
 import os
+import sys
 import pydicom
 from collections import defaultdict, Counter
 
@@ -83,7 +90,7 @@ def analyse(label, directory):
     series = index_series(directory)
     if not series:
         print("  (no DICOMs)")
-        return
+        return Counter()
     counts = Counter()
     print(f"  {'SN':>10s}  {'Slc':>4s}  {'Rows':>5s} × {'Cols':>5s}  {'PS[0]':>9s}  {'PS[1]':>9s}  Test                      Desc")
     for sn, suid, ds, n, desc in series:
@@ -95,6 +102,7 @@ def analyse(label, directory):
         counts[verdict] += 1
         print(f"  {sn:>10d}  {n:>4d}  {rows:>5d} × {cols:>5d}  {ps_str[0]:>9s}  {ps_str[1]:>9s}  {verdict:25s}  {desc[:30]}")
     print(f"\n  Per-verdict counts: {dict(counts)}")
+    return counts
 
 
 def compare_bruker(label):
@@ -162,6 +170,47 @@ def compare_bruker(label):
     print(f"\n  Summary: matched_with_bruker={matched}, swap_confirmed={swap_confirmed}, swap_not_needed_or_ambiguous={swap_not_needed}, not_in_bruker={not_in_bruker}")
 
 
-analyse("m13 (Dicomifier, no Bruker comparison)", DICO_M13)
-analyse("m17 (Dicomifier)", DICO_M17)
-compare_bruker("m17 vs Bruker GUI on NAS")
+def _legacy_dev_run():
+    """The original hardcoded-path dev validation (m13/m17 vs Bruker on NAS)."""
+    analyse("m13 (Dicomifier, no Bruker comparison)", DICO_M13)
+    analyse("m17 (Dicomifier)", DICO_M17)
+    compare_bruker("m17 vs Bruker GUI on NAS")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        description="Validate regenerated-DICOM PixelSpacing axis order via FOV "
+                    "consistency. Operator post-ingest sanity check for the MRI "
+                    "no-DICOM regeneration path (see the MRI regeneration runbook)."
+    )
+    ap.add_argument(
+        "dicom_dir", nargs="*",
+        help="One or more folders of .dcm files to check (e.g. an ingested "
+             "<ACQ-ID>.data/). Omit to run the built-in m13/m17 dev paths.",
+    )
+    args = ap.parse_args(argv)
+
+    if not args.dicom_dir:
+        _legacy_dev_run()
+        return 0
+
+    total = Counter()
+    for d in args.dicom_dir:
+        label = os.path.basename(os.path.normpath(d)) or d
+        total.update(analyse(label, d))
+
+    # Verdict: a regenerated, workaround-applied batch must NOT contain any
+    # "matches_swapped" series (that would mean the PixelSpacing swap didn't
+    # apply). Square/ambiguous series are fine.
+    swapped = total.get("matches_swapped", 0)
+    print(f"\n=== OVERALL: {dict(total)} ===")
+    if swapped:
+        print(f"FAIL: {swapped} series still read as SWAPPED ([col,row]) — the "
+              f"PixelSpacing workaround did NOT apply. Re-check the regeneration.")
+        return 1
+    print("PASS: no swapped-axis series — PixelSpacing is in Bruker-correct [row,col] order.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
