@@ -7,9 +7,13 @@ folder to gjesus3" goal). The companion
 covers the already-implemented **archive mode** (clean `.tgz` filenames pulled from
 `\\cicmgsp02\gnuclear2$`); this document covers the **messier live data dir** that mode explicitly
 defers ("Live-machine mode (future)").
-**Last updated:** 2026-06-11 — now includes the MFB-group scope/roster (§2A), the validated subject
-grammar + DB-as-validator (§3A), the one-entry-per-animal multi-animal decision (§3B), the
-subject-data storage split (§3C), and the two-program strategy (§7).
+**Last updated:** 2026-06-12 — **§3B/§3C/§7 reconciled to NI-LIVE-08:** `registry_subjects.csv` is
+**one row per subject** (static record), **not** a `(acq_id, animal)` junction table (that shape was
+vetoed); the scan→animal link is the packed `subject_ids` column, and per-(scan, animal)
+`scan_position`/`age-at-acq` live in the sidecar `subjects:[…]` array. Earlier (2026-06-11): the
+MFB-group scope/roster (§2A), the validated subject grammar + DB-as-validator (§3A), the
+one-entry-per-animal multi-animal decision (§3B), the subject-data storage split (§3C), and the
+two-program strategy (§7).
 **Evidence:** `S:\gnuclear\2026\Jesus\Ryan\datapath.txt` — a full recursive path dump
 (295,538 lines) of the Molecubes box data root `/Users/molecubes/Documents/volumes/remiW11/data/`.
 All counts below are from that snapshot.
@@ -249,7 +253,8 @@ already uses — see the `animal_facility_db_metadata` design / `tools/ingest/en
 1. **One scan can image up to 4 animals.** The machine **physically holds ≤ 4 mice** (confirmed),
    so the animal-list is **1–4**, never more — `0124_2-4-5-6` (four) is the max case. **At raw
    ingest, one scan = one acquisition entry that records its 1–4 animals as a list** (Model 1, §3B);
-   the one-to-many lives in the NAS subjects table. Per-animal *image* splitting is a deferred,
+   the scan→animal link is the packed `subject_ids` list on that one row, and the NAS subjects table
+   (§3C) is one row **per animal** (not per scan). Per-animal *image* splitting is a deferred,
    optional derivative — not part of the sync.
 2. **The animal prefix can't be required.** `m` (mouse), `r` (rat), or bare. Parse the prefix when
    present (it sets species), default-flag when absent.
@@ -309,14 +314,18 @@ do this (see below). **Superseded by Model 1.**
 **Decision — at raw ingest use Model 1:**
 - **1 scan = 1 acquisition row = 1 ACQ-ID** (honest 1:1 with the real machine event; combined
   reconstruction kept whole). DICOMs stored once, **no duplication, no per-animal hard-link fan-out**.
-- The scan's **1–4 animals are recorded as a list**. The authoritative one-to-many lives in the **NAS
-  subjects table** (§3C): one row per `(acq_id, project, animal, facility_id, scan_position)`. The
-  acquisition registry row carries a compact human-readable pointer (e.g. `subject_ids` =
-  semicolon-joined facility ids); the sidecar carries a small `subjects: [...]` array (minimal subset
-  per §3C). Semicolons are a *pointer*, not the primary key — the table is.
-- **Position** (which mouse in which bed slot) is captured **per subjects-table row** when known;
-  historical data → record the animal, flag position unknown. (Forcing a position convention going
-  forward is a Program-B standard item, not an ingest blocker.)
+- The scan's **1–4 animals are recorded as a list** in the acquisition row's packed **`subject_ids`**
+  column (`;`-joined facility ids, always-a-list). **That column is where the scan→animal link lives**
+  — the one acquisition row points at its 1–4 animals. The **NAS subjects table**
+  (`registry_subjects.csv`, §3C) is **one row per animal** (the static record), **NOT** one row per
+  scan-animal pair. The acquisition×animal relationship is fully recoverable by joining `subject_ids`
+  against that table, so **no junction/mapping table is built now** (NI-LIVE-08 — a junction is a
+  deferred query-layer option, explicitly vetoed for now).
+- **Position** (which mouse in which bed slot) and **age-at-acquisition** are *per-(scan, animal)*
+  facts, so they live in the per-acquisition **sidecar `subjects:[…]` array** (one element per animal
+  in that scan) — **not** in the one-row-per-animal subjects table. Recorded when known; historical
+  data → record the animal, flag position unknown. (Forcing a position convention going forward is a
+  Program-B standard item, not an ingest blocker.)
 
 **Per-animal image splitting (Model 2) — DEFERRED, optional, derivative.** If/when an analysis needs
 separate per-mouse volumes: a project-workspace step crops each animal, mints new UIDs, and references
@@ -338,22 +347,31 @@ now only matters if/when we build the deferred split.*
 data is **mutable** (the facility DB fills in after a delay; sex/age/strain can be corrected), but
 `/raw/` sidecars are **immutable**. So do **not** dump the full subject record into the JSON sidecar.
 
-- **DECIDED (user, 2026-06-11): our own NAS subjects table.** Full subject/sample data → a separate,
-  updatable registry on the NAS (e.g. `registry_subjects.csv`), keyed by `facility_id` /
-  `(project, animal)`, **one row per `(acq_id, animal, scan_position)`** (this is also where a
-  multi-animal scan's 1–4 animals live — §3B). Back-filled/corrected over time by the recovery tool;
-  self-contained on the NAS so it survives DB outages. The acquisition row references subjects by id.
-  Natural fit with the post-restart `subject_id` column and the existing
+- **DECIDED (user, 2026-06-11; shape settled 2026-06-12 — NI-LIVE-08): our own NAS subjects table,
+  one row per SUBJECT.** Full subject data → a separate, updatable registry on the NAS
+  (`registry_subjects.csv`), **keyed by `facility_id` — exactly one row per animal**, holding the
+  *static* record (`facility_id`, `project_alias`, `animal_code`, `species`, `sex`, `strain`,
+  `date_of_birth`, + provenance). An animal seen in N scans still has **one** row — the writer is an
+  **upsert by `facility_id`, never append-per-scan**. This is **NOT** a `(acq_id, animal)` mapping
+  table — that shape was explicitly **vetoed** (NI-LIVE-08); the scan→animal link is the packed
+  `subject_ids` column on the acquisition row (§3B), and the acq×animal relationship is recovered by
+  joining the two. Back-filled/corrected over time by the recovery tool; self-contained on the NAS so
+  it survives DB outages. Natural fit with the `subject_ids` column and the existing
   `pending_subject_metadata.csv` → `recover_subject_metadata.py` flow.
-- **Sidecar holds only a minimal convenience subset** — enough to read an acquisition standalone:
-  **species, sex, age-at-acquisition**, the `(project, animal, facility_id)` key, and
-  `scan_position`. Everything else lives in the updatable table.
+- **Sidecar holds only a minimal convenience subset** — enough to read an acquisition standalone: the
+  `(project, animal, facility_id)` key, cached `species`/`sex`, plus the *per-(scan, animal)* facts
+  that have **no home** in the one-row-per-animal table — **`scan_position` and `age-at-acquisition`** —
+  as a small `subjects:[…]` array (one element per animal in the scan). Everything *static* lives in
+  the updatable subjects table. (The sidecar `subjects:[…]` JSON shape is documented in `08_METADATA`
+  at the live-ingest build stage.)
 - This also respects the existing **metadata-location split** (immutable acquisition-level in
   `/raw/`, mutable study/subject-level elsewhere) and keeps the immutable sidecar from going stale
   when the DB is later corrected.
 
-*Resolved: our own NAS table (above). Remaining: which fields are the "minimal convenience subset"
-beyond species/sex/age-at-acq — NI-LIVE-12 (§8).*
+*Resolved (NI-LIVE-08/12, 2026-06-12): our own NAS table, **one row per subject** (static record);
+per-(scan, animal) `scan_position`/`age-at-acq` + the scan→animal link live with the acquisition
+(`subject_ids` + sidecar `subjects:[…]`), not in the subjects table; **no junction table**. The exact
+sidecar `subjects:[…]` JSON shape is the only open detail — settled at the live-ingest build stage.*
 
 ### Decided sync-execution context (user, 2026-06-11)
 
@@ -568,8 +586,8 @@ a hand-vetted one-shot carries low risk and high clarity — exactly the right p
   timestamp, DB hit/miss per animal). Validate against `datapath.txt` (irene = cleanest start). Highest
   value, zero risk.
 - **Stage A2 — vetted one-shot ingest to the sandbox:** human reviews/edits the table → ingest with
-  §3B (one entry **per scan**, animals recorded as a list; the subjects table holds the per-animal
-  rows) + §3C (minimal sidecar, subjects table) → verify idempotent re-run (R7), empty-folder guard
+  §3B (one entry **per scan**, animals recorded as a list in `subject_ids`; the subjects table holds
+  one row **per animal**) + §3C (minimal sidecar, subjects table) → verify idempotent re-run (R7), empty-folder guard
   (R9), `os.link` on the real mount (R10).
 - **Stage B — forward standard + simple sync:** define + document the acquisition naming standard;
   ship the thin "sync my folder" front-end (point-at-folder → preview → dry-run → live) reusing
@@ -586,7 +604,7 @@ ni_live_sync/
   plan.py                  build the per-SCAN entry + 1–4 animal list (§3B) + date tie-break (R5)
   review_table.{csv|tui}   Program A: human vets BEFORE commit ; Program B: dry-run preview
   ingest  (reuses ingest_raw.copy_ni_acquisition + ni_metadata + standard project hard-link, one per scan)
-  subjects_table writer    §3C  one row per (acq_id, animal, position) -> registry_subjects.csv ; sidecar = minimal subset
+  subjects_table writer    §3C  UPSERT one row per ANIMAL (PK facility_id) -> registry_subjects.csv ; scan→animal link via subject_ids ; position/age in sidecar ; NO junction table
   pending queue (exists)   §3A  pending_subject_metadata.csv + recover_subject_metadata.py
 ```
 

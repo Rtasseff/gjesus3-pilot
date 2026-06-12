@@ -16,6 +16,14 @@
 | `5b20ffd` | **`equipment/nuclear-imaging/live_machine_data_layout_and_sync_rules.md`** (571 lines) — the NI live-machine layout + the multi-animal solution |
 
 ### The multi-animal NI solution (the new doc, §3B/§3C) — **Model 1**
+
+> **⚠️ SUPERSEDED in part — read §3 + NI-LIVE-08 below.** The "one row per `(acq_id, …, scan_position)`"
+> shape quoted in this subsection was the designer's *original* proposal. It was **overridden** (user,
+> 2026-06-12): `registry_subjects.csv` is a **true one-row-per-subject** table, **NOT** a `(acq_id, animal)`
+> junction/mapping table (that was vetoed). The scan→animal link is the packed `subject_ids` column;
+> per-(scan, animal) `scan_position`/age-at-acq live in the sidecar. **The spec was corrected 2026-06-12**
+> (equipment §3B/§3C/§7 + `06_REGISTRIES`). Kept below only as the historical proposal.
+
 - One NI scan physically holds **≤ 4 mice**. Decision: **1 scan = 1 acquisition row = 1 ACQ-ID**
   (honest 1:1 with the machine event; DICOMs stored once, no per-animal duplication / hard-link fan-out).
 - The scan's **1–4 animals are recorded as a list**. The **authoritative one-to-many** lives in a NEW
