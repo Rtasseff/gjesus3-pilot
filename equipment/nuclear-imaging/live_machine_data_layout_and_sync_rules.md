@@ -473,6 +473,35 @@ from a clean filename (R4), (3) the date tie-break/flag (R5), and (4) the idempo
 
 ## 7. Strategy — two programs: a one-time vetted migration, then a simple standard sync
 
+> **UPDATE 2026-06-12 — reconciled with merged `origin/main` (correction pass + NI-LIVE-08); Step 1 is BUILT + validated.**
+>
+> **Now DONE upstream (reuse, don't rebuild):** registry lock + durable ACQ-ID reservation
+> (`tools/ingest/locking.py`), BOM/newline-safe CSV appends (`csv_safe.py`), archive re-run
+> idempotency, crash-orphan rollback (registry append = commit point), empty-folder fail-loud,
+> cross-drive relpath guard, the `os.link` diagnostic (`tools/diagnostics/test_oslink.py`), and the
+> single-animal DB-lookup + `pending_subject_metadata.csv` recovery chain. These cover R7/R8/R9/R10
+> and the DB-as-validator path — the remaining build is much smaller than this section first assumed.
+>
+> **Now DECIDED (NI-LIVE-08, 2026-06-12):** packed `subject_ids` (`;`-joined, always-a-list) replaces
+> singular `subject_id`; a TRUE one-row-per-subject `registry_subjects.csv`; minimal sidecar
+> `subjects:[…]`; **no** mapping/junction table; query layer deferred. Steer: *stop expanding the
+> model; capture the small group's data; then build query.* Still greenfield: the `subject_id`→
+> `subject_ids` rename, the subjects-table writer, the multi-animal list assembly, `molecubes_ni_live.yaml`.
+>
+> **Step 1 BUILT: `tools/ni_live_discover.py`** (read-only discovery dry-run). Validated against the
+> snapshot — **254/262 (97%) of MFB NI scans parse to a DB-keyable `(project, animal)`**; only **7**
+> (ermal bare-number with no recoverable project) genuinely need human input, plus 8 possible-range to
+> eyeball. Most flags are informational (species deferred to the DB: 160; project recovered from the
+> parent folder: 93). **102 of 262 scans image >1 animal** (cap 4). Rats (`r20`) parse correctly.
+>
+> **Leaner plan:** **Gate 0** — run `test_oslink.py` on the Mac (push-from-Mac feasibility) + confirm
+> host/layout with Unai. **Step 1** — `ni_live_discover.py` (done; review the table, `--csv` for full).
+> **Step 2** — `molecubes_ni_live.yaml` + multi-animal wiring (animal list → per-animal DB lookup →
+> packed `subject_ids` + `registry_subjects.csv` rows + sidecar array; land the `subject_id`→
+> `subject_ids` rename). **Step 3** — vetted one-shot to `J:\gjesus3-sandbox`. **PARKED:** Program B
+> forward standard, the mapping table, per-animal splitting, the query layer.
+
+
 **DECIDED direction (user, 2026-06-11):** split the problem in two so the *ongoing* tool stays simple.
 
 > **Program A — one-time historical migration (messy → clean).** A **prevetted, human-in-the-loop**
@@ -546,7 +575,8 @@ is shared and mostly **already exists**.
 | NI-LIVE-05 | For acquisitions with multiple `recon_N` (CT often has `recon_0`/`recon_1`/`recon_2=ATTMAP`): keep all, or let the operator select (archive mode kept all)? |
 | NI-LIVE-06 | Confirm the roster→folder map (§2A): is `ely` = Elena González? are `jrc`/`mjesus` Jesus (and does the PI ever scan)? do Susana / Iraia / Adrián / Ekine / Tania / Marta have NI folders (different slug / no NI use)? |
 | NI-LIVE-07 | Subject grammar (§3A): is `m10-15` a 6-animal **range** or a pair? Confirm dashes are explicit lists except obvious consecutive pairs. Is the species prefix (`m`/`r`/none) reliable enough to set species, or always defer to the DB? |
-| NI-LIVE-08 | Multi-animal acquisition → multiple subjects: confirm the `subject:` block / registry should carry a **list** of `(project, animal, facility_id)`, and how the registry's single-subject columns (post-restart `subject_id`) represent N>1 (list? primary + others in sidecar?). |
+| NI-LIVE-08 | ✅ **RESOLVED 2026-06-12** — packed `subject_ids` (`;`-joined, always-a-list) on `registry_raw.csv` + a true one-row-per-subject `registry_subjects.csv` + minimal sidecar `subjects:[…]`; no mapping table; query layer deferred. |
+| NI-LIVE-12 | ✅ **RESOLVED 2026-06-12** — our own NAS `registry_subjects.csv` (not the facility DB as the table). Minimal sidecar subset still TBD beyond species/sex/age-at-acq. |
 | NI-LIVE-09 | Project-code recovery conflict (subject `1015_…` under parent `1025`): which wins, or always flag? And when the subject is a bare number, is "parent series leading digits" the right project source for the DB join, given series_id (funded) ≠ animal-protocol code? |
 | NI-LIVE-10 | §3B: confirm a multi-mouse scan is **one shared-FOV reconstruction** (all mice in one volume) so hard-link-same-DICOM is exactly right — vs. the platform ever exporting per-mouse cropped images. |
 | NI-LIVE-11 | §3B: the **position-numbering standard** — how is "which mouse is in slot N" determined and recorded (researcher-entered? bed geometry? a fixed head-first / left-to-right convention)? For historical data position is usually unknown → record animal, flag position. |
