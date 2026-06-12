@@ -103,18 +103,36 @@ singular→packed `subject_ids` change is a trivial length-1 case):
 | **NI — archive mode** | `\\cicmgsp02\gnuclear2$` (.tgz) | built + tested (round 8) | **No** (single-animal per .tgz) |
 | **NI — live box** | Mac `/data/<researcher>` | Step 1 only | **YES** (Gate 0 + Step 2) |
 
-**Two cross-cutting cautions (not blockers, but decide before bulk NI ingest):**
-1. **Land the `subject_id`→`subject_ids` rename on the empty production registry FIRST** (Step 2a), so
-   every historical row is born with the final schema — cheaper than migrating populated rows later.
-2. **NI source-of-truth:** the archive (`gnuclear2$`) and the live box hold the *same* acquisitions, so
-   ingesting both would duplicate. Decide per coverage — the archive is proven but may only cover part
-   of MFB's history (round 8 = Jesus's 2025); the live box covers ~2022–2026 but is blocked. If you
-   start NI from the archive now, you need a dedup story for the eventual live-box sync (or treat the
-   archive ingest as provisional). MRI/microscopy have no such overlap.
+**NI source-of-truth = the ARCHIVE — DECIDED 2026-06-12 (user).** Users cannot alter the live box, and a
+**systematic script pulls box→archive**, so the archive is authoritative and complete: **`gnuclear2$`
+now, `gnuclear3` (needs access) in future.** **Preload all historical NI from the archive** via the
+already-built, tested archive-mode pipeline (round 8). The **live-box sync is forward-only** — to stay
+current moving forward — **NOT the historical loader.** This removes the duplication worry (one source)
+and means the historical NI preload is **not** blocked by the NI-live-box open questions.
 
-**Bottom line:** you can start MRI + microscopy historical ingest into the production NAS now with no
-NI-live dependency; NI archive-mode too, once the source-of-truth call is made; only the NI **live-box**
-ingest waits on Gate 0 + Step 2. Sequence the `subject_ids` rename ahead of bulk ingest.
+**Three things to check / sequence before the bulk NI preload:**
+1. ⚠️ **The multi-animal question moves to the archive — it does NOT disappear.** ~39% of MFB scans
+   (102/262 on the snapshot) image 2–4 animals, but the archive regex in `molecubes_ni.yaml` parses a
+   single `short_sample` (`m14`) only, and round 8 (Jesus 2025) was **all single-animal → multi is
+   UNTESTED.** Before the bulk preload, **check how the box→archive script names a multi-animal `.tgz`**
+   (one `.tgz` per animal? a packed `short_sample` like `2-4-5-6`?). If packed → the archive preload
+   needs the multi-animal parse after all; if split → reconcile the N rows as one scan. Don't silently
+   under-record 39% of subjects.
+2. 💡 **Reconsider whether the live-box sync is needed at all.** If box→archive latency is acceptable and
+   coverage is complete, "stay current" may be met by **periodically re-running the idempotent
+   archive-mode ingest** — which would let us **shelve Step 2's messy live-box parser entirely** (clean
+   `.tgz` names beat messy live folders). Check the archive latency + completeness before building it.
+3. **Shared dedup identity** for archive-preloaded *and* any future live-synced acquisitions:
+   `(acq_datetime_full, modality)` — globally unique, present in **both** the `.tgz` name and the live
+   anchor — so the same scan from either source reconciles and never double-ingests.
+
+**Also:** **land the `subject_id`→`subject_ids` rename on the empty production registry FIRST** (Step
+2a), so every historical row is born with the final schema (single-animal archive rows are a length-1
+packed list — cheaper than migrating populated rows later).
+
+**Bottom line:** MRI + microscopy + **NI archive-mode** historical preload into the production NAS can
+start now (existing tested pipeline), modulo the multi-animal-`.tgz` check (#1) and the `subject_ids`
+rename. Only the NI **live-box** sync waits on Gate 0 + Step 2 — and #2 may shelve even that.
 
 ## Related
 - `equipment/nuclear-imaging/live_machine_data_layout_and_sync_rules.md` — design of record.

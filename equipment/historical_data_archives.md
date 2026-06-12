@@ -28,6 +28,14 @@ Three tiers, most→least standardized:
 The live-machine box (`REMIW11` / the Molecubes `…/remiW11/data/` tree) and its sync rules are in
 [`nuclear-imaging/live_machine_data_layout_and_sync_rules.md`](nuclear-imaging/live_machine_data_layout_and_sync_rules.md).
 
+> **Source of truth = the ARCHIVE (DECIDED 2026-06-12).** Users cannot alter the live box and a
+> systematic script pulls box→archive, so the archive (`gnuclear2$` now, `gnuclear3` future) is the
+> authoritative, complete record — **preload all historical NI from it** (archive-mode pipeline,
+> proven in round 8). The **live-box sync is forward-only** (stay-current), not the historical loader
+> — and may be replaced by a scheduled re-run of the idempotent archive ingest. ⚠️ Before bulk
+> preload, check how the box→archive script names **multi-animal** scans (~39% of MFB scans image 2–4
+> animals; the archive regex is single-`short_sample`). See [`tasks/ni_live_sync_handoff.md`](../tasks/ni_live_sync_handoff.md).
+
 ---
 
 ## MRI (Bruker ParaVision)
