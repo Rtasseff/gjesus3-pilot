@@ -31,10 +31,12 @@ The live-machine box (`REMIW11` / the Molecubes `…/remiW11/data/` tree) and it
 > **Source of truth = the ARCHIVE (DECIDED 2026-06-12).** Users cannot alter the live box and a
 > systematic script pulls box→archive, so the archive (`gnuclear2$` now, `gnuclear3` future) is the
 > authoritative, complete record — **preload all historical NI from it** (archive-mode pipeline,
-> proven in round 8). The **live-box sync is forward-only** (stay-current), not the historical loader
-> — and may be replaced by a scheduled re-run of the idempotent archive ingest. ⚠️ Before bulk
-> preload, check how the box→archive script names **multi-animal** scans (~39% of MFB scans image 2–4
-> animals; the archive regex is single-`short_sample`). See [`tasks/ni_live_sync_handoff.md`](../tasks/ni_live_sync_handoff.md).
+> proven in round 8). The **live-box sync is the forward path for active project data — ESSENTIAL, not
+> optional** (it's most of what gets researchers invested); the archive does the historical preload,
+> the live sync keeps current. Dedup both on `(acq_datetime_full, modality)` so they reconcile. ⚠️
+> When preloading from the archive, confirm the `.tgz` for a **multi-animal** scan exposes the full
+> animal list (the live-box folder does; round 8 was single-animal). See
+> [`tasks/ni_live_sync_handoff.md`](../tasks/ni_live_sync_handoff.md).
 
 ---
 
