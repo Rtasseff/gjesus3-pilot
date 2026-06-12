@@ -58,6 +58,19 @@ INTERMEDIATE_NOISE_RE = re.compile(r"^(new[ _]?recon.*|reconstructed.*|recon_\d+
 SPECIES = {"m": "mouse", "r": "rat", None: "?"}
 
 
+def _near_miss(a, b):
+    """True if two project codes look like a one-digit typo of each other
+    (same length, exactly one differing position) — e.g. 1015 vs 1025.
+
+    Used ONLY to flag a subject-prefix-vs-parent project disagreement worth a
+    human's eye (NI-LIVE-09). A WHOLESALE-different parent is NOT a conflict:
+    the funded series id (e.g. 1207) routinely differs from the animal-protocol
+    code (e.g. 0522), and §3A/§5 make the subject prefix authoritative — so we
+    must not cry wolf on every difference, only on the typo-shaped near-misses.
+    """
+    return len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1
+
+
 def parse_subject(subject, parent_series):
     """subject folder -> {phantom, project, animals[], timepoint, flags[]}.
 
@@ -76,6 +89,13 @@ def parse_subject(subject, parent_series):
     m = PROJECT_PREFIX_RE.match(s)
     if m:
         project, rest = m.group(1), m.group(2)
+        # subject carried its own project prefix — trust it (§3A), but if the
+        # parent series leads with a near-miss code (1015 vs 1025), that's a
+        # likely typo: flag for a human, do NOT pick (NI-LIVE-09).
+        if parent_series:
+            pm = PROJECT_LEAD_RE.match(parent_series)
+            if pm and pm.group(1) != project and _near_miss(project, pm.group(1)):
+                flags.append(f"project-conflict:{pm.group(1)}")
     else:
         if parent_series:
             pm = PROJECT_LEAD_RE.match(parent_series)

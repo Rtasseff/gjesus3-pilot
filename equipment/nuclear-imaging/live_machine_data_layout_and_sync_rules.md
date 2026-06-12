@@ -255,7 +255,13 @@ already uses — see the `animal_facility_db_metadata` design / `tools/ingest/en
    present (it sets species), default-flag when absent.
 3. **The project code is recovered from two places** (subject prefix first; else parent series
    leading digits) and the two can *conflict* (parent `1025` but subject `1015_…`). On conflict →
-   flag, don't pick.
+   flag, don't pick. **Implemented in `ni_live_discover.py`:** only a *typo-shaped near-miss*
+   (same length, one differing digit — `1015` vs `1025`, `0324` vs `0314`) raises
+   `project-conflict:<parent>`; a *wholesale*-different parent is **not** flagged, because the funded
+   series id routinely differs from the animal-protocol code (§5) and the subject prefix is
+   authoritative there (e.g. `0522_120` under series `1207`). On the snapshot this flags exactly two
+   clusters (10 `1015`-vs-`1025` + 2 `0324`-vs-`0314` acqs) and nothing by-design. The tool still
+   keeps the subject prefix and does **not** decide which wins — NI-LIVE-09.
 4. **Ranges vs lists are ambiguous.** `m6-7` is obviously a pair, but `m10-15` could be a 6-animal
    range; `6-8-9` proves dashes are explicit lists, not ranges. Treat consecutive 2-tuples as a pair,
    flag anything wider for confirmation.
@@ -494,6 +500,15 @@ from a clean filename (R4), (3) the date tie-break/flag (R5), and (4) the idempo
 > eyeball. Most flags are informational (species deferred to the DB: 160; project recovered from the
 > parent folder: 93). **102 of 262 scans image >1 animal** (cap 4). Rats (`r20`) parse correctly.
 >
+> **Step-1 review (2026-06-12, data-office):** independently re-ran against the snapshot — the numbers
+> reproduce exactly. Added the typo-shaped **`project-conflict:<parent>`** flag (§3A #3) so the 10
+> `1015`-vs-`1025` + 2 `0324`-vs-`0314` near-misses no longer pass as confident, unflagged keys (they
+> were silently picking the subject prefix); wholesale series≠protocol differences stay unflagged by
+> design. Added **`tools/test_ni_live_discover.py`** (30 checks, green) pinning the §3A example table,
+> the conflict flag, and the `facility_id`↔`animal_db.compose_subject_id` contract. Parsing/headline
+> counts are unchanged — the flag only adds review signal. NI-LIVE-09's *resolution* (which code wins)
+> is still open for Unai.
+>
 > **Leaner plan:** **Gate 0** — run `test_oslink.py` on the Mac (push-from-Mac feasibility) + confirm
 > host/layout with Unai. **Step 1** — `ni_live_discover.py` (done; review the table, `--csv` for full).
 > **Step 2** — `molecubes_ni_live.yaml` + multi-animal wiring (animal list → per-animal DB lookup →
@@ -577,7 +592,7 @@ is shared and mostly **already exists**.
 | NI-LIVE-07 | Subject grammar (§3A): is `m10-15` a 6-animal **range** or a pair? Confirm dashes are explicit lists except obvious consecutive pairs. Is the species prefix (`m`/`r`/none) reliable enough to set species, or always defer to the DB? |
 | NI-LIVE-08 | ✅ **RESOLVED 2026-06-12** — packed `subject_ids` (`;`-joined, always-a-list) on `registry_raw.csv` + a true one-row-per-subject `registry_subjects.csv` + minimal sidecar `subjects:[…]`; no mapping table; query layer deferred. |
 | NI-LIVE-12 | ✅ **RESOLVED 2026-06-12** — our own NAS `registry_subjects.csv` (not the facility DB as the table). Minimal sidecar subset still TBD beyond species/sex/age-at-acq. |
-| NI-LIVE-09 | Project-code recovery conflict (subject `1015_…` under parent `1025`): which wins, or always flag? And when the subject is a bare number, is "parent series leading digits" the right project source for the DB join, given series_id (funded) ≠ animal-protocol code? |
+| NI-LIVE-09 | ⚠️ **PARTIAL (2026-06-12)** — `ni_live_discover.py` now **flags** the typo-shaped near-miss (`project-conflict:<parent>`, e.g. subject `1015_…` under parent `1025`) instead of silently picking; wholesale series≠protocol differences are left unflagged by design. **Still open:** the *resolution rule* — on a confirmed conflict, which code wins? And when the subject is a bare number, is "parent series leading digits" the right project source for the DB join, given series_id (funded) ≠ animal-protocol code? |
 | NI-LIVE-10 | §3B: confirm a multi-mouse scan is **one shared-FOV reconstruction** (all mice in one volume) so hard-link-same-DICOM is exactly right — vs. the platform ever exporting per-mouse cropped images. |
 | NI-LIVE-11 | §3B: the **position-numbering standard** — how is "which mouse is in slot N" determined and recorded (researcher-entered? bed geometry? a fixed head-first / left-to-right convention)? For historical data position is usually unknown → record animal, flag position. |
 | NI-LIVE-12 | §3C: is the full subject/sample table **our own NAS registry** (`registry_subjects.csv`, Excel-bound, back-fillable) or do we treat the **facility DB as the table** and only cache the minimal subset in our registry? Which fields are the "minimal convenience subset" beyond species/sex/age-at-acq? |
