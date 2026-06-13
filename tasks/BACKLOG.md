@@ -241,3 +241,28 @@ original `tasks.md` locations (§3.1 / §3.2) as history; this is the active hom
   imminent historical-data ingest (the earlier "trim the recovery apparatus"
   suggestion is withdrawn; the queue is the intended design). Decide at the
   restart, not before.
+
+---
+
+## MRI anatomy (`is_whole_body` / region) — back-fill + auto-derive (2026-06-13)
+
+Context: the MRI jrc bulk historical ingest (`tools/configs/mri_jrc_animalfirst.yaml`
+/ `mri_jrc_projfirst.yaml`) sets `anatomy.is_whole_body: null` (copied from the
+template). But `is_whole_body` is a **highly-recommended, per-acquisition** field
+(08_METADATA §4.6), and MRI is region-specific (cardiac / brain / abdominal). The
+config sets `anatomy` **once per batch**, so a single value can't be right across the
+~10,300 acqs / 21 mixed-anatomy projects → all would land `is_whole_body: null`
+(non-blocking WARN). It is **not** currently auto-derived (verified in
+`enrichment.py::_build_anatomy` — operator-entered only).
+
+- [ ] **Back-fill the anatomy block** for the MRI ingest. Safe to ingest-now /
+  enrich-later: each acq records `original_name = <study_folder>/<exam>` (registry +
+  sidecar) → maps back to staging; **and** the deriving metadata (ParaVision
+  `ProtocolName`/sequence + `PVM_Fov`) is already captured in the `mri:` sidecar, so
+  the back-fill can read sidecars on the NAS (no staging needed). Use the controlled
+  `/raw/` sidecar-update path (same pattern as `tools/recover_subject_metadata.py`).
+- [ ] **Cleanest long-term fix — auto-derive at ingest.** Wire ProtocolName/sequence
+  + FOV → `is_whole_body` + UBERON `region` in the enrichment/resolver path so anatomy
+  fills per-acquisition automatically (the unimplemented "auto-hint" 08_METADATA §4.6
+  already gestures at). Good candidate to fold into the designer's MRI work (alongside
+  the DICOM-conversion / dicomifier piece).
