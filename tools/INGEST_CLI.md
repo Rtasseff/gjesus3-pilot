@@ -177,13 +177,16 @@ Each template's **header comment block lists every `discovered.*` field** the op
 
 ## Dicomifier opt-in for no-DICOM MRI exams
 
+> **▶ Full operator procedure:** [`equipment/mri-platform/mri_no_dicom_regeneration_runbook.md`](../equipment/mri-platform/mri_no_dicom_regeneration_runbook.md) — the canonical step-by-step for the historical pull. This section is the quick CLI reference.
+
 **When:** internal MRI ingests where some source exams have **no `pdata/<idx>/dicom/` subfolders** because the researcher didn't run Bruker's GUI DICOM exporter. Round-6 v2 (2026-05-27) had 3 of 7 source projects in this state (m13/m14/m29 protocol 0423) — they currently sit on `/raw/` as empty `<ACQ-ID>.data/` placeholders + populated JCAMP-DX sidecars. With this opt-in, ingest auto-regenerates the missing DICOMs via Dicomifier 2.5.3 (and applies two confirmed PV-7 workarounds — see [`tasks/tasks.md §3.1`](../tasks/tasks.md)).
 
 **Pre-flight (one-time setup on the workstation):**
 
 ```bash
 # WSL Ubuntu (or any shell where conda + miniforge are on PATH)
-conda install -c conda-forge dicomifier pydicom
+conda env create -f tools/dicomifier-pilot.environment.yml   # committed env spec
+#   (equivalent manual form: conda create -n dicomifier-pilot -c conda-forge dicomifier pydicom)
 conda activate dicomifier-pilot
 dicomifier --version    # should print 2.5.3 or later
 ```

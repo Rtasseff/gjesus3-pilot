@@ -336,6 +336,10 @@ A real-world gap surfaced during the v2 source-data inventory: **3 of 7 round-6 
 
 ### ParaVision → DICOM regeneration via Dicomifier (Phase 2 — module + wiring complete 2026-06-01)
 
+> **▶ Operators / historical-pull team: follow the step-by-step runbook —
+> [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md).** It is the canonical procedure
+> (setup → config flag → run from WSL → verify). This section is the in-context design summary.
+
 **Implementation:** [Dicomifier 2.5.3](https://github.com/lamyj/dicomifier) (open-source, IADI lab — Inserm/Université de Lorraine), invoked via subprocess from `tools/ingest/paravision_regen.py`. Two confirmed PV-7 bugs are worked around per-file:
 
 1. **PixelSpacing axis-order** — Dicomifier emits `[col, row]` instead of DICOM Part 3's `[row, col]`. Workaround: swap. Verified across 16 m17 anisotropic series (cardiac CINE / Localizer / Planning / T1_FLASH / T2_TurboRARE).

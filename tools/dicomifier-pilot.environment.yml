@@ -1,0 +1,24 @@
+# Conda environment for ParaVision -> DICOM regeneration (MRI no-DICOM sessions).
+#
+# Dicomifier is a Linux/conda tool, so this env lives in WSL (Ubuntu) even though
+# the rest of the ingest is run on Windows. Only the conversion SUBPROCESS needs
+# this env; tools/ingest/paravision_regen.py shells out to `dicomifier`.
+#
+# One-time create (in WSL, with conda/miniforge on PATH):
+#     conda env create -f tools/dicomifier-pilot.environment.yml
+#   (equivalent to the original manual setup:
+#     conda create -n dicomifier-pilot -c conda-forge dicomifier pydicom)
+#
+# Per-ingest:
+#     conda activate dicomifier-pilot
+#     dicomifier --version          # expect 2.5.3 or later
+#     python tools/ingest_raw.py --config tools/configs/mri_bruker_<batch>.yaml --nas-root /mnt/gjesus3
+#
+# Full procedure: equipment/mri-platform/mri_no_dicom_regeneration_runbook.md
+name: dicomifier-pilot
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.9
+  - dicomifier>=2.5.3   # 2.5.3 is the version the PV-7 workarounds were validated against (2026-06-01)
+  - pydicom             # used by paravision_regen.py (workarounds) + validate_dicomifier_pixelspacing.py
