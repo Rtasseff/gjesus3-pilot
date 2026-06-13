@@ -273,11 +273,18 @@ config sets `anatomy` **once per batch**, so a single value can't be right acros
 
 Found during the MRI ingest: `animal_db.lookup` returns `facility_animal_id =
 "<animal>-AE-biomaGUNE-None"` for **projects whose facility-DB record has a null
-project alias** — confirmed for **1521 / 0619 / 0618** (animals resolve fine,
-species/sex correct; only the project alias is null). 452 MRI acqs were affected
-and **already back-filled** (recomposed from `discovered.project_code`, which is
-correct). But the gap **recurs for any future ingest** touching those (or other
-null-alias) projects.
+project alias** (animals resolve fine — `status=found`, species/sex correct; only
+the project's alias field is null). A full audit of all 21 MRI project codes found
+**4 affected: 0219 / 0618 / 0619 / 1521** (the other 17 resolve correctly).
+Examples (project, sample animal → DB return): `1521,m4 → 4-AE-biomaGUNE-None`;
+`0619,m207 → 207-…-None`; `0618,m156 → 156-…-None`; `0219,m37 → 37-…-None`.
+
+452 ingested MRI acqs (1521:72, 0619:336, 0618:44) were affected and **already
+back-filled** (recomposed from `discovered.project_code`, which is correct).
+**`0219` has 0 ingested acqs** (all its exams were no-DICOM/flagged) — so it will
+surface during the **no-DICOM regeneration pass** unless fixed first. Ryan is
+emailing the animal facility (2026-06-13) to populate the alias for those 4 project
+records. The gap **recurs for any future ingest** touching null-alias projects.
 
 - [ ] **Harden the ingest:** when the DB returns a project found but with a null
   alias, fall back to the operator/parse project (`discovered.project_code` via
