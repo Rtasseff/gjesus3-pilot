@@ -266,3 +266,24 @@ config sets `anatomy` **once per batch**, so a single value can't be right acros
   fills per-acquisition automatically (the unimplemented "auto-hint" 08_METADATA §4.6
   already gestures at). Good candidate to fold into the designer's MRI work (alongside
   the DICOM-conversion / dicomifier piece).
+
+---
+
+## Facility-DB null project alias → `-None` subject ids (2026-06-13)
+
+Found during the MRI ingest: `animal_db.lookup` returns `facility_animal_id =
+"<animal>-AE-biomaGUNE-None"` for **projects whose facility-DB record has a null
+project alias** — confirmed for **1521 / 0619 / 0618** (animals resolve fine,
+species/sex correct; only the project alias is null). 452 MRI acqs were affected
+and **already back-filled** (recomposed from `discovered.project_code`, which is
+correct). But the gap **recurs for any future ingest** touching those (or other
+null-alias) projects.
+
+- [ ] **Harden the ingest:** when the DB returns a project found but with a null
+  alias, fall back to the operator/parse project (`discovered.project_code` via
+  `project_hint`) when composing `facility_animal_id`, instead of emitting `-None`.
+  One-line guard in `animal_db.compose_subject_id` callers / `enrichment.py`.
+- [ ] **Fix the source:** ask the data office to populate the project alias for
+  `1521` / `0619` / `0618` (and audit for other null-alias projects) in the facility DB.
+- [ ] **Detector:** a quick `validate_registries` check for any `subject_ids`
+  containing `-None` (catch future occurrences automatically).
