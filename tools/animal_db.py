@@ -217,6 +217,18 @@ def get_connection(connect_timeout=CONNECT_TIMEOUT):
     )
 
 
+def credentials_available():
+    """True if a DB lookup can even be ATTEMPTED — pymysql present AND a
+    credentials file at CNF_PATH (env `GJESUS3_MYCNF`, else `~/.my.cnf`).
+
+    When False, every DB-sourced subject is written as `source: "pending-db"`
+    for later recovery. Useful as a one-time pre-flight check so an operator
+    notices BEFORE a large batch run — especially in WSL, where `~/.my.cnf`
+    resolves to the WSL home and `GJESUS3_MYCNF` is often unset.
+    """
+    return HAS_PYMYSQL and os.path.isfile(CNF_PATH)
+
+
 # ---- Core lookup ---------------------------------------------------------
 
 def _query_subject(conn, project_alias, animal_code):

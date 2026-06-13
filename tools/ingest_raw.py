@@ -22,6 +22,7 @@ from ingest import (
     metadata_sidecar, provenance, resolver, enrichment, locking,
 )
 import create_project as create_project_mod
+import animal_db
 
 
 def relative_config_path(config_path):
@@ -74,6 +75,29 @@ def log(msg, level="INFO"):
     print(f"[{ts}] {level}: {msg}")
 
 
+def _copy_to_nas(src, dst):
+    """Copy one file to the NAS, tolerant of CIFS/SMB mounts that reject
+    timestamp/mode preservation.
+
+    From WSL the NAS is a CIFS mount (`/mnt/gjesus3`), and such mounts commonly
+    disallow `os.utime` (and sometimes `os.chmod`). `shutil.copy2` copies the
+    bytes and THEN calls `copystat`, so it raises in `copystat` *after* the data
+    is already written — crashing the ingest mid-copy (an `OSError`, seen as the
+    WSL→NAS `copy2`/`utime` blocker). We instead copy the bytes with
+    `copyfile` (which touches no metadata, so it cannot fail on a CIFS mount)
+    and then preserve timestamps/mode **best-effort**, swallowing the mount's
+    rejection. Integrity is guaranteed by the sha256 verify, not by timestamps.
+    On native Windows / a local FS `copystat` succeeds, so behaviour is
+    unchanged there.
+    """
+    shutil.copyfile(src, dst)
+    try:
+        shutil.copystat(src, dst)
+    except OSError:
+        pass  # CIFS mount disallows utime/chmod — timestamps not preserved, fine
+    return dst
+
+
 def copy_files(src_dir, dst_dir):
     """Copy all files from src_dir into dst_dir, preserving subdirectory structure.
 
@@ -95,7 +119,7 @@ def copy_files(src_dir, dst_dir):
     for src_path, rel in iterator:
         dst_path = os.path.join(dst_dir, rel)
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
-        shutil.copy2(src_path, dst_path)
+        _copy_to_nas(src_path, dst_path)
         count += 1
 
     return count
@@ -273,7 +297,7 @@ def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn):
     for src_file, dst_rel in iterator:
         dst_abs = os.path.join(dest_dir, dst_rel)
         os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
-        shutil.copy2(src_file, dst_abs)
+        _copy_to_nas(src_file, dst_abs)
         src_hash = checksum.sha256_file(src_file)
         dst_hash = checksum.sha256_file(dst_abs)
         if src_hash != dst_hash:
@@ -467,7 +491,7 @@ def copy_mri_paravision(
         for src_file, dst_rel in iterator:
             dst_abs = os.path.join(dest_dir, dst_rel)
             os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
-            shutil.copy2(src_file, dst_abs)
+            _copy_to_nas(src_file, dst_abs)
             src_hash = checksum.sha256_file(src_file)
             dst_hash = checksum.sha256_file(dst_abs)
             if src_hash != dst_hash:
@@ -550,7 +574,7 @@ def copy_paravision_exam(source_path, dest_dir, reconstructions, log_fn):
     for src_file, dst_rel in iterator:
         dst_abs = os.path.join(dest_dir, dst_rel)
         os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
-        shutil.copy2(src_file, dst_abs)
+        _copy_to_nas(src_file, dst_abs)
         src_hash = checksum.sha256_file(src_file)
         dst_hash = checksum.sha256_file(dst_abs)
         if src_hash != dst_hash:
@@ -931,7 +955,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         log(f"Computing source archive checksum ({archive_mb} MB)...")
         src_hash = checksum.sha256_file(archive_src)
         log(f"Copying archive -> {primary_name}")
-        shutil.copy2(archive_src, dst_file)
+        _copy_to_nas(archive_src, dst_file)
         log("Verifying copy integrity...")
         dst_hash = checksum.sha256_file(dst_file)
         if dst_hash != src_hash:
@@ -964,7 +988,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         log(f"Computing source checksum...")
         src_hash = checksum.sha256_file(source_path)
         log(f"Copying file -> {primary_name}")
-        shutil.copy2(source_path, dst_file)
+        _copy_to_nas(source_path, dst_file)
         log("Verifying copy integrity...")
         dst_hash = checksum.sha256_file(dst_file)
         if dst_hash != src_hash:
@@ -1325,6 +1349,20 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
     for case in cases:
         case["ingest_config"] = ingest_config_path
     log(f"Batch: {len(cases)} cases discovered")
+
+    # Pre-flight: if any case will hit the animal DB for subject enrichment but
+    # credentials are absent, warn ONCE up front — otherwise every subject
+    # silently becomes source='pending-db' (easy to miss across a large batch).
+    # Common in WSL, where ~/.my.cnf is the WSL home and GJESUS3_MYCNF is unset.
+    if any(c.get("subject_from_db") for c in cases) and not animal_db.credentials_available():
+        log(
+            f"animal-DB credentials not found ({animal_db.CNF_PATH}) — every "
+            f"DB-sourced subject in this batch will be written as 'pending-db' "
+            f"for later recovery. In WSL, export GJESUS3_MYCNF=<path to .my.cnf> "
+            f"(or place ~/.my.cnf in the WSL home) before running. See the MRI "
+            f"no-DICOM regeneration runbook §4.",
+            "WARN",
+        )
 
     results = []
     for i, case in enumerate(cases):
