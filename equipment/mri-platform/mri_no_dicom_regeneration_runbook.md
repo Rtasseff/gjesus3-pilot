@@ -86,6 +86,33 @@ dicomifier --version            # expect 2.5.3 or later
 Env spec: [`tools/dicomifier-pilot.environment.yml`](../../tools/dicomifier-pilot.environment.yml). The NAS is reached at
 `/mnt/gjesus3` inside WSL (the same `J:\` mapped drive).
 
+### 4a. WSL environment notes (read before a large run)
+
+These are the WSL-specific gotchas the historical pull surfaced:
+
+1. **Animal-DB credentials must be visible to WSL.** Subject enrichment reads MariaDB
+   credentials from `GJESUS3_MYCNF` (else `~/.my.cnf`). Inside WSL, `~/.my.cnf` is the
+   **WSL** home, not your Windows home — so if you don't point at the file, **every
+   subject is written `source: "pending-db"`** (recoverable later, but you'll back-fill
+   thousands). Before the run, export the path:
+   ```bash
+   export GJESUS3_MYCNF=/mnt/c/Users/<you>/.my.cnf   # or wherever your .my.cnf lives
+   ```
+   The ingest now prints a one-time **WARN** at batch start if credentials aren't found
+   and the batch needs them — heed it before letting a big run proceed.
+
+2. **NAS copy is timestamp-tolerant (no action needed).** WSL mounts the NAS as a CIFS
+   share that disallows setting file timestamps; the ingest copies file bytes and
+   preserves timestamps *best-effort* (integrity is still guaranteed by the sha256
+   verify). This previously crashed the copy mid-run — it no longer does.
+
+3. **Spectroscopy / calibration scans are auto-skipped, not regenerated.** Acquisitions
+   whose method is **STEAM / PRESS** (MR spectroscopy) or **Wobble** (tuning) are *not*
+   image data, so DICOM regeneration does not apply. The ingest detects them, logs a
+   **WARN**, writes the empty `.data/` placeholder, and moves on (no crash). These need
+   a **separate ingest path** (tracked in `tasks/BACKLOG.md`) — they are expected to
+   show up as skipped, not as failures.
+
 ---
 
 ## 5. Step-by-step
