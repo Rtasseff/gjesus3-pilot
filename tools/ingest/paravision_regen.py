@@ -70,8 +70,44 @@ from pathlib import Path
 # pydicom is required (not optional like in paravision_metadata.py)
 import pydicom
 
+from . import jcampdx
+
 
 DICOMIFIER_BIN = "dicomifier"  # assumed on PATH; conda env's bin dir
+
+# Acquisition methods that are NOT 2D/3D image data and must NOT be run through
+# the image-DICOM regeneration path: Dicomifier emits an MR-Spectroscopy object
+# (or out-of-range "pixel" data), which the image workarounds below then crash
+# on (the int16 struct.error). These need a SEPARATE ingest path (not image
+# regeneration) — see tasks/BACKLOG. Matched as a case-insensitive substring of
+# the Bruker method / pulse-program name. Extend as new non-image types appear.
+_NONIMAGE_METHOD_MARKERS = ("STEAM", "PRESS", "WOBBLE")
+
+
+def _exam_method_signature(exam_path):
+    """Best-effort lower-cased method + pulse-program name for an exam, read from
+    its JCAMP-DX `method` (`Method`) + `acqp` (`PULPROG`) files. '' if unreadable."""
+    exam_path = Path(exam_path)
+    parts = []
+    for fname, key in (("method", "Method"), ("acqp", "PULPROG")):
+        try:
+            parsed = jcampdx.parse_file(exam_path / fname)
+            if parsed.get(key):
+                parts.append(str(parsed[key]))
+        except Exception:
+            pass
+    return " ".join(parts).lower()
+
+
+def is_nonimage_exam(exam_path):
+    """Return (True, marker) if the exam is a spectroscopy/calibration acquisition
+    (STEAM / PRESS / Wobble / ...) that must NOT go through image-DICOM
+    regeneration; (False, '') for a normal image exam."""
+    sig = _exam_method_signature(exam_path)
+    for marker in _NONIMAGE_METHOD_MARKERS:
+        if marker.lower() in sig:
+            return True, marker
+    return False, ""
 
 
 # Tags we modify; keep this list in sync with the tasks.md spec to make
@@ -135,8 +171,17 @@ def _apply_workarounds_inplace(dcm_path):
             f"deeper Dicomifier issue; investigate before continuing."
         )
     vr = "SS" if int(pix_repr) == 1 else "US"
-    ds.add_new(_TAG_SMALLEST_IMG_PIX, vr, int(arr.min()))
-    ds.add_new(_TAG_LARGEST_IMG_PIX, vr, int(arr.max()))
+    # Smallest/LargestImagePixelValue are optional display hints valid only for
+    # integer image data within the 16-bit SS/US range. Spectroscopy or any
+    # out-of-range "pixel" data would overflow the SS/US packing (struct.error)
+    # and crash the batch — guard the range and skip these optional tags rather
+    # than fail. (Non-image acquisitions should already be filtered upstream by
+    # is_nonimage_exam(); this is the per-file backstop.)
+    lo, hi = int(arr.min()), int(arr.max())
+    vr_lo, vr_hi = (-32768, 32767) if vr == "SS" else (0, 65535)
+    if vr_lo <= lo <= vr_hi and vr_lo <= hi <= vr_hi:
+        ds.add_new(_TAG_SMALLEST_IMG_PIX, vr, lo)
+        ds.add_new(_TAG_LARGEST_IMG_PIX, vr, hi)
 
     ds.save_as(str(dcm_path))
 
@@ -167,6 +212,20 @@ def regenerate_exam_dicoms(exam_path, output_dir, log_fn):
     exam_path = Path(exam_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Skip non-image acquisitions (spectroscopy STEAM/PRESS, Wobble, ...) BEFORE
+    # spending a Dicomifier run: they are not image data, so image-DICOM
+    # regeneration doesn't apply and the workarounds would crash on the output.
+    # Raising here is caught by copy_mri_paravision -> WARN + empty .data/
+    # placeholder + continue (no batch abort). They need a separate ingest path.
+    nonimage, marker = is_nonimage_exam(exam_path)
+    if nonimage:
+        raise RuntimeError(
+            f"{exam_path.name}: non-image acquisition (method matches "
+            f"'{marker}' — spectroscopy/calibration). DICOM image regeneration "
+            f"is not applicable; this acquisition needs separate handling "
+            f"(tasks/BACKLOG). Skipping regeneration."
+        )
 
     ok, ver = check_dicomifier_available()
     if not ok:
@@ -202,10 +261,19 @@ def regenerate_exam_dicoms(exam_path, output_dir, log_fn):
 
         log_fn(f"  Dicomifier produced {len(flat_files)} flat DICOM(s); applying workarounds")
         n_organized = 0
+        n_failed = 0
         per_pdata = {}
         for fname in flat_files:
             src = os.path.join(flat_tmp, fname)
-            pdata_idx, frame_n = _apply_workarounds_inplace(src)
+            # Per-file backstop: a stray non-image frame (e.g. a spectroscopy
+            # object that slipped past is_nonimage_exam) must not abort the whole
+            # exam — skip it with a WARN.
+            try:
+                pdata_idx, frame_n = _apply_workarounds_inplace(src)
+            except Exception as e:
+                n_failed += 1
+                log_fn(f"  Skipping {fname}: workaround failed ({e})", "WARN")
+                continue
             per_pdata.setdefault(pdata_idx, 0)
             per_pdata[pdata_idx] += 1
             dicom_dir = output_dir / "pdata" / str(pdata_idx) / "dicom"
@@ -214,8 +282,17 @@ def regenerate_exam_dicoms(exam_path, output_dir, log_fn):
             shutil.copy2(src, dst)
             n_organized += 1
 
+        if n_organized == 0:
+            raise RuntimeError(
+                f"All {len(flat_files)} regenerated DICOM(s) failed the "
+                f"workarounds for {exam_path} — likely a non-image acquisition; "
+                f"needs separate handling (tasks/BACKLOG)."
+            )
         summary = ", ".join(f"pdata/{k}: {v}" for k, v in sorted(per_pdata.items()))
-        log_fn(f"  Organized into pdata/<idx>/dicom/: {summary}")
+        msg = f"  Organized into pdata/<idx>/dicom/: {summary}"
+        if n_failed:
+            msg += f" ({n_failed} frame(s) skipped)"
+        log_fn(msg)
         return n_organized
 
 
