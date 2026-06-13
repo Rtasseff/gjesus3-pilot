@@ -294,3 +294,23 @@ records. The gap **recurs for any future ingest** touching null-alias projects.
   `1521` / `0619` / `0618` (and audit for other null-alias projects) in the facility DB.
 - [ ] **Detector:** a quick `validate_registries` check for any `subject_ids`
   containing `-None` (catch future occurrences automatically).
+
+---
+
+## Spectroscopy / non-image MRI (STEAM, PRESS, Wobble) — separate ingest path (2026-06-13)
+
+**Priority: VERY LOW (deferred).** Not needed for the current imaging recovery —
+revisit only if/when the spectroscopy data is actually wanted downstream.
+
+Scope (from the historical MRI pull): ~360 spectroscopy (STEAM / PRESS) + ~5
+Wobble (tuning) acquisitions are **not image data**, so DICOM image regeneration
+does not apply. As of `fix/dicomifier-wsl-2026-06-13` the ingest **auto-detects
+and skips** these (`paravision_regen.is_nonimage_exam` → WARN + empty `.data/`
+placeholder + no crash), so they no longer block or derail an imaging batch —
+they simply land as skipped placeholders.
+
+- [ ] **(very low priority) Separate ingest path for MR spectroscopy.** Decide
+  the primary/sidecar shape for spectroscopy (raw FID / processed spectra, not
+  image DICOMs) and how/whether to store the STEAM/PRESS results + the Wobble
+  tuning scans. The ~365 acquisitions are safely skipped until this is built;
+  there is no rush.
