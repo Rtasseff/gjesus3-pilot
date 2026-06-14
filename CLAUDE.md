@@ -85,13 +85,13 @@ When updating one document, check for impacts on others:
 - **Universal starter** at `tools/templates/ingest_template.yaml` — fallback for instruments not yet onboarded.
 - **Per-batch configs** live in `tools/configs/` (under git, version-locked with the scripts) — produced by copying the matching per-instrument template, editing `staging_dir` + `notes`, saving as `<instrument>_<batch>.yaml`. Each row's `ingest_config` column records the relative path of the config that produced it.
 
-### Quasi-production lifecycle
+### Production lifecycle (true production since the 2026-06-10 restart)
 
-The pilot operates in a deliberate two-phase setup: each instrument iterates **test → purge → accept-as-quasi-production**, and after the team exhibition **all of it gets purged** for a true production restart. Implications for ongoing work:
+**History (now complete):** the pilot ran a deliberate two-phase setup — each instrument iterated **test → purge → accept-as-quasi-production**, and after the team exhibition the **whole quasi-prod dataset was purged (2026-06-10)** and `J:\gjesus3-data` was restarted as true production. That purge has **already happened**; there is **no future exhibition purge pending**. Implications for ongoing work:
 
-- Configs and registry rows can carry a "TEST INGEST — purge after review" tag indefinitely without being a problem; the tag *is* what makes the eventual purge unambiguous. Don't strip TEST tags from configs/rows that are technically "done."
-- Treat the existing 365+ NAS acquisitions as quasi-production data: real enough to verify against, ephemeral enough that the user's risk tolerance permits experimental ingests against the live registry (annoying-but-not-damaging if it goes wrong).
-- The `tools/migrate_registry_columns.py` pattern (back up → migrate → register the .bak path) is the right shape when the schema needs to evolve; the defensive header check in `registry.append_row` enforces correct migration order.
+- **The live data is real and retained.** Historical data is being ingested round by round into the true-production system (nuclear-imaging + internal MRI done 2026-06-14; microscopy preloads pending). Treat the registry and `/raw/` with production care — an ingest that goes wrong is now *damaging*, not ephemeral. (The old "the 365+ quasi-prod acqs are annoying-but-not-damaging if it goes wrong" stance retired with the purge.)
+- **TEST tags are now the exception, not the norm.** A genuinely experimental run may still carry a "TEST INGEST — purge after review" tag, but most ingests are real and retained. Don't read a TEST tag as "will be wiped at the next exhibition purge" — that lifecycle is over.
+- The `tools/migrate_registry_columns.py` pattern (back up → migrate → register the .bak path) is still the right shape when the schema needs to evolve; the defensive header check in `registry.append_row` enforces correct migration order. (The restart already applied a fresh-header schema — `sample_organism` + `subject_id`→packed `subject_ids` + `anatomical_entity` — so this pattern is for *future* evolution, not the restart itself.)
 
 ### Equipment reference
 
