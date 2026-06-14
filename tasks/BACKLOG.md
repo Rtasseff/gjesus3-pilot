@@ -269,6 +269,51 @@ config sets `anatomy` **once per batch**, so a single value can't be right acros
 
 ---
 
+## Microscopy anatomy from the sample-id organ suffix — back-fill + auto-derive (2026-06-14)
+
+**Priority: MEDIUM (non-blocking, but the info is present per-file so it's recoverable and
+worth doing).** Surfaced during the AxioScan 7 MFB production ingest.
+
+**The issue.** AxioScan `.czi` filenames encode the organ in the sample-id suffix
+(`ID103T`, `ID12Lu`, `ID145H`, `ID249Li`, …), so anatomy is known **per acquisition** — but
+the ingest **throws it away**: `tools/ingest/enrichment.py` line 150 does
+`code, _organ = subject_id.parse_animal_short_code(...)` and never uses `_organ`, and
+`_build_anatomy` only reads the operator-entered config `anatomy:` block. So every AxioScan
+acq lands `anatomy.region = null` (non-blocking WARN) even though the organ is right there in
+the name. (Contrast the MRI anatomy item above — for MRI the organ genuinely isn't in the data;
+for microscopy it is.)
+
+**The suffix vocabulary is OPERATOR-SPECIFIC and partly ambiguous** (measured across the 565 MFB files):
+- **AUA** — unambiguous/verbose: `Lu`=lung (105), `Li`=liver (12), `K`=kidney (12), `T`=tumor (104).
+- **MBC** — single-letter: `H`=heart (102), `B`=brain (17), `HL`=heart+lung (53), `L`=?? (111).
+  **`L` is used only by MBC** (AUA writes `Lu`/`Li`), so its meaning (liver vs lung) must be
+  confirmed with **MBC**, not AUA.
+- ~49 bare-numeric ids carry no organ at all.
+
+**What needs to be done.**
+1. **Define an operator→organ→UBERON map.** Confirm the ambiguous codes with the operators
+   (AUA's are clear; ask MBC about `L`/`H`/`B`/`HL`). Decide handling for combos (`HL` →
+   `anatomy.additional_regions`), `T` (tumor — anatomical site varies; likely leave the host-organ
+   region or mark unknown), and bare/none (leave null). UBERON starter ids in 08_METADATA §4.6.2
+   (heart `UBERON:0000948`, lung `UBERON:0002048`, brain `UBERON:0000955`; add liver/kidney).
+2. **Back-fill the already-ingested AxioScan acqs.** Read `sample_short` from the registry/sidecar,
+   map organ→UBERON, write `anatomy.region` + registry `anatomical_entity` via the controlled
+   `/raw/` sidecar-update path (same pattern as `tools/recover_subject_metadata.py`). Idempotent,
+   non-blocking.
+3. **Forward fix — assessment in line with future ingests.** Wire `enrichment.py` to consume the
+   currently-discarded `_organ` → `anatomy.region` using the **same** map, so future microscopy
+   ingests auto-populate anatomy. One mapping shared by back-fill + live ingest.
+
+**Suggestions.**
+- Keep the operator→organ→UBERON map as a small **reference YAML** (cf.
+  `tools/reference/pi_group_lookup.yaml`) — data, not code — so researchers can extend/correct it.
+- Likely **microscopy-wide**: Cell Observer / Confocal LSM 900 may share the suffix convention —
+  design the map + wiring cross-microscopy, not AxioScan-only.
+- Both steps (back-fill script + the `enrichment.py` wiring) are tooling changes → need Ryan's
+  authorization before implementing.
+
+---
+
 ## Facility-DB null project alias → `-None` subject ids (2026-06-13)
 
 Found during the MRI ingest: `animal_db.lookup` returns `facility_animal_id =
