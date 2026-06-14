@@ -275,6 +275,51 @@ config sets `anatomy` **once per batch**, so a single value can't be right acros
 
 ---
 
+## Microscopy anatomy from the sample-id organ suffix — back-fill + auto-derive (2026-06-14)
+
+**Priority: MEDIUM (non-blocking, but the info is present per-file so it's recoverable and
+worth doing).** Surfaced during the AxioScan 7 MFB production ingest.
+
+**The issue.** AxioScan `.czi` filenames encode the organ in the sample-id suffix
+(`ID103T`, `ID12Lu`, `ID145H`, `ID249Li`, …), so anatomy is known **per acquisition** — but
+the ingest **throws it away**: `tools/ingest/enrichment.py` line 150 does
+`code, _organ = subject_id.parse_animal_short_code(...)` and never uses `_organ`, and
+`_build_anatomy` only reads the operator-entered config `anatomy:` block. So every AxioScan
+acq lands `anatomy.region = null` (non-blocking WARN) even though the organ is right there in
+the name. (Contrast the MRI anatomy item above — for MRI the organ genuinely isn't in the data;
+for microscopy it is.)
+
+**The suffix vocabulary is OPERATOR-SPECIFIC and partly ambiguous** (measured across the 565 MFB files):
+- **AUA** — unambiguous/verbose: `Lu`=lung (105), `Li`=liver (12), `K`=kidney (12), `T`=tumor (104).
+- **MBC** — single-letter: `H`=heart (102), `B`=brain (17), `HL`=heart+lung (53), `L`=?? (111).
+  **`L` is used only by MBC** (AUA writes `Lu`/`Li`), so its meaning (liver vs lung) must be
+  confirmed with **MBC**, not AUA.
+- ~49 bare-numeric ids carry no organ at all.
+
+**What needs to be done.**
+1. **Define an operator→organ→UBERON map.** Confirm the ambiguous codes with the operators
+   (AUA's are clear; ask MBC about `L`/`H`/`B`/`HL`). Decide handling for combos (`HL` →
+   `anatomy.additional_regions`), `T` (tumor — anatomical site varies; likely leave the host-organ
+   region or mark unknown), and bare/none (leave null). UBERON starter ids in 08_METADATA §4.6.2
+   (heart `UBERON:0000948`, lung `UBERON:0002048`, brain `UBERON:0000955`; add liver/kidney).
+2. **Back-fill the already-ingested AxioScan acqs.** Read `sample_short` from the registry/sidecar,
+   map organ→UBERON, write `anatomy.region` + registry `anatomical_entity` via the controlled
+   `/raw/` sidecar-update path (same pattern as `tools/recover_subject_metadata.py`). Idempotent,
+   non-blocking.
+3. **Forward fix — assessment in line with future ingests.** Wire `enrichment.py` to consume the
+   currently-discarded `_organ` → `anatomy.region` using the **same** map, so future microscopy
+   ingests auto-populate anatomy. One mapping shared by back-fill + live ingest.
+
+**Suggestions.**
+- Keep the operator→organ→UBERON map as a small **reference YAML** (cf.
+  `tools/reference/pi_group_lookup.yaml`) — data, not code — so researchers can extend/correct it.
+- Likely **microscopy-wide**: Cell Observer / Confocal LSM 900 may share the suffix convention —
+  design the map + wiring cross-microscopy, not AxioScan-only.
+- Both steps (back-fill script + the `enrichment.py` wiring) are tooling changes → need Ryan's
+  authorization before implementing.
+
+---
+
 ## Facility-DB null project alias → `-None` subject ids (2026-06-13)
 
 Found during the MRI ingest: `animal_db.lookup` returns `facility_animal_id =
@@ -320,3 +365,31 @@ they simply land as skipped placeholders.
   image DICOMs) and how/whether to store the STEAM/PRESS results + the Wobble
   tuning scans. The ~365 acquisitions are safely skipped until this is built;
   there is no rush.
+
+## MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14)
+
+**Priority: LOW (data-safe; near-term MRI template fix).** Found
+during the no-DICOM regen relink (`tools/relink_mri_regen.py`, 2026-06-14): the MRI
+`link_filename` —
+`MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`
+— is **not unique** when the same animal is scanned in **multiple separate study
+sessions on the same calendar day** (timepoint series `_t0h_`/`_t6h_`, repeat
+sessions `_2_1_1`, or date-typo'd folder names e.g. `jrc240122` vs `jrc220124`).
+Such acqs resolve to the same link name and collide.
+
+Measured on the 3,297-acq imaging regen batch: **3,097 distinct names → 144
+colliding names → ~200 acqs** left without a distinct project link (the relink
+creates the first of each group and skips the rest — it does **not** merge). This
+is **pre-existing** (the same template drove the earlier 6,405-acq DICOM-bearing
+run, so the same collisions exist there) and **data-safe**: every colliding acq
+keeps its own ACQ-ID, `/raw/` folder, sidecar, checksums, and registry row — only
+the project `raw_linked/` convenience layer can't distinguish them.
+
+- [ ] **Add a session/time discriminator to the MRI `link_filename`** (e.g. the
+  source study `HHMMSS` from the folder name, unique per session, or the timepoint
+  token) in the MRI template + configs. Caveat: changing the convention now would
+  make new acqs inconsistent with the ~9,500 MRI acqs already linked under the
+  current scheme (6,405 DICOM-bearing + 3,104 regen), so do it as a deliberate
+  template change with a coordinated relink of the affected acqs, not an ad-hoc patch.
+- [ ] (optional) Once the template is fixed, a targeted relink of the ~200
+  colliding acqs under the new unique names.
