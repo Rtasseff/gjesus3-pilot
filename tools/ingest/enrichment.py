@@ -199,10 +199,35 @@ def _build_condition(cfg_single, discovered, log):
     return out
 
 
-def _build_anatomy(cfg_single, discovered, log, sample_type="organism"):
+def _build_anatomy(cfg_single, discovered, log, sample_type="organism",
+                   derive_fields=None, auto_derive=True):
     out = resolver.resolve_anatomy_block(cfg_single.get("anatomy"), discovered)
     region = out.get("region")
     has_region = bool(region and region.get("label"))
+
+    # Auto-derive (DRAFT mapping) — fills the gap ONLY when the operator left
+    # anatomy unset (no region AND is_whole_body null) and we have MRI scan-name
+    # signals. Operator-entered anatomy always wins; an ambiguous/unmatched
+    # signal derives nothing (stays null + WARN below). See anatomy_derive.py.
+    if (auto_derive and derive_fields and not has_region
+            and out.get("is_whole_body") is None):
+        from . import anatomy_derive
+        proposed = anatomy_derive.derive_anatomy(
+            derive_fields.get("text_signals") or [],
+            fov=derive_fields.get("fov"),
+        )
+        if proposed:
+            out["is_whole_body"] = proposed["is_whole_body"]
+            out["region"] = proposed["region"]
+            out["auto_hint"] = proposed["auto_hint"]
+            out["source"] = proposed["source"]
+            region = out["region"]
+            has_region = True
+            log(f"anatomy: auto-derived region={region.get('label')} "
+                f"(is_whole_body={out['is_whole_body']}; DRAFT mapping, "
+                f"source={proposed['source']}). Override with an explicit "
+                f"anatomy: block if wrong.", "INFO")
+
     if sample_type == "tissue":
         # Ex-vivo tissue: is_whole_body is N/A (a section is never whole-body),
         # so it stays null and is NOT warned. The meaningful field is the UBERON
@@ -223,12 +248,18 @@ def _build_anatomy(cfg_single, discovered, log, sample_type="organism"):
 
 def build_enrichment(cfg_single, *, acq_id, acq_date, acq_dt_iso="",
                      canonical_path="", registries_dir="", dry_run=False,
-                     lookup_fn=None, log=None):
+                     lookup_fn=None, log=None, derive_fields=None,
+                     auto_derive=True):
     """Return (subject, condition, anatomy) for this case, or None per block.
 
     Pure orchestration over the resolver + animal-DB fetch + pending list. Never
     raises on missing data (08_METADATA §4.7). `lookup_fn` defaults to
     animal_db.lookup and is injectable for tests.
+
+    `derive_fields` (optional) is the scan-name signal dict from
+    anatomy_derive.collect_mri_signals — when present and the operator left
+    anatomy unset, the anatomy region is auto-derived (DRAFT mapping). Set
+    `auto_derive=False` to disable that entirely.
     """
     log = log or _default_log
     if lookup_fn is None:
@@ -255,5 +286,7 @@ def build_enrichment(cfg_single, *, acq_id, acq_date, acq_dt_iso="",
     # are the same UBERON anatomical-entity concept. Not for cells (a cell
     # line's source organ is line-static metadata, deferred 2026-06-09).
     if sample_type in ("organism", "tissue"):
-        anatomy = _build_anatomy(cfg_single, discovered, log, sample_type)
+        anatomy = _build_anatomy(cfg_single, discovered, log, sample_type,
+                                 derive_fields=derive_fields,
+                                 auto_derive=auto_derive)
     return subject, condition, anatomy

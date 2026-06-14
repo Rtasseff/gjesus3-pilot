@@ -1057,6 +1057,18 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         )
         eco_section = cfg_single.get("ecosystem_section") or {}
 
+        # Scan-name signals for anatomy auto-derivation. Only MRI exposes a
+        # deriving signal today (ParaVision scan name / sequence); other
+        # ecosystems pass derive_fields=None (no auto-derive). The operator's
+        # explicit anatomy: block always wins — this only fills the gap. See
+        # ingest/anatomy_derive.py.
+        derive_fields = None
+        if eco_section_name == "mri":
+            from ingest import anatomy_derive
+            derive_fields = anatomy_derive.collect_mri_signals(
+                cfg_single.get("discovered") or {}, eco_section,
+            )
+
         # --- Step 8.4: Preclinical enrichment blocks (non-blocking) ---
         # subject/condition/anatomy for organism|tissue acquisitions
         # (08_METADATA §4.4–4.7). Never raises: a DB miss WARNs, writes a
@@ -1071,6 +1083,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             registries_dir=os.path.join(nas_root, "registries"),
             dry_run=dry_run,
             log=log,
+            derive_fields=derive_fields,
         )
 
         # (The correction-pass S1 stashed cfg_single["subject_id"] here; the
