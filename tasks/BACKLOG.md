@@ -328,6 +328,32 @@ for microscopy it is.)
 - Both steps (back-fill script + the `enrichment.py` wiring) are tooling changes → need Ryan's
   authorization before implementing.
 
+## AxioScan MFB ingest — Phase 2 follow-ups (2026-06-15)
+
+The AxioScan MFB historical ingest landed in true production on 2026-06-15: **565 acqs**
+(configs `tools/configs/axioscan7_mfb_20260614.yaml` + `axioscan7_mfb_mpcls_20260614.yaml`),
+0 failures, 563 subjects live (2 `-None` from the `0619` null-alias project; 5 mPCLS carry
+no subject by design). Three deferred items:
+
+- [ ] **`is_control: true` for the 4 `CTRL`-tagged slides.** The main config sets
+  `is_control: null`; the 4 files `MFB_AUA_1022_ID{59,60,70,72}T_KI67_CTRL_10X` carry a
+  `CTRL` control tag. Set `condition.is_control: true` for those 4 via the per-acq override
+  at `/projects/proj-ae-biomegune-1022/metadata/<acq_id>.json` (the documented mutable path —
+  do NOT edit the `/raw/` sidecar).
+- [ ] **Anatomy back-fill** — see the "Microscopy anatomy from the sample-id organ suffix"
+  item above (all 565 landed `anatomy.region = null`; the organ is in the sample_short suffix).
+- [ ] **Link-name collisions — same slide re-scanned across date folders.** The AxioScan
+  `link_filename` is `ZWSI_<original-basename>` and the filename carries NO scan date (the date
+  is the parent folder), so the SAME slide scanned/exported on multiple days collides on one
+  link name — only the first gets a distinct project hard link. Measured: 15 slide-filenames
+  appear in 2–3 date folders each → 565 acqs but 544 distinct link names → **21 acqs without a
+  distinct project link**. These are **genuine separate acquisitions** (different sizes + czi
+  timestamps, e.g. `ID29H` = 490/405/123 MB on 2026-02-19/-12/-06), not byte-dups — data-safe
+  (each has its own ACQ-ID/raw/checksum/registry row). Fix: add `acq_date` to the AxioScan
+  `link_filename` (e.g. `ZWSI_${acq_date}_${original_name}`) and relink the 21 (same class as
+  the MRI link-name-collision item). Also (data-quality): confirm with the operators that the
+  multi-date re-scans are intentional vs accidental re-exports.
+
 ---
 
 ## Facility-DB null project alias → `-None` subject ids (2026-06-13)

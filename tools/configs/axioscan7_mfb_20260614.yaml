@@ -1,0 +1,99 @@
+# AxioScan 7 — MFB true-production historical ingest (2026-06-14)
+#
+# Whole-archive sweep of S:\goptical\GOpticalUsers data\AxioScan, restricted to
+# Jesus's lab (MFB) via `filter: group_code: MFB`. Source left in place
+# (delete_source_after_ingest: false); the ingest copies each .czi to
+# /raw/ on the NAS.
+#
+# Structure: <base>/<YYYYMMDD>/<file>.czi  — every MFB file is exactly one level
+# under a date folder, so `pattern: [0-9]*/*.czi` captures the set and skips the
+# non-date `OpticalSpectroscopyPlatform` folder. (Started pointed at one date
+# folder for the smoke test — see `pattern` below.)
+#
+# Filename (6-chunk standard, 531/565 files):
+#   MFB_<operator>_<project>_<sample_short>_<stain>_<magnification>.czi
+#   e.g. MFB_MBC_0424_ID29H_WGA_10x.czi
+# Variants that DON'T fit the 6-field parse (handled separately, Phase 2):
+#   - mPCLS (5 files, MFB_AUA_mPCLS_0426_...): project chunk is a prep label, not
+#     a code -> would misparse. Excluded from this run (ingest them first with a
+#     dedicated config so they dedup-skip here, or run after).
+#   - CTRL-tagged (4 files, ..._KI67_CTRL_10X): get is_control: true via a
+#     dedicated Phase-2 config (this batch leaves is_control null).
+# 7-/8-chunk section variants (25 files) parse project + sample_short correctly
+# (only stain/magnification land cosmetically shifted) — acceptable for now.
+#
+# Anatomy: lands null this run. The organ is in the sample_short suffix
+# (ID29*H* = heart) but the tooling discards it today — per-acq back-fill is
+# tracked in tasks/BACKLOG.md ("Microscopy anatomy from the sample-id organ
+# suffix"). Do NOT guess a per-batch organ: a date folder mixes organs.
+#
+# discovered.* for registry/link: group_code / operator / project /
+#   sample_short / stain / magnification (filename) + czi_* (embedded) +
+#   acquisition_date (parent folder, fallback only).
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  staging_dir: "S:/goptical/GOpticalUsers data/AxioScan"
+  # Full whole-archive sweep (date folders only; skips OpticalSpectroscopyPlatform).
+  # Smoke-tested first on "20260219/*.czi" (6 acqs, verified).
+  pattern: "[0-9]*/*.czi"
+  filename_parse:
+    separator: "_"
+    fields: [group_code, operator, project, sample_short, stain, magnification]
+  filter:
+    group_code: MFB
+  acquisition_date_from: parent_folder_name
+
+  # Subject from the animal-facility DB (Phase 3). project_alias from `project`,
+  # animal_code from `sample_short` (subject_id.py strips ID + the organ letter).
+  # Runs from Windows where pymysql + ~/.my.cnf resolve live; a miss queues to
+  # pending_subject_metadata.csv (non-blocking).
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.project}"
+    animal_code:   "${discovered.sample_short}"
+
+registry:
+  instrument:           ZWSI
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  # Historical batch — the study researcher isn't in the filename and is unknown
+  # per-acq, so NA (the scope operator is captured separately below).
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "${discovered.project}_${discovered.sample_short}"
+  sample_type:          tissue
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  notes:                "MFB AxioScan 7 WSI, historical true-prod ingest (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
+
+# Scope operator (sidecar-only) from the required filename chunk.
+operator: "${discovered.operator}"
+
+auto_create_project:
+  owner:       "${discovered.operator}"
+  description: "Auto-created from AxioScan 7 ingest; animal-project chunk ${discovered.project}."
+  notes:       "Auto-created on first ingest. Owner = filename operator chunk; edit _project.yaml to reassign."
+
+# Hard link under /projects/<proj>/raw_linked/. ${original_name} is basenamed by
+# the resolver, so the staging date-folder prefix is dropped:
+#   ZWSI_MFB_MBC_0424_ID29H_WGA_10x.czi
+link_filename: "${instrument}_${original_name}"
+
+# Condition (tissue). Mixed-cohort batches -> is_control null; CTRL-tagged files
+# handled in Phase 2. disease_model/state unknown for a historical bulk pull.
+condition:
+  is_control:    null
+  disease_model: ""
+  disease_state: ""
+  source:        "operator-entered"
+
+# Anatomy (tissue): is_whole_body N/A (null, not warned). region left null this
+# run; back-filled later from the sample_short organ suffix (BACKLOG).
+anatomy:
+  is_whole_body: null
+  source:        "operator-entered"

@@ -1,0 +1,65 @@
+# AxioScan 7 — MFB mPCLS subset (precision-cut lung slices), 2026-06-14
+#
+# The 5 mPCLS files in 20260513 use a DIFFERENT 7-chunk layout than the standard
+# scheme — the prep label "mPCLS" sits in the project slot and the real project
+# code (0426) follows it, so the 6-field config would misparse them
+# (project="mPCLS"). This dedicated config parses them correctly and is run
+# BEFORE the main sweep so the main run dedup-skips them.
+#
+#   MFB_AUA_mPCLS_0426_n1_HE_20x.czi
+#   group_code=MFB operator=AUA prep=mPCLS project=0426 slice=n1 stain=HE mag=20x
+#
+# 20260513 contains ONLY these 5 mPCLS files, so pattern "20260513/*.czi" + the
+# MFB filter isolates them exactly.
+#
+# Subject: these are ex-vivo precision-cut lung slices with no per-file animal
+# code (slice n1..n5, not an animal id), so subject_from_db is OFF — no DB lookup.
+# Anatomy is left null like the rest (back-filled later; mPCLS = lung is a clean
+# case for that pass — tasks/BACKLOG.md).
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  staging_dir: "S:/goptical/GOpticalUsers data/AxioScan"
+  pattern: "20260513/*.czi"
+  filename_parse:
+    separator: "_"
+    fields: [group_code, operator, prep, project, slice, stain, magnification]
+  filter:
+    group_code: MFB
+  acquisition_date_from: parent_folder_name
+  subject_from_db: false
+
+registry:
+  instrument:           ZWSI
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "${discovered.project}_mPCLS_${discovered.slice}"
+  sample_type:          tissue
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  notes:                "MFB AxioScan 7 mPCLS (precision-cut lung slices), ${discovered.stain} at ${discovered.czi_objective_mag}x — historical true-prod ingest"
+
+operator: "${discovered.operator}"
+
+auto_create_project:
+  owner:       "${discovered.operator}"
+  description: "Auto-created from AxioScan 7 ingest; animal-project chunk ${discovered.project}."
+  notes:       "Auto-created on first ingest. Owner = filename operator chunk; edit _project.yaml to reassign."
+
+link_filename: "${instrument}_${original_name}"
+
+condition:
+  is_control:    null
+  disease_model: ""
+  disease_state: ""
+  source:        "operator-entered"
+
+anatomy:
+  is_whole_body: null
+  source:        "operator-entered"
