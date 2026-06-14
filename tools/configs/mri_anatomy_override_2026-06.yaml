@@ -1,0 +1,32 @@
+# One-time historical anatomy back-fill override — Jesús's group MRI (2026-06).
+#
+# NOT a permanent code rule. The shared mapping in tools/ingest/anatomy_derive.py
+# stays high-confidence-only (08_METADATA §4.6.4); this file is a back-fill INPUT
+# applied by `tools/backfill_mri_anatomy.py --override` ONLY where that mapping
+# left a scan null. It encodes a group-specific, lower-confidence guess for the
+# HISTORICAL Jesús-group data without baking it into rules other groups inherit.
+#
+# Rationale (data-office sign-off + MRI lead, 2026-06-14): the dominant scan in
+# this group's archive is the cine-FLASH cardiac cine (SeriesDescription
+# "Cine_IG_FLASH", ~60% of acqs). The high-confidence mapping correctly leaves a
+# bare "cine FLASH" null (cine is a technique, FLASH a sequence — neither is an
+# anatomy term, and other groups' cine-FLASH won't be cardiac). For THIS group's
+# cardiac-flow work it is the cardiac cine, so the one-time back-fill tags it heart.
+#
+# Note: the named-vessel/chamber cines (Cine MPA, Cine aorta, Cine 4-chamber) are
+# already filled by the high-confidence mapping FIRST, so this override only ever
+# touches the bare Cine_IG_FLASH series. A bare "Velocity_map" (no named vessel)
+# is deliberately NOT overridden — the vessel is genuinely unknown, so it stays null.
+#
+# Usage:
+#   python tools/backfill_mri_anatomy.py --nas-root J:/gjesus3-data \
+#       --override tools/configs/mri_anatomy_override_2026-06.yaml        # dry-run
+#   (add --apply once the dry-run is eyeballed)
+
+overrides:
+  - match: "cine[ _]*ig[ _]*flash"   # the "Cine_IG_FLASH" cardiac cine workhorse
+    label: heart
+    ontology: UBERON
+    id: "UBERON:0000948"
+    is_whole_body: false
+    note: "one-time historical override (Jesús cardiac-flow): cine-FLASH = cardiac cine"

@@ -194,11 +194,61 @@ def test_backfill_end_to_end():
               "second apply is idempotent (already-set)")
 
 
+def test_override():
+    print("[one-time back-fill override (input, not a code rule)]")
+    with tempfile.TemporaryDirectory() as d:
+        ovpath = os.path.join(d, "ov.yaml")
+        with open(ovpath, "w", encoding="utf-8") as f:
+            f.write('overrides:\n')
+            f.write('  - match: "cine[ _]*ig[ _]*flash"\n')
+            f.write('    label: heart\n')
+            f.write('    ontology: UBERON\n')
+            f.write('    id: "UBERON:0000948"\n')
+            f.write('    is_whole_body: false\n')
+            f.write('    note: "test override"\n')
+        ov = bf.load_override(ovpath)
+        check(len(ov) == 1 and ov[0]["label"] == "heart", "load_override parses the rule")
+
+        prop = bf.apply_override(["jrc_x", "Bruker:IgFLASH", "Cine_IG_FLASH"], ov)
+        check(prop and prop["region"]["label"] == "heart", "override: Cine_IG_FLASH -> heart")
+        check(prop and prop["source"] == "auto-derived-override", "override source tagged")
+        check(bf.apply_override(["Velocity_map"], ov) is None,
+              "override: bare velocity_map -> None (no named vessel, not overridden)")
+
+        def _sc(series):
+            return {"mri": {"reconstruction": {"by_index": {"1": {"dicoms": [
+                {"headers": {"SeriesDescription": series}}]}}}},
+                "anatomy": {"is_whole_body": None, "region": None,
+                            "additional_regions": [], "source": "unknown", "auto_hint": ""}}
+
+        # High-confidence wins over the override (4-chamber -> auto-derived, not override).
+        oc, pr = bf.plan_one(_sc("Cine_ 4 chamber"), override=ov)
+        check(oc == "fill" and pr["source"] == "auto-derived",
+              "4-chamber stays high-confidence (override not consulted)")
+        # Bare cine-FLASH: null from the mapping, filled by the override.
+        oc2, pr2 = bf.plan_one(_sc("Cine_IG_FLASH"), override=ov)
+        check(oc2 == "fill" and pr2["region"]["label"] == "heart"
+              and pr2["source"] == "auto-derived-override",
+              "bare Cine_IG_FLASH -> heart via override")
+        # Without the override it correctly stays null.
+        oc3, _ = bf.plan_one(_sc("Cine_IG_FLASH"))
+        check(oc3 == "no-derivation", "bare Cine_IG_FLASH without override -> null")
+
+        # The shipped override file loads and matches.
+        repo_ov = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "configs", "mri_anatomy_override_2026-06.yaml")
+        if os.path.isfile(repo_ov):
+            p = bf.apply_override(["Cine_IG_FLASH"], bf.load_override(repo_ov))
+            check(p and p["region"]["label"] == "heart",
+                  "shipped override file maps Cine_IG_FLASH -> heart")
+
+
 def main():
     test_derive_rules()
     test_collect_signals()
     test_enrichment_build_anatomy()
     test_backfill_end_to_end()
+    test_override()
     print()
     if FAILS:
         print(f"FAILED ({len(FAILS)}):")

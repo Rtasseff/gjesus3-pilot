@@ -33,6 +33,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # tools/ on path
@@ -73,15 +74,76 @@ def _anatomy_is_unset(anatomy):
     return (not has_region) and anatomy.get("is_whole_body") is None
 
 
-def plan_one(sidecar, *, force=False):
+def load_override(path):
+    """Load a one-time historical override file (YAML).
+
+    Format:
+        overrides:
+          - match: "cine.*flash"        # case-insensitive regex on the scan-name signal
+            label: heart
+            ontology: UBERON
+            id: "UBERON:0000948"
+            is_whole_body: false
+            note: "one-time historical: Jesús cardiac-flow cine"
+
+    This is a back-fill INPUT, deliberately kept OUT of the permanent code
+    mapping (`ingest/anatomy_derive.py` stays high-confidence-only). It lets a
+    one-off, group-specific historical guess be applied + audited without
+    baking it into rules other groups would inherit. Returns a list of rules
+    each with a compiled `regex`; [] when `path` is falsy.
+    """
+    if not path:
+        return []
+    import yaml  # lazy — only needed when --override is used
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    rules = []
+    for o in (data.get("overrides") or []):
+        if not (o.get("match") and o.get("label") and o.get("id")):
+            raise ValueError(f"override entry needs match/label/id: {o!r}")
+        rules.append({
+            "match": o["match"],
+            "regex": re.compile(o["match"], re.IGNORECASE),
+            "label": o["label"],
+            "ontology": o.get("ontology", "UBERON"),
+            "id": o["id"],
+            "is_whole_body": o.get("is_whole_body", False),
+            "note": o.get("note", ""),
+        })
+    return rules
+
+
+def apply_override(text_signals, override_rules):
+    """Apply the one-time override to a scan-name signal (only reached when the
+    high-confidence mapping returned null). First matching rule wins. Returns a
+    proposed anatomy dict with source='auto-derived-override', or None."""
+    text = " ".join(str(s) for s in text_signals if s).lower()
+    if not text.strip():
+        return None
+    for rule in override_rules:
+        if rule["regex"].search(text):
+            return {
+                "is_whole_body": rule["is_whole_body"],
+                "region": {"label": rule["label"], "ontology": rule["ontology"],
+                           "id": rule["id"]},
+                "auto_hint": (rule["note"]
+                              or f"one-time back-fill override ('{rule['match']}')"),
+                "source": "auto-derived-override",
+            }
+    return None
+
+
+def plan_one(sidecar, *, force=False, override=None):
     """Decide whether/what to back-fill for one sidecar.
 
     Returns (outcome, proposed) where outcome is one of:
       "no-mri"       — no mri section (not an MRI acq)
       "no-anatomy"   — no anatomy block (not organism/tissue)
       "already-set"  — anatomy already has region / is_whole_body (skipped)
-      "no-derivation"— signals didn't match a confident rule (left null)
-      "fill"         — `proposed` anatomy dict ready to write
+      "no-derivation"— neither the high-confidence mapping nor the override matched
+      "fill"         — `proposed` anatomy dict ready to write (from the
+                       high-confidence mapping, or — only if that returned null —
+                       the optional one-time `override`)
     """
     if "mri" not in sidecar:
         return "no-mri", None
@@ -96,6 +158,9 @@ def plan_one(sidecar, *, force=False):
     proposed = anatomy_derive.derive_anatomy(
         signals["text_signals"], fov=signals.get("fov"),
     )
+    if not proposed and override:
+        # High-confidence mapping left it null; try the one-time override.
+        proposed = apply_override(signals["text_signals"], override)
     if not proposed:
         return "no-derivation", None
     return "fill", proposed
@@ -162,10 +227,13 @@ def _update_registry(registry_path, registries_dir, updates):
     return changed
 
 
-def backfill(nas_root, *, project=None, acq_id=None, apply=False, force=False):
+def backfill(nas_root, *, project=None, acq_id=None, apply=False, force=False,
+             override=None):
     """Walk the registry, back-fill anatomy on unset MRI acquisitions.
 
-    Returns a counts dict.
+    Returns a counts dict (with a `by_source` sub-dict tallying fills by
+    source: 'auto-derived' = high-confidence mapping, 'auto-derived-override'
+    = the one-time override).
     """
     registries_dir = os.path.join(nas_root, "registries")
     registry_path = os.path.join(registries_dir, "registry_raw.csv")
@@ -173,6 +241,7 @@ def backfill(nas_root, *, project=None, acq_id=None, apply=False, force=False):
     counts = {"scanned": 0, "filled": 0, "would-fill": 0, "already-set": 0,
               "no-derivation": 0, "no-anatomy": 0, "no-mri": 0,
               "missing-sidecar": 0, "error": 0}
+    by_source = {}
     registry_updates = {}
 
     for row in rows:
@@ -194,23 +263,25 @@ def backfill(nas_root, *, project=None, acq_id=None, apply=False, force=False):
             log(f"{aid}: could not read sidecar: {e}", "ERROR")
             continue
 
-        outcome, proposed = plan_one(sidecar, force=force)
+        outcome, proposed = plan_one(sidecar, force=force, override=override)
         if outcome in ("no-mri", "no-anatomy", "already-set", "no-derivation"):
             counts[outcome] += 1
             continue
 
         # outcome == "fill"
         label = proposed["region"]["label"]
+        src = proposed.get("source", "?")
+        by_source[src] = by_source.get(src, 0) + 1
         if not apply:
             counts["would-fill"] += 1
             log(f"{aid}: WOULD fill region={label} "
-                f"(is_whole_body={proposed['is_whole_body']})")
+                f"(is_whole_body={proposed['is_whole_body']}, src={src})")
             continue
         ok, detail = _apply_to_sidecar(path, proposed)
         if ok:
             counts["filled"] += 1
             registry_updates[aid] = label
-            log(f"{aid}: filled region={label} ({detail})")
+            log(f"{aid}: filled region={label} (src={src}; {detail})")
         else:
             counts["error"] += 1
             log(f"{aid}: {detail}", "ERROR")
@@ -219,6 +290,7 @@ def backfill(nas_root, *, project=None, acq_id=None, apply=False, force=False):
         n = _update_registry(registry_path, registries_dir, registry_updates)
         log(f"registry: patched anatomical_entity on {n} row(s)")
 
+    counts["by_source"] = by_source
     return counts
 
 
@@ -238,25 +310,35 @@ def main(argv=None):
     ap.add_argument("--force", action="store_true",
                     help="Re-derive even when anatomy is already set "
                          "(overwrites operator/prior anatomy — use with care).")
+    ap.add_argument("--override", default=None,
+                    help="Optional one-time historical override file (YAML; see "
+                         "load_override). Applied ONLY where the high-confidence "
+                         "mapping leaves a scan null — a back-fill input, not a "
+                         "permanent code rule.")
     args = ap.parse_args(argv)
+
+    override = load_override(args.override)
 
     log(f"NAS root: {args.nas_root}")
     log(f"Mode: {'APPLY' if args.apply else 'DRY-RUN'}"
         f"{' +force' if args.force else ''}"
         f"{(' project=' + args.project) if args.project else ''}"
         f"{(' acq=' + args.acq_id) if args.acq_id else ''}")
-    log("Anatomy mapping is a DRAFT (ingest/anatomy_derive.py) — review the "
-        "filled regions before relying on them.", "WARN")
+    log("High-confidence mapping: ingest/anatomy_derive.py. Eyeball the filled "
+        "regions before --apply.")
+    if override:
+        log(f"One-time override ACTIVE: {args.override} ({len(override)} rule(s)) "
+            f"— historical back-fill input, not a permanent code rule.", "WARN")
 
     counts = backfill(
         args.nas_root, project=args.project, acq_id=args.acq_id,
-        apply=args.apply, force=args.force,
+        apply=args.apply, force=args.force, override=override,
     )
     print()
     log(f"Summary: {counts}")
     verb = "filled" if args.apply else "would-fill"
-    log(f"{counts[verb]} acquisition(s) {verb}; "
-        f"{counts['no-derivation']} left null (no confident rule); "
+    log(f"{counts[verb]} acquisition(s) {verb} (by source: {counts.get('by_source', {})}); "
+        f"{counts['no-derivation']} left null (no confident rule / override); "
         f"{counts['already-set']} already set.")
     return 1 if counts["error"] else 0
 
