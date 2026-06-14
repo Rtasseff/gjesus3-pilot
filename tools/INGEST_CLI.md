@@ -141,6 +141,9 @@ For a mixed-condition session, override a single acquisition at `/projects/<proj
 | [`tools/migrate_registry_columns.py`](migrate_registry_columns.py) | One-shot schema migration for `registry_raw.csv` when `REGISTRY_FIELDS` gains new columns. The defensive header check in `registry.append_row` blocks ingests until this runs. Backs up the original to `.bak.<timestamp>` before overwriting. |
 | [`tools/ingest/probe_czi.py`](ingest/probe_czi.py), [`tools/ingest/probe_paravision.py`](ingest/probe_paravision.py) | Read-only embedded-metadata probes for `.czi` and Bruker ParaVision exam folders. Dump parsed metadata + the curated `discovered.<eco>_*` subset to `_probes/` for review before a real ingest. |
 | [`tools/backfill_mri_anatomy.py`](backfill_mri_anatomy.py) | Back-fill the `anatomy` block (UBERON `region` / `is_whole_body`) on already-ingested MRI acquisitions from each sidecar's scan name, using the shared mapping in `ingest/anatomy_derive.py` (the same one the live ingest auto-derives with). Updates the `/raw/` sidecar + the registry `anatomical_entity` column. **Dry-run by default** (`--apply` to write; `--project` / `--acq-id` to scope; only fills acqs the operator left unset). |
+| [`tools/backfill_microscopy_anatomy.py`](backfill_microscopy_anatomy.py) | Microscopy (AxioScan/ZWSI) analog: back-fill `anatomy.region` from the sample-id organ code via the operator-keyed [`reference/microscopy_organ_map.yaml`](reference/microscopy_organ_map.yaml). Same dry-run-default / atomic / unset-only / registry-update behavior. |
+
+> **Anatomy back-fill — operator runbook:** [`tools/ANATOMY_BACKFILL.md`](ANATOMY_BACKFILL.md) (when + how to run the MRI + microscopy back-fills, including the Jesús-group one-time MRI override).
 
 ---
 

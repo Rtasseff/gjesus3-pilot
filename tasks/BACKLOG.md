@@ -277,6 +277,16 @@ config sets `anatomy` **once per batch**, so a single value can't be right acros
 
 ## Microscopy anatomy from the sample-id organ suffix — back-fill + auto-derive (2026-06-14)
 
+> **✅ DONE 2026-06-14.** Auto-derive + back-fill shipped to `main`, mirroring the MRI work.
+> Operator-keyed map `tools/reference/microscopy_organ_map.yaml` (data, not code; AUA `Lu/Li/K`,
+> MBC `H/B/L/HL` — `L`=lung confirmed with MBC, AUA `T`=tumor intentionally null). Shared by
+> `anatomy_derive.derive_microscopy_anatomy` (wired into `enrichment._build_anatomy`, tissue path,
+> operator-set wins) + `tools/backfill_microscopy_anatomy.py`. Operator runbook:
+> [`tools/ANATOMY_BACKFILL.md`](../tools/ANATOMY_BACKFILL.md). Dry-run on the live ZWSI set fills
+> ~88/146 (heart 57, lung 31); AUA `T` (tumor) + bare-numeric stay null by design. Remaining
+> open item: confirm AUA's `mPCLS`→lung + whether `T` has a consistent host organ (edit the YAML
+> if so). Original analysis kept below for the record.
+
 **Priority: MEDIUM (non-blocking, but the info is present per-file so it's recoverable and
 worth doing).** Surfaced during the AxioScan 7 MFB production ingest.
 

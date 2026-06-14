@@ -227,9 +227,10 @@ link_filename: "${instrument}_${original_name}"
 # was cut from (region-only; is_whole_body is N/A for an ex-vivo section, so it
 # stays null and is not warned). This is the SAME UBERON anatomical-entity
 # concept as the in-vivo anatomy.region, queryable across in-vivo scans + ex-vivo
-# sections. The organ is also hinted by sample_short's letter (the "B" in
-# "ID13B"), but the letter->UBERON mapping is lab-specific — set the UBERON term
-# explicitly per batch below.
+# sections. AUTO-DERIVED (2026-06-14): the region is filled automatically from the
+# sample_short organ code (the "B" in "ID13B") via the operator-keyed map
+# tools/reference/microscopy_organ_map.yaml. Leave the region below commented to
+# use auto-derive; uncomment ONLY to override (operator-set always wins).
 #
 # Spec: 08_METADATA §4.4 (subject) / §4.5 (condition) / §4.6 (anatomy).
 
@@ -252,12 +253,12 @@ condition:
 
 anatomy:
   # Ex-vivo tissue: is_whole_body is N/A (a section is never whole-body) -> left
-  # null and NOT warned. The meaningful field is the UBERON organ/region the
-  # section was cut from. EDIT per batch (one batch of slides is usually one
-  # organ) or override per-acq in /projects/<proj>/metadata/<acq_id>.json.
-  # NON-BLOCKING: an empty region just WARNs, the acq still ingests.
+  # null and NOT warned. The region is AUTO-DERIVED from the sample-id organ code
+  # via the operator-keyed map tools/reference/microscopy_organ_map.yaml — you do
+  # NOT need to set it per batch. Unmapped/ambiguous codes (e.g. AUA "T"=tumor)
+  # stay null + WARN (non-blocking). Uncomment region below ONLY to override.
   is_whole_body: null
-  # region:                       # uncomment + fill (verified UBERON ids in 08_METADATA §4.6)
+  # region:                       # uncomment ONLY to override the auto-derive
   #   label:    "heart"
   #   ontology: "UBERON"
   #   id:       "UBERON:0000948"
