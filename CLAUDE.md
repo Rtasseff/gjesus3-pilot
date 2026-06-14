@@ -18,7 +18,7 @@ This is a **design, documentation, and tooling project** for a research data man
 - **Data Management Lead:** Ryan Tasseff (Data Office)
 - **Infrastructure:** QNAP NAS "gjesus3" (TS-864eU, 6 × 20 TB, RAID 5, ~63 TB user-available after snapshot reservation), SMB share `\\GJESUS3\gjesus3`
 - **Access:** Hardwired on-site machines only (no laptops)
-- **Status:** Pilot in **quasi-production state** — four ingest rounds complete (collaborator DICOM 75 acqs, AxioScan 7 28 acqs, Cell Observer 165 acqs, internal MRI 97 acqs). Will be purged after team exhibition and restarted as true production with feedback incorporated. "Done" in this project means "done in quasi-production" unless explicitly noted.
+- **Status:** **True production.** The team exhibition is over and the quasi-production pilot (four test rounds — collaborator DICOM, AxioScan 7, Cell Observer, internal MRI) was **purged 2026-06-10**; `J:\gjesus3-data` was restarted as the live **true-production** system. Historical data is now being ingested into it round by round (nuclear-imaging + internal MRI done as of 2026-06-14; microscopy preloads still pending). **"Done" in this project means "done in true production"** unless explicitly noted. (The pre-purge quasi-prod phase is complete and historical — do **not** treat a future purge/restart as pending.)
 
 ## Documentation architecture — what belongs where
 

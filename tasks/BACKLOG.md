@@ -317,7 +317,7 @@ they simply land as skipped placeholders.
 
 ## MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14)
 
-**Priority: LOW (data-safe; deferred to the true-prod restart template).** Found
+**Priority: LOW (data-safe; near-term MRI template fix).** Found
 during the no-DICOM regen relink (`tools/relink_mri_regen.py`, 2026-06-14): the MRI
 `link_filename` —
 `MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`
@@ -334,10 +334,11 @@ run, so the same collisions exist there) and **data-safe**: every colliding acq
 keeps its own ACQ-ID, `/raw/` folder, sidecar, checksums, and registry row — only
 the project `raw_linked/` convenience layer can't distinguish them.
 
-- [ ] **Add a session/time discriminator to the MRI `link_filename`** in the
-  true-prod restart template (e.g. the source study `HHMMSS` from the folder name,
-  unique per session, or the timepoint token). Changing it now would make the regen
-  batch inconsistent with the 6,405 already linked under the old scheme, so it
-  belongs in the restart template refresh, not a live patch.
+- [ ] **Add a session/time discriminator to the MRI `link_filename`** (e.g. the
+  source study `HHMMSS` from the folder name, unique per session, or the timepoint
+  token) in the MRI template + configs. Caveat: changing the convention now would
+  make new acqs inconsistent with the ~9,500 MRI acqs already linked under the
+  current scheme (6,405 DICOM-bearing + 3,104 regen), so do it as a deliberate
+  template change with a coordinated relink of the affected acqs, not an ad-hoc patch.
 - [ ] (optional) Once the template is fixed, a targeted relink of the ~200
   colliding acqs under the new unique names.
