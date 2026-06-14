@@ -314,3 +314,30 @@ they simply land as skipped placeholders.
   image DICOMs) and how/whether to store the STEAM/PRESS results + the Wobble
   tuning scans. The ~365 acquisitions are safely skipped until this is built;
   there is no rush.
+
+## MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14)
+
+**Priority: LOW (data-safe; deferred to the true-prod restart template).** Found
+during the no-DICOM regen relink (`tools/relink_mri_regen.py`, 2026-06-14): the MRI
+`link_filename` —
+`MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`
+— is **not unique** when the same animal is scanned in **multiple separate study
+sessions on the same calendar day** (timepoint series `_t0h_`/`_t6h_`, repeat
+sessions `_2_1_1`, or date-typo'd folder names e.g. `jrc240122` vs `jrc220124`).
+Such acqs resolve to the same link name and collide.
+
+Measured on the 3,297-acq imaging regen batch: **3,097 distinct names → 144
+colliding names → ~200 acqs** left without a distinct project link (the relink
+creates the first of each group and skips the rest — it does **not** merge). This
+is **pre-existing** (the same template drove the earlier 6,405-acq DICOM-bearing
+run, so the same collisions exist there) and **data-safe**: every colliding acq
+keeps its own ACQ-ID, `/raw/` folder, sidecar, checksums, and registry row — only
+the project `raw_linked/` convenience layer can't distinguish them.
+
+- [ ] **Add a session/time discriminator to the MRI `link_filename`** in the
+  true-prod restart template (e.g. the source study `HHMMSS` from the folder name,
+  unique per session, or the timepoint token). Changing it now would make the regen
+  batch inconsistent with the 6,405 already linked under the old scheme, so it
+  belongs in the restart template refresh, not a live patch.
+- [ ] (optional) Once the template is fixed, a targeted relink of the ~200
+  colliding acqs under the new unique names.

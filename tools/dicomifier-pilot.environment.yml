@@ -22,3 +22,10 @@ dependencies:
   - python>=3.9
   - dicomifier>=2.5.3   # 2.5.3 is the version the PV-7 workarounds were validated against (2026-06-01)
   - pydicom             # used by paravision_regen.py (workarounds) + validate_dicomifier_pixelspacing.py
+  - pip
+  - pip:
+    - pymysql>=1.1      # REQUIRED for live subject enrichment when the regen ingest runs from WSL.
+                        # animal_db.credentials_available() checks for the driver AND ~/.my.cnf; if pymysql
+                        # is absent it returns False and EVERY subject silently lands source="pending-db"
+                        # even though the creds file is present. Added 2026-06-14 after the historical MRI
+                        # regen pilot did exactly that. See the runbook §4a note 1.

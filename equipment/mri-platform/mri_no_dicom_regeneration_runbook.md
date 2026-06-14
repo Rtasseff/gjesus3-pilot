@@ -90,16 +90,32 @@ Env spec: [`tools/dicomifier-pilot.environment.yml`](../../tools/dicomifier-pilo
 
 These are the WSL-specific gotchas the historical pull surfaced:
 
-1. **Animal-DB credentials must be visible to WSL.** Subject enrichment reads MariaDB
-   credentials from `GJESUS3_MYCNF` (else `~/.my.cnf`). Inside WSL, `~/.my.cnf` is the
-   **WSL** home, not your Windows home — so if you don't point at the file, **every
-   subject is written `source: "pending-db"`** (recoverable later, but you'll back-fill
-   thousands). Before the run, export the path:
-   ```bash
-   export GJESUS3_MYCNF=/mnt/c/Users/<you>/.my.cnf   # or wherever your .my.cnf lives
-   ```
-   The ingest now prints a one-time **WARN** at batch start if credentials aren't found
-   and the batch needs them — heed it before letting a big run proceed.
+1. **Animal-DB credentials AND the `pymysql` driver must be visible to WSL.** Subject
+   enrichment reads MariaDB credentials from `GJESUS3_MYCNF` (else `~/.my.cnf`) and
+   connects via **`pymysql`**. `animal_db.credentials_available()` returns True only when
+   **both** are present. Two ways this silently breaks in WSL, each sending **every
+   subject to `source: "pending-db"`** (recoverable later, but you back-fill thousands):
+   - **Missing driver.** `pymysql` is **not** in the base `dicomifier` conda env. It is now
+     pinned in [`tools/dicomifier-pilot.environment.yml`](../../tools/dicomifier-pilot.environment.yml)
+     (added 2026-06-14 after the historical MRI regen pilot wrote ~thousands of pending-db
+     rows for this exact reason). If you built the env before that, run once:
+     `conda activate dicomifier-pilot && pip install 'pymysql>=1.1'`.
+   - **Creds file not found.** Inside WSL, `~/.my.cnf` is the **WSL** home, not your Windows
+     home — if it's not there, export the path before the run:
+     ```bash
+     export GJESUS3_MYCNF=/mnt/c/Users/<you>/.my.cnf   # or wherever your .my.cnf lives
+     ```
+   The ingest prints a one-time **WARN** at batch start if credentials/driver aren't found
+   and the batch needs them — heed it before letting a big run proceed. Verify quickly with
+   `python -c "from ingest import animal_db; print(animal_db.credentials_available())"` (run
+   from `tools/`, env active) → must print `True`.
+
+2b. **Project hard-links must be created from Windows afterward.** `os.link` is refused
+   (`EPERM`) over the CIFS NAS mount from WSL, so a regen run deposits `/raw/` correctly but
+   leaves **empty project link-folder shells**. After the WSL run, from **Windows** (`J:\`,
+   where `os.link` works) run [`tools/relink_mri_regen.py`](../../tools/relink_mri_regen.py)
+   `--nas-root J:/gjesus3-data` (dry-run first) to fill them — it is idempotent and rebuilds
+   the discovered-dependent link names from the registry + sidecar.
 
 2. **NAS copy is timestamp-tolerant (no action needed).** WSL mounts the NAS as a CIFS
    share that disallows setting file timestamps; the ingest copies file bytes and
