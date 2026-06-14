@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # tools/
 
 from ingest import anatomy_derive, enrichment, registry as reg  # noqa: E402
 import backfill_mri_anatomy as bf  # noqa: E402
+import backfill_microscopy_anatomy as bfm  # noqa: E402
 
 FAILS = []
 
@@ -243,12 +244,112 @@ def test_override():
                   "shipped override file maps Cine_IG_FLASH -> heart")
 
 
+def test_microscopy_derive():
+    print("[microscopy organ-code derive (operator-keyed)]")
+    d = anatomy_derive.derive_microscopy_anatomy
+    om = anatomy_derive.load_organ_map()
+    check("AUA" in om and "MBC" in om, "shipped organ map loads AUA + MBC")
+
+    # AUA verbose suffixes.
+    check((d("ID12Lu", "AUA", om) or {}).get("region", {}).get("id") == "UBERON:0002048",
+          "AUA Lu -> lung UBERON:0002048")
+    check((d("ID5Li", "AUA", om) or {}).get("region", {}).get("id") == "UBERON:0002107",
+          "AUA Li -> liver UBERON:0002107")
+    check((d("ID9K", "AUA", om) or {}).get("region", {}).get("id") == "UBERON:0002113",
+          "AUA K -> kidney UBERON:0002113")
+    check(d("ID103T", "AUA", om) is None, "AUA T (tumor) -> null (unmapped)")
+    check((d("mPCLS_n1", "AUA", om) or {}).get("region", {}).get("label") == "lung",
+          "AUA mPCLS -> lung (keyword)")
+
+    # MBC single letters.
+    check((d("ID29H", "MBC", om) or {}).get("region", {}).get("label") == "heart",
+          "MBC H -> heart")
+    check((d("ID13B", "MBC", om) or {}).get("region", {}).get("label") == "brain",
+          "MBC B -> brain")
+    check((d("ID7L", "MBC", om) or {}).get("region", {}).get("label") == "lung",
+          "MBC L -> lung (confirmed)")
+    hl = d("ID8HL", "MBC", om)
+    check(hl and hl["region"]["label"] == "heart", "MBC HL -> heart (primary)")
+    check(hl and any(r["label"] == "lung" for r in hl.get("additional_regions") or []),
+          "MBC HL adds lung as additional region")
+
+    # Tissue discipline + operator-specificity + edge cases.
+    check((d("ID29H", "MBC", om) or {}).get("is_whole_body") is None,
+          "tissue -> is_whole_body stays null")
+    check((d("ID29H", "MBC", om) or {}).get("source") == "auto-derived", "source = auto-derived")
+    check(d("ID29H", "AUA", om) is None, "AUA has no single-letter H -> null (operator-specific)")
+    check(d("ID12Lu", "ZZZ", om) is None, "unknown operator -> null")
+    check(d("", "MBC", om) is None and d("ID12Lu", "", om) is None, "blank inputs -> null")
+    check((d("id12lu", "aua", om) or {}).get("region", {}).get("label") == "lung",
+          "case-insensitive")
+
+
+def test_enrichment_microscopy():
+    print("[enrichment microscopy auto-derive]")
+    disc = {"sample_short": "ID12Lu", "operator": "AUA"}
+    out = enrichment._build_anatomy({}, disc, _quiet, "tissue")
+    check((out.get("region") or {}).get("label") == "lung", "tissue AUA Lu -> lung")
+    # Organism (MRI) must NOT use the microscopy path.
+    out2 = enrichment._build_anatomy({}, disc, _quiet, "organism")
+    check(out2.get("region") is None, "organism does not microscopy-derive")
+    # Operator-set anatomy wins.
+    cfg = {"anatomy": {"is_whole_body": None,
+                       "region": {"label": "brain", "id": "UBERON:0000955"}}}
+    out3 = enrichment._build_anatomy(cfg, disc, _quiet, "tissue")
+    check((out3.get("region") or {}).get("label") == "brain", "operator-set region wins")
+
+
+def test_microscopy_backfill():
+    print("[backfill_microscopy_anatomy dry-run + apply]")
+    with tempfile.TemporaryDirectory() as d:
+        registries_dir = os.path.join(d, "registries")
+        os.makedirs(registries_dir)
+        reg_path = os.path.join(registries_dir, "registry_raw.csv")
+        acq = "ACQ-20260219-ZWSI-001"
+        canonical = f"/raw/MICROSCOPY/2026/2026-02/{acq}/"
+        acq_dir = os.path.join(d, canonical.lstrip("/"))
+        os.makedirs(acq_dir)
+        sidecar = {"acq_id": acq, "discovered": {"sample_short": "ID29H"},
+                   "microscopy": {},
+                   "anatomy": {"is_whole_body": None, "region": None,
+                               "additional_regions": [], "source": "unknown", "auto_hint": ""}}
+        with open(os.path.join(acq_dir, "metadata.json"), "w", encoding="utf-8") as f:
+            json.dump(sidecar, f, indent=2)
+        rowd = {k: "" for k in reg.REGISTRY_FIELDS}
+        rowd.update({"acq_id": acq, "data_ecosystem": "MICROSCOPY", "instrument": "ZWSI",
+                     "operator": "MBC", "canonical_path": canonical, "sample_id": "0424_ID29H"})
+        with open(reg_path, "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=reg.REGISTRY_FIELDS)
+            w.writeheader()
+            w.writerow(rowd)
+        sc_path = os.path.join(acq_dir, "metadata.json")
+
+        c = bfm.backfill(d, apply=False)
+        check(c["would-fill"] == 1 and c["filled"] == 0, "dry-run would-fill=1")
+        with open(sc_path, encoding="utf-8") as f:
+            check(json.load(f)["anatomy"]["region"] is None, "dry-run left sidecar untouched")
+
+        c2 = bfm.backfill(d, apply=True)
+        check(c2["filled"] == 1, "apply filled=1")
+        with open(sc_path, encoding="utf-8") as f:
+            anat = json.load(f)["anatomy"]
+        check((anat.get("region") or {}).get("label") == "heart",
+              "sidecar region=heart (MBC H) after apply")
+        check(reg.read_registry(reg_path)[0]["anatomical_entity"] == "heart",
+              "registry anatomical_entity=heart after apply")
+        c3 = bfm.backfill(d, apply=True)
+        check(c3["already-set"] == 1 and c3["filled"] == 0, "idempotent (already-set)")
+
+
 def main():
     test_derive_rules()
     test_collect_signals()
     test_enrichment_build_anatomy()
     test_backfill_end_to_end()
     test_override()
+    test_microscopy_derive()
+    test_enrichment_microscopy()
+    test_microscopy_backfill()
     print()
     if FAILS:
         print(f"FAILED ({len(FAILS)}):")

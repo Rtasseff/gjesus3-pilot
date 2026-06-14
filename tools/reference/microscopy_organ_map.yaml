@@ -1,0 +1,48 @@
+# Microscopy sample-id organ map — derive anatomy.region from the .czi sample-id
+# organ code (operator-keyed). DATA, not code: edit here to add/correct codes.
+# BOTH the live ingest (enrichment._build_anatomy) and the back-fill
+# (tools/backfill_microscopy_anatomy.py) read this one file — single source of truth.
+#
+# Why operator-keyed: the suffix vocabulary differs by operator — AUA writes
+# verbose codes (Lu/Li), MBC uses single letters (H/B/L). `discovered.operator`
+# (the .czi filename chunk, e.g. "AUA"/"MBC") selects the sub-map.
+#
+# High-confidence only (null if any doubt): a code NOT listed here -> anatomy
+# stays null (queryable as "unknown"). A wrong label is worse than a missing one.
+# UBERON ids verified via EBI OLS (2026-06-14):
+#   heart UBERON:0000948 | lung UBERON:0002048 | brain UBERON:0000955
+#   liver UBERON:0002107 | kidney UBERON:0002113
+#
+# Matching (see anatomy_derive.derive_microscopy_anatomy):
+#   codes    — match the EXACT organ suffix parsed from the sample-id
+#              (subject_id.parse_animal_short_code, e.g. "ID12Lu" -> "Lu"),
+#              case-insensitive. Single letters are matched as this parsed
+#              suffix only (never as a loose substring), to avoid false hits.
+#   keywords — match a substring of the sample-id, for prep-type names that
+#              aren't a trailing letter (e.g. precision-cut lung slices "mPCLS").
+# `codes` win over `keywords`. An entry may carry `additional_regions` for a
+# multi-organ section (e.g. heart+lung).
+
+operators:
+
+  AUA:                      # verbose suffixes
+    codes:
+      Lu: {label: lung,   id: "UBERON:0002048"}
+      Li: {label: liver,  id: "UBERON:0002107"}
+      K:  {label: kidney, id: "UBERON:0002113"}
+      # T (tumor): intentionally NOT mapped. A tumor's host organ varies and
+      # "tumor" is a pathology, not a clean anatomical region -> leave null.
+      # (If AUA confirms a consistent host organ for "T", add it here.)
+    keywords:
+      PCLS: {label: lung, id: "UBERON:0002048"}   # (m)PCLS = precision-cut lung slices
+
+  MBC:                      # single-letter suffixes
+    codes:
+      H: {label: heart, id: "UBERON:0000948"}
+      B: {label: brain, id: "UBERON:0000955"}
+      L: {label: lung,  id: "UBERON:0002048"}     # confirmed = lung (MBC), 2026-06-14
+      HL:                                          # heart + lung section
+        label: heart
+        id: "UBERON:0000948"
+        additional_regions:
+          - {label: lung, id: "UBERON:0002048"}

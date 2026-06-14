@@ -28,9 +28,17 @@ UBERON ids verified via EBI OLS (2026-06-14).
 Shared by BOTH the ingest auto-derive (enrichment._build_anatomy, future
 ingests) AND tools/backfill_mri_anatomy.py (back-fill already-ingested
 sidecars) — a SINGLE source of truth for the mapping.
+
+Microscopy note: MRI anatomy comes from the scan NAME (`ANATOMY_RULES` below);
+microscopy (AxioScan etc.) anatomy comes from the sample-id ORGAN CODE via an
+operator-keyed reference map — see `derive_microscopy_anatomy` /
+`load_organ_map` lower in this file and `tools/reference/microscopy_organ_map.yaml`.
 """
 
+import os
 import re
+
+from . import subject_id
 
 
 # Sentinel: a setup/planning scan (localizer / pilot / ...). It carries no
@@ -141,3 +149,93 @@ def collect_mri_signals(discovered, mri_section):
     geometry = mri_section.get("geometry") or {}
     fov = geometry.get("fov") if geometry else None
     return {"text_signals": signals, "fov": fov}
+
+
+# ===================================================================
+# Microscopy (AxioScan etc.) — anatomy from the sample-id organ code
+# ===================================================================
+# Unlike MRI (scan-name rules in code), the microscopy organ vocabulary is
+# OPERATOR-SPECIFIC and editable, so the mapping lives in a reference YAML
+# (tools/reference/microscopy_organ_map.yaml) loaded at runtime — data, not code.
+
+_DEFAULT_ORGAN_MAP_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),  # tools/
+    "reference", "microscopy_organ_map.yaml",
+)
+_ORGAN_MAP_CACHE = {}
+
+
+def load_organ_map(path=None):
+    """Load the operator-keyed microscopy organ map (YAML) -> the `operators`
+    dict. Cached per path. Returns {} if the file is absent/unreadable (so a
+    missing map degrades to "derive nothing", never an error)."""
+    path = path or _DEFAULT_ORGAN_MAP_PATH
+    if path in _ORGAN_MAP_CACHE:
+        return _ORGAN_MAP_CACHE[path]
+    operators = {}
+    try:
+        import yaml  # lazy
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        operators = data.get("operators") or {}
+    except (OSError, ValueError):
+        operators = {}
+    _ORGAN_MAP_CACHE[path] = operators
+    return operators
+
+
+def _region_from_entry(entry, source_note):
+    """Build the proposed anatomy dict from a map entry. Tissue => is_whole_body
+    stays null (a section is never whole-body — 08_METADATA §4.6)."""
+    return {
+        "is_whole_body": None,
+        "region": {"label": entry["label"],
+                   "ontology": entry.get("ontology", "UBERON"),
+                   "id": entry["id"]},
+        "additional_regions": entry.get("additional_regions") or [],
+        "auto_hint": source_note,
+        "source": "auto-derived",
+    }
+
+
+def derive_microscopy_anatomy(sample_short, operator, organ_map=None):
+    """Derive a tissue anatomy region from a microscopy sample-id + operator.
+
+    Args:
+        sample_short: the sample-id chunk (e.g. "ID12Lu", "ID29H", "mPCLS_n1").
+        operator: the acquiring operator code (e.g. "AUA" / "MBC") — selects the
+            sub-map (the suffix vocabulary is operator-specific).
+        organ_map: the `operators` dict (defaults to the reference YAML).
+
+    High-confidence only: an exact organ-suffix code (parsed) is tried first,
+    then prep-type keywords (substring); an unmapped code / unknown operator /
+    blank input derives nothing (None) so anatomy stays null. Returns
+    {is_whole_body, region, additional_regions, auto_hint, source} or None.
+    """
+    if organ_map is None:
+        organ_map = load_organ_map()
+    op = (operator or "").strip().upper()
+    short = (sample_short or "").strip()
+    if not op or not short:
+        return None
+    opmap = organ_map.get(op) or organ_map.get(operator) or {}
+    if not opmap:
+        return None
+
+    # 1. Exact organ-suffix code (e.g. "ID12Lu" -> "Lu"). Case-insensitive,
+    #    matched as the parsed suffix only (never a loose substring).
+    _code, organ = subject_id.parse_animal_short_code(short)
+    if organ:
+        codes = {str(k).lower(): v for k, v in (opmap.get("codes") or {}).items()}
+        entry = codes.get(organ.lower())
+        if entry:
+            return _region_from_entry(
+                entry, f"auto-derived (operator {op}, organ code '{organ}') from sample-id")
+
+    # 2. Prep-type keyword (substring), e.g. "mPCLS" -> lung.
+    low = short.lower()
+    for kw, entry in (opmap.get("keywords") or {}).items():
+        if str(kw).lower() in low:
+            return _region_from_entry(
+                entry, f"auto-derived (operator {op}, keyword '{kw}') from sample-id")
+    return None

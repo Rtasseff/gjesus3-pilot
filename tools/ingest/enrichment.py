@@ -224,9 +224,32 @@ def _build_anatomy(cfg_single, discovered, log, sample_type="organism",
             region = out["region"]
             has_region = True
             log(f"anatomy: auto-derived region={region.get('label')} "
-                f"(is_whole_body={out['is_whole_body']}; DRAFT mapping, "
+                f"(is_whole_body={out['is_whole_body']}; "
                 f"source={proposed['source']}). Override with an explicit "
                 f"anatomy: block if wrong.", "INFO")
+
+    # Microscopy (tissue) path: derive the organ region from the sample-id organ
+    # code (operator-keyed map) when MRI scan-name signals aren't in play. Same
+    # discipline — operator-set anatomy wins; fills only when unset; high-
+    # confidence only (else null). See anatomy_derive.derive_microscopy_anatomy
+    # + tools/reference/microscopy_organ_map.yaml.
+    if (auto_derive and not derive_fields and not has_region
+            and out.get("is_whole_body") is None and sample_type == "tissue"):
+        from . import anatomy_derive
+        proposed = anatomy_derive.derive_microscopy_anatomy(
+            discovered.get("sample_short"), discovered.get("operator"),
+        )
+        if proposed:
+            out["region"] = proposed["region"]
+            if proposed.get("additional_regions"):
+                out["additional_regions"] = proposed["additional_regions"]
+            out["auto_hint"] = proposed["auto_hint"]
+            out["source"] = proposed["source"]
+            region = out["region"]
+            has_region = True
+            log(f"anatomy: auto-derived region={region.get('label')} from the "
+                f"sample-id organ code (source={proposed['source']}). Override "
+                f"with an explicit anatomy: block if wrong.", "INFO")
 
     if sample_type == "tissue":
         # Ex-vivo tissue: is_whole_body is N/A (a section is never whole-body),
