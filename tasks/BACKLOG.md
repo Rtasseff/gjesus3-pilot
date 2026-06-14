@@ -255,17 +255,23 @@ config sets `anatomy` **once per batch**, so a single value can't be right acros
 (non-blocking WARN). It is **not** currently auto-derived (verified in
 `enrichment.py::_build_anatomy` — operator-entered only).
 
-- [ ] **Back-fill the anatomy block** for the MRI ingest. Safe to ingest-now /
-  enrich-later: each acq records `original_name = <study_folder>/<exam>` (registry +
-  sidecar) → maps back to staging; **and** the deriving metadata (ParaVision
-  `ProtocolName`/sequence + `PVM_Fov`) is already captured in the `mri:` sidecar, so
-  the back-fill can read sidecars on the NAS (no staging needed). Use the controlled
-  `/raw/` sidecar-update path (same pattern as `tools/recover_subject_metadata.py`).
-- [ ] **Cleanest long-term fix — auto-derive at ingest.** Wire ProtocolName/sequence
-  + FOV → `is_whole_body` + UBERON `region` in the enrichment/resolver path so anatomy
-  fills per-acquisition automatically (the unimplemented "auto-hint" 08_METADATA §4.6
-  already gestures at). Good candidate to fold into the designer's MRI work (alongside
-  the DICOM-conversion / dicomifier piece).
+- [x] **Auto-derive at ingest — DONE 2026-06-14.** `tools/ingest/anatomy_derive.py`
+  maps the **scan name** → UBERON `region` + `is_whole_body`, wired into
+  `enrichment._build_anatomy` (`ingest_raw.py` Step 8.4); fills only when the operator
+  left anatomy unset (operator wins). Reviewed with the MRI lead (J. Ruiz-Cabello):
+  **high-confidence literal terms only, null if any doubt** — heart, named large
+  vessels (MPA/aorta/carotid), brain, abdomen; setup scans skip; bare cine / unnamed
+  velocity-map / FLASH-RARE / FOV → null. Pulse-sequence + FOV deliberately NOT used
+  (not organ-determinant). No group-specific assumptions baked in.
+- [x] **Back-fill tool — DONE 2026-06-14.** `tools/backfill_mri_anatomy.py` applies the
+  SAME mapping to already-ingested MRI sidecars + the registry `anatomical_entity`
+  column (dry-run default; atomic + verify; only fills unset acqs). **Run it `--apply`
+  against the ingested MRI once a dry-run is eyeballed.**
+- [ ] **(optional, low priority) Liberal historical guess** for Jesús-group scans whose
+  names are too generic for the high-confidence rules (e.g. bare "Velocity map" / "Cine
+  slices" that are cardiac-flow in context). If wanted, do it as a **one-off back-fill
+  override list — NOT a permanent code rule** (keeps low-confidence, group-specific
+  guesses out of the shared mapping that other groups will inherit).
 
 ---
 

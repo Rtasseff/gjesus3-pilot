@@ -670,6 +670,8 @@ Anatomical coverage is a property of the **imaging acquisition** (the field of v
 
 So `anatomy:` is **operator-entered** (like `condition:`), with an *optional, non-authoritative* `auto_hint` the ingest may surface from the protocol name / bed range / FOV to pre-fill the operator's choice. The MRI/NI operator front-ends collect `is_whole_body` at ingest (the `--is-whole-body true|false` flag or an interactive prompt, 2026-06-08, set once per run); the UBERON `region` is **not** prompted there — when `is_whole_body = false` it is left `null` (WARN) and filled later via the per-acq metadata override, because a region needs a label + ontology id that don't belong in the dead-simple capture path.
 
+> **Conservative auto-derive (MRI, 2026-06-14).** The "fill later" gap above is now also filled automatically for MRI when the operator leaves anatomy unset: `tools/ingest/anatomy_derive.py` maps the **scan name** (SeriesDescription / ProtocolName / sequence) to a UBERON `region` — but *only* on high-confidence literal anatomy terms (a named view/structure/vessel); anything ambiguous stays `null` (a wrong label is worse than a missing one). It writes `source: "auto-derived"`, and operator-entered anatomy always overrides it. This does **not** contradict the "cannot be reliably auto-derived" finding above — it derives nothing unless the name is unambiguous, and deliberately ignores the pulse sequence (organ-independent) and FOV (coil-dependent). Reviewed with the MRI lead 2026-06-14; see §4.6.4.
+
 #### 4.6.2 Schema
 
 ```json
@@ -681,7 +683,7 @@ So `anatomy:` is **operator-entered** (like `condition:`), with an *optional, no
     "id":       "UBERON:0000955"
   },
   "additional_regions": [],                        // optional — extra UBERON terms when a scan spans more than one named region (e.g. thorax + abdomen)
-  "source":    "operator-entered",                 // provenance / confidence: operator-entered | study-yaml | auto-hint-confirmed | auto-guess | unknown
+  "source":    "operator-entered",                 // provenance / confidence: operator-entered | study-yaml | auto-derived | auto-hint-confirmed | auto-guess | unknown
   "auto_hint": "protocol:1_Localizer_multi_slice; fov_mm:[50,50]"  // optional, non-authoritative — surfaced from instrument metadata to assist/pre-fill the operator
 }
 ```
@@ -722,8 +724,8 @@ The `is_whole_body` flag is the primary "needle in a haystack" filter — `== tr
 | Ontology = UBERON | ✅ DECIDED (2026-06-03) — cross-species; **one `region` field** across in-vivo scans + ex-vivo tissue (the tissue `anatomical_entity` registry column is its denormalized projection) |
 | Optional `additional_regions` / `auto_hint` | 🔶 DRAFT, write-through |
 | `anatomy:` writer | ✅ IMPLEMENTED (Phase 3, 2026-06-03; **extended to `tissue` 2026-06-09**) — `tools/ingest/enrichment.py`, called from `ingest_raw.py` Step 8.4; WARN-not-raise (§4.7), gate-aware (no `is_whole_body` nag for tissue). Top-level `anatomy:` YAML block in `mri_bruker` + `molecubes_ni` (organism) + `axioscan7` (tissue, region-only). **Not** written for `cells` (deferred) |
-| Auto-hint extractor (MRI ProtocolName+FOV, NI bed-range) | 🔶 Future — non-authoritative pre-fill only |
-| Backfill of existing 97 MRI + 84 NI organism acqs | ⚠️ Queued — Phase 4; ingests now with `null`+WARN, enriched later (§4.7) |
+| MRI anatomy **auto-derive** (scan-name → region) | ✅ IMPLEMENTED 2026-06-14 — `tools/ingest/anatomy_derive.py` (shared by ingest + back-fill), wired into `enrichment._build_anatomy`. Fills the region **only when the operator left anatomy unset** (operator always wins) and **only on high-confidence literal scan-name terms** (heart / great vessels / brain / abdomen); anything ambiguous stays `null` (never a guess). Writes `source: "auto-derived"`. Mapping reviewed with the MRI lead (J. Ruiz-Cabello) 2026-06-14; UBERON ids verified via EBI OLS. Uses the scan NAME — **not** the pulse sequence (organ-independent) or FOV (coil-dependent, not determinant). NI bed-range still future. |
+| Back-fill of existing MRI organism acqs | ✅ TOOL IMPLEMENTED 2026-06-14 — `tools/backfill_mri_anatomy.py` reads each MRI sidecar, applies the SAME mapping, fills the `anatomy` block + the registry `anatomical_entity` column (dry-run default; atomic write + verify-after-write; only fills unset acqs). NI bed-range back-fill still queued. |
 
 ### 4.7 Metadata Completeness — the Non-Blocking Model (DECIDED 2026-06-03)
 

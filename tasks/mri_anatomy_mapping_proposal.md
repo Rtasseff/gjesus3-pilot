@@ -1,6 +1,18 @@
 # MRI anatomy mapping — candidate rules for data-office review (2026-06-13)
 
-**Status: PROPOSAL — INPUT NEEDED.** These are candidate `ANATOMY_RULES` for
+> **✅ RESOLVED 2026-06-14** with the MRI lead's (J. Ruiz-Cabello) email answers + Ryan's
+> "high-confidence-only, null-if-doubt" rule. Outcome now LIVE in
+> `tools/ingest/anatomy_derive.py` (`ANATOMY_RULES`) and documented in 08_METADATA §4.6.4:
+> heart (4-chamber / long-axis / short-axis / cardiac / ventricle); large vessels **only
+> when named** — MPA → pulmonary artery (UBERON:0002012), aorta (UBERON:0000947), carotid
+> (UBERON:0005396); brain; abdomen. Setup/planning scans **skip**. Flow scans are **large
+> vessels, not heart** (per the lead) so a bare "velocity map" with no named vessel → null;
+> bare "cine", FLASH/RARE, and FOV are **not** organ-determinant → null. No group-specific
+> assumptions baked in (the system will expand beyond Jesús's cardiac work). The text below
+> is the original proposal, kept for the decision record.
+
+**Status: PROPOSAL — INPUT NEEDED (superseded by the RESOLVED note above).** These are
+candidate `ANATOMY_RULES` for
 `tools/ingest/anatomy_derive.py`, drawn from the verbatim protocol names in
 [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) §3.
 Nothing here is wired in yet — review/edit, then say the word and I'll fold the
