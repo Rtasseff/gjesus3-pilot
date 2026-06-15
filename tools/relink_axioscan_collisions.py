@@ -59,7 +59,10 @@ def main(argv=None):
     colliding = {b: rs for b, rs in groups.items() if len(rs) > 1}
 
     stats = {"groups": len(colliding), "linked": 0, "skipped_exist": 0,
-             "removed_dateless": 0, "errors": 0}
+             "removed_dateless": 0, "kept_no_dated": 0, "errors": 0}
+    # (project_abs, actual_basename) for which a dated link exists / was created /
+    # would-be-created — guards the date-less-link removal below.
+    ok_slides = set()
     print(f"collision groups: {stats['groups']}  (nas={nas}, dry_run={args.dry_run})")
 
     for _key, rs in colliding.items():
@@ -82,9 +85,11 @@ def main(argv=None):
             src = raw_file_path(nas, r)
             dest = os.path.join(project_abs, "raw_linked", link_name)
             if os.path.exists(dest):
+                ok_slides.add((project_abs, actual_b))
                 stats["skipped_exist"] += 1
                 continue
             if args.dry_run:
+                ok_slides.add((project_abs, actual_b))
                 print(f"  [dry-run] {acq} -> raw_linked/{link_name}")
                 stats["linked"] += 1
                 continue
@@ -107,14 +112,22 @@ def main(argv=None):
                     "lab_notebook_ref": "",
                     "notes": "Auto: AxioScan link-name collision (date-less link name); appended YYYYMMDD",
                 })
+                ok_slides.add((project_abs, actual_b))
                 stats["linked"] += 1
                 print(f"  NEW {acq} -> raw_linked/{link_name}")
             except Exception as e:  # noqa: BLE001
                 print(f"  ERROR {acq}: {e}")
                 stats["errors"] += 1
-        # drop the ambiguous date-less link(s) ZWSI_<basename> in each project
+        # drop the ambiguous date-less link ZWSI_<basename> in each project — but
+        # ONLY when a dated replacement exists / was created for that slide. Guard:
+        # if every dated-link create errored, KEEP the date-less link so a slide is
+        # never left with no project link at all (its inode is still in /raw/).
         for project_abs, basenames in proj_folders.items():
             for ab in basenames:
+                if (project_abs, ab) not in ok_slides:
+                    print(f"  KEEP date-less ZWSI_{ab}: no dated link created (guard)")
+                    stats["kept_no_dated"] += 1
+                    continue
                 old = os.path.join(project_abs, "raw_linked", f"ZWSI_{ab}")
                 if os.path.exists(old):
                     if args.dry_run:
