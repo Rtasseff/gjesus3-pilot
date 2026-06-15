@@ -335,14 +335,18 @@ The AxioScan MFB historical ingest landed in true production on 2026-06-15: **56
 0 failures, 563 subjects live (2 `-None` from the `0619` null-alias project; 5 mPCLS carry
 no subject by design). Three deferred items:
 
-- [ ] **`is_control: true` for the 4 `CTRL`-tagged slides.** The main config sets
-  `is_control: null`; the 4 files `MFB_AUA_1022_ID{59,60,70,72}T_KI67_CTRL_10X` carry a
-  `CTRL` control tag. Set `condition.is_control: true` for those 4 via the per-acq override
-  at `/projects/proj-ae-biomegune-1022/metadata/<acq_id>.json` (the documented mutable path —
-  do NOT edit the `/raw/` sidecar).
-- [ ] **Anatomy back-fill** — see the "Microscopy anatomy from the sample-id organ suffix"
-  item above (all 565 landed `anatomy.region = null`; the organ is in the sample_short suffix).
-- [ ] **Link-name collisions — same slide re-scanned across date folders.** The AxioScan
+- [x] **`is_control: true` for the 4 `CTRL`-tagged slides — DONE 2026-06-15.** Set
+  `condition.is_control: true` in the 4 `/raw/` sidecars (`ACQ-20260306-ZWSI-003/005/007/009`,
+  `MFB_AUA_1022_ID{59,60,70,72}T_KI67_CTRL_10X`), `source=derived-from-filename-CTRL-tag`.
+- [x] **Anatomy back-fill — DONE 2026-06-15** via the designer's
+  `tools/backfill_microscopy_anatomy.py --apply` (412/565 filled: heart 155, lung 216, kidney 12,
+  liver 12, brain 17; 153 left null = `T`-tumor + bare-numeric). Registry `anatomical_entity` +
+  sidecars patched. (See "Microscopy anatomy from the sample-id organ suffix" above — auto-derive
+  also live for future ingests.)
+- [x] **Link-name collisions — DONE 2026-06-15** via `tools/relink_axioscan_collisions.py`
+  (16 groups incl. one `10X`/`10x` case-variant; 38 date-stamped links `ZWSI_..._<YYYYMMDD>.czi`,
+  date-less links removed → 565 distinct project links). Detail below was the original finding:
+  **Link-name collisions — same slide re-scanned across date folders.** The AxioScan
   `link_filename` is `ZWSI_<original-basename>` and the filename carries NO scan date (the date
   is the parent folder), so the SAME slide scanned/exported on multiple days collides on one
   link name — only the first gets a distinct project hard link. Measured: 15 slide-filenames
