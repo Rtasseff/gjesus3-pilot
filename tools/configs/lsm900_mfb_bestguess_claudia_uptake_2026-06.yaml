@@ -1,0 +1,47 @@
+# Confocal LSM 900 (LSM9) — MFB best-guess ingest, SMOKE TEST (2026-06-15).
+#
+# *** LEGACY best-guess, LOW CONFIDENCE *** — these instruments had no historical
+# naming standard (the messy K:\gjesus\Ainhize\CONFOCAL LSM 900 tree). One config
+# per top-level source folder; the folder = one provisional project (literal slug
+# project_hint). Reliable fields come from the .czi itself; sample_type / anatomy /
+# control are GUESSED afterward by tools/backfill_microscopy_bestguess.py (off-NAS),
+# all marked source="auto-guess". This is the reusable shape for the external drives.
+#
+# K-drive note: source is in daily use — ingest one folder at a time, single-threaded
+# (default), never the whole tree at once. delete_source_after_ingest: false.
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  staging_dir: "K:/gjesus/Ainhize/CONFOCAL LSM 900/Claudia Uptake CCMn-doxo"
+  pattern: "**/*.czi"            # recursive within this one folder (any depth)
+  subject_from_db: false         # cells / unknown — not in the animal-facility DB
+
+registry:
+  instrument:           LSM9
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  # researcher not reliably in the path -> NA (folder context kept in project_hint
+  # + original_name). The acquiring ZEN account is captured as `operator:` below.
+  researcher:           "NA"
+  data_source:          internal
+  # No naming standard -> sample_id is the source filename (best guess, traceable).
+  sample_id:            "${discovered.filename}"
+  sample_type:          "NA"     # left unset on purpose -> best-guess pass fills it
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  # Provisional project = the source folder (slugged). PROVISIONAL (05_PROJECTS §9).
+  project_hint:         "claudia-uptake-ccmn-doxo"
+  notes:                "BEST-GUESS / LOW-CONFIDENCE — legacy Confocal LSM900, no naming standard; project = source folder, sample_id = filename; sample_type/anatomy guessed post-ingest (source=auto-guess). Verify before scientific reuse."
+
+# ZEN account that captured the image (reliable, from the .czi).
+operator: "${discovered.czi_user}"
+
+auto_create_project:
+  owner:       "NA"
+  description: "Auto-created BEST-GUESS project from legacy Confocal LSM900 source folder 'Claudia Uptake CCMn-doxo' (no naming standard)."
+  notes:       "Provisional best-guess grouping = the source folder. Re-project later if a real convention is established."
+
+link_filename: "${instrument}_${original_name}"

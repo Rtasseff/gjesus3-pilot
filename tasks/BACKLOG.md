@@ -433,3 +433,30 @@ the project `raw_linked/` convenience layer can't distinguish them.
   template change with a coordinated relink of the affected acqs, not an ad-hoc patch.
 - [ ] (optional) Once the template is fixed, a targeted relink of the ~200
   colliding acqs under the new unique names.
+
+## Legacy Zeiss microscopy (Cell Observer / Confocal LSM 900) — BEST-GUESS ingest (2026-06-15)
+
+These two instruments had **no historical naming standard** (they were the tissue-histology
+workhorses before the AxioScan 7). Source = the messy `K:\gjesus\Ainhize\{CELL OBSERVER,
+CONFOCAL LSM 900}` trees (MFB group): Cell Observer **1,739 .czi / 205 GB**, Confocal **806 .czi
+/ 10 GB**; thousands of `.tif`/`.jpg`/`.qpdata` are derivatives we skip (ingest `.czi` only).
+Same model planned for the **future external-drive microscopy** (also no standard).
+
+**Best-guess system (built + smoke-tested 2026-06-15, all LOW CONFIDENCE, `source: "auto-guess"`):**
+- Reliable fields come from the `.czi` itself (timestamp, objective, channels, ZEN operator `czi_user`).
+- **Project** = the source top-folder, slugged → one provisional project per folder (literal
+  `project_hint` in a **per-folder config** — also keeps the K: copy to one folder at a time, since
+  K: is in daily use; single-threaded, never the whole tree at once).
+- **sample_type / anatomy / is_control** are GUESSED off-NAS afterward by
+  `tools/backfill_microscopy_bestguess.py` (reads each acq's `original_name`, zero source-drive
+  access) against `tools/reference/microscopy_bestguess_map.yaml`: cell-line name → cells (wins);
+  organ word → tissue + UBERON region; else null (never defaulted to cells); ctrl/control/neg → is_control.
+- Smoke test: `tools/configs/lsm900_mfb_bestguess_claudia_uptake_2026-06.yaml` (Confocal folder
+  `Claudia Uptake CCMn-doxo`, 8 acqs) → all `cells`, 3 `is_control`, project `PROJ-0023`. ✅
+
+- [ ] **Bulk ingest** — per-folder, throttled, K:-conservative (Confocal ~10 GB first, then Cell
+  Observer ~205 GB in chunks). Generate the per-folder configs; run one folder at a time; then the
+  best-guess pass over all. **Plan: load it, then gather researcher feedback before the external drives.**
+- [ ] Minor: strip the `.czi` extension from the best-guess `sample_id`.
+- [ ] Optional refinement: some folders embed a project code (`0721 HUGO`, `1022 RGD`) — could map
+  those to the `ae-biomegune-NNNN` projects (shared with MRI/NI/AxioScan) instead of a folder slug.

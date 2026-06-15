@@ -1,0 +1,59 @@
+# Best-guess sample-classification + anatomy map for the LEGACY Zeiss microscopy
+# instruments that had NO historical naming standard: Cell Observer (CELL) and
+# Confocal LSM 900 (LSM9), for Jesús's MFB group (and the future external drives).
+#
+# DATA, not code — edit here to refine the guesses. Read by
+# tools/backfill_microscopy_bestguess.py, which scans each acquisition's
+# `original_name` (the full source relpath, already on the NAS — NO source-drive
+# access) for these keywords and proposes sample_type + anatomy.region.
+#
+# *** LOW CONFIDENCE — these are GUESSES. *** These instruments were the tissue-
+# histology workhorses before the AxioScan 7, so a large fraction is expected to be
+# tissue. Policy (per data-office, 2026-06-15):
+#   1. If a CELL-LINE name appears -> sample_type = cells. (Checked FIRST: a lung-
+#      derived line like HLF / "lung fibroblast" is CELLS, not lung tissue — the
+#      cell-line name is the more specific signal and wins over a bare organ word.)
+#   2. Else if an ORGAN / anatomy word appears -> sample_type = tissue + that region
+#      (they'd only name a sample by organ when it IS tissue; cells get a line name).
+#   3. Else -> sample_type = null (UNKNOWN). Do NOT default to cells.
+# Every value this produces is written with source = "auto-guess" and a notes flag.
+#
+# Matching is case-insensitive substring on the whole relpath (folders + filename).
+# UBERON ids verified via the project's existing map (08_METADATA §4.6.2).
+
+# ---- 1. cell-line fragments -> sample_type: cells (checked first; wins) ----
+cell_lines:
+  - mda-mb-231
+  - mda mb 231
+  - mda
+  - thp-1
+  - thp1
+  - a549
+  - hepg2
+  - hep g2
+  - hlf            # human lung fibroblast — a CELL LINE, not lung tissue
+  - fibroblast     # cultured fibroblasts -> cells (organ-qualified or not)
+  - lp-ionp        # nanoparticle-uptake cell assays (Laura/Marina uptake work)
+  - macrophage
+
+# ---- 2. organ / anatomy words -> sample_type: tissue + anatomy.region ----
+# (only reached when no cell-line fragment matched above)
+organs:
+  brain:    {label: brain,  id: "UBERON:0000955"}
+  cerebro:  {label: brain,  id: "UBERON:0000955"}     # ES
+  lung:     {label: lung,   id: "UBERON:0002048"}
+  pulmon:   {label: lung,   id: "UBERON:0002048"}     # ES (pulmón)
+  pulmones: {label: lung,   id: "UBERON:0002048"}
+  liver:    {label: liver,  id: "UBERON:0002107"}
+  higado:   {label: liver,  id: "UBERON:0002107"}     # ES (hígado)
+  heart:    {label: heart,  id: "UBERON:0000948"}
+  corazon:  {label: heart,  id: "UBERON:0000948"}     # ES (corazón)
+  cardiac:  {label: heart,  id: "UBERON:0000948"}
+  kidney:   {label: kidney, id: "UBERON:0002113"}
+  rinon:    {label: kidney, id: "UBERON:0002113"}     # ES (riñón)
+  spleen:   {label: spleen, id: "UBERON:0002106"}
+  bazo:     {label: spleen, id: "UBERON:0002106"}     # ES
+  # tumor: tissue, but no clean single-organ UBERON (host organ varies). Mark
+  # tissue with a low-confidence "neoplasm" region rather than guess an organ.
+  tumor:    {label: neoplasm, id: "UBERON:0000310"}
+  tumour:   {label: neoplasm, id: "UBERON:0000310"}
