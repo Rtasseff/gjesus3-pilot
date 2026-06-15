@@ -1,0 +1,36 @@
+# LSM9 — MFB best-guess ingest (legacy, no naming standard), 2026-06-15.
+# *** LOW CONFIDENCE *** auto-generated per source folder. Reliable fields from the
+# .czi; sample_type/anatomy/control guessed post-ingest by
+# tools/backfill_microscopy_bestguess.py (source=auto-guess). One folder = one
+# provisional project. Source in daily use: single-folder, single-threaded copy.
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+
+auto_discover:
+  staging_dir: "K:/gjesus/Ainhize/CONFOCAL LSM 900/TRAINING (muestras hepG2 LP-IONP uptake)"
+  pattern: "**/*.czi"
+  subject_from_db: false
+
+registry:
+  instrument:           LSM9
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "${discovered.filename}"
+  sample_type:          "NA"
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  project_hint:         "training-muestras-hepg2-lp-ionp-uptake"
+  notes:                "BEST-GUESS / LOW-CONFIDENCE — legacy LSM9, no naming standard; project = source folder 'TRAINING (muestras hepG2 LP-IONP uptake)', sample_id = filename; sample_type/anatomy guessed post-ingest. Verify before scientific reuse."
+
+operator: "${discovered.czi_user}"
+
+auto_create_project:
+  owner:       "NA"
+  description: "Auto-created BEST-GUESS project from legacy LSM9 source folder 'TRAINING (muestras hepG2 LP-IONP uptake)' (no naming standard)."
+  notes:       "Provisional best-guess grouping = the source folder. Re-project later if a real convention is established."
+
+link_filename: "${instrument}_${original_name}"

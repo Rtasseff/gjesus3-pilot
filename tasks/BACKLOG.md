@@ -460,3 +460,12 @@ Same model planned for the **future external-drive microscopy** (also no standar
 - [ ] Minor: strip the `.czi` extension from the best-guess `sample_id`.
 - [ ] Optional refinement: some folders embed a project code (`0721 HUGO`, `1022 RGD`) — could map
   those to the `ae-biomegune-NNNN` projects (shared with MRI/NI/AxioScan) instead of a folder slug.
+- [ ] **Project re-organization via researcher feedback (the real fix — post-hoc).** Per-folder
+  projects — and especially Cell Observer's per-PERSON projects (`Claudia`, `Laura`, …) — are a
+  DELIBERATE STOPGAP, not the long-term shape (data-office does NOT want per-user/researcher project
+  folders). Plan (Ryan, 2026-06-15): use this best-guess ingest as the concrete artifact to (a) get the
+  MFB researchers to propose corrected project names + organization for their historical microscopy, then
+  **re-project in post** (cheap — `original_name` preserves the full source path, so any acq can be
+  re-homed without re-copying), and (b) get them to adopt better project definitions in their naming
+  GOING FORWARD so it doesn't recur. Feeds the still-provisional project-naming convention (05_PROJECTS
+  §9 / PROJ-05).
