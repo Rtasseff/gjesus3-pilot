@@ -16,6 +16,7 @@ import os
 import subprocess
 
 from . import csv_safe
+from . import locking
 
 
 PROVENANCE_HEADERS = [
@@ -85,19 +86,24 @@ def append_entry(prov_path, entry):
     if output_path and has_entry_for_output(prov_path, output_path):
         return None
 
-    if not entry.get("file_id"):
-        entry["file_id"] = next_file_id(prov_path)
-
-    file_exists = os.path.exists(prov_path) and os.path.getsize(prov_path) > 0
     os.makedirs(os.path.dirname(prov_path), exist_ok=True)
-    # Trailing-newline guard (csv_safe) before the append.
-    csv_safe.ensure_trailing_newline(prov_path)
-    with open(prov_path, "a", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=PROVENANCE_HEADERS, extrasaction="ignore")
-        if not file_exists:
-            w.writeheader()
-        full = {k: entry.get(k, "") for k in PROVENANCE_HEADERS}
-        w.writerow(full)
+    # Serialize FILE-NNNN allocation (read-max) + append so two ingests linking
+    # into the same project's provenance.csv can't mint the same id or interleave
+    # a torn line. See 06_REGISTRIES.md §2.7 (registry-integrity / locking).
+    # The lock dir is the directory holding this provenance.csv.
+    with locking.registry_lock(os.path.dirname(prov_path)):
+        if not entry.get("file_id"):
+            entry["file_id"] = next_file_id(prov_path)
+
+        file_exists = os.path.exists(prov_path) and os.path.getsize(prov_path) > 0
+        # Trailing-newline guard (csv_safe) before the append.
+        csv_safe.ensure_trailing_newline(prov_path)
+        with open(prov_path, "a", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=PROVENANCE_HEADERS, extrasaction="ignore")
+            if not file_exists:
+                w.writeheader()
+            full = {k: entry.get(k, "") for k in PROVENANCE_HEADERS}
+            w.writerow(full)
     return entry["file_id"]
 
 

@@ -196,6 +196,13 @@ def parse_file(path):
             # Comment line.
             if line.startswith("$$"):
                 continue
+            # ##END= terminator (special — no continuation). Must be checked
+            # BEFORE _ENTRY: `##END=` matches the entry regex (key="END",
+            # empty value) and would otherwise be captured as a junk `END:""`.
+            if line.startswith("##END"):
+                flush()
+                pending_key = None
+                continue
             # New entry.
             m = _ENTRY.match(line)
             if m:
@@ -205,11 +212,6 @@ def parse_file(path):
                 pending_lines = [init_val] if init_val.strip() else []
                 # Inline value forms (e.g. `##$KEY=value`) are captured in
                 # init_val; multi-line continuations are appended below.
-                continue
-            # ##END= marker (special — no continuation).
-            if line.startswith("##END"):
-                flush()
-                pending_key = None
                 continue
             # Continuation line for the current entry.
             if pending_key is not None and line.strip():

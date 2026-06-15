@@ -88,8 +88,9 @@ def migrate(registry_path, dry_run=False):
     print(f"Columns to add:  {missing_cols}")
     if extra_cols:
         print(
-            f"WARNING — existing columns not in target schema: {extra_cols}. "
-            f"These will be dropped."
+            f"REFUSING to migrate — existing columns not in target schema: "
+            f"{extra_cols}. Aborting (nothing written); reconcile these "
+            f"columns first, then re-run."
         )
         return 2
 

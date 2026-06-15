@@ -160,7 +160,10 @@ def build_row(segs):
     while i > 1 and INTERMEDIATE_NOISE_RE.match(segs[i]):
         i -= 1
     subject = segs[i] if i >= 1 else ""
-    parent_series = segs[1] if len(segs) >= 3 else None
+    # The parent series is the folder ABOVE the subject (segs[i-1]) — only set
+    # it when there's a DISTINCT level there. For a 3-segment path the subject
+    # is already segs[1], so segs[i-1] would be the same folder: no parent.
+    parent_series = segs[i - 1] if i >= 2 else None
     p = parse_subject(subject, parent_series)
 
     machine_ymd = ts[:8]

@@ -86,6 +86,32 @@ def read_registry(registry_path):
     return []
 
 
+def assert_header_compatible(registry_path):
+    """Raise RuntimeError if an existing registry CSV's header doesn't match
+    REGISTRY_FIELDS.
+
+    No-op when the file doesn't exist yet (append_row creates it with the
+    correct header). Call this as a PRE-FLIGHT check, before the expensive
+    file copy, so a header/migration mismatch fails fast instead of after a
+    multi-GB copy is already on the NAS — which the pre-commit rollback would
+    then delete (forcing a needless re-copy). append_row runs the same check
+    at write time, so this is a cheap early-out, not a new invariant.
+    """
+    if not os.path.exists(registry_path):
+        return
+    # BOM-tolerant header read (csv_safe): an Excel "Save As CSV UTF-8"
+    # BOM must not make the header compare unequal and refuse every append.
+    existing = csv_safe.read_header(registry_path)
+    if existing != REGISTRY_FIELDS:
+        raise RuntimeError(
+            f"registry header mismatch in {registry_path}\n"
+            f"  file has {len(existing)} columns: {existing}\n"
+            f"  code expects {len(REGISTRY_FIELDS)}: {REGISTRY_FIELDS}\n"
+            f"  refusing to append (would corrupt column alignment). "
+            f"Migrate the CSV before re-running."
+        )
+
+
 def append_row(registry_path, row_dict):
     """Append a single row to the registry CSV.
 
@@ -101,17 +127,7 @@ def append_row(registry_path, row_dict):
     file_exists = os.path.exists(registry_path)
 
     if file_exists:
-        # BOM-tolerant header read (csv_safe): an Excel "Save As CSV UTF-8"
-        # BOM must not make the header compare unequal and refuse every append.
-        existing = csv_safe.read_header(registry_path)
-        if existing != REGISTRY_FIELDS:
-            raise RuntimeError(
-                f"registry header mismatch in {registry_path}\n"
-                f"  file has {len(existing)} columns: {existing}\n"
-                f"  code expects {len(REGISTRY_FIELDS)}: {REGISTRY_FIELDS}\n"
-                f"  refusing to append (would corrupt column alignment). "
-                f"Migrate the CSV before re-running."
-            )
+        assert_header_compatible(registry_path)
 
     # Ensure all fields present (fill missing with empty string)
     row = {field: row_dict.get(field, "") for field in REGISTRY_FIELDS}

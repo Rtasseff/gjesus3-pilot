@@ -59,6 +59,22 @@ def _norm_path(path):
     return p
 
 
+def _scandir_sorted(path):
+    """Return sorted os.scandir entries, surfacing an unreadable directory as a
+    clean ScopeError instead of a raw OSError traceback.
+
+    Shared NAS staging trees commonly contain a permission-denied folder; the
+    classification helpers below scan child/grandchild dirs that _norm_path
+    never validated, and the front-ends only catch ScopeError — so a bare
+    PermissionError from os.scandir would otherwise crash the operator with a
+    traceback rather than a readable message.
+    """
+    try:
+        return sorted(os.scandir(path), key=lambda e: e.name)
+    except OSError as e:
+        raise ScopeError(f"cannot read directory {path!r}: {e}") from e
+
+
 # ----------------------------------------------------------------- NI
 
 def _looks_like_ni_acquisition(path):
@@ -74,7 +90,7 @@ def _looks_like_ni_acquisition(path):
 
 def _has_ni_acquisition_children(path):
     """True if any immediate child of `path` looks like an NI acquisition."""
-    for entry in sorted(os.scandir(path), key=lambda e: e.name):
+    for entry in _scandir_sorted(path):
         if entry.is_dir() and _looks_like_ni_acquisition(entry.path):
             return True
     return False
@@ -106,7 +122,7 @@ def _is_paravision_exam(path):
 
 def _has_paravision_exam_children(path):
     """True if any immediate child of `path` is a ParaVision exam folder."""
-    for entry in sorted(os.scandir(path), key=lambda e: e.name):
+    for entry in _scandir_sorted(path):
         if entry.is_dir() and _is_paravision_exam(entry.path):
             return True
     return False
@@ -114,7 +130,7 @@ def _has_paravision_exam_children(path):
 
 def _has_paravision_exam_grandchildren(path):
     """True if any <child>/<grandchild> of `path` is a ParaVision exam."""
-    for child in sorted(os.scandir(path), key=lambda e: e.name):
+    for child in _scandir_sorted(path):
         if not child.is_dir():
             continue
         if _has_paravision_exam_children(child.path):

@@ -10,11 +10,24 @@ except ImportError:
     HAS_PYDICOM = False
 
 
+def _has_dicm_magic(path):
+    """True if `path` carries the standard DICOM preamble (bytes 128..132 ==
+    b"DICM"). Returns False on any OSError / short read."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(128)
+            return f.read(4) == b"DICM"
+    except OSError:
+        return False
+
+
 def find_dicom_files(source_dir, limit=None):
     """Find DICOM files in a directory tree.
 
     Returns list of file paths. Checks for .dcm extension first,
-    then falls back to attempting pydicom read on extensionless files.
+    then falls back to extensionless files that carry the DICOM magic
+    (bytes 128..132 == b"DICM") so non-DICOM artifacts (README, LICENSE)
+    are not mistaken for primary data and inflate file_count.
     """
     dcm_files = []
     for root, _dirs, files in os.walk(source_dir):
@@ -22,8 +35,8 @@ def find_dicom_files(source_dir, limit=None):
             fpath = os.path.join(root, fname)
             if fname.lower().endswith(".dcm"):
                 dcm_files.append(fpath)
-            elif not os.path.splitext(fname)[1]:
-                # Extensionless file — may be DICOM
+            elif not os.path.splitext(fname)[1] and _has_dicm_magic(fpath):
+                # Extensionless file with the DICOM preamble — accept as DICOM
                 dcm_files.append(fpath)
             if limit and len(dcm_files) >= limit:
                 return dcm_files

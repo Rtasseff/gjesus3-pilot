@@ -47,6 +47,7 @@ the round-8 ingest YAML regex parses to populate `discovered.user`,
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -107,7 +108,8 @@ def is_already_extracted(staged_dir):
     return os.path.isfile(os.path.join(staged_dir, ".extracted"))
 
 
-def extract_one(tgz_path, staging_root, strip_components=6, dry_run=False):
+def extract_one(tgz_path, staging_root, strip_components=6, dry_run=False,
+                force=False):
     """Extract a single .tgz to staging_root/<basename>/.
 
     Strips `strip_components` levels of leading path components so the
@@ -126,13 +128,20 @@ def extract_one(tgz_path, staging_root, strip_components=6, dry_run=False):
     stem = basename[:-4]  # strip ".tgz"
     staged_dir = os.path.join(staging_root, stem)
 
-    if is_already_extracted(staged_dir):
+    if is_already_extracted(staged_dir) and not force:
         return staged_dir, "skipped"
 
     if dry_run:
-        log(f"  [DRY-RUN] Would extract {basename} -> {staged_dir}")
+        action = "Would re-extract (--force)" if force else "Would extract"
+        log(f"  [DRY-RUN] {action} {basename} -> {staged_dir}")
         return staged_dir, "extracted"
 
+    # Start from a clean staged dir: a pre-existing dir is either a prior
+    # partial/interrupted extraction (no .extracted sentinel) or a --force
+    # redo of a completed one. Clearing it first ensures a re-extract can't
+    # mix new output with stale files (e.g. a different --strip-components).
+    if os.path.isdir(staged_dir):
+        shutil.rmtree(staged_dir)
     os.makedirs(staged_dir, exist_ok=True)
     # `tar -xzf <tgz> --strip-components=N -C <dst>` extracts the
     # archive's contents with N leading path components stripped.
@@ -253,6 +262,7 @@ def main():
             tgz, args.staging,
             strip_components=args.strip_components,
             dry_run=args.dry_run,
+            force=args.force,
         )
         if status == "extracted":
             n_extracted += 1

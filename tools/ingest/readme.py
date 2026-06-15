@@ -30,7 +30,11 @@ def generate_readme(acq_id, cfg, summary, dest_dir):
     if study_date and len(study_date) == 8:
         acq_date_fmt = f"{study_date[:4]}-{study_date[4:6]}-{study_date[6:8]}"
     else:
-        acq_date_fmt = cfg.get("acquisition_date", "unknown")
+        # The pipeline sets cfg["acquisition_datetime"] (resolved ISO), never a
+        # top-level "acquisition_date" — fall back to the date portion of the
+        # datetime (the part before "T"); else "unknown".
+        acq_dt = cfg.get("acquisition_datetime", "")
+        acq_date_fmt = acq_dt.split("T", 1)[0] if acq_dt else "unknown"
 
     from datetime import datetime, timezone
     reg_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

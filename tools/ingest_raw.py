@@ -182,11 +182,17 @@ def _resolve_archive_primary(cfg_single, ingest_block):
         )
     discovered = cfg_single.get("discovered") or {}
     case = discovered.get("folder_name") or Path(cfg_single["source_path"]).name
-    archive_exts = (".zip", ".rar", ".7z", ".tgz", ".tar", ".gz")
+    # Compound extensions (.tar.gz) are listed before their single-suffix
+    # tails (.gz) so a name like "LEONE_1.tar.gz" matches as case "LEONE_1"
+    # rather than being mis-split by os.path.splitext into stem "LEONE_1.tar".
+    archive_exts = (".tar.gz", ".tgz", ".zip", ".rar", ".7z", ".tar", ".gz")
     for fname in sorted(os.listdir(src_dir)):
-        stem, ext = os.path.splitext(fname)
-        if stem == case and ext.lower() in archive_exts:
-            return os.path.join(src_dir, fname)
+        lower = fname.lower()
+        for ext in archive_exts:
+            # Match the extension case-insensitively; the stem (everything
+            # before it) must equal the case name exactly.
+            if lower.endswith(ext) and fname[: len(fname) - len(ext)] == case:
+                return os.path.join(src_dir, fname)
     raise RuntimeError(
         f"No source archive found for case {case!r} under {src_dir!r} "
         f"(looked for {case}.<{'/'.join(e.lstrip('.') for e in archive_exts)}>)."
@@ -290,6 +296,29 @@ def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn):
         raise RuntimeError(
             f"NI slim copy plan is empty for {source_path}. Expected at "
             f"least one per-frame or direct .dcm under recon_<idx>/."
+        )
+
+    # Guard against destination-name collisions: two source DICOMs that map to
+    # the same flat filename (e.g. >1 direct .dcm under one CT recon_<idx>/,
+    # both planned as recon<idx>.dcm) would silently overwrite each other. The
+    # per-file checksum can't catch it — each src is compared to its own copy,
+    # so the last write wins and earlier frames are dropped with no error. Fail
+    # loudly instead, naming the colliding sources.
+    seen = {}
+    collisions = {}
+    for src_file, dst_rel in plan:
+        if dst_rel in seen:
+            collisions.setdefault(dst_rel, [seen[dst_rel]]).append(str(src_file))
+        else:
+            seen[dst_rel] = str(src_file)
+    if collisions:
+        detail = "; ".join(
+            f"{dst} <- [{', '.join(srcs)}]" for dst, srcs in sorted(collisions.items())
+        )
+        raise RuntimeError(
+            f"NI slim copy plan has destination-name collisions for "
+            f"{source_path} (multiple source DICOMs map to the same file and "
+            f"would silently overwrite): {detail}"
         )
 
     iterator = tqdm(plan, desc="Copying", unit="file") if HAS_TQDM else plan
@@ -485,6 +514,28 @@ def copy_mri_paravision(
                 "WARN",
             )
             return {}
+
+        # Same destination-name collision guard as the NI path: two source
+        # DICOMs mapping to one flat filename would silently overwrite (the
+        # per-file checksum compares each src to its own copy, so the last
+        # write wins). Unlikely for MRIm<NN> names, but the non-MRIm fallback
+        # (recon<idx>_<basename>) can collide. Fail loudly, naming the sources.
+        _seen = {}
+        _collisions = {}
+        for src_file, dst_rel in plan:
+            if dst_rel in _seen:
+                _collisions.setdefault(dst_rel, [_seen[dst_rel]]).append(str(src_file))
+            else:
+                _seen[dst_rel] = str(src_file)
+        if _collisions:
+            detail = "; ".join(
+                f"{dst} <- [{', '.join(srcs)}]" for dst, srcs in sorted(_collisions.items())
+            )
+            raise RuntimeError(
+                f"MRI slim copy plan has destination-name collisions for "
+                f"{source_path} (multiple source DICOMs map to the same file "
+                f"and would silently overwrite): {detail}"
+            )
 
         iterator = tqdm(plan, desc="Copying", unit="file") if HAS_TQDM else plan
         checksums = {}
@@ -744,6 +795,13 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     # Dry-run previews registry-only (no reservation; a dry run writes nothing).
     registry_path = os.path.join(nas_root, "registries", "registry_raw.csv")
     registries_dir = os.path.join(nas_root, "registries")
+    # Pre-flight: refuse early if the registry header doesn't match the current
+    # schema (a pending migration). Without this the mismatch would only
+    # surface at the registry append — AFTER the expensive file copy — and the
+    # pre-commit rollback would then delete the verified copy, forcing a
+    # needless re-copy. Checking here (before the ACQ-ID is even allocated)
+    # fails fast, wastes nothing, and surfaces the migration need in dry-run.
+    registry.assert_header_compatible(registry_path)
     if dry_run:
         acq_id_str = acq_id.generate_acq_id(acq_date, instrument, registry_path)
     else:
@@ -863,6 +921,18 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         log(
             f"Refusing to ingest empty source (0 primary/DICOM files): "
             f"{source_path}. Nothing to register — check this folder.",
+            "ERROR",
+        )
+        return acq_id_str, False
+
+    # Microscopy stores a single primary file (the .czi/.tif). The copy step
+    # below requires a file source; reject a folder source HERE — before the
+    # dry-run early return — so a preview and a real run agree. Otherwise the
+    # dry-run "succeeds" and the real run fails after the ACQ-ID is allocated.
+    if data_ecosystem == "MICROSCOPY" and not os.path.isfile(source_path):
+        log(
+            f"Microscopy ingest expects a single file source; got "
+            f"{source_path}",
             "ERROR",
         )
         return acq_id_str, False

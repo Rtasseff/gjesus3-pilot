@@ -329,9 +329,19 @@ def main(argv=None):
                 f"{s['deleted']} .lnk removed, {s['skipped']} skipped, {s['errors']} errors")
         if args.create_missing:
             proj_id = folder_to_proj.get(name, "")
-            cm = create_missing_project(project_abs, proj_id, registry,
-                                        dry_run=args.dry_run) if proj_id else \
-                {"created_file": 0, "created_folder": 0, "skipped": 0, "errors": 0}
+            if proj_id:
+                cm = create_missing_project(project_abs, proj_id, registry,
+                                            dry_run=args.dry_run)
+            else:
+                # No PROJ-ID for this folder: it's absent from
+                # registry_projects.csv or its folder_location doesn't end in
+                # this folder name. Silently skipping during a recovery run
+                # would hide an un-relinked project — warn loudly instead.
+                print(f"   WARN: '{name}' has no PROJ-ID in "
+                      f"registry_projects.csv (folder not registered or "
+                      f"folder_location mismatch) — create-missing skipped "
+                      f"for this project.")
+                cm = {"created_file": 0, "created_folder": 0, "skipped": 0, "errors": 0}
             for k in ("created_file", "created_folder", "skipped", "errors"):
                 totals[k] += cm[k]
             line += (f" | created-missing: {cm['created_file']} file + "

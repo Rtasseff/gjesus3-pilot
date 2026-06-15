@@ -132,7 +132,12 @@ def mirror(sftp, remote_root, local_root, dry_run=False, force=False):
 
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
         try:
-            sftp.get(remote_path, local_path)
+            # Download to a .part file then atomically rename, so an interrupted
+            # transfer never leaves a wrong-sized file at the final path (which
+            # would defeat the size-based idempotency check on the next run).
+            part_path = local_path + ".part"
+            sftp.get(remote_path, part_path)
+            os.replace(part_path, local_path)
             # Preserve mtime so the idempotency check works on re-runs.
             os.utime(local_path, (st.st_atime, st.st_mtime))
         except Exception as e:

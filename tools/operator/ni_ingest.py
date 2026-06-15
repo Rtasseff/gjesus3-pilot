@@ -41,6 +41,7 @@ prints a clear "use archive mode for now" message instead of guessing a layout.
 import argparse
 import importlib.util
 import os
+import subprocess
 import sys
 from datetime import datetime
 
@@ -154,8 +155,9 @@ def _explain_archive_and_maybe_extract(path, assume_yes):
         answer = ""
     if answer in ("y", "yes"):
         # Print the extractor help to stdout so the operator sees the exact
-        # flags; we deliberately don't guess source/target for them.
-        os.system(f'{sys.executable} "{extractor}" --help')
+        # flags; we deliberately don't guess source/target for them. List form
+        # (no shell) so an interpreter path with spaces is handled correctly.
+        subprocess.run([sys.executable, extractor, "--help"])
     log(
         "After extraction, re-run: ni-ingest <extracted-staging-folder>",
         "INFO",

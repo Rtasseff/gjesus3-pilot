@@ -45,7 +45,9 @@ def summarize_source(source_path):
     total_size = 0
     primary_count = 0
     for root, _dirs, files in os.walk(source_path):
-        for fname in files:
+        # Sort so primary-file selection is deterministic (lexicographically
+        # smallest) when a folder holds more than one supported image.
+        for fname in sorted(files):
             fpath = os.path.join(root, fname)
             total_size += os.path.getsize(fpath)
             ext = os.path.splitext(fname)[1].lower()

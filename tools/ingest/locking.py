@@ -62,12 +62,53 @@ def _is_stale(lock_path, stale_after):
     return age > stale_after
 
 
-def _break_stale(lock_path, log):
+def _break_stale(lock_path, stale_after, log):
+    """Atomically reclaim a stale lock without clobbering a fresh one.
+
+    The naive ``os.unlink(lock_path)`` has a TOCTOU race: two waiters that both
+    observed the SAME stale lock would each unlink it — and the second unlink
+    can delete a DIFFERENT, freshly-acquired lock the first waiter created in
+    between, leaving two holders (defeating the mutex). Instead, rename the
+    lockfile to a unique sideline name: ``os.rename`` moves a specific
+    directory entry, so only ONE waiter can win the rename of a given file (the
+    loser gets an OSError). The winner then RE-CHECKS the sidelined file's age:
+    if it really is stale it is removed (reclaimed); if it turns out fresh (a
+    lock created in the observe->rename window) it is put back so its holder
+    still owns it. Returns True only when a genuinely-stale lock was reclaimed
+    (the caller should then retry the create immediately).
+    """
+    sideline = f"{lock_path}.stale.{os.getpid()}.{int(time.time() * 1000)}"
     try:
-        os.unlink(lock_path)
-        log(f"registry_lock: reclaimed a stale lock ({lock_path})", "WARN")
+        os.rename(lock_path, sideline)
     except OSError:
-        pass  # another waiter just reclaimed / the holder released it — fine
+        # Someone else already moved/removed it, or the holder released it.
+        return False
+    # We now exclusively own `sideline`. Confirm it was genuinely stale before
+    # removing it — this is the guard the bare unlink lacked.
+    try:
+        age = time.time() - os.path.getmtime(sideline)
+    except OSError:
+        age = stale_after + 1.0  # vanished underneath us; treat as reclaimable
+    if age > stale_after:
+        try:
+            os.unlink(sideline)
+        except OSError:
+            pass
+        log(f"registry_lock: reclaimed a stale lock ({lock_path})", "WARN")
+        return True
+    # Not actually stale — we grabbed a live holder's lock in the race window.
+    # Put it back so the holder keeps ownership, then wait normally.
+    try:
+        os.rename(sideline, lock_path)
+    except OSError:
+        # The path is occupied again (holder released, a new waiter acquired)
+        # or otherwise unavailable — drop our copy; the release protocol
+        # already tolerates a missing lockfile (FileNotFoundError handled).
+        try:
+            os.unlink(sideline)
+        except OSError:
+            pass
+    return False
 
 
 @contextlib.contextmanager
@@ -91,8 +132,8 @@ def registry_lock(registries_dir, timeout=60.0, poll=0.2, stale_after=600.0,
             break
         except FileExistsError:
             if _is_stale(lock_path, stale_after):
-                _break_stale(lock_path, log)
-                continue
+                if _break_stale(lock_path, stale_after, log):
+                    continue  # genuinely-stale lock reclaimed — retry create now
             if time.monotonic() >= deadline:
                 raise LockTimeout(
                     f"could not acquire {lock_path} within {timeout:g}s — "

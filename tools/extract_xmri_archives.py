@@ -11,8 +11,12 @@ without extension (e.g. `LEONE_1.01.zip` -> `LEONE_1.01/`, `HPIC02.rar` ->
 `.zip` is handled by the stdlib `zipfile`; `.rar` is shelled out to 7-Zip
 (`7z.exe`). Run this from **native Windows Python** when `--dest` is on the NAS
 so the created folders inherit correct Windows ACLs (the whole point of the
-container rebuild). Idempotent: a case whose dest dir already exists and is
-non-empty is skipped, so the run can be resumed after an interruption.
+container rebuild). Idempotent: a case whose dest dir carries the `.extracted`
+sentinel (written only after a fully-successful extraction) is skipped, so the
+run can be resumed after an interruption. A non-empty dir WITHOUT the sentinel
+is treated as a partial/interrupted extraction and re-extracted from clean —
+a truncated DICOM tree is never accepted as complete. Use `--force` to
+re-extract a case that is already marked complete.
 
 Usage (from the repo root, Windows):
 
@@ -30,6 +34,7 @@ Add `--limit N` to extract only the first N archives (cheap validation), and
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -42,8 +47,23 @@ _ZIP_EXTS = {".zip"}
 _RAR_EXTS = {".rar"}
 
 
-def _is_nonempty_dir(path):
-    return path.is_dir() and any(path.iterdir())
+# Sentinel marker written into a case dir ONLY after a fully-successful
+# extraction. Its presence — not "dir is non-empty" — is what marks a case
+# as done, so an interrupted extraction (partial, non-empty, no sentinel) is
+# re-extracted rather than silently accepted as complete.
+EXTRACTED_SENTINEL = ".extracted"
+
+
+def _is_extracted(case_dir):
+    """True only if the case dir carries the `.extracted` completion sentinel."""
+    return (case_dir / EXTRACTED_SENTINEL).is_file()
+
+
+def _write_sentinel(case_dir, archive):
+    """Mark a case dir as fully extracted (records the source archive)."""
+    (case_dir / EXTRACTED_SENTINEL).write_text(
+        f"source: {archive}\n", encoding="utf-8"
+    )
 
 
 def _extract_zip(archive, case_dir):
@@ -73,7 +93,8 @@ def _extract_rar(archive, case_dir, seven_zip):
         )
 
 
-def extract_all(src, dest, seven_zip=DEFAULT_7Z, limit=None, dry_run=False):
+def extract_all(src, dest, seven_zip=DEFAULT_7Z, limit=None, dry_run=False,
+                force=False):
     """Extract every archive in `src` into `dest/<case>/`.
 
     Returns (extracted, skipped, failed) counts.
@@ -101,7 +122,7 @@ def extract_all(src, dest, seven_zip=DEFAULT_7Z, limit=None, dry_run=False):
     for i, archive in enumerate(archives, 1):
         case = archive.stem  # basename without extension
         case_dir = dest / case
-        if _is_nonempty_dir(case_dir):
+        if _is_extracted(case_dir) and not force:
             print(f"[{i}/{len(archives)}] SKIP {case} (already extracted)")
             skipped += 1
             continue
@@ -109,6 +130,12 @@ def extract_all(src, dest, seven_zip=DEFAULT_7Z, limit=None, dry_run=False):
             print(f"[{i}/{len(archives)}] would extract {archive.name} -> {case_dir}")
             extracted += 1
             continue
+        # Start from a known-empty dir: a pre-existing dir here is either a
+        # prior partial/interrupted extraction (no sentinel) or a --force
+        # redo of a completed one. Either way, clear it so we never mix new
+        # output with stale files.
+        if case_dir.exists():
+            shutil.rmtree(case_dir)
         print(f"[{i}/{len(archives)}] extracting {archive.name} -> {case_dir} ...", flush=True)
         case_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -117,10 +144,19 @@ def extract_all(src, dest, seven_zip=DEFAULT_7Z, limit=None, dry_run=False):
             else:
                 _extract_rar(archive, case_dir, seven_zip)
             n_files = sum(1 for _ in case_dir.rglob("*") if _.is_file())
+            _write_sentinel(case_dir, archive)
             print(f"    done ({n_files} files)")
             extracted += 1
         except Exception as e:
             print(f"    FAILED: {e}", file=sys.stderr)
+            # Remove the partial output so a resume re-extracts from clean
+            # instead of accepting a truncated tree as complete.
+            try:
+                if case_dir.exists():
+                    shutil.rmtree(case_dir)
+            except OSError as cleanup_err:
+                print(f"    (could not clean partial {case_dir}: {cleanup_err})",
+                      file=sys.stderr)
             failed += 1
 
     print(
@@ -138,11 +174,14 @@ def main(argv=None):
     ap.add_argument("--seven-zip", default=DEFAULT_7Z, help=f"Path to 7z.exe (default {DEFAULT_7Z})")
     ap.add_argument("--limit", type=int, default=None, help="Only extract the first N archives")
     ap.add_argument("--dry-run", action="store_true", help="List actions without extracting")
+    ap.add_argument("--force", action="store_true",
+                    help="Re-extract even if the .extracted sentinel is present")
     args = ap.parse_args(argv)
 
     _, _, failed = extract_all(
         args.src, args.dest,
         seven_zip=args.seven_zip, limit=args.limit, dry_run=args.dry_run,
+        force=args.force,
     )
     return 1 if failed else 0
 

@@ -188,8 +188,12 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
         )
 
     yaml_path = os.path.join(project_dir, "_project.yaml")
-    with open(yaml_path, "w") as f:
+    # Atomic write: write to a sibling .tmp then os.replace, so a crash
+    # mid-write can't truncate / corrupt the target.
+    tmp_path = yaml_path + ".tmp"
+    with open(tmp_path, "w") as f:
         f.write(content)
+    os.replace(tmp_path, yaml_path)
     log("Wrote _project.yaml")
 
     # --- Create empty provenance.csv ---

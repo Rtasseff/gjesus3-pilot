@@ -113,6 +113,33 @@ def test_stale_lock_reclaimed():
         check(not os.path.exists(lock_path), "lockfile released after the block")
 
 
+def test_break_stale_spares_fresh_lock():
+    print("[stale-break spares a fresh lock]")
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        registries_dir = os.path.join(d, "registries")
+        os.makedirs(registries_dir)
+        lock_path = os.path.join(registries_dir, locking.LOCK_FILENAME)
+        # A FRESH lock (mtime = now). The steal-by-rename re-check must NOT
+        # reclaim it — this is the guard the old bare-unlink lacked, which let
+        # two waiters both delete-and-acquire and end up co-holding the lock.
+        with open(lock_path, "w") as f:
+            f.write("pid=123 acquired=now\n")
+        reclaimed = locking._break_stale(lock_path, 600.0, lambda *a, **k: None)
+        check(reclaimed is False, "_break_stale returns False for a fresh lock")
+        check(os.path.exists(lock_path), "the fresh lock is left in place")
+        # And a genuinely stale one IS reclaimed by the same call.
+        old = time.time() - 5000
+        os.utime(lock_path, (old, old))
+        reclaimed2 = locking._break_stale(lock_path, 600.0, lambda *a, **k: None)
+        check(reclaimed2 is True, "_break_stale returns True for a stale lock")
+        check(not os.path.exists(lock_path), "the stale lock is removed")
+        # No sideline temp files left behind.
+        leftovers = [n for n in os.listdir(registries_dir)
+                     if n.startswith(locking.LOCK_FILENAME + ".stale.")]
+        check(not leftovers, f"no .stale sideline files left (got {leftovers})")
+
+
 def test_always_released_and_reacquire():
     print("[always released / re-acquire]")
     import tempfile
@@ -152,6 +179,7 @@ def test_timeout_when_held():
 def main():
     test_concurrent_allocate_append()
     test_stale_lock_reclaimed()
+    test_break_stale_spares_fresh_lock()
     test_always_released_and_reacquire()
     test_timeout_when_held()
     print()

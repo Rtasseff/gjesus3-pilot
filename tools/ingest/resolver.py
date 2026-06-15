@@ -110,6 +110,8 @@ AUTO_COLUMNS = {
                            # (NI-LIVE-08). Packed ;-joined always-a-list projection of
                            # subject.facility_animal_id. AUTO — never an operator registry: key.
     "anatomical_entity",   # NEW 2026-06-10 — projection of anatomy.region.label
+    "primary_kind",        # DRAFT per-ecosystem primary-entity shape
+                           # (file/archive/folder) set by the pipeline (ingest_raw.py).
 }
 
 

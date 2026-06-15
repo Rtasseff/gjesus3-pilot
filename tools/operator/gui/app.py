@@ -718,10 +718,14 @@ def api_save_recipe():
     if not name:
         return jsonify({"error": "Give the recipe a name."}), 400
 
-    # Derive a safe filename from the name.
+    # Derive a safe filename from the name. Reject names with no usable
+    # filename characters — they would all collapse to a single fallback and
+    # silently clobber one another.
     safe = "".join(
         c if (c.isalnum() or c in "-_") else "_" for c in name.lower()
-    ).strip("_") or "recipe"
+    ).strip("_")
+    if not safe:
+        return jsonify({"error": "Give the recipe a name with letters or numbers."}), 400
     fname = f"{safe}.yaml"
     rdir = recipes_dir()
     try:
@@ -730,6 +734,20 @@ def api_save_recipe():
         return jsonify({"error": f"Cannot create recipes folder ({rdir}): {e}"}), 500
 
     target = os.path.join(rdir, os.path.basename(fname))
+    # Guard against silently overwriting an existing recipe: distinct names can
+    # sanitise to the same filename (e.g. "Study A" and "Study/A" both ->
+    # study_a.yaml), and a recipe often encodes an instrument's locked
+    # convention. Require an explicit overwrite to replace one.
+    if os.path.exists(target) and not bool(data.get("overwrite")):
+        return jsonify({
+            "error": (
+                f"A recipe already exists as {fname!r}. Saving would overwrite "
+                f"it — choose a different name, or resend with overwrite=true "
+                f"to replace it."
+            ),
+            "exists": True,
+            "file": fname,
+        }), 409
     payload = {
         "schema": "gjesus3.operator.recipe/v1",
         "name": name,
