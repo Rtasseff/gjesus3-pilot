@@ -51,7 +51,7 @@ def build_user_supplied(cfg):
 
 
 def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None,
-                  subject=None, condition=None, anatomy=None):
+                  subject=None, condition=None, anatomy=None, subjects=None):
     """Construct the sidecar dict.
 
     Args:
@@ -64,8 +64,12 @@ def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None
         subject / condition / anatomy: the Phase 3 preclinical enrichment
             blocks (08_METADATA §4.4–4.6), built by ingest/enrichment.py for
             organism/tissue acquisitions. Each is added only when not None,
-            keeping the key order acq_id .. discovered, subject, condition,
-            anatomy, <ecosystem_section> (08_METADATA §4.3).
+            keeping the key order acq_id .. discovered, subject, subjects,
+            condition, anatomy, <ecosystem_section> (08_METADATA §4.3).
+        subjects: OPTIONAL list of subject blocks for a multi-animal NI scan
+            (NI-LIVE-08) — written as the `subjects:[]` array alongside the
+            primary `subject`. None (omitted) for single-subject instruments,
+            so their sidecars are byte-for-byte unchanged.
 
     Returns:
         ordered dict ready for json.dump.
@@ -80,6 +84,8 @@ def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None
     }
     if subject is not None:
         sidecar["subject"] = subject
+    if subjects is not None:
+        sidecar["subjects"] = subjects
     if condition is not None:
         sidecar["condition"] = condition
     if anatomy is not None:

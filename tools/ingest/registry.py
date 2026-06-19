@@ -143,7 +143,7 @@ def append_row(registry_path, row_dict):
 
 
 def build_row(acq_id, cfg, summary, dest_path, registration_dt,
-              subject=None, anatomy=None):
+              subject=None, anatomy=None, subjects=None):
     """Build a registry row dict from config and analysis results.
 
     Args:
@@ -154,6 +154,10 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt,
         registration_dt: ISO datetime string for registration_datetime.
         subject: the non-blocking enrichment subject block (or None for
             non-animal samples) — sources sample_organism + subject_ids.
+        subjects: OPTIONAL list of subject blocks for a multi-animal NI scan
+            (NI-LIVE-08). When given it supersedes `subject` — subject_ids is the
+            ;-joined facility ids of the 1–4 animals; single-subject instruments
+            keep passing `subject` (the length-1 path, unchanged).
         anatomy: the enrichment anatomy block (or None) — sources
             anatomical_entity from anatomy.region.label. Both blocks are built
             at ingest Step 8.4, before this row, so the values are in hand here.
@@ -179,7 +183,19 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt,
     # non-blocking enrichment blocks (built at Step 8.4, before this row). They
     # are pipeline-derived (AUTO), not registry: keys, and blank for non-animal
     # samples (subject/anatomy are None for cells/material/phantom).
-    subject = subject or {}
+    # Normalize to a subject LIST: an explicit `subjects` list (a multi-animal
+    # NI scan, NI-LIVE-08) wins; otherwise wrap the single `subject` (every
+    # other instrument) as a length-1 list. The packed subject_ids +
+    # sample_organism projections then come from the list either way — ONE code
+    # path for 1..4 animals, no divergence between single- and multi-subject.
+    subj_list = [s for s in (subjects if subjects is not None
+                             else ([subject] if subject else [])) if s]
+    packed_subject_ids = ";".join(
+        fa for s in subj_list
+        for fa in [(s.get("facility_animal_id") or "").strip()] if fa)
+    sample_organism = next(
+        ((s.get("species") or "").strip() for s in subj_list
+         if (s.get("species") or "").strip()), "")
     anatomy = anatomy or {}
     region = anatomy.get("region") or {}
 
@@ -196,15 +212,12 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt,
         "data_source": cfg.get("data_source", ""),
         "sample_id": cfg.get("sample_id", ""),
         "sample_type": cfg.get("sample_type", ""),
-        # Projections of the enrichment blocks (built at Step 8.4, passed in via
-        # subject=/anatomy=). AUTO; blank for non-animal samples.
-        "sample_organism": subject.get("species", "") or "",
-        # subject_ids is a packed, ;-joined, ALWAYS-A-LIST column (NI-LIVE-08,
-        # renamed from subject_id 2026-06-12). The single-subject ingest path
-        # projects the one facility id here — a length-1 list (the bare id, no ';').
-        # Multi-animal NI packing (joining the 1–4 ids) is done by the live-sync
-        # glue before it calls build_row; this single-subject projection is unchanged.
-        "subject_ids": subject.get("facility_animal_id", "") or "",
+        # Projections over the subject LIST (built at Step 8.4). AUTO; blank for
+        # non-animal samples. sample_organism = the (single) species; subject_ids
+        # = the ;-joined facility ids (NI-LIVE-08) — a length-1 list for every
+        # single-animal instrument, the packed 1–4 for a multi-animal NI scan.
+        "sample_organism": sample_organism,
+        "subject_ids": packed_subject_ids,
         "anatomical_entity": (region.get("label", "") if isinstance(region, dict) else "") or "",
         "session_id": cfg.get("session_id", ""),
         "primary_kind": cfg.get("primary_kind", ""),
