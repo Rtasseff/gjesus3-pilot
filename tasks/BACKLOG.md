@@ -469,3 +469,26 @@ Same model planned for the **future external-drive microscopy** (also no standar
   re-homed without re-copying), and (b) get them to adopt better project definitions in their naming
   GOING FORWARD so it doesn't recur. Feeds the still-provisional project-naming convention (05_PROJECTS
   §9 / PROJ-05).
+
+## NI (Molecubes) — tracer compound NOT in the data; richer `reconparams.txt` source (2026-06-19)
+
+Investigated whether the **radiotracer** is recoverable from the NI data (manager thought it lived in a
+reconstruction-parameter file). Pulled + extracted a source PET `.tgz` from `\\cicmgsp02\gnuclear2$` and
+searched every parameter file (`recon_0/reconparams.txt` + `.xml`, `acqparams.xml`, `protocol.txt` + `.xml`,
+`recon.ini`, `reconstruction.log`) — plus the DICOM header.
+
+- **Finding: the tracer COMPOUND is not recorded by the Molecubes platform anywhere.** The only
+  radio-chemistry field is the **isotope** (`Acquisition/isotope = F-18`, `Reconstruction/isotope = F-18`;
+  the DICOM `RadiopharmaceuticalCodeSequence` likewise codes only `^18^Fluorine`). Nothing names the
+  compound (FDG vs NaF vs FET …). The platform stores what it needs for decay correction (isotope, 511 keV,
+  half-life, activity), not the chemistry.
+- **We already capture the isotope** (`ni_isotope` from `protocol.txt`). So nothing more is extractable for
+  the tracer — **the compound is study-level knowledge and must come from the researchers / study records**,
+  not from the instrument data. (No tooling action; record-keeping decision.)
+- [ ] **(optional enrichment) `reconparams.txt` is a richer NI source than `protocol.txt`.** It carries
+  fields we don't currently extract — `principalinvestigator`, `bedtype` (mouse), scan `duration`, `FOV`,
+  recon `iterations`/voxel size, energy window, the **attenuation-correction CT reference** (links PET↔CT),
+  scanner serial. BUT the NI slim copy retains only the reconstructed DICOM, so `reconparams.txt` is **not
+  on the NAS** — capturing these would mean extending the NI extractor (`ni_metadata.py`) to read
+  `recon_<idx>/reconparams.txt` at ingest + a back-fill from the intact source `.tgz` on gnuclear2$. Defer
+  unless the team wants the PET↔CT link or per-scan acquisition params surfaced.
