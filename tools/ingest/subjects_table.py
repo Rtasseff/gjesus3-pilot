@@ -249,6 +249,29 @@ def write_subjects(path, rows_by_id):
     os.replace(tmp, path)
 
 
+def plan_upserts(table, rows, now):
+    """Pure merge — apply incoming rows onto a {facility_id: row} table.
+
+    Returns (new_table, stats) and does NO I/O. This is the SINGLE merge path
+    shared by upsert_subjects (which then writes the result) and any dry-run /
+    back-fill preview (which only reports the stats) — so the preview delta can
+    never diverge from what the write actually does.
+    """
+    table = dict(table)
+    stats = {"inserted": 0, "updated": 0, "unchanged": 0}
+    for incoming in rows:
+        fid = (incoming.get("facility_id") or "").strip()
+        if not fid:
+            continue
+        if fid not in table:
+            table[fid] = _new_row(incoming, now)
+            stats["inserted"] += 1
+        else:
+            table[fid], changed = _merge(table[fid], incoming, now)
+            stats["updated" if changed else "unchanged"] += 1
+    return table, stats
+
+
 def upsert_subjects(registries_dir, rows, now=None, log=None, _hold_lock=True):
     """Upsert subject rows into registry_subjects.csv (insert-or-merge by id).
 
@@ -270,19 +293,9 @@ def upsert_subjects(registries_dir, rows, now=None, log=None, _hold_lock=True):
 
     def _do():
         table = read_subjects(path)
-        stats = {"inserted": 0, "updated": 0, "unchanged": 0}
-        for incoming in rows:
-            fid = (incoming.get("facility_id") or "").strip()
-            if not fid:
-                continue
-            if fid not in table:
-                table[fid] = _new_row(incoming, now)
-                stats["inserted"] += 1
-            else:
-                table[fid], changed = _merge(table[fid], incoming, now)
-                stats["updated" if changed else "unchanged"] += 1
+        new_table, stats = plan_upserts(table, rows, now)
         if stats["inserted"] or stats["updated"]:
-            write_subjects(path, table)
+            write_subjects(path, new_table)
         return stats
 
     if _hold_lock:
