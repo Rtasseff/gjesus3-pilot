@@ -20,6 +20,7 @@ from pathlib import Path
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
     metadata_sidecar, provenance, resolver, enrichment, locking,
+    subjects_table,
 )
 import create_project as create_project_mod
 import animal_db
@@ -1265,6 +1266,24 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                                  subject=subject_block, anatomy=anatomy_block)
         with locking.registry_lock(registries_dir):
             registry.append_row(registry_path, row)
+            # Step 10b: upsert this acquisition's subject into the one-row-per-
+            # subject registry_subjects.csv (06_REGISTRIES §2.3.2 / NI-LIVE-08),
+            # under the SAME lock — _hold_lock=False, since the lock is not
+            # reentrant and re-acquiring would deadlock. NON-BLOCKING, like
+            # enrichment: a subjects-table failure must never fail an ingest
+            # whose registry row already committed. subject_block is None for
+            # non-animal samples (cells/material/phantom) -> no row. This is the
+            # single-animal path (one row); the multi-animal NI live-sync glue
+            # upserts its 1-4 animals via subjects_table.upsert_subjects directly.
+            try:
+                srow = subjects_table.row_from_subject_block(subject_block)
+                if srow:
+                    subjects_table.upsert_subjects(
+                        registries_dir, [srow], now=reg_dt, log=log,
+                        _hold_lock=False,
+                    )
+            except Exception as e:
+                log(f"subjects table upsert failed (non-blocking): {e}", "WARN")
         committed = True
         log(f"Appended to registry: {registry_path}")
     except Exception as e:
