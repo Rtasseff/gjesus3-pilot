@@ -72,6 +72,13 @@ def base_case(sample_type, **extra):
     return case
 
 
+def build_one(*args, **kwargs):
+    """Test shim: build_enrichment now returns a subjects LIST (NI-LIVE-08
+    multi-animal). These single-subject checks want the primary block."""
+    subjects, condition, anatomy = enrichment.build_enrichment(*args, **kwargs)
+    return (subjects[0] if subjects else None), condition, anatomy
+
+
 def test_resolvers():
     print("[resolvers]")
     # condition: unsupplied -> sentinels
@@ -110,7 +117,7 @@ def test_resolvers():
 def test_subject_found():
     print("[subject: DB found]")
     msgs, log = collecting_log()
-    subj, cond, anat = enrichment.build_enrichment(
+    subj, cond, anat = build_one(
         base_case("organism"), acq_id="ACQ-X", acq_date="20251027",
         acq_dt_iso="2025-10-27T09:30:13Z", log=log, lookup_fn=make_lookup("found"))
     check(subj["source"] == "animal-facility-db", "subject.source animal-facility-db")
@@ -127,7 +134,7 @@ def test_subject_pending(reason):
     tmp = tempfile.mkdtemp()
     msgs, log = collecting_log()
     status = "not_found" if reason == "db-miss" else "unreachable"
-    subj, cond, anat = enrichment.build_enrichment(
+    subj, cond, anat = build_one(
         base_case("organism"), acq_id="ACQ-Y", acq_date="20251027",
         acq_dt_iso="2025-10-27T09:30:13Z", canonical_path="/raw/DICOM/2025/2025-10/ACQ-Y/",
         registries_dir=tmp, dry_run=False, log=log, lookup_fn=make_lookup(status))
@@ -140,7 +147,7 @@ def test_subject_pending(reason):
     check(rows[0]["acq_id"] == "ACQ-Y", "pending acq_id correct")
     check(any("WARN" in m and "pending-db" in m for m in msgs), "WARN emitted for pending")
     # idempotency: a re-ingest must not duplicate
-    enrichment.build_enrichment(
+    build_one(
         base_case("organism"), acq_id="ACQ-Y", acq_date="20251027",
         acq_dt_iso="2025-10-27T09:30:13Z", canonical_path="/raw/DICOM/2025/2025-10/ACQ-Y/",
         registries_dir=tmp, dry_run=False, log=log, lookup_fn=make_lookup(status))
@@ -152,7 +159,7 @@ def test_dry_run_no_pending():
     print("[subject: dry-run writes no pending row]")
     tmp = tempfile.mkdtemp()
     _, log = collecting_log()
-    enrichment.build_enrichment(
+    build_one(
         base_case("organism"), acq_id="ACQ-Z", acq_date="20251027",
         registries_dir=tmp, dry_run=True, log=log, lookup_fn=make_lookup("not_found"))
     check(not os.path.exists(pending.pending_path(tmp)), "no pending file in dry-run")
@@ -164,7 +171,7 @@ def test_operator_override():
     case = base_case("organism", subject={"species": "Rattus norvegicus",
                                            "strain": "Crl:WI(Han)", "sex": "F",
                                            "date_of_birth": "2025-01-01"})
-    subj, _, _ = enrichment.build_enrichment(
+    subj, _, _ = build_one(
         case, acq_id="ACQ-OP", acq_date="20251027",
         acq_dt_iso="2025-10-27T09:30:13Z", log=log, lookup_fn=make_lookup("found"))
     check(subj["source"] == "operator-entered", "operator subject overrides DB")
@@ -175,14 +182,14 @@ def test_operator_override():
 def test_tissue_and_cells():
     print("[sample_type gating]")
     _, log = collecting_log()
-    subj, cond, anat = enrichment.build_enrichment(
+    subj, cond, anat = build_one(
         base_case("tissue"), acq_id="ACQ-T", acq_date="20251027",
         log=log, lookup_fn=make_lookup("found"))
     check(subj is not None and cond is not None, "tissue gets subject + condition")
     # 2026-06-09: anatomy: extended to ex-vivo tissue (region-only; is_whole_body
     # N/A). See 08_METADATA §4.6 / 09_MODALITIES.
     check(anat is not None, "tissue gets an anatomy block (region-only) — 2026-06-09")
-    s2, c2, a2 = enrichment.build_enrichment(
+    s2, c2, a2 = build_one(
         {"sample_type": "cells", "discovered": {}}, acq_id="ACQ-C",
         acq_date="20251027", log=log, lookup_fn=make_lookup("found"))
     # 2026-06-09: condition: written for cells too (control-vs-case applies to a
@@ -196,7 +203,7 @@ def test_unknown_source():
     _, log = collecting_log()
     case = base_case("organism")
     case["subject_from_db"] = False
-    subj, _, _ = enrichment.build_enrichment(
+    subj, _, _ = build_one(
         case, acq_id="ACQ-U", acq_date="20251027", log=log, lookup_fn=make_lookup("found"))
     check(subj["source"] == "unknown", "no flag + no override -> source unknown")
 
@@ -222,7 +229,7 @@ def test_review_fixes():
     _, log = collecting_log()
     case = base_case("organism", subject={"species": "Mus musculus",
                                            "date_of_birth": "unknown"})
-    subj, _, _ = enrichment.build_enrichment(
+    subj, _, _ = build_one(
         case, acq_id="ACQ-B", acq_date="20251016",
         acq_dt_iso="2025-10-16T00:00:00Z", log=log, lookup_fn=make_lookup("found"))
     check(subj["age_at_acquisition"] == "", "operator bad DOB -> age '' (non-blocking)")
@@ -230,7 +237,7 @@ def test_review_fixes():
 
     # operator sex: NA must keep the 'unknown' sentinel, not become ''.
     case2 = base_case("organism", subject={"species": "Mus musculus", "sex": "NA"})
-    s2, _, _ = enrichment.build_enrichment(
+    s2, _, _ = build_one(
         case2, acq_id="ACQ-S", acq_date="20251016", log=log, lookup_fn=make_lookup("found"))
     check(s2["sex"] == "unknown", "operator sex:NA -> sentinel 'unknown'")
 

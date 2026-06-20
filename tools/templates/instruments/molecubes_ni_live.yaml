@@ -1,0 +1,66 @@
+# Molecubes NI — LIVE-machine sync (path-based). Sibling of molecubes_ni.yaml
+# (archive mode); the SAME downstream pipeline (copy_ni_acquisition + ni_metadata
+# + registry + subjects + project link). The only difference: fields come from
+# the directory PATH (path_parse) instead of the archive filename — the archive
+# script just smashes these same path levels into one folder name.
+#
+# Live tree, one researcher:  <series>/<YYMMDD>/<subject>/<YYYYMMDDhhmmss>_<MODALITY>/
+# Per sync: copy to tools/configs/, edit staging_dir + researcher + operator, then
+#   python tools/ingest_raw.py --config tools/configs/<this>.yaml --nas-root J:/gjesus3-sandbox
+# Re-running ingests ONLY new acquisitions (the registry dedup index skips the rest).
+# Eyeball the messy/ambiguous names FIRST with the read-only review table:
+#   python tools/ni_live_discover.py --root <box>/<researcher> <researcher>
+#
+# discovered.* available: series, date, subject (path_parse) · acq_datetime_full,
+#   modality (anchor regex) · project, animal_codes, subject_flags (subject_parse) ·
+#   ni_* (ni_metadata). Multi-animal (1-4 mice in one scan) packs subject_ids
+#   automatically via subject_parse + subject_from_db (NI-LIVE-08).
+
+ingest:
+  acquisition_layout: folder
+  copy_strategy: ni_molecubes
+  auto_create_projects: true
+  delete_source_after_ingest: false        # NEVER delete from the live box
+
+auto_discover:
+  # EDIT per sync: the chosen researcher's data folder on the box.
+  staging_dir: "/Users/molecubes/Documents/volumes/remiW11/data/irene"
+  pattern: "**/"                           # recurse; depth + the anchor regex isolate acquisitions
+  path_parse:
+    levels: [series, date, subject]        # the 3 hand-typed levels under the researcher folder
+  filename_parse:
+    # the machine-issued acquisition folder = <14-digit timestamp>_<MODALITY>
+    regex: '^(?P<acq_datetime_full>\d{14})_(?P<modality>PET|CT|SPECT|OI)$'
+  subject_parse:                           # split the subject folder -> project + 1-4 animal codes
+    field: subject                         #   (reuses ni_live_discover.parse_subject)
+  subject_from_db: true                    # look each parsed animal up; a miss queues to pending (non-blocking)
+
+registry:
+  instrument:           discovered.modality
+  data_ecosystem:       DICOM
+  instrument_model:     "Molecubes (PET/SPECT/CT)"
+  researcher:           irene              # EDIT per sync (matches staging_dir)
+  data_source:          internal
+  sample_id:            "${discovered.subject}"
+  sample_type:          organism
+  acquisition_datetime: discovered.acq_datetime_full
+  # group the PET + CT of one animal-visit into one ISA "study":
+  session_id:           "${discovered.series}_${discovered.date}_${discovered.subject}"
+  # project from the subject prefix (§3A authoritative), via subject_parse:
+  project_hint:         "ae-biomegune-${discovered.project}"
+  notes:                "Live-box NI sync: ${discovered.modality} of subject ${discovered.subject} (project ${discovered.project})"
+
+operator: irene                            # EDIT per sync
+
+auto_create_project:
+  owner:       "NI-platform"
+  description: "Auto-created during live-box NI sync; animal protocol ${discovered.project}. PROVISIONAL."
+  notes:       "Auto-created on first live NI sync. Edit owner via _project.yaml."
+
+# Name of the project hard link under /projects/<proj>/raw_linked/. Unique per scan
+# (timestamp + modality is globally unique on the box).
+link_filename: "${discovered.modality}_${discovered.subject}_${acq_date}_${discovered.acq_datetime_full}"
+
+# condition: / anatomy: — set once per batch when the control/disease/whole-body
+# state is known (same shape as molecubes_ni.yaml). Omitted here so the sync writes
+# the non-blocking null sentinels (WARN, still ingests); add the blocks to record them.

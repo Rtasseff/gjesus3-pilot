@@ -1145,7 +1145,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         # (08_METADATA §4.4–4.7). Never raises: a DB miss WARNs, writes a
         # source="pending-db" placeholder, and queues the acq to
         # registries/pending_subject_metadata.csv for later recovery.
-        subject_block, condition_block, anatomy_block = enrichment.build_enrichment(
+        subjects_list, condition_block, anatomy_block = enrichment.build_enrichment(
             cfg_single,
             acq_id=acq_id_str,
             acq_date=acq_date,
@@ -1156,6 +1156,12 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             log=log,
             derive_fields=derive_fields,
         )
+        # subjects_list: 1 block for single-animal instruments, 1-4 for a
+        # multi-animal NI scan (NI-LIVE-08). The primary (first) feeds the single
+        # `subject` sidecar key (back-compat); the full list packs subject_ids,
+        # the sidecar subjects:[] array, and the subjects-table rows.
+        subject_block = subjects_list[0] if subjects_list else None
+        multi_subjects = subjects_list if len(subjects_list) > 1 else None
 
         # (The correction-pass S1 stashed cfg_single["subject_id"] here; the
         # merged build_row now projects subject_ids / sample_organism /
@@ -1168,6 +1174,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             ecosystem_section_name=eco_section_name,
             ecosystem_section=eco_section,
             subject=subject_block,
+            subjects=multi_subjects,
             condition=condition_block,
             anatomy=anatomy_block,
         )
@@ -1263,23 +1270,23 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         # sample_organism / subject_ids / anatomical_entity.
         reg_dt = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt,
-                                 subject=subject_block, anatomy=anatomy_block)
+                                 anatomy=anatomy_block, subjects=subjects_list)
         with locking.registry_lock(registries_dir):
             registry.append_row(registry_path, row)
-            # Step 10b: upsert this acquisition's subject into the one-row-per-
-            # subject registry_subjects.csv (06_REGISTRIES §2.3.2 / NI-LIVE-08),
-            # under the SAME lock — _hold_lock=False, since the lock is not
-            # reentrant and re-acquiring would deadlock. NON-BLOCKING, like
-            # enrichment: a subjects-table failure must never fail an ingest
-            # whose registry row already committed. subject_block is None for
-            # non-animal samples (cells/material/phantom) -> no row. This is the
-            # single-animal path (one row); the multi-animal NI live-sync glue
-            # upserts its 1-4 animals via subjects_table.upsert_subjects directly.
+            # Step 10b: upsert this acquisition's subject(s) into the one-row-
+            # per-subject registry_subjects.csv (06_REGISTRIES §2.3.2 /
+            # NI-LIVE-08), under the SAME lock — _hold_lock=False, since the lock
+            # is not reentrant and re-acquiring would deadlock. NON-BLOCKING,
+            # like enrichment: a subjects-table failure must never fail an ingest
+            # whose registry row already committed. subjects_list is empty for
+            # non-animal samples (no rows), 1 block for single-animal, and 1-4
+            # for a multi-animal NI scan — one upsert call handles all.
             try:
-                srow = subjects_table.row_from_subject_block(subject_block)
-                if srow:
+                srows = [r for r in (subjects_table.row_from_subject_block(sb)
+                                     for sb in subjects_list) if r]
+                if srows:
                     subjects_table.upsert_subjects(
-                        registries_dir, [srow], now=reg_dt, log=log,
+                        registries_dir, srows, now=reg_dt, log=log,
                         _hold_lock=False,
                     )
             except Exception as e:

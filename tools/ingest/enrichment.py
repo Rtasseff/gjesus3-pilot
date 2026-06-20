@@ -2,8 +2,9 @@
 
 Phase 3 (08_METADATA §4.4 subject / §4.5 condition / §4.6 anatomy, non-blocking
 model §4.7). Called from ingest_raw.py Step 8.5 with the resolved per-case
-config; returns (subject, condition, anatomy) dicts (or None when a block does
-not apply to this sample_type) ready to nest in metadata.json.
+config; returns (subjects, condition, anatomy) — subjects is a LIST of 1-4
+subject blocks (empty for non-animal); condition/anatomy are dicts or None —
+ready to nest in metadata.json.
 
 Trigger rules:
     sample_type ∈ {organism, tissue}  -> subject + condition
@@ -119,64 +120,108 @@ def _subject_from_operator(block, discovered, acq_for_age):
     return _finalize_subject(resolved, acq_for_age, src)
 
 
-def _build_subject(cfg_single, discovered, acq_for_age, acq_id,
-                   canonical_path, registries_dir, dry_run, lookup_fn, log):
-    # 1. Explicit operator override wins.
+def _resolve_one_db_subject(alias, code, acq_for_age, acq_id, canonical_path,
+                            registries_dir, dry_run, lookup_fn, log):
+    """Resolve ONE (project_alias, animal_code) to a subject block via the
+    facility DB — the shared per-animal path used by both the single-animal
+    config (subject_lookup) and the multi-animal live sync (subject_parse).
+    DB hit -> full block; miss/unreachable -> pending-db placeholder + queue."""
+    res = lookup_fn(alias, code)
+    if res.status == "found":
+        fa = res.subject.get("facility_animal_id")
+        log(f"subject: DB hit {fa}")
+        return _finalize_subject(res.subject, acq_for_age, "animal-facility-db")
+
+    # not_found (db-miss) | unreachable (no-credentials) -> pending.
+    fa_id = animal_db.compose_subject_id(code, alias)
+    reason = res.reason or "db-miss"
+    log(f"subject: DB {res.status} ({reason}) for {fa_id}; writing "
+        f"source=pending-db and queueing for recovery.", "WARN")
+    if not dry_run and registries_dir:
+        try:
+            sidecar = (canonical_path.rstrip("/") + "/metadata.json") if canonical_path else ""
+            pending.append_pending(registries_dir, acq_id, sidecar, fa_id, reason)
+        except Exception as e:  # pending list must never break ingest
+            log(f"subject: could not append to pending list: {e}", "WARN")
+    return _subject_placeholder("pending-db", fa_id)
+
+
+def _subject_pairs(cfg_single, discovered, log):
+    """The (project_alias, animal_code:int) pairs to look up for this scan.
+
+    Multi-animal LIVE path: subject_parse populated discovered.animal_codes
+    (;-joined) + discovered.project -> one pair per animal (1-4).
+    Single-animal ARCHIVE path: the subject_lookup block -> one pair.
+    Returns [] when nothing is resolvable (phantom / unparsed -> caller writes
+    source=unknown)."""
+    codes_packed = (discovered.get("animal_codes") or "").strip()
+    if codes_packed:
+        alias = (discovered.get("project") or "").strip() or \
+            subject_id.project_alias_from_hint(cfg_single.get("project_hint", ""))
+        pairs = []
+        for c in codes_packed.split(";"):
+            c = c.strip()
+            if not c:
+                continue
+            try:
+                pairs.append((alias, int(c)))
+            except ValueError:
+                log(f"subject: non-numeric animal code {c!r} from subject_parse; "
+                    f"skipping.", "WARN")
+        return pairs
+
+    lookup_block = cfg_single.get("subject_lookup") or {}
+    alias = ""
+    if lookup_block.get("project_alias"):
+        try:
+            alias = resolver.resolve_value(lookup_block["project_alias"], discovered)
+        except resolver.ResolverError:
+            alias = ""
+    if not alias:
+        alias = subject_id.project_alias_from_hint(cfg_single.get("project_hint", ""))
+    code_str = ""
+    if lookup_block.get("animal_code"):
+        try:
+            code_str = resolver.resolve_value(lookup_block["animal_code"], discovered)
+        except resolver.ResolverError:
+            code_str = ""
+    code, _organ = subject_id.parse_animal_short_code(code_str)
+    if code is None:
+        log(f"subject: could not parse an animal code from {code_str!r} "
+            f"(alias={alias!r}); writing source=unknown (no DB lookup).", "WARN")
+        return []
+    return [(alias, code)]
+
+
+def _build_subjects(cfg_single, discovered, acq_for_age, acq_id,
+                    canonical_path, registries_dir, dry_run, lookup_fn, log):
+    """Resolve the 1..N subjects for this acquisition -> a LIST of subject
+    blocks. Length 1 for every single-animal instrument; 1-4 for a multi-animal
+    NI scan. Operator override -> [that]; DB path -> one block per animal;
+    nothing resolvable -> [unknown placeholder]."""
+    # 1. Explicit operator override wins (single subject).
     op_block = cfg_single.get("subject")
     if op_block:
         subj = _subject_from_operator(op_block, discovered, acq_for_age)
         log(f"subject: operator-entered ({subj.get('facility_animal_id') or 'no id'})")
-        return subj
+        return [subj]
 
-    # 2. Animal-facility DB lookup.
+    # 2. Animal-facility DB lookup (1..N animals).
     if cfg_single.get("subject_from_db"):
-        lookup_block = cfg_single.get("subject_lookup") or {}
-
-        alias = ""
-        if lookup_block.get("project_alias"):
-            try:
-                alias = resolver.resolve_value(lookup_block["project_alias"], discovered)
-            except resolver.ResolverError:
-                alias = ""
-        if not alias:
-            alias = subject_id.project_alias_from_hint(cfg_single.get("project_hint", ""))
-
-        code_str = ""
-        if lookup_block.get("animal_code"):
-            try:
-                code_str = resolver.resolve_value(lookup_block["animal_code"], discovered)
-            except resolver.ResolverError:
-                code_str = ""
-        code, _organ = subject_id.parse_animal_short_code(code_str)
-
-        if code is None:
-            log(f"subject: could not parse an animal code from {code_str!r} "
-                f"(alias={alias!r}); writing source=unknown (no DB lookup).", "WARN")
-            return _subject_placeholder("unknown")
-
-        res = lookup_fn(alias, code)
-        if res.status == "found":
-            fa = res.subject.get("facility_animal_id")
-            log(f"subject: DB hit {fa}")
-            return _finalize_subject(res.subject, acq_for_age, "animal-facility-db")
-
-        # not_found (db-miss) | unreachable (no-credentials) -> pending.
-        fa_id = animal_db.compose_subject_id(code, alias)
-        reason = res.reason or "db-miss"
-        log(f"subject: DB {res.status} ({reason}) for {fa_id}; writing "
-            f"source=pending-db and queueing for recovery.", "WARN")
-        if not dry_run and registries_dir:
-            try:
-                sidecar = (canonical_path.rstrip("/") + "/metadata.json") if canonical_path else ""
-                pending.append_pending(registries_dir, acq_id, sidecar, fa_id, reason)
-            except Exception as e:  # pending list must never break ingest
-                log(f"subject: could not append to pending list: {e}", "WARN")
-        return _subject_placeholder("pending-db", fa_id)
+        pairs = _subject_pairs(cfg_single, discovered, log)
+        if not pairs:
+            return [_subject_placeholder("unknown")]
+        return [
+            _resolve_one_db_subject(alias, code, acq_for_age, acq_id,
+                                    canonical_path, registries_dir, dry_run,
+                                    lookup_fn, log)
+            for alias, code in pairs
+        ]
 
     # 3. No source configured for an organism/tissue acq.
     log("subject: no subject_from_db flag and no operator subject: block; "
         "writing source=unknown.", "WARN")
-    return _subject_placeholder("unknown")
+    return [_subject_placeholder("unknown")]
 
 
 def _build_condition(cfg_single, discovered, log):
@@ -273,7 +318,9 @@ def build_enrichment(cfg_single, *, acq_id, acq_date, acq_dt_iso="",
                      canonical_path="", registries_dir="", dry_run=False,
                      lookup_fn=None, log=None, derive_fields=None,
                      auto_derive=True):
-    """Return (subject, condition, anatomy) for this case, or None per block.
+    """Return (subjects, condition, anatomy) for this case. subjects is a LIST
+    (length 1 for single-animal, 1-4 for a multi-animal NI scan; empty for
+    non-animal samples); condition/anatomy are dicts or None per block.
 
     Pure orchestration over the resolver + animal-DB fetch + pending list. Never
     raises on missing data (08_METADATA §4.7). `lookup_fn` defaults to
@@ -292,10 +339,12 @@ def build_enrichment(cfg_single, *, acq_id, acq_date, acq_dt_iso="",
     discovered = cfg_single.get("discovered") or {}
     acq_for_age = _acq_for_age(acq_dt_iso, acq_date)
 
-    subject = condition = anatomy = None
-    # subject: only for animal-derived in-vivo / ex-vivo samples (DB-linked).
+    subjects = []
+    condition = anatomy = None
+    # subject(s): only for animal-derived in-vivo / ex-vivo samples (DB-linked).
+    # A LIST — length 1 for single-animal, 1-4 for a multi-animal NI scan.
     if sample_type in ("organism", "tissue"):
-        subject = _build_subject(
+        subjects = _build_subjects(
             cfg_single, discovered, acq_for_age, acq_id,
             canonical_path, registries_dir, dry_run, lookup_fn, log,
         )
@@ -312,4 +361,4 @@ def build_enrichment(cfg_single, *, acq_id, acq_date, acq_dt_iso="",
         anatomy = _build_anatomy(cfg_single, discovered, log, sample_type,
                                  derive_fields=derive_fields,
                                  auto_derive=auto_derive)
-    return subject, condition, anatomy
+    return subjects, condition, anatomy

@@ -550,6 +550,28 @@ def expand_batch(cfg, nas_root=None):
                     if k not in discovered or not discovered[k]:
                         discovered[k] = v
 
+        # subject_parse: split the (messy, hand-typed) subject folder into a
+        # project code + its 1-4 animal numbers, reusing the validated live-box
+        # grammar (ni_live_discover.parse_subject). Populates discovered.project
+        # + discovered.animal_codes (;-joined) so the multi-animal DB lookup and
+        # project_hint resolve. The single-animal archive path (no subject_parse
+        # block) is untouched.
+        sp_cfg = disco.get("subject_parse") or {}
+        if sp_cfg:
+            import ni_live_discover
+            subj_val = discovered.get(sp_cfg.get("field", "subject"), "")
+            if subj_val:
+                parsed = ni_live_discover.parse_subject(
+                    subj_val, discovered.get("series"))
+                if parsed.get("project"):
+                    discovered.setdefault("project", parsed["project"])
+                discovered["animal_codes"] = ";".join(
+                    str(a["number"]) for a in parsed["animals"])
+                if parsed.get("flags"):
+                    discovered["subject_flags"] = ",".join(parsed["flags"])
+                if parsed.get("phantom"):
+                    discovered["phantom"] = "yes"
+
         case["discovered"] = discovered
         case["ecosystem_section"] = eco_section
         if eco_section_name_override:
