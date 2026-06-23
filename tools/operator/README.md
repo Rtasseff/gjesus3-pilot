@@ -111,6 +111,15 @@ python tools/operator/mri_ingest.py /path/to/study --go                         
   - `--model 7T | 11.7T` — which BioSpec scanner produced the batch. If you omit
     it, the tool warns and leaves a placeholder; pass it to record the real
     scanner in the registry.
+  - `--no-regenerate-dicom` — **By default**, an exam with no DICOMs (the
+    researcher didn't run Bruker's GUI exporter) has its DICOMs **regenerated at
+    ingest time** via Dicomifier — *but only on a machine where Dicomifier is
+    installed.* The tool prints, before the preview, whether Dicomifier was
+    detected: if yes, no-DICOM exams are filled now; if no, they ingest as empty
+    placeholders and a later re-ingest from a Dicomifier-equipped machine fills
+    them (never blocks). Pass this flag to skip regeneration entirely and force
+    the placeholder. (Dicomifier = the `dicomifier-pilot` conda env; on Windows
+    it lives in WSL.)
 - **Pulling from the console over FTP (optional):** if the data is still on the
   MRI console, add `--ftp-remote /remote/path`. The tool SFTP-mirrors that remote
   folder into your local path first, then previews and ingests. This needs FTP

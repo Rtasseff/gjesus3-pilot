@@ -72,6 +72,10 @@ scope = core.scope
 preview = core.preview
 runner = core.runner
 env = core.env
+# Sibling operator module: project-link collision detection for the MRI page.
+# Imported under the package alias so it shares the loader's import footing
+# (never `import collisions` bare — keep all operator imports package-qualified).
+collisions = importlib.import_module(f"{core.__name__}.collisions")
 
 # Flask is imported after the core so a missing-flask error is obvious and
 # does not mask a core-import problem.
@@ -104,6 +108,24 @@ BUILDER_GRID_LIMIT = 25
 # data-office path and wrong here. The operator's saved choice and an explicit
 # $GJESUS3_ROOT both still win (see load_saved_nas_root).
 GUI_DEFAULT_NAS_ROOT = r"\\gjesus3\gjesus3\gjesus3-data"
+
+# --- MRI (Bruker ParaVision) mode -------------------------------------------
+# A SEPARATE, deliberately-simple page (/mri) over the SAME shared core. Unlike
+# the microscopy recipe/builder UI, MRI has one locked convention (the
+# mri_bruker template); the operator only chooses a destination project and (if
+# linking) edits the project-link name. NOT a recipe system.
+MRI_KEY = "MRI"
+MRI_LABEL = "Internal MRI (Bruker ParaVision)"
+# --model -> registry.instrument_model (same map as tools/operator/mri_ingest.py).
+_MRI_MODEL_MAP = {"7T": "Bruker BioSpec 7T", "11.7T": "Bruker BioSpec 11.7T"}
+# discovered.* fields offered as link-name palette chips (the scan-name +
+# protocol fields the mri_bruker template exposes), plus resolver-supplied extras.
+MRI_LINK_PALETTE_KEYS = [
+    "mri_exam_number", "mri_recon_indices", "mri_sequence_name",
+    "animal_num", "project_code", "mri_study_name",
+]
+MRI_LINK_PALETTE_EXTRAS = ["${sample_id}", "${acq_date}", "${acq_id}",
+                           "${original_name}"]
 
 # Controlled sample_type vocabulary — 06_REGISTRIES §2.4 (DRAFT, REG-07). Operators
 # pick one verbatim; a new kind is a vocab-extension decision, not an ad-hoc value.
@@ -772,42 +794,14 @@ def api_save_recipe():
     return jsonify({"file": fname, "path": target})
 
 
-@app.route("/api/ingest", methods=["POST"])
-def api_ingest():
-    """Commit path: stream the live ingest log via Server-Sent Events.
+def _ingest_sse_response(cfg, nas_root, dry_run, stamp):
+    """Run runner.run in a worker thread and stream its log as SSE.
 
-    Builds the same config the preview used, then calls runner.run with a
-    log_callback that pushes each (msg, level) line down the SSE stream. The
-    final event carries the per-acq results. dry_run honoured for a safe test.
+    Shared by the microscopy (/api/ingest) and MRI (/api/mri/ingest) commit
+    paths -- identical streaming behaviour; only the config assembly upstream
+    differs. Each (msg, level) the pipeline logs becomes a `data: {...}` event;
+    the final `done` event carries the per-acq results + the dry_run flag.
     """
-    data = request.get_json(silent=True) or {}
-    instrument = (data.get("instrument") or "").upper()
-    overrides = data.get("overrides") or {}
-    staging_path = (data.get("staging_path") or "").strip()
-    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
-    dry_run = bool(data.get("dry_run"))
-    recipe_path = (data.get("recipe_path") or "").strip() or None
-
-    if instrument not in MICROSCOPY_KEYS:
-        return jsonify({"error": f"Pick an instrument ({', '.join(MICROSCOPY_KEYS)})."}), 400
-    try:
-        env.validate_nas_root(nas_root)
-    except env.NasRootError as e:
-        return jsonify({"error": str(e)}), 400
-
-    try:
-        cfg, tpl_path, _staging_dir, _pattern = _build_cfg(
-            instrument, overrides, staging_path
-        )
-    except scope.ScopeError as e:
-        return jsonify({"error": str(e)}), 400
-    except config_builder.OverrideError as e:
-        return jsonify({"error": f"Bad override: {e}"}), 400
-    except (KeyError, FileNotFoundError) as e:
-        return jsonify({"error": str(e)}), 400
-
-    stamp = recipe_path or runner.default_recipe_path(tpl_path)
-
     def generate():
         import queue
         q = queue.Queue()
@@ -848,6 +842,202 @@ def api_ingest():
             yield f"data: {payload}\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
+
+
+@app.route("/api/ingest", methods=["POST"])
+def api_ingest():
+    """Commit path: stream the live ingest log via Server-Sent Events.
+
+    Builds the same config the preview used, then calls runner.run with a
+    log_callback that pushes each (msg, level) line down the SSE stream. The
+    final event carries the per-acq results. dry_run honoured for a safe test.
+    """
+    data = request.get_json(silent=True) or {}
+    instrument = (data.get("instrument") or "").upper()
+    overrides = data.get("overrides") or {}
+    staging_path = (data.get("staging_path") or "").strip()
+    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    dry_run = bool(data.get("dry_run"))
+    recipe_path = (data.get("recipe_path") or "").strip() or None
+
+    if instrument not in MICROSCOPY_KEYS:
+        return jsonify({"error": f"Pick an instrument ({', '.join(MICROSCOPY_KEYS)})."}), 400
+    try:
+        env.validate_nas_root(nas_root)
+    except env.NasRootError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        cfg, tpl_path, _staging_dir, _pattern = _build_cfg(
+            instrument, overrides, staging_path
+        )
+    except scope.ScopeError as e:
+        return jsonify({"error": str(e)}), 400
+    except config_builder.OverrideError as e:
+        return jsonify({"error": f"Bad override: {e}"}), 400
+    except (KeyError, FileNotFoundError) as e:
+        return jsonify({"error": str(e)}), 400
+
+    stamp = recipe_path or runner.default_recipe_path(tpl_path)
+    return _ingest_sse_response(cfg, nas_root, dry_run, stamp)
+
+
+# ====================================================================== MRI
+# A separate, deliberately-simple page over the SHARED core (see the MRI_*
+# constants above). Reuses _build_cfg / preview / runner / _ingest_sse_response;
+# adds only (a) the two operator-editable fields (project + link name), (b) the
+# link-collision check, and (c) the Dicomifier-availability hint. The SFTP
+# remote-pull source is layered on after the local-source path is proven.
+
+def _dicomifier_status():
+    """(available, version) for at-ingest DICOM regen on THIS machine.
+
+    Best-effort: importing the regen module needs pydicom and the `dicomifier`
+    binary on PATH (the dicomifier-pilot conda env; on Windows it lives in WSL).
+    Any failure -> (False, None). Mirrors what mri_ingest.py prints in the CLI.
+    """
+    try:
+        from ingest import paravision_regen
+        return paravision_regen.check_dicomifier_available()
+    except Exception:  # noqa: BLE001 — a probe must never break preview
+        return False, None
+
+
+def _mri_overrides(data):
+    """Assemble the config_builder override dict from the MRI page inputs.
+
+    Keys honoured (all optional for preview; operator is enforced at ingest):
+      operator      -> registry.researcher + sidecar operator (MRI: same person)
+      model         -> registry.instrument_model ("7T" / "11.7T")
+      project_mode  -> "auto" (template default, per animal-protocol code) |
+                       "fixed" (one specific project) | "none" (no project/links)
+      project_hint  -> the fixed hint, when project_mode == "fixed"
+      link_filename -> the project-link-name template, when project_mode != "none"
+      regenerate    -> bool; False sets ingest.auto_regenerate_dicom: false
+    """
+    ov = {}
+    operator = (data.get("operator") or "").strip()
+    if operator:
+        ov["registry.researcher"] = operator
+        ov["operator"] = operator
+    model = (data.get("model") or "").strip()
+    if model in _MRI_MODEL_MAP:
+        ov["registry.instrument_model"] = _MRI_MODEL_MAP[model]
+    mode = (data.get("project_mode") or "auto").strip().lower()
+    if mode == "none":
+        ov["registry.project_hint"] = ""              # -> no project, no links
+    elif mode == "fixed":
+        ov["registry.project_hint"] = (data.get("project_hint") or "").strip()
+    # mode == "auto": leave the template's ae-biomegune-${discovered.project_code}
+    if mode != "none":
+        link = (data.get("link_filename") or "").strip()
+        if link:
+            ov["link_filename"] = link
+    if data.get("regenerate") is False:
+        ov["ingest.auto_regenerate_dicom"] = False
+    return ov
+
+
+@app.route("/mri")
+def mri_index():
+    """The simple MRI ingest page (separate from the microscopy index)."""
+    tpl = templates.load_template(MRI_KEY)
+    return render_template(
+        "mri.html",
+        nas_root=load_saved_nas_root(),
+        link_default=tpl.get("link_filename") or "",
+        project_default=(tpl.get("registry") or {}).get("project_hint") or "",
+        models=sorted(_MRI_MODEL_MAP),
+        palette_keys=MRI_LINK_PALETTE_KEYS,
+        palette_extras=MRI_LINK_PALETTE_EXTRAS,
+    )
+
+
+@app.route("/api/mri/preview", methods=["POST"])
+def api_mri_preview():
+    """Read-only MRI preview + link-collision check (local source folder)."""
+    data = request.get_json(silent=True) or {}
+    staging_path = (data.get("staging_path") or "").strip()
+    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+
+    if not staging_path:
+        return jsonify({"error": "Pick a source folder (a ParaVision exam, a "
+                                 "study folder, or a batch root)."}), 400
+    try:
+        env.validate_nas_root(nas_root)
+    except env.NasRootError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        cfg, tpl_path, staging_dir, pattern = _build_cfg(
+            MRI_KEY, _mri_overrides(data), staging_path
+        )
+    except scope.ScopeError as e:
+        return jsonify({"error": str(e)}), 400
+    except config_builder.OverrideError as e:
+        return jsonify({"error": f"Bad setting: {e}"}), 400
+    except (KeyError, FileNotFoundError) as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        result = preview.preview_batch(cfg, nas_root)
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"Preview failed: {e}"}), 500
+
+    cases = [_case_to_dict(c) for c in result.cases]
+    available, version = _dicomifier_status()
+    return jsonify({
+        "staging_dir": staging_dir,
+        "pattern": pattern,
+        "template_path": tpl_path,
+        "n_matched": result.n_matched,
+        "n_new": result.n_new,
+        "n_skipped": result.n_skipped,
+        "n_already_ingested": result.n_already_ingested,
+        "n_dropped": result.n_dropped,
+        "dropped": result.dropped,
+        "blocking_errors": result.blocking_errors,
+        "warnings": result.warnings,
+        "cases": cases,
+        "collisions": collisions.find_link_collisions(cases),
+        "existing_targets": collisions.find_existing_link_targets(cases, nas_root),
+        "dicomifier_available": available,
+        "dicomifier_version": version,
+    })
+
+
+@app.route("/api/mri/ingest", methods=["POST"])
+def api_mri_ingest():
+    """Commit path for the MRI page: SSE-streamed ingest (operator REQUIRED)."""
+    data = request.get_json(silent=True) or {}
+    staging_path = (data.get("staging_path") or "").strip()
+    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    dry_run = bool(data.get("dry_run"))
+    operator = (data.get("operator") or "").strip()
+
+    if not staging_path:
+        return jsonify({"error": "Pick a source folder first."}), 400
+    if not operator:
+        return jsonify({"error": "Operator is required for MRI (the person who "
+                                 "ran the scanner)."}), 400
+    try:
+        env.validate_nas_root(nas_root)
+    except env.NasRootError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        cfg, tpl_path, _sd, _pat = _build_cfg(
+            MRI_KEY, _mri_overrides(data), staging_path
+        )
+    except scope.ScopeError as e:
+        return jsonify({"error": str(e)}), 400
+    except config_builder.OverrideError as e:
+        return jsonify({"error": f"Bad setting: {e}"}), 400
+    except (KeyError, FileNotFoundError) as e:
+        return jsonify({"error": str(e)}), 400
+
+    stamp = runner.default_recipe_path(tpl_path)
+    return _ingest_sse_response(cfg, nas_root, dry_run, stamp)
 
 
 # --------------------------------------------------------------------- runner

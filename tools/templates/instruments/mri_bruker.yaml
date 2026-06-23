@@ -163,10 +163,12 @@
 # --- No-DICOM acquisition handling ---
 # When the researcher hasn't run Bruker's GUI DICOM exporter (a real-
 # world gap: 3 of 7 round-6 source projects), the source has no
-# `pdata/<idx>/dicom/*.dcm` files. The ingest still registers the
-# acquisition: `<ACQ-ID>.data/` is created empty and `metadata.json.mri:`
-# is fully populated from the parsed JCAMP-DX. Idempotent re-run after
-# the student converts will fill in the DICOMs.
+# `pdata/<idx>/dicom/*.dcm` files. By DEFAULT (auto_regenerate_dicom: true,
+# see the ingest: block below) these are regenerated AT INGEST TIME via
+# Dicomifier when it is on PATH. If Dicomifier is absent the ingest still
+# registers the acquisition: `<ACQ-ID>.data/` is created empty and
+# `metadata.json.mri:` is fully populated from the parsed JCAMP-DX; an
+# idempotent re-run from a Dicomifier-equipped machine then fills the DICOMs.
 # --------------------------------------------------------------------------
 
 ingest:
@@ -193,30 +195,34 @@ ingest:
   reconstructions: all
 
   # --------------------------------------------------------------------
-  # auto_regenerate_dicom (Phase 2 of tasks.md §3.1, 2026-06-01)
+  # auto_regenerate_dicom (Phase 2 of tasks.md §3.1; DEFAULT-ON for MRI
+  # since 2026-06-22)
   # --------------------------------------------------------------------
-  # OPTIONAL: when true, exams whose source has NO `pdata/<idx>/dicom/`
+  # DEFAULT (true): exams whose source has NO `pdata/<idx>/dicom/`
   # subfolders (i.e. the researcher didn't run Bruker's GUI DICOM
   # exporter) get their DICOMs regenerated AT INGEST TIME via
   # Dicomifier 2.5.3 + the PV-7 workarounds (PixelSpacing axis-swap +
-  # Window-tag fix). Output is equivalent to Bruker GUI export.
+  # Window-tag fix). Output is equivalent to Bruker GUI export. Exams
+  # that ALREADY have DICOMs are untouched — regen only fills the gap.
   #
-  # Default: false. Opt-in to keep Dicomifier dependency optional.
+  # GRACEFUL when Dicomifier is absent: if `dicomifier` is not on PATH
+  # (or regen fails) the ingest logs a WARN and falls through to the
+  # empty-`.data/` placeholder — it does NOT abort. A later idempotent
+  # re-ingest from a Dicomifier-equipped machine fills the DICOMs in.
   #
-  # REQUIREMENTS when set to true:
-  #   - `dicomifier` must be on PATH at ingest time. Easiest path is
-  #     to activate the conda env before running ingest:
-  #         conda activate dicomifier-pilot
-  #     (env created via:
-  #         conda install -c conda-forge dicomifier pydicom)
-  #   - If `dicomifier` is not found, the ingest logs a clear error
-  #     and falls through to the empty-.data/ placeholder behaviour
-  #     (existing default path) — does NOT abort the batch.
+  # WHERE IT ACTUALLY RUNS: only where `dicomifier` is on PATH. Install
+  # the conda env on the ingest machine to enable it:
+  #     conda activate dicomifier-pilot
+  #     (env: conda install -c conda-forge dicomifier pydicom)
+  # On a native-Windows run (Dicomifier lives in WSL) regen will not
+  # fire — no-DICOM exams placeholder and are filled by the WSL pass
+  # (tools/configs/mri_jrc_*_regen.yaml). The operator front-ends
+  # (mri_ingest.py / the GUI) print whether Dicomifier is detected so
+  # you know which will happen up front.
   #
-  # The 3 no-DICOM source projects from round-6 v2 (m13/m14/m29
-  # protocol 0423) are the immediate targets. Set true to fill in
-  # their currently-empty .data/ placeholders via idempotent re-ingest.
-  # auto_regenerate_dicom: false
+  # To force the placeholder behaviour, set this false here or pass
+  # `mri-ingest --no-regenerate-dicom`.
+  auto_regenerate_dicom: true
 
 auto_discover:
   # EDIT: absolute path to the batch root — the directory containing

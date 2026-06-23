@@ -126,6 +126,45 @@ def parse_reconstructions(raw):
         )
 
 
+# ----------------------------------------------------------- regen status
+
+def log_regen_status(disabled):
+    """Tell the operator what will happen to no-DICOM exams, before the preview.
+
+    MRI regenerates missing DICOMs by default (the mri_bruker template sets
+    ingest.auto_regenerate_dicom: true), but regen only actually runs where
+    Dicomifier is on PATH. Printing this up front avoids the surprise of a
+    silently-empty .data/ on a machine without Dicomifier:
+
+      - regen disabled (--no-regenerate-dicom) -> placeholder for no-DICOM exams
+      - regen on + Dicomifier present          -> no-DICOM exams regenerated now
+      - regen on + Dicomifier absent           -> placeholder now, fill on re-ingest
+
+    Never raises: the availability probe is best-effort (importing the regen
+    module needs pydicom, which may be absent), so any failure is treated as
+    "not available" rather than aborting the tool.
+    """
+    if disabled:
+        log("DICOM regeneration DISABLED (--no-regenerate-dicom): any exam "
+            "without pdata/*/dicom/ will ingest as an empty .data/ placeholder.")
+        return
+    available, version = False, None
+    try:
+        from ingest import paravision_regen
+        available, version = paravision_regen.check_dicomifier_available()
+    except Exception:  # noqa: BLE001 — probe must never break the CLI
+        available, version = False, None
+    if available:
+        log(f"DICOM regeneration ON; Dicomifier detected ({version}) — exams "
+            "without pdata/*/dicom/ will be regenerated at ingest time.")
+    else:
+        log("DICOM regeneration ON but Dicomifier is NOT detected on this "
+            "machine -- no-DICOM exams will ingest as empty .data/ placeholders "
+            "and can be filled by a later re-ingest from a Dicomifier-equipped "
+            "machine (activate the dicomifier-pilot conda env to regenerate "
+            "now). This does NOT block the ingest.", "WARN")
+
+
 # ------------------------------------------------------------------ FTP pull
 
 def ftp_pull(remote_root, local_root, dry_run=False):
@@ -335,6 +374,14 @@ def main(argv=None):
              "instrument_model). Default: leave the template placeholder.",
     )
     p.add_argument(
+        "--no-regenerate-dicom", dest="no_regenerate_dicom",
+        action="store_true",
+        help="Disable at-ingest DICOM regeneration. By DEFAULT, exams with no "
+             "pdata/*/dicom/ are regenerated via Dicomifier when it is on PATH "
+             "(and ingested as empty placeholders when it is not). Pass this to "
+             "force the placeholder behaviour and skip regeneration entirely.",
+    )
+    p.add_argument(
         "--ftp-remote", dest="ftp_remote", default=None,
         help="Remote SFTP path to mirror into the local staging dir before "
              "ingest (creds via GJESUS3_FTP_* env). Omit to ingest an "
@@ -489,6 +536,12 @@ def main(argv=None):
     meta_overrides["operator"] = operator
     log(f"Researcher/operator: {operator}")
 
+    # DICOM regeneration is ON by default for MRI (the mri_bruker template sets
+    # ingest.auto_regenerate_dicom: true). --no-regenerate-dicom forces the
+    # empty-.data/ placeholder path for any exam that lacks pdata/*/dicom/.
+    if args.no_regenerate_dicom:
+        meta_overrides["ingest.auto_regenerate_dicom"] = False
+
     # --- build the in-memory config -----------------------------------------
     try:
         cfg, template_path = build_mri_config(
@@ -514,6 +567,10 @@ def main(argv=None):
             "--model 11.7T to record the real scanner.",
             "WARN",
         )
+
+    # --- DICOM regen status (so the operator knows what happens to no-DICOM
+    # exams BEFORE the preview, with no silent-empty-.data/ surprise) --------
+    log_regen_status(disabled=args.no_regenerate_dicom)
 
     # --- preview (read-only) ------------------------------------------------
     log("Building preview (read-only)...")

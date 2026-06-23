@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MRI Ingest — gjesus3</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>MRI Ingest <span class="muted">— Bruker ParaVision</span>
+      <a href="/" class="muted" style="font-size:.55em;font-weight:normal">→ switch to microscopy ingest</a></h1>
+    <div class="nasbar">
+      <label>Destination NAS <span class="muted">— where files are ingested to</span>
+        <input id="nas-root" type="text" value="{{ nas_root }}" size="28"
+               placeholder="\\gjesus3\gjesus3\gjesus3-data">
+      </label>
+      <button id="nas-browse" type="button" class="browse">Browse…</button>
+      <button id="nas-save" type="button">Set</button>
+      <span id="nas-status" class="pill"></span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- Dry-run banner (shown by mri.js whenever dry-run is ON). -->
+    <div id="dry-banner" class="dry-banner" hidden>
+      DRY RUN — preview only. <strong>Nothing will be written to the NAS.</strong>
+      Uncheck “Dry-run” at the bottom to ingest for real.
+    </div>
+
+    <p class="muted">
+      Point at a ParaVision <strong>exam</strong>, a <strong>study folder</strong>, or a
+      <strong>batch root</strong> (a study already pulled from the scanner). The MRI
+      naming convention is locked in — you only set who ran the scanner, the
+      destination project, and (when linking) the project link name. Preview first,
+      then ingest. Re-running is safe: already-ingested scans are skipped.
+    </p>
+
+    <!-- SOURCE -->
+    <div class="row">
+      <label class="grow">Source folder <span class="muted">— a ParaVision exam, a study folder, or a batch root</span>
+        <input id="staging" type="text" placeholder="D:\projects\mri\&lt;pulled study&gt;">
+      </label>
+      <button id="browse" type="button" class="browse">Browse…</button>
+    </div>
+
+    <!-- WHO RAN IT + SCANNER -->
+    <div class="row">
+      <label class="grow">Operator <span class="star">★</span> <span class="muted">— who RAN the scanner (= the researcher; required)</span>
+        <input id="operator" type="text" placeholder="e.g. Irene">
+      </label>
+      <label>Scanner model <span class="muted">— optional</span>
+        <select id="model">
+          <option value="">— leave unset —</option>
+          {% for m in models %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <!-- DESTINATION PROJECT -->
+    <fieldset>
+      <legend>Destination project <span class="muted">— where the scans are linked</span></legend>
+      <div class="row">
+        <label>Link to
+          <select id="project-mode">
+            <option value="auto">Per animal-protocol code (default) — ae-biomegune-&lt;NNNN&gt;</option>
+            <option value="fixed">A specific project…</option>
+            <option value="none">No project (don’t create links)</option>
+          </select>
+        </label>
+        <label class="grow" id="project-fixed-wrap" hidden>Project short-name
+          <input id="project-hint" type="text" placeholder="ae-biomegune-0424">
+        </label>
+      </div>
+      <p class="muted" id="project-note"></p>
+    </fieldset>
+
+    <!-- PROJECT LINK NAME (hidden when project = none) -->
+    <fieldset id="link-fieldset">
+      <legend>Project link name <span class="muted">— the name under the project’s raw_linked/</span></legend>
+      <p class="muted">Type fixed text, or click/drag a metadata label below. Keep it
+        unique per scan — the default already includes sample, date, exam and recon, so
+        two scans never clash. The preview <strong>warns</strong> if your edit would make
+        two scans collide.</p>
+      <div id="link-field" class="tokenfield is-empty" data-placeholder="leave blank to use the source name"></div>
+      <div class="row">
+        <button id="link-reset" type="button">Reset to default</button>
+      </div>
+      <div id="link-palette" class="palette"></div>
+    </fieldset>
+
+    <!-- DICOM REGEN -->
+    <div class="row">
+      <label class="check"><input id="regenerate" type="checkbox" checked>
+        Regenerate missing DICOMs at ingest (via Dicomifier)</label>
+      <span id="dicomifier-state" class="muted"></span>
+    </div>
+
+    <div class="row">
+      <button id="preview" type="button" class="primary">Preview</button>
+    </div>
+
+    <div id="summary" class="summary"></div>
+    <div id="collisions" class="errbox"></div>
+    <div id="dropped" class="dropbox"></div>
+    <div id="errors" class="errbox"></div>
+    <div id="table-wrap" class="table-wrap"></div>
+    <details id="warnings-wrap" class="warnings"><summary>Warnings / skips</summary>
+      <pre id="warnings"></pre>
+    </details>
+
+    <div class="commit-row" id="commit">
+      <label class="check"><input id="dry" type="checkbox" checked> Dry-run (test only — writes nothing)</label>
+      <span class="state" id="dry-state"></span>
+      <button id="ingest" type="button" class="go" disabled>Ingest</button>
+    </div>
+    <div id="log-wrap" class="log-wrap" hidden>
+      <h3>Ingest log</h3>
+      <pre id="log"></pre>
+      <div id="result" class="summary"></div>
+    </div>
+  </main>
+
+  <!-- In-page folder browser (same component as the microscopy page). -->
+  <div id="fb-overlay" class="fb-overlay" hidden>
+    <div class="fb-modal">
+      <header class="fb-head">
+        <strong id="fb-title">Select a folder</strong>
+        <button id="fb-close" type="button" class="fb-x" title="Cancel">×</button>
+      </header>
+      <div class="fb-bar">
+        <button id="fb-up" type="button" title="Up one level">↑ Up</button>
+        <input id="fb-path" type="text" class="fb-path" spellcheck="false"
+               placeholder="path — type and press Go, or browse below">
+        <button id="fb-go" type="button">Go</button>
+      </div>
+      <div id="fb-drives" class="fb-drives"></div>
+      <div id="fb-list" class="fb-list"></div>
+      <div id="fb-error" class="errbox"></div>
+      <footer class="fb-foot">
+        <span class="muted">Click a folder to open it. Files are shown greyed for context — you select the folder, not a file.</span>
+        <span class="fb-foot-actions">
+          <button id="fb-cancel" type="button">Cancel</button>
+          <button id="fb-select" type="button" class="go">Use this folder</button>
+        </span>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    window.MRI = {
+      linkDefault: {{ link_default|tojson }},
+      projectDefault: {{ project_default|tojson }},
+      paletteKeys: {{ palette_keys|tojson }},
+      paletteExtras: {{ palette_extras|tojson }}
+    };
+  </script>
+  <script src="{{ url_for('static', filename='tokenfield.js') }}"></script>
+  <script src="{{ url_for('static', filename='mri.js') }}"></script>
+</body>
+</html>
