@@ -29,6 +29,15 @@ Registries are **CSV files** that serve as indexes (manifests) for each storage 
 | Projects Registry | `/gjesus3/registries/registry_projects.csv` | Indexes all project folders |
 | Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets (if used) |
 
+The `registries/` directory also holds a few **generated / bookkeeping artifacts** that are NOT registries and NOT hand-edited sources of truth:
+
+| Artifact | Location | What it is |
+|----------|----------|------------|
+| Finder index | `/gjesus3/registries/index.html` | **Generated artifact** — the self-contained researcher "Finder" (a searchable HTML view of `registry_raw` ⋈ `registry_projects`, with Copy-path buttons). **Auto-refreshed at the end of each successful (non-dry-run) ingest** and regenerable on demand with [`tools/generate_index.py`](../tools/generate_index.py). **Never hand-edited; not a source of truth** (re-running the generator overwrites it) and not under git. See [`tools/FINDER.md`](../tools/FINDER.md). |
+| Lock + sequence | `/gjesus3/registries/.registry.lock`, `.acq_id_seq.json` | Concurrency bookkeeping for ACQ-ID allocation + CSV-append safety (§2.7) — not data. |
+| Pending list | `/gjesus3/registries/pending_subject_metadata.csv` | Deferred-recovery queue for DB-miss / no-credentials subject enrichment (§2.3.2; [08_METADATA §4.4.6](08_METADATA.md)). |
+| Ingest manifest | `/gjesus3/registries/ingest_manifest.csv` | Portable source-name → ACQ-ID → canonical-path map written on every ingest ([10_TOOLS §2.1.1](10_TOOLS.md)). |
+
 ### 1.3 Why CSV?
 
 | Consideration | CSV Advantage |

@@ -33,6 +33,8 @@ python tools/ingest_raw.py -i
 
 The script is idempotent: re-running the same config skips acquisitions already in the registry (matched by `acquisition_date` + `original_name`). Safe to re-run after a partial failure.
 
+After a successful (non-dry-run) batch the script **auto-refreshes the researcher Finder** — it regenerates `registries/index.html` (the searchable HTML view researchers double-click over SMB; see [`tools/FINDER.md`](FINDER.md)). This is **non-fatal**: a refresh failure logs a WARN but does not fail the ingest, and you can always rebuild the index by hand with `tools/generate_index.py`.
+
 ---
 
 ## CLI flags

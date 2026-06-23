@@ -54,7 +54,10 @@ Organizing by data ecosystem rather than by instrument solves several problems:
 ```
 /gjesus3/
 ├── registries/
-│   └── registry_raw.csv                # Master registry (see 06_REGISTRIES)
+│   ├── registry_raw.csv                # Master registry (see 06_REGISTRIES)
+│   └── index.html                      # GENERATED researcher "Finder" — auto-refreshed
+│                                       # at the end of each successful ingest; not a
+│                                       # source of truth, not in git (see 06_REGISTRIES §1.2)
 │
 └── raw/
     ├── MICROSCOPY/                              # Bio-Formats / OMERO ecosystem
