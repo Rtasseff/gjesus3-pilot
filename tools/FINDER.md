@@ -61,11 +61,11 @@ PYTHONPATH=tools python tools/generate_index.py --nas-root J:/gjesus3-data --per
 It only writes `index.html` files — it never touches `/raw/`, the registry CSVs,
 or anything else. The page shows a "generated <timestamp>" line.
 
-**You rarely need to run it for the global index by hand:** a successful
-(non-dry-run) `ingest_raw.py` batch **auto-refreshes `registries/index.html`** at
-the end of the run (non-fatally — a refresh failure logs a WARN but never fails the
-ingest). Run the generator manually when you want the **per-project** indexes
-(`--per-project`), a local preview, or to rebuild after a refresh WARN.
+**You rarely need to run it by hand:** a successful (non-dry-run) `ingest_raw.py`
+batch **auto-refreshes the global `registries/index.html` AND every per-project
+`index.html`** at the end of the run (non-fatally — a refresh failure logs a WARN
+but never fails the ingest). Run the generator manually only for a local preview,
+or to rebuild after a refresh WARN.
 
 `--link-base` sets the share root prepended to the copyable paths. The default is
 the portable container UNC `\\GJESUS3\gjesus3\gjesus3-data` — it works on any
@@ -88,8 +88,8 @@ Filters: free-text positional + `--instrument --researcher --subject --anatomy
 ## Scope & limitations (MVP — by design)
 - **Static snapshot.** The page embeds the registry data at generation time. The
   registry changes only on ingest, and each successful ingest auto-refreshes the
-  global `index.html`; per-project indexes and any post-WARN rebuild are a manual
-  generator run.
+  global `index.html` *and* the per-project indexes; only a post-WARN rebuild needs
+  a manual generator run.
 - **Size.** Self-contained means all rows are embedded — ~19 MB at 13.5k acqs.
   It opens fine, but for a much larger archive the next step is client-side
   virtualization / a fetched data file. The table shows the first 800 matches of

@@ -261,6 +261,42 @@ assembles a project on the NAS.)
     naturally with the existing `find_acq.py` join engine (the Finder's data source) for
     resolving the selected rows to their `/raw/` acquisitions.
 
+## Finder — provenance-driven project index (a possibly-better project-level index) (2026-06-23)
+
+Context: we now publish a **registry-driven per-project `index.html`** (the global Finder,
+filtered by `project_hint`, auto-refreshed on ingest — see [`tools/FINDER.md`](../tools/FINDER.md)).
+This item explores a **different, possibly better** way to build the project-level index: drive
+it from the **project's own provenance file** instead of the registry. Raised by the data office
+2026-06-23 — **shape still open, discuss before building.**
+
+- [ ] **Build the project `index.html` from the project's provenance file, not from `project_hint`.**
+  At ingest, every raw acquisition hard-linked into a project is recorded in that project's
+  **provenance** (see [`07_PROVENANCE`](../mfb-rdm-docs/07_PROVENANCE.md) + the ingest
+  provenance-writing step). A provenance-driven index would list **the files actually present in
+  the project's linked `raw/` folder** and use the provenance to link each hard-linked file back
+  to its **source acquisition** → its `metadata.json` sidecar and its registry row (so the
+  researcher still gets full acquisition + registry info, reached *through* the provenance rather
+  than via a `project_hint` match).
+  - *Why it may beat the registry-driven version:*
+    - **Reflects what's actually in the project, now.** `project_hint` is stamped once at ingest;
+      provenance reflects the project's real current contents. Not every ingest even puts raw
+      files into a project, and the **initial project is often vague** — researchers later
+      **reorganize / re-home** acqs into projects meaningful to them. A provenance-driven index
+      tracks that reality; a `project_hint` filter goes stale.
+    - **Shows non-acquisition files too.** Project folders accumulate files that aren't raw
+      acquisitions (analyses, notes, derived outputs) with **no registry row** — the
+      registry-driven index can't show them, but a provenance/folder-driven index can list them
+      with whatever partial info exists (name, size, any provenance recorded).
+    - **Could strengthen provenance itself.** Building the view from provenance surfaces gaps (a
+      linked file with no provenance entry, or an entry whose source acq is gone), so it doubles
+      as a **provenance completeness / tracking** check.
+  - *Open questions (for the later discussion):* exact shape (does it **replace** or **complement**
+    the registry-driven per-project index?); what provenance records today vs what this needs (may
+    require enriching the provenance schema); how to render rows with full registry info vs
+    partial-only; performance (per-project provenance reads vs one registry pass); and whether the
+    "select-in-Finder → assemble a project" item above should *write* into this same
+    provenance-driven model.
+
 ## True-production restart — subsystem review (correction pass 2026-06-11)
 
 - [ ] **Review which pilot subsystems carry forward vs. are replaced by

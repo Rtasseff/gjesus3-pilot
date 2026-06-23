@@ -1682,9 +1682,9 @@ def main():
     # for a batch it regenerates once, reflecting whatever is now in the registry.)
     if not args.dry_run:
         try:
-            import generate_index  # tools/ dir; writes <nas_root>/registries/index.html
-            log("Refreshing registry Finder index (registries/index.html)...")
-            generate_index.main(["--nas-root", nas_root])
+            import generate_index  # tools/ dir; writes the global + per-project index.html files
+            log("Refreshing Finder indexes (global + per-project index.html)...")
+            generate_index.main(["--nas-root", nas_root, "--per-project"])
         except Exception as e:
             log(f"Finder index refresh failed (non-fatal): {e}", "WARN")
 
