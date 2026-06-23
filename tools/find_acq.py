@@ -33,7 +33,7 @@ SEARCH_FIELDS = [
 
 
 def _projects_index(nas):
-    """project_id -> {folder, short, owner} from registry_projects.csv."""
+    """project_id -> {folder, short, owner, desc} from registry_projects.csv."""
     path = os.path.join(nas, "registries", "registry_projects.csv")
     idx = {}
     if os.path.isfile(path):
@@ -45,6 +45,7 @@ def _projects_index(nas):
                         "folder": (r.get("folder_location") or "").strip(),
                         "short": (r.get("short_name") or "").strip(),
                         "owner": (r.get("owner") or "").strip(),
+                        "desc": (r.get("description") or "").strip(),
                     }
     return idx
 
@@ -69,6 +70,8 @@ def build_records(nas):
         p = proj_idx.get((r.get("project_hint") or "").strip()) or {}
         rec["_project_folder"] = p.get("folder", "")
         rec["_project_short"] = p.get("short", "")
+        rec["_project_owner"] = p.get("owner", "")
+        rec["_project_desc"] = p.get("desc", "")
         rec["_search"] = " ".join(str(r.get(f, "")) for f in SEARCH_FIELDS).lower()
         records.append(rec)
     return records, proj_idx

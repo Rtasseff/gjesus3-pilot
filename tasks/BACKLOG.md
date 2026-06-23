@@ -229,6 +229,38 @@ original `tasks.md` locations (§3.1 / §3.2) as history; this is the active hom
   Prep is already in place: keep the flat registry clean and keep DICOM UIDs
   captured (done) — that's what makes the eventual platform import frictionless.
 
+## Finder — "Select-in-Finder → assemble a project" (2026-06-23)
+
+Context: the registry **Finder** ([`tools/FINDER.md`](../tools/FINDER.md)) today is a
+read-only locator — a generated, self-contained `registries/index.html` a researcher
+double-clicks over SMB to search the registry and **Copy path** to their data. It never
+touches the filesystem. This item is the next step up: turn it from a read-only *finder*
+into a *build-a-working-set* front-end. (Extends the "select-rows" idea already noted in
+`tools/FINDER.md` *Next* — that one only exports a CSV/methods manifest; this one actually
+assembles a project on the NAS.)
+
+- [ ] **Select acquisition rows → create the hard links + provenance into a chosen
+  project.** Let a user **tick/select** acquisition rows in the Finder `index.html` view,
+  pick a target project folder, and have the system **create the project hard links for the
+  selected acqs AND write the corresponding provenance entries** — i.e. the *same* hard-link +
+  provenance machinery that [`tools/ingest_raw.py`](../tools/ingest_raw.py) and the linker
+  ([`tools/ingest/linker.py`](../tools/ingest/linker.py), `create_hardlink`) already perform
+  in the ingest project-linking step when an ingest's `project_hint` resolves. This makes the
+  Finder a "build a working set / assemble a project" tool, not just a locator.
+  - *Why it's not a page-only change (the hard constraint):* the current Finder is a
+    **static, sandboxed HTML page running over `file://`** — by browser security it **cannot
+    touch the filesystem** (it can't even open a `file://` path directly, which is why it
+    offers Copy-path instead of a link; see `tools/FINDER.md`). Actually creating hard links
+    and writing provenance therefore **requires a helper / CLI / back-end beyond the browser
+    page** — e.g. the page emits a selection manifest that a small local CLI consumes (reusing
+    the `linker` + provenance code), or a thin local service the page calls. The browser page
+    alone can never do this.
+  - *Reuse, don't reinvent:* drive it through the existing linker + the ingest
+    provenance-writing step rather than a parallel path, so project links and provenance stay
+    identical to ingest-time links (same inode hard links, same provenance shape). Pairs
+    naturally with the existing `find_acq.py` join engine (the Finder's data source) for
+    resolving the selected rows to their `/raw/` acquisitions.
+
 ## True-production restart — subsystem review (correction pass 2026-06-11)
 
 - [ ] **Review which pilot subsystems carry forward vs. are replaced by

@@ -30,7 +30,11 @@ import find_acq  # noqa: E402
 
 # The SMB share UNC works on any locked-down machine regardless of drive-letter
 # mapping; override with --link-base if your share is reached differently.
-DEFAULT_LINK_BASE = r"\\GJESUS3\gjesus3"
+# Must point at the *container* (the dir holding raw/ + registries/), because the
+# canonical paths we join onto it are share-relative like "/raw/...". The old value
+# (\\GJESUS3\gjesus3) omitted the gjesus3-data component and produced unresolvable
+# paths.
+DEFAULT_LINK_BASE = r"\\GJESUS3\gjesus3\gjesus3-data"
 
 
 def _winpath(base, rel):
@@ -58,6 +62,10 @@ def _payload(records, link_base):
             "project": r.get("project_hint", ""),
             "researcher": r.get("researcher", ""),
             "size": r.get("file_size_mb", ""),
+            "sample_type": r.get("sample_type", ""),
+            "proj_short": r.get("_project_short", ""),
+            "proj_owner": r.get("_project_owner", ""),
+            "proj_desc": r.get("_project_desc", ""),
             "path": _winpath(link_base, raw),
             "proj_path": _winpath(link_base, r.get("_project_folder", "")),
             "meta_path": _winpath(link_base, raw.rstrip("/") + "/metadata.json") if raw else "",
@@ -118,8 +126,9 @@ _HTML = r"""<!doctype html>
 <script>
 const DATA = __DATA__;
 const COLS = [["acq","Acq ID"],["date","Date"],["instr","Instr"],["mod","Modality"],
-  ["sample","Sample"],["subject","Subject"],["organism","Organism"],["region","Region"],
-  ["project","Project"],["size","MB"]];
+  ["researcher","Researcher"],["operator","Operator"],["sample","Sample"],["subject","Subject"],
+  ["organism","Organism"],["sample_type","Sample type"],["orig","Original name"],
+  ["proj_short","Project"],["proj_owner","Owner"]];
 const CAP = 800;
 let sortKey = "date", sortDir = -1;
 const $ = id => document.getElementById(id);
@@ -143,12 +152,20 @@ function copyPath(p){
   } else { window.prompt("Copy this path:", p); }
 }
 function detailRow(d){
-  const f = [["Raw path",d.path],["Project link",d.proj_path],["Metadata",d.meta_path],
+  // 3-tuple rows carry a data-p tag (meta|raw|proj) -> a Copy button in the <dd>.
+  const f = [["Raw path",d.path,"raw"],["Project link",d.proj_path,"proj"],
+    ["Metadata",d.meta_path,"meta"],
     ["Researcher",d.researcher],["Operator",d.operator],["Session",d.session],
-    ["Format",d.format],["File count",d.count],["Original name",d.orig],["Notes",d.notes]];
+    ["Format",d.format],["File count",d.count],["File size (MB)",d.size],
+    ["Original name",d.orig],["Project",d.proj_short],
+    ["Project description",d.proj_desc],["Notes",d.notes]];
   const tr = document.createElement("tr"); tr.className = "detail";
   tr.innerHTML = '<td colspan="'+(COLS.length+1)+'"><dl class="d">' +
-    f.filter(([,v])=>v).map(([k,v])=>"<dt>"+esc(k)+"</dt><dd>"+esc(v)+"</dd>").join("") + "</dl></td>";
+    f.filter(([,v])=>v).map(([k,v,p]) => "<dt>"+esc(k)+"</dt><dd>"+esc(v) +
+      (p ? ' <button class="copy" data-p="'+p+'">Copy</button>' : "") + "</dd>").join("") +
+    "</dl></td>";
+  tr.querySelectorAll("button.copy").forEach(b => { b.onclick = e => { e.stopPropagation();
+    copyPath(b.dataset.p==="meta"?d.meta_path : b.dataset.p==="raw"?d.path : d.proj_path); }; });
   return tr;
 }
 function render(){

@@ -31,8 +31,8 @@ def _seed(d):
         w = csv.writer(f)
         w.writerow(["project_id", "short_name", "description", "owner", "start_date",
                     "status", "last_activity", "folder_location", "notes"])
-        w.writerow(["PROJ-0003", "ae-biomegune-0424", "", "", "", "active", "",
-                    "/projects/proj-ae-biomegune-0424/", ""])
+        w.writerow(["PROJ-0003", "ae-biomegune-0424", "AE biomaGUNE 0424 cardiac study",
+                    "MBC", "", "active", "", "/projects/proj-ae-biomegune-0424/", ""])
     rows = [
         {"acq_id": "ACQ-20260219-ZWSI-001", "acquisition_datetime": "2026-02-19T00:00:00Z",
          "instrument": "ZWSI", "modalities_in_study": "WSI", "sample_id": "0424_ID29H",
@@ -68,9 +68,17 @@ def test_build_records():
         z = next(r for r in recs if r["acq_id"] == "ACQ-20260219-ZWSI-001")
         check(z["_raw_path"] == "/raw/MICROSCOPY/2026/2026-02/ACQ-20260219-ZWSI-001/", "raw path carried")
         check(z["_project_folder"] == "/projects/proj-ae-biomegune-0424/", "project folder resolved")
+        check(z["_project_owner"] == "MBC", "project owner resolved")
+        check(z["_project_desc"] == "AE biomaGUNE 0424 cardiac study", "project description resolved")
         check("id29h" in z["_search"] and "heart" in z["_search"], "search blob lower-cased")
         c = next(r for r in recs if r["acq_id"] == "ACQ-20260101-CELL-001")
         check(c["_project_folder"] == "", "unresolved project -> empty folder")
+        pay = generate_index._payload(recs, r"\\GJESUS3\gjesus3\gjesus3-data")
+        pz = next(p for p in pay if p["acq"] == "ACQ-20260219-ZWSI-001")
+        check(pz["sample_type"] == "tissue", "payload carries sample_type")
+        check(pz["proj_short"] == "ae-biomegune-0424", "payload carries proj_short")
+        check(pz["proj_owner"] == "MBC", "payload carries proj_owner")
+        check(pz["proj_desc"] == "AE biomaGUNE 0424 cardiac study", "payload carries proj_desc")
 
 
 def test_matches():
@@ -105,6 +113,8 @@ def test_render_html():
         check("ACQ-20260219-ZWSI-001" in html, "acq id embedded")
         check("const DATA =" in html, "data embedded inline")
         check("GJESUS3" in html and "MICROSCOPY" in html, "share path embedded")
+        check("Sample type" in html, "new 'Sample type' column header present")
+        check("Copy" in html, "detail copy button label present")
         check(html.count("</script>") == 1, "exactly one </script> (no data breakout)")
 
 

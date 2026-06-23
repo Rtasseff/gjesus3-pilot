@@ -17,11 +17,19 @@ This is an **MVP to try and evaluate** — see *Scope & limitations* at the end.
 ## How a researcher uses it
 1. Open the share, double-click `registries\index.html` (or their project's
    `index.html`). It opens in the browser already on the machine.
-2. Type in the search box — it filters instantly (id, sample, subject, instrument,
-   modality, date, region, project, researcher). Click a column to sort; click a
-   row for full details (paths, metadata link, original name, …).
-3. Click **Copy path** on a row and paste into File Explorer's address bar to open
-   that acquisition's folder.
+2. Type in the search box — it filters instantly across every visible column.
+   The table columns are, in order: **Acq ID, Date, Instrument, Modality,
+   Researcher, Operator, Sample, Subject, Organism, Sample type, Original name,
+   Project** (the project `short_name`) and **Owner** (the project owner). Click a
+   column header to sort; click a row to open the detail panel for everything else.
+3. The **detail panel** adds **File size (MB)** and **Project description** on top of
+   the raw path, project link, metadata path, session, format, file count, original
+   name and notes. It has **Copy path** buttons for the raw path, the project link,
+   and the `metadata.json` path.
+4. Click a **Copy path** button and paste into File Explorer's address bar to open
+   that folder. Tip: paste the copied **metadata.json** path into a Chrome/Edge tab
+   instead — the browser renders the JSON sidecar as a native collapsible tree, a
+   zero-embed way to read an acquisition's metadata without any viewer.
 
 > **Why "Copy path" and not a clickable link?** Browsers block opening a
 > `file://` / UNC path *from* a `file://` page (security), so a plain link often
@@ -49,12 +57,20 @@ PYTHONPATH=tools python tools/generate_index.py --nas-root J:/gjesus3-data
 PYTHONPATH=tools python tools/generate_index.py --nas-root J:/gjesus3-data --per-project
 ```
 It only writes `index.html` files — it never touches `/raw/`, the registry CSVs,
-or anything else. Re-run it whenever you want to refresh (e.g. after an ingest);
-the page shows a "generated <timestamp>" line.
+or anything else. The page shows a "generated <timestamp>" line.
 
-`--link-base` sets the share root prepended to the copyable paths (default
-`\\GJESUS3\gjesus3`, which works on any machine regardless of drive-letter
-mapping; use this rather than `J:` so every researcher's copy-path resolves).
+**You rarely need to run it for the global index by hand:** a successful
+(non-dry-run) `ingest_raw.py` batch **auto-refreshes `registries/index.html`** at
+the end of the run (non-fatally — a refresh failure logs a WARN but never fails the
+ingest). Run the generator manually when you want the **per-project** indexes
+(`--per-project`), a local preview, or to rebuild after a refresh WARN.
+
+`--link-base` sets the share root prepended to the copyable paths. The default is
+the portable container UNC `\\GJESUS3\gjesus3\gjesus3-data` — it works on any
+machine regardless of drive-letter mapping, so every researcher's copy-path
+resolves. (Use a drive-letter base like `J:\gjesus3-data` only if you know every
+researcher maps the NAS to that same letter.) Note the `gjesus3-data` container
+component: an earlier default omitted it and produced unresolvable paths.
 
 ## The CLI (power users / scripting)
 ```
@@ -68,9 +84,11 @@ Filters: free-text positional + `--instrument --researcher --subject --anatomy
 ---
 
 ## Scope & limitations (MVP — by design)
-- **Static snapshot.** The page embeds the registry data at generation time;
-  re-run to refresh. (Acceptable: the registry changes only on ingest.)
-- **Size.** Self-contained means all rows are embedded — ~15 MB at 13.5k acqs.
+- **Static snapshot.** The page embeds the registry data at generation time. The
+  registry changes only on ingest, and each successful ingest auto-refreshes the
+  global `index.html`; per-project indexes and any post-WARN rebuild are a manual
+  generator run.
+- **Size.** Self-contained means all rows are embedded — ~19 MB at 13.5k acqs.
   It opens fine, but for a much larger archive the next step is client-side
   virtualization / a fetched data file. The table shows the first 800 matches of
   any search (narrow your query); the count line tells you the true total.
@@ -81,7 +99,8 @@ Filters: free-text positional + `--instrument --researcher --subject --anatomy
 - **No edit / no write-back.** Read-only view; it never modifies data.
 
 ## Next (not in this MVP)
-Richer per-acquisition detail panel from the sidecar; saved/shareable searches
-(URL hash); select-rows → export a CSV / methods-section manifest; a small
-counts dashboard; and — when they exist — per-row "Open in XNAT/OMERO" launch
-links (the Finder stays the front door; the heavy viewers plug in later).
+Saved/shareable searches (URL hash); select-rows → export a CSV / methods-section
+manifest; a small counts dashboard; and — when they exist — per-row "Open in
+XNAT/OMERO" launch links (the Finder stays the front door; the heavy viewers plug
+in later). (The detail panel now reaches the sidecar via the copyable
+`metadata.json` path — a richer in-page sidecar view could come later.)
