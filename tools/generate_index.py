@@ -97,15 +97,17 @@ _HTML = r"""<!doctype html>
   .controls input,.controls select{font-size:14px;padding:6px 8px;border:1px solid #ccc;border-radius:4px}
   #q{flex:1;min-width:240px}
   #count{font-size:13px;color:#555;margin-left:auto}
-  table{border-collapse:collapse;width:100%;background:#fff;font-size:13px}
-  th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #eee;white-space:nowrap}
+  table{border-collapse:collapse;background:#fff;font-size:13px;table-layout:fixed}
+  th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   th{position:sticky;top:55px;background:#eaf0ef;cursor:pointer;user-select:none;z-index:1}
+  .rz{position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize;z-index:2}
+  .rz:hover{background:#9bb}
   tr.acq{cursor:pointer}
   tr.acq:hover{background:#eef6ff}
   td.path{font-family:Consolas,monospace;font-size:12px;color:#333}
   button.copy{font-size:12px;padding:2px 9px;cursor:pointer;border:1px solid #bbb;border-radius:4px;background:#f3f3f3}
   button.copy:hover{background:#e7eefc}
-  tr.detail td{background:#fafbff;white-space:normal}
+  tr.detail td{background:#fafbff;white-space:normal;overflow:visible;text-overflow:clip}
   dl.d{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:3px 14px;font-size:12px}
   dl.d dt{color:#666}
   dl.d dd{margin:0;font-family:Consolas,monospace}
@@ -125,22 +127,39 @@ _HTML = r"""<!doctype html>
 <div id="empty" class="empty" hidden>No matches.</div>
 <script>
 const DATA = __DATA__;
-const COLS = [["acq","Acq ID"],["date","Date"],["instr","Instr"],["mod","Modality"],
-  ["researcher","Researcher"],["operator","Operator"],["sample","Sample"],["subject","Subject"],
-  ["organism","Organism"],["sample_type","Sample type"],["orig","Original name"],
-  ["proj_short","Project"],["proj_owner","Owner"]];
+const COLS = [["acq","Acq ID",185],["date","Date",92],["instr","Instr",64],["mod","Modality",95],
+  ["researcher","Researcher",105],["operator","Operator",100],["sample","Sample",150],["subject","Subject",170],
+  ["organism","Organism",120],["sample_type","Sample type",100],["orig","Original name",210],
+  ["proj_short","Project",150],["proj_owner","Owner",110]];
 const CAP = 800;
 let sortKey = "date", sortDir = -1;
 const $ = id => document.getElementById(id);
-const esc = s => (s==null?"":(""+s)).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const esc = s => (s==null?"":(""+s)).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 const head = $("head");
-COLS.forEach(([k,label]) => {
-  const th = document.createElement("th"); th.textContent = label;
-  th.onclick = () => { sortDir = (sortKey===k) ? -sortDir : 1; sortKey = k; render(); };
-  head.appendChild(th);
-});
-head.insertAdjacentHTML("beforeend", "<th>Open</th>");
+const TABLE = document.querySelector("table");
+let tableW = 0;
+function startResize(e, th){
+  e.preventDefault();
+  const startX = e.clientX, startW = th.offsetWidth, startTW = TABLE.offsetWidth;
+  const mv = ev => { const w = Math.max(40, startW + ev.clientX - startX);
+    th.style.width = w + "px"; TABLE.style.width = (startTW + (w - startW)) + "px"; };
+  const up = () => { document.removeEventListener("mousemove", mv);
+    document.removeEventListener("mouseup", up); document.body.style.userSelect = ""; };
+  document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up);
+  document.body.style.userSelect = "none";
+}
+function buildTh(key, label, w, sortable){
+  const th = document.createElement("th"); th.style.width = w + "px"; th.textContent = label;
+  if(sortable) th.onclick = () => { sortDir = (sortKey===key) ? -sortDir : 1; sortKey = key; render(); };
+  const rz = document.createElement("div"); rz.className = "rz";
+  rz.onmousedown = e => { e.stopPropagation(); startResize(e, th); };
+  rz.onclick = e => e.stopPropagation();
+  th.appendChild(rz); head.appendChild(th); tableW += w;
+}
+COLS.forEach(([k,label,w]) => buildTh(k, label, w || 120, true));
+buildTh("_open", "Open", 96, false);
+TABLE.style.width = tableW + "px";
 [...new Set(DATA.map(d=>d.instr).filter(Boolean))].sort().forEach(v => {
   const o = document.createElement("option"); o.value = v; o.textContent = v; $("instr").appendChild(o);
 });
@@ -180,7 +199,7 @@ function render(){
   const rows = $("rows"); rows.innerHTML = "";
   hits.slice(0, CAP).forEach(d => {
     const tr = document.createElement("tr"); tr.className = "acq";
-    tr.innerHTML = COLS.map(([k]) => "<td>"+esc(d[k])+"</td>").join("") +
+    tr.innerHTML = COLS.map(([k]) => "<td title=\""+esc(d[k])+"\">"+esc(d[k])+"</td>").join("") +
       '<td><button class="copy">Copy path</button></td>';
     tr.querySelector("button.copy").onclick = e => { e.stopPropagation(); copyPath(d.path); };
     tr.onclick = () => {

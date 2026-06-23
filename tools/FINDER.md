@@ -21,7 +21,9 @@ This is an **MVP to try and evaluate** — see *Scope & limitations* at the end.
    The table columns are, in order: **Acq ID, Date, Instrument, Modality,
    Researcher, Operator, Sample, Subject, Organism, Sample type, Original name,
    Project** (the project `short_name`) and **Owner** (the project owner). Click a
-   column header to sort; click a row to open the detail panel for everything else.
+   column header to sort; **drag a column's right edge to resize it** (columns have
+   default widths and truncate long values with "…" — hover a cell to see the full
+   text); click a row to open the detail panel for everything else.
 3. The **detail panel** adds **File size (MB)** and **Project description** on top of
    the raw path, project link, metadata path, session, format, file count, original
    name and notes. It has **Copy path** buttons for the raw path, the project link,
