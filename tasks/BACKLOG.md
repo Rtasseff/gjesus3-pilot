@@ -229,6 +229,74 @@ original `tasks.md` locations (§3.1 / §3.2) as history; this is the active hom
   Prep is already in place: keep the flat registry clean and keep DICOM UIDs
   captured (done) — that's what makes the eventual platform import frictionless.
 
+## Finder — "Select-in-Finder → assemble a project" (2026-06-23)
+
+Context: the registry **Finder** ([`tools/FINDER.md`](../tools/FINDER.md)) today is a
+read-only locator — a generated, self-contained `registries/index.html` a researcher
+double-clicks over SMB to search the registry and **Copy path** to their data. It never
+touches the filesystem. This item is the next step up: turn it from a read-only *finder*
+into a *build-a-working-set* front-end. (Extends the "select-rows" idea already noted in
+`tools/FINDER.md` *Next* — that one only exports a CSV/methods manifest; this one actually
+assembles a project on the NAS.)
+
+- [ ] **Select acquisition rows → create the hard links + provenance into a chosen
+  project.** Let a user **tick/select** acquisition rows in the Finder `index.html` view,
+  pick a target project folder, and have the system **create the project hard links for the
+  selected acqs AND write the corresponding provenance entries** — i.e. the *same* hard-link +
+  provenance machinery that [`tools/ingest_raw.py`](../tools/ingest_raw.py) and the linker
+  ([`tools/ingest/linker.py`](../tools/ingest/linker.py), `create_hardlink`) already perform
+  in the ingest project-linking step when an ingest's `project_hint` resolves. This makes the
+  Finder a "build a working set / assemble a project" tool, not just a locator.
+  - *Why it's not a page-only change (the hard constraint):* the current Finder is a
+    **static, sandboxed HTML page running over `file://`** — by browser security it **cannot
+    touch the filesystem** (it can't even open a `file://` path directly, which is why it
+    offers Copy-path instead of a link; see `tools/FINDER.md`). Actually creating hard links
+    and writing provenance therefore **requires a helper / CLI / back-end beyond the browser
+    page** — e.g. the page emits a selection manifest that a small local CLI consumes (reusing
+    the `linker` + provenance code), or a thin local service the page calls. The browser page
+    alone can never do this.
+  - *Reuse, don't reinvent:* drive it through the existing linker + the ingest
+    provenance-writing step rather than a parallel path, so project links and provenance stay
+    identical to ingest-time links (same inode hard links, same provenance shape). Pairs
+    naturally with the existing `find_acq.py` join engine (the Finder's data source) for
+    resolving the selected rows to their `/raw/` acquisitions.
+
+## Finder — provenance-driven project index (a possibly-better project-level index) (2026-06-23)
+
+Context: we now publish a **registry-driven per-project `index.html`** (the global Finder,
+filtered by `project_hint`, auto-refreshed on ingest — see [`tools/FINDER.md`](../tools/FINDER.md)).
+This item explores a **different, possibly better** way to build the project-level index: drive
+it from the **project's own provenance file** instead of the registry. Raised by the data office
+2026-06-23 — **shape still open, discuss before building.**
+
+- [ ] **Build the project `index.html` from the project's provenance file, not from `project_hint`.**
+  At ingest, every raw acquisition hard-linked into a project is recorded in that project's
+  **provenance** (see [`07_PROVENANCE`](../mfb-rdm-docs/07_PROVENANCE.md) + the ingest
+  provenance-writing step). A provenance-driven index would list **the files actually present in
+  the project's linked `raw/` folder** and use the provenance to link each hard-linked file back
+  to its **source acquisition** → its `metadata.json` sidecar and its registry row (so the
+  researcher still gets full acquisition + registry info, reached *through* the provenance rather
+  than via a `project_hint` match).
+  - *Why it may beat the registry-driven version:*
+    - **Reflects what's actually in the project, now.** `project_hint` is stamped once at ingest;
+      provenance reflects the project's real current contents. Not every ingest even puts raw
+      files into a project, and the **initial project is often vague** — researchers later
+      **reorganize / re-home** acqs into projects meaningful to them. A provenance-driven index
+      tracks that reality; a `project_hint` filter goes stale.
+    - **Shows non-acquisition files too.** Project folders accumulate files that aren't raw
+      acquisitions (analyses, notes, derived outputs) with **no registry row** — the
+      registry-driven index can't show them, but a provenance/folder-driven index can list them
+      with whatever partial info exists (name, size, any provenance recorded).
+    - **Could strengthen provenance itself.** Building the view from provenance surfaces gaps (a
+      linked file with no provenance entry, or an entry whose source acq is gone), so it doubles
+      as a **provenance completeness / tracking** check.
+  - *Open questions (for the later discussion):* exact shape (does it **replace** or **complement**
+    the registry-driven per-project index?); what provenance records today vs what this needs (may
+    require enriching the provenance schema); how to render rows with full registry info vs
+    partial-only; performance (per-project provenance reads vs one registry pass); and whether the
+    "select-in-Finder → assemble a project" item above should *write* into this same
+    provenance-driven model.
+
 ## True-production restart — subsystem review (correction pass 2026-06-11)
 
 - [ ] **Review which pilot subsystems carry forward vs. are replaced by
@@ -469,3 +537,26 @@ Same model planned for the **future external-drive microscopy** (also no standar
   re-homed without re-copying), and (b) get them to adopt better project definitions in their naming
   GOING FORWARD so it doesn't recur. Feeds the still-provisional project-naming convention (05_PROJECTS
   §9 / PROJ-05).
+
+## NI (Molecubes) — tracer compound NOT in the data; richer `reconparams.txt` source (2026-06-19)
+
+Investigated whether the **radiotracer** is recoverable from the NI data (manager thought it lived in a
+reconstruction-parameter file). Pulled + extracted a source PET `.tgz` from `\\cicmgsp02\gnuclear2$` and
+searched every parameter file (`recon_0/reconparams.txt` + `.xml`, `acqparams.xml`, `protocol.txt` + `.xml`,
+`recon.ini`, `reconstruction.log`) — plus the DICOM header.
+
+- **Finding: the tracer COMPOUND is not recorded by the Molecubes platform anywhere.** The only
+  radio-chemistry field is the **isotope** (`Acquisition/isotope = F-18`, `Reconstruction/isotope = F-18`;
+  the DICOM `RadiopharmaceuticalCodeSequence` likewise codes only `^18^Fluorine`). Nothing names the
+  compound (FDG vs NaF vs FET …). The platform stores what it needs for decay correction (isotope, 511 keV,
+  half-life, activity), not the chemistry.
+- **We already capture the isotope** (`ni_isotope` from `protocol.txt`). So nothing more is extractable for
+  the tracer — **the compound is study-level knowledge and must come from the researchers / study records**,
+  not from the instrument data. (No tooling action; record-keeping decision.)
+- [ ] **(optional enrichment) `reconparams.txt` is a richer NI source than `protocol.txt`.** It carries
+  fields we don't currently extract — `principalinvestigator`, `bedtype` (mouse), scan `duration`, `FOV`,
+  recon `iterations`/voxel size, energy window, the **attenuation-correction CT reference** (links PET↔CT),
+  scanner serial. BUT the NI slim copy retains only the reconstructed DICOM, so `reconparams.txt` is **not
+  on the NAS** — capturing these would mean extending the NI extractor (`ni_metadata.py`) to read
+  `recon_<idx>/reconparams.txt` at ingest + a back-fill from the intact source `.tgz` on gnuclear2$. Defer
+  unless the team wants the PET↔CT link or per-scan acquisition params surfaced.

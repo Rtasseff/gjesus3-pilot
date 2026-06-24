@@ -1701,6 +1701,19 @@ def main():
             if not ok:
                 sys.exit(1)
 
+    # Auto-refresh the researcher Finder index so it always reflects the latest
+    # ingest. Non-fatal: a refresh failure must never fail an otherwise-successful
+    # ingest. (Skipped on --dry-run. The single-case path sys.exit()s on failure
+    # before reaching here, so this only runs once a successful invocation finishes;
+    # for a batch it regenerates once, reflecting whatever is now in the registry.)
+    if not args.dry_run:
+        try:
+            import generate_index  # tools/ dir; writes the global + per-project index.html files
+            log("Refreshing Finder indexes (global + per-project index.html)...")
+            generate_index.main(["--nas-root", nas_root, "--per-project"])
+        except Exception as e:
+            log(f"Finder index refresh failed (non-fatal): {e}", "WARN")
+
 
 if __name__ == "__main__":
     main()
