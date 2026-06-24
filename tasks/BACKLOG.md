@@ -602,3 +602,36 @@ Linux one; confirm `os.link` behaviour on the server's NAS mount first).
 **Relationship to other backlog items.** Subsumes part of "Independent /
 second-stage tooling" and complements the Finder's "assemble a project" item —
 the downstream Windows tool IS that post-ingest project-assembly surface.
+
+## No-DICOM regeneration on Windows — research finding (2026-06-24)
+
+**Q (user): is there literally no way to run Dicomifier or similar on Windows?**
+Researched 2026-06-24:
+
+- **Dicomifier itself: Linux-only, by design.** The conda-forge recipe carries
+  `skip: true  # [win or osx]` — no win-64 or osx-64 build exists. The blocker is
+  its compiled C++ DICOM dependency **`odil`** (Boost/CMake/pybind11 stack), which
+  isn't packaged for Windows. The only way to run it "on Windows" is **WSL** (a
+  full Linux subsystem) — not bundleable into the PyInstaller exe and impractical
+  to stand up on a novice operator's machine. This is exactly why the historical
+  regen ran in WSL on the data-office box.
+- **Pure-Python Bruker readers DO run on Windows** — `brkraw`, `bruker2nifti`,
+  `brukerapi-python` — but they all output **NIfTI, not DICOM**. They solve the
+  *reading* of `2dseq`+JCAMP-DX, not the DICOM *writing*.
+- **Therefore the only Windows-native path to DICOMs would be to BUILD one:** read
+  with `brukerapi`/`brkraw` (pure Python) + write with `pydicom` (pure Python) — a
+  bundleable, exe-friendly `2dseq → DICOM` generator. Feasible, but a real project:
+  the hard part is the correct DICOM tag/geometry mapping that `odil`/Dicomifier
+  already encode (the team earlier estimated ~2-4 weeks for a from-scratch DICOM
+  generator, which is why Dicomifier was adopted instead).
+
+**Conclusion.** Off-the-shelf, there is **no way to regenerate DICOMs on a
+Windows operator box.** The three real options: (a) **Linux** (WSL or the
+server-side ingest host above) runs Dicomifier — current approach, and what the
+`pending_dicom_regen.csv` worklist defers to; (b) **build a pure-Python
+`2dseq`→`pydicom` writer** if Windows-native regen ever becomes worth ~weeks of
+work; (c) accept **NIfTI** (via `brkraw` on Windows) for no-DICOM exams — but that
+changes the stored format away from the DICOM standard the MRI `.data/` uses.
+This finding reinforces both the worklist (defer to Linux) and the server-side
+ingest architecture (the server has Dicomifier). Sources: conda-forge
+dicomifier-feedstock `recipe/meta.yaml`; brkraw.github.io; bruker2nifti docs.
