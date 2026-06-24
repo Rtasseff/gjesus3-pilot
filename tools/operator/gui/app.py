@@ -1304,9 +1304,14 @@ def main(argv=None):
         "--debug", action="store_true",
         help="Run Flask in debug mode (reloader off to keep the core load sane).",
     )
+    parser.add_argument(
+        "--mri", action="store_true",
+        help="Open the browser straight to the MRI ingest page (/mri) instead "
+             "of the microscopy landing page. Same server either way.",
+    )
     args = parser.parse_args(argv)
 
-    url = f"http://{args.host}:{args.port}/"
+    url = f"http://{args.host}:{args.port}/" + ("mri" if args.mri else "")
     if not args.no_browser:
         # Open the browser shortly after the server starts.
         threading.Timer(1.0, _open_browser, args=(url,)).start()
