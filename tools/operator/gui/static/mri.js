@@ -263,6 +263,19 @@ function renderTable(cases) {
     `<tbody>${rows.join("")}</tbody></table>`;
 }
 
+// "Dropped" = folders that matched the scan pattern but aren't scans. For
+// ParaVision that's the housekeeping siblings (AdjResult, subject, …) beside the
+// numbered exam folders — expected and harmless. Show them plainly so the
+// "N dropped" count never reads as an error.
+function renderDropped(dropped) {
+  const box = $("#dropped");
+  if (!dropped || !dropped.length) { box.innerHTML = ""; box.style.display = "none"; return; }
+  const names = dropped.map((d) => esc(d.name)).join(", ");
+  box.innerHTML = `<span class="muted">${dropped.length} non-scan folder(s) skipped ` +
+    `(normal ParaVision housekeeping, nothing to ingest): ${names}</span>`;
+  box.style.display = "";
+}
+
 let lastDicomifier = null;   // {available, version} after a preview; null before
 
 function updateDicomifierNote() {
@@ -283,6 +296,7 @@ async function preview() {
   $("#errors").textContent = "";
   $("#summary").innerHTML = "";
   $("#collisions").style.display = "none";
+  $("#dropped").style.display = "none";
   $("#table-wrap").innerHTML = "";
   $("#warnings").textContent = "";
   $("#ingest").disabled = true;
@@ -310,11 +324,12 @@ async function preview() {
       updateLinkExample();
     }
     renderCollisions(d.collisions, d.existing_targets);
+    renderDropped(d.dropped);
     renderTable(lastCases);
 
     let s = `<strong>${d.n_new}</strong> new scan(s) would be ingested`;
     if (d.n_already_ingested) s += `; ${d.n_already_ingested} already ingested (skipped)`;
-    if (d.n_dropped) s += `; ${d.n_dropped} dropped`;
+    if (d.n_dropped) s += `; ${d.n_dropped} non-scan folder(s) skipped`;
     s += `; ${d.n_matched} scanned.`;
     $("#summary").innerHTML = s;
 

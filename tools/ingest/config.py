@@ -525,9 +525,16 @@ def expand_batch(cfg, nas_root=None):
         # ecosystem's extractor decides what it accepts.
         eco_section = {}
         eco_section_name_override = None
+        # Track whether a content-detecting extractor ran but recognised
+        # nothing — the signal that this match is a non-primary sibling
+        # folder (e.g. ParaVision's AdjResult / subject / ScanProgram dirs
+        # that sit beside the numbered exam folders under a `*/*` scan).
+        embedded_attempted = False
+        embedded_yielded = False
         if embed_metadata and (is_file or is_dir):
             extractor = get_embedded_extractor(eco_for_extract)
             if extractor:
+                embedded_attempted = True
                 try:
                     result = extractor(match_path)
                 except Exception as e:
@@ -545,6 +552,7 @@ def expand_batch(cfg, nas_root=None):
                     eco_disc, eco_section, eco_section_name_override = result
                 else:
                     eco_disc, eco_section = result
+                embedded_yielded = bool(eco_disc) or bool(eco_section)
                 # Merge without overwriting earlier discovered values.
                 for k, v in (eco_disc or {}).items():
                     if k not in discovered or not discovered[k]:
@@ -580,7 +588,17 @@ def expand_batch(cfg, nas_root=None):
         try:
             apply_registry_block(case, registry_block)
         except resolver.ResolverError as e:
-            print(f"[expand_batch] SKIP {match_basename}: {e}")
+            # A content-detecting extractor (ParaVision / NI) that recognised
+            # nothing, whose registry row then can't resolve a scan-only
+            # `discovered.<eco>_*` field, is a non-primary sibling folder under
+            # a `*/*` scan — benign and expected. Say so plainly instead of
+            # leaking the raw resolver error (which reads like a config bug).
+            if (embedded_attempted and not embedded_yielded
+                    and "is not in discovered fields" in str(e)):
+                print(f"[expand_batch] SKIP {match_basename}: not a scan folder "
+                      f"(no acquisition metadata; a sibling/housekeeping folder)")
+            else:
+                print(f"[expand_batch] SKIP {match_basename}: {e}")
             continue
         _apply_operator(case, cfg.get("operator"))
 
