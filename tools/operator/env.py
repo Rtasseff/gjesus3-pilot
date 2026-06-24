@@ -11,6 +11,7 @@ FTP creds use the same env-var names as `tools/ftp_mirror.py`:
 `GJESUS3_FTP_HOST/USER/PASSWORD/PORT`.
 """
 
+import configparser
 import os
 
 # Defaults mirror ingest_raw.main's argparse defaults.
@@ -84,27 +85,66 @@ FTP_ENV_USER = "GJESUS3_FTP_USER"
 FTP_ENV_PASSWORD = "GJESUS3_FTP_PASSWORD"
 FTP_ENV_PORT = "GJESUS3_FTP_PORT"
 
+# Durable credential store (DECIDED 2026-06-12, see
+# equipment/historical_data_archives.md §MRI). INI file in the user profile --
+# NOT the repo, NOT OneDrive. A shared on-site machine reads it instead of
+# re-setting env vars every session:
+#
+#     [mri]
+#     host = kenia.cicbiomagune.int
+#     user = mriuser
+#     password = <password>
+#
+# Env vars (GJESUS3_FTP_*) still win per-field, so a session can override.
+FTP_CRED_FILE = os.path.join(os.path.expanduser("~"), ".ssh", "gjesus3_mri.cred")
+FTP_CRED_SECTION = "mri"
 
-def ftp_creds_present():
-    """True if the minimum SFTP creds (host + user + password) are in the env.
 
-    Port has a default (22) in ftp_mirror, so it is not required here.
+def read_cred_file(path=None):
+    """Read the [mri] section of the SFTP credentials file.
+
+    Returns a dict with host/user/password/port keys (missing -> None), or an
+    empty dict if the file is absent / unreadable / has no [mri] section.
+    Never raises -- a missing or malformed file degrades to "no creds here".
     """
-    return all(
-        os.environ.get(name)
-        for name in (FTP_ENV_HOST, FTP_ENV_USER, FTP_ENV_PASSWORD)
-    )
+    path = path or FTP_CRED_FILE
+    if not os.path.isfile(path):
+        return {}
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(path, encoding="utf-8")
+    except (configparser.Error, OSError):
+        return {}
+    if not parser.has_section(FTP_CRED_SECTION):
+        return {}
+    sec = parser[FTP_CRED_SECTION]
+    return {k: (sec.get(k) or None) for k in ("host", "user", "password", "port")}
 
 
 def ftp_creds():
-    """Return the SFTP connection params dict from the env (missing -> None/22).
+    """Return the SFTP connection params dict.
 
-    Host/user/password come straight from the env; port defaults to 22 to
-    match ftp_mirror.main.
+    Precedence per field: env var (GJESUS3_FTP_*) > ~/.ssh/gjesus3_mri.cred
+    [mri] section > default. Port defaults to 22 to match ftp_mirror.main.
     """
+    cred = read_cred_file()
+    port_raw = os.environ.get(FTP_ENV_PORT) or cred.get("port") or "22"
+    try:
+        port = int(port_raw)
+    except (TypeError, ValueError):
+        port = 22
     return {
-        "host": os.environ.get(FTP_ENV_HOST),
-        "user": os.environ.get(FTP_ENV_USER),
-        "password": os.environ.get(FTP_ENV_PASSWORD),
-        "port": int(os.environ.get(FTP_ENV_PORT, "22")),
+        "host": os.environ.get(FTP_ENV_HOST) or cred.get("host"),
+        "user": os.environ.get(FTP_ENV_USER) or cred.get("user"),
+        "password": os.environ.get(FTP_ENV_PASSWORD) or cred.get("password"),
+        "port": port,
     }
+
+
+def ftp_creds_present():
+    """True if host + user + password are resolvable (env var or cred file).
+
+    Port has a default (22), so it is not required here.
+    """
+    c = ftp_creds()
+    return bool(c["host"] and c["user"] and c["password"])

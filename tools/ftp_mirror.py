@@ -36,6 +36,7 @@ size + mtime. To force re-download, pass --force.
 """
 
 import argparse
+import configparser
 import getpass
 import os
 import stat
@@ -52,6 +53,32 @@ except ImportError:
 def log(msg, level="INFO"):
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"[{ts}] {level}: {msg}")
+
+
+# Durable credential store (DECIDED 2026-06-12, see
+# equipment/historical_data_archives.md §MRI). Read as a fallback so the tool
+# works on a shared on-site machine without re-exporting env vars each session.
+# Env vars / CLI flags still win per-field. Stdlib only -- keeps this standalone.
+CRED_FILE = os.path.join(os.path.expanduser("~"), ".ssh", "gjesus3_mri.cred")
+
+
+def cred_file_defaults(path=CRED_FILE):
+    """Read host/user/password/port from the [mri] section of CRED_FILE.
+
+    Returns a dict (missing keys -> None) or {} if the file is absent /
+    unreadable / has no [mri] section. Never raises.
+    """
+    if not os.path.isfile(path):
+        return {}
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(path, encoding="utf-8")
+    except (configparser.Error, OSError):
+        return {}
+    if not parser.has_section("mri"):
+        return {}
+    sec = parser["mri"]
+    return {k: (sec.get(k) or None) for k in ("host", "user", "password", "port")}
 
 
 def is_dir(sftp, path):
@@ -170,11 +197,15 @@ def main():
     )
     p.add_argument("--host", default=os.environ.get("GJESUS3_FTP_HOST"))
     p.add_argument("--port", type=int,
-                   default=int(os.environ.get("GJESUS3_FTP_PORT", "22")))
+                   default=(int(os.environ["GJESUS3_FTP_PORT"])
+                            if os.environ.get("GJESUS3_FTP_PORT") else None),
+                   help="SFTP port. Default: GJESUS3_FTP_PORT env, else the "
+                        "cred file, else 22.")
     p.add_argument("--user", default=os.environ.get("GJESUS3_FTP_USER"))
     p.add_argument("--password", default=os.environ.get("GJESUS3_FTP_PASSWORD"),
-                   help="SFTP password. Prefer GJESUS3_FTP_PASSWORD env var. "
-                        "If neither is set, you'll be prompted.")
+                   help="SFTP password. Prefer GJESUS3_FTP_PASSWORD env var or "
+                        "the ~/.ssh/gjesus3_mri.cred file. If neither is set, "
+                        "you'll be prompted.")
     p.add_argument("--remote", required=True,
                    help="Remote directory to mirror (e.g. /opt/PV-7.0.0/data/nmr/<study>)")
     p.add_argument("--local", required=True,
@@ -190,18 +221,33 @@ def main():
         log("paramiko is not installed. Run: pip install paramiko", "ERROR")
         return 2
 
-    if not args.host or not args.user:
-        log("--host and --user are required (or set env vars).", "ERROR")
+    # Resolve each field: CLI flag / env var (already in args) > cred file > default.
+    cred = cred_file_defaults()
+    host = args.host or cred.get("host")
+    user = args.user or cred.get("user")
+    password = args.password or cred.get("password")
+    if args.port is not None:
+        port = args.port
+    elif cred.get("port"):
+        try:
+            port = int(cred["port"])
+        except ValueError:
+            port = 22
+    else:
+        port = 22
+
+    if not host or not user:
+        log("host and user are required (set --host/--user, the GJESUS3_FTP_* "
+            "env vars, or ~/.ssh/gjesus3_mri.cred).", "ERROR")
         return 2
 
-    password = args.password
     if not password:
-        password = getpass.getpass(f"SFTP password for {args.user}@{args.host}: ")
+        password = getpass.getpass(f"SFTP password for {user}@{host}: ")
 
-    log(f"Connecting: sftp://{args.user}@{args.host}:{args.port}")
-    transport = paramiko.Transport((args.host, args.port))
+    log(f"Connecting: sftp://{user}@{host}:{port}")
+    transport = paramiko.Transport((host, port))
     try:
-        transport.connect(username=args.user, password=password)
+        transport.connect(username=user, password=password)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
         if not args.dry_run:
