@@ -65,13 +65,19 @@ The chosen NAS root persists in `%LOCALAPPDATA%\gjesus3-operator\nas_root.txt`
 
 ## Freeze to a single `.exe` (PyInstaller)
 
-The Windows microscopy machine runs the `.exe` only (no Python/admin install).
+The operator machine runs the `.exe` only (no Python/admin install). ONE exe
+serves both pages — ship two shortcuts: `gjesus3_ingest.exe` (microscopy `/`) and
+`gjesus3_ingest.exe --mri` (the MRI page `/mri`).
 
 ```sh
-pip install flask pyinstaller czifile tifffile numpy pyyaml
-pyinstaller tools/operator/gui/microscopy_ingest.spec
-# -> dist/microscopy_ingest/microscopy_ingest.exe
+pip install flask paramiko pyinstaller czifile tifffile numpy pyyaml
+pyinstaller tools/operator/gui/gjesus3_ingest.spec
+# -> dist/gjesus3_ingest/gjesus3_ingest.exe
 ```
+
+For the **MRI page**, the bundle also carries `paramiko` (lazy-imported → added as
+a hidden import) and `tools/ftp_mirror.py` (loaded by path). The MRI page also
+needs `~/.ssh/gjesus3_mri.cred` on the operator's machine to reach the scanner.
 
 The spec bundles the per-instrument templates to
 `<bundle>/tools/templates/instruments/` and the seed recipes to

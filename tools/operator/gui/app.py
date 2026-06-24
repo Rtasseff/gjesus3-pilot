@@ -24,7 +24,7 @@ Two paths (per the build plan, Phase 4):
 Run (dev):
     pip install flask
     python tools/operator/gui/app.py            # opens http://127.0.0.1:5000
-Freeze: see tools/operator/gui/README.md + microscopy_ingest.spec.
+Freeze: see tools/operator/gui/README.md + gjesus3_ingest.spec.
 
 This module loads the operator core through its non-colliding loader
 (`tools/operator/_loader.py` -> alias `gj_op_core`) because the package

@@ -1,14 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec — Microscopy operator ingest GUI (single .exe).
+"""PyInstaller spec — gjesus3 operator ingest GUI (single .exe, BOTH pages).
 
-Build (from the repo root, on the Windows microscopy machine):
+ONE Flask app, two pages: `/` = microscopy (recipes/builder) and `/mri` = the
+simple MRI ingest page (SFTP pull from the scanner -> preview -> ingest). The
+same exe serves both; ship TWO desktop shortcuts:
+    Microscopy Ingest  ->  gjesus3_ingest.exe
+    MRI Ingest         ->  gjesus3_ingest.exe --mri      (opens /mri directly)
 
-    pip install flask pyinstaller czifile tifffile numpy pyyaml
-    pyinstaller tools/operator/gui/microscopy_ingest.spec
+Build (from the repo root, on a Windows machine):
 
-Produces dist/microscopy_ingest/microscopy_ingest.exe (one-folder by default;
-flip `onefile` below for a single file). Double-clicking it starts the local
-Flask server and opens the browser.
+    pip install flask paramiko pyinstaller czifile tifffile numpy pyyaml
+    pyinstaller tools/operator/gui/gjesus3_ingest.spec
+
+Produces dist/gjesus3_ingest/gjesus3_ingest.exe (one-folder by default; flip
+`onefile` below for a single file). Double-clicking it starts the local Flask
+server and opens the browser.
+
+MRI-specific bundling (added 2026-06-24): paramiko (imported LAZILY inside the
+SFTP endpoints, so PyInstaller's static analysis misses it -> hidden import) and
+tools/ftp_mirror.py (loaded by path at runtime via app.py::_load_ftp_mirror ->
+must be a bundled data file).
 
 DATA BUNDLING — coordinate with the core's path resolution:
   * templates.template_path() looks under <_MEIPASS>/tools/templates/instruments
@@ -57,6 +68,9 @@ datas += [
     (os.path.join(TOOLS, "operator"), os.path.join("tools", "operator")),
     (os.path.join(TOOLS, "ingest"), os.path.join("tools", "ingest")),
     (os.path.join(TOOLS, "ingest_raw.py"), "tools"),
+    # MRI remote-pull engine — app.py::_load_ftp_mirror loads it by path from
+    # <_MEIPASS>/tools/ftp_mirror.py, so it must be a bundled data file.
+    (os.path.join(TOOLS, "ftp_mirror.py"), "tools"),
 ]
 
 hiddenimports = [
@@ -66,6 +80,9 @@ hiddenimports = [
     "czifile", "tifffile", "numpy",
     # pipeline modules that may be reached only dynamically.
     "ingest", "ingest_raw",
+    # MRI SFTP pull: paramiko is imported LAZILY inside app.py's SFTP endpoints,
+    # so static analysis won't see it. Pull it (and its native deps) in by name.
+    "paramiko", "cryptography", "bcrypt", "nacl", "cffi",
 ]
 
 block_cipher = None
@@ -89,7 +106,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="microscopy_ingest",
+    name="gjesus3_ingest",
     console=True,           # keep the console so the operator sees the URL/log
     debug=False,
     bootloader_ignore_signals=False,
@@ -103,5 +120,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    name="microscopy_ingest",
+    name="gjesus3_ingest",
 )
