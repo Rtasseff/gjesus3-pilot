@@ -133,7 +133,7 @@ The conceptual model above is now applied on the live container. **IT will not c
 
 ### 3.2 Quick Start Guide
 
-> **Most operators want [§3.3 Operator self-service ingest (no-YAML path)](#33-operator-self-service-ingest-no-yaml-path) instead** — the microscopy GUI and the `ni-ingest` / `mri-ingest` scripts, no config files. Start there (and at the one-page [`START_HERE.md`](../START_HERE.md)). §3.2 below is the YAML/data-office path for batch ingests and new conventions.
+> **Most operators want [§3.3 Operator self-service ingest (no-YAML path)](#33-operator-self-service-ingest-no-yaml-path) instead** — no config files. As of 2026-06-24 the GUI ships as a one-click Windows app, **`gjesus3_ingest.exe`**, on the NAS at **`\\gjesus3\gjesus3\gjesus3-data\tools\`** with two shortcuts: **Microscopy Ingest** (ZWSI/CELL/LSM9) and **MRI Ingest** (the new `/mri` page — pull from the scanner, preview, ingest; needs the per-machine `~/.ssh/gjesus3_mri.cred`). Each page has a "? Help" link to its HTML guide (also in `tools\docs\`). The `ni-ingest` / `mri-ingest` CLI scripts remain for the data-office/on-platform path. Start there (and at the one-page [`START_HERE.md`](../START_HERE.md)). §3.2 below is the YAML/data-office path for batch ingests and new conventions. Full GUI design: [10_TOOLS §5.2](10_TOOLS.md).
 
 Daily flow for depositing a new acquisition. This is the operational view — what to do and in what order. For the underlying command syntax and flags, see [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md).
 
