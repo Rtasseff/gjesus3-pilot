@@ -988,6 +988,37 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             log(str(e), "ERROR")
             return acq_id_str, False
         log(f"Copied + verified {len(dest_checksums)} files")
+
+        # No-DICOM MRI placeholder -> queue for deferred regeneration. When the
+        # mri_paravision_v2 copy produced ZERO files, the source had no DICOMs
+        # AND Dicomifier wasn't available (the common case on a Windows operator
+        # box, where Dicomifier can't run). The acq is registered with an empty
+        # .data/; record it so a later Dicomifier pass can RE-PULL the source
+        # exam from the platform host (the staging copy is gone) and fill the
+        # DICOMs in. Non-blocking — a worklist failure never fails the ingest.
+        if copy_strategy == "mri_paravision_v2" and not dest_checksums:
+            try:
+                from ingest import pending_dicom
+                _disc = cfg_single.get("discovered") or {}
+                _wl = pending_dicom.append_pending_dicom(
+                    registries_dir,
+                    acq_id=acq_id_str,
+                    original_name=original_name,
+                    reconstructions=str(ingest_block.get("reconstructions", "")),
+                    canonical_path=canonical_path,
+                    paravision_version=_disc.get("mri_paravision_version", ""),
+                    ingest_config=cfg_single.get("ingest_config", ""),
+                )
+                log(
+                    f"  No DICOMs + no regeneration -> queued for deferred DICOM "
+                    f"regeneration in {os.path.basename(_wl)} (a Dicomifier pass "
+                    f"will re-pull '{original_name}' from the platform host and "
+                    f"fill this .data/).", "WARN",
+                )
+            except Exception as e:  # noqa: BLE001 — must never fail the ingest
+                log(f"  Could not queue for DICOM regen ({e}); these stay findable "
+                    f"via registry MRI rows with file_count=0.", "WARN")
+
         checksum.write_checksums(
             dest_checksums,
             os.path.join(dest_dir, "checksums.json"),
