@@ -815,13 +815,46 @@ def api_save_recipe():
     return jsonify({"file": fname, "path": target})
 
 
-def _ingest_sse_response(cfg, nas_root, dry_run, stamp):
+# NAS top-level dir names that must NEVER be deleted as "staging" (defence for
+# the auto-cleanup below — a batch dir is always a SUBfolder of one of these).
+_PROTECTED_DIR_NAMES = {
+    "raw", "projects", "registries", "recipes", "publications",
+    "curated_datasets", "staging", "tmp",
+}
+
+
+def _safe_to_delete_staging(path):
+    """True only for a real, non-top-level batch dir — safe to rmtree.
+
+    Guards the MRI post-ingest staging cleanup: refuses a drive root, a NAS
+    top-level dir (raw/projects/staging/…), or anything that isn't an existing
+    directory. A pulled batch is always `<staging>/<batch>/`, so this passes it
+    while rejecting every dangerous path.
+    """
+    if not path:
+        return False
+    p = os.path.normpath(os.path.abspath(path))
+    if not os.path.isdir(p):
+        return False
+    if os.path.dirname(p) == p:                       # a drive / filesystem root
+        return False
+    if os.path.basename(p).lower() in _PROTECTED_DIR_NAMES:
+        return False
+    return True
+
+
+def _ingest_sse_response(cfg, nas_root, dry_run, stamp, cleanup_dir=None):
     """Run runner.run in a worker thread and stream its log as SSE.
 
     Shared by the microscopy (/api/ingest) and MRI (/api/mri/ingest) commit
     paths -- identical streaming behaviour; only the config assembly upstream
     differs. Each (msg, level) the pipeline logs becomes a `data: {...}` event;
     the final `done` event carries the per-acq results + the dry_run flag.
+
+    `cleanup_dir` (MRI remote-pull only): a local staging batch dir to delete
+    after a SUCCESSFUL, non-dry-run ingest (every acq ok). The operator never
+    manages staging, so a clean real ingest removes the pulled copy. A partial
+    or failed ingest keeps it for a retry. Microscopy passes None (no cleanup).
     """
     def generate():
         import queue
@@ -838,13 +871,24 @@ def _ingest_sse_response(cfg, nas_root, dry_run, stamp):
                     log_callback=cb, recipe_path=stamp,
                 )
                 ok = sum(1 for _aid, good in results if good)
+                total = len(results)
+                # Auto-remove the pulled staging only on a fully-successful real
+                # ingest. Best-effort: a cleanup failure must not fail the run.
+                if (cleanup_dir and not dry_run and total > 0 and ok == total
+                        and _safe_to_delete_staging(cleanup_dir)):
+                    try:
+                        import shutil
+                        shutil.rmtree(cleanup_dir)
+                        cb(f"Removed local staging copy: {cleanup_dir}")
+                    except OSError as e:
+                        cb(f"Could not remove staging {cleanup_dir}: {e}", "WARN")
                 q.put(("done", "INFO", json.dumps({
                     "results": [
                         {"acq_id": aid, "ok": bool(good)}
                         for aid, good in results
                     ],
                     "ok": ok,
-                    "total": len(results),
+                    "total": total,
                     "dry_run": dry_run,
                 })))
             except Exception as e:  # noqa: BLE001 — report to the stream
@@ -1029,15 +1073,22 @@ def api_mri_preview():
 
 @app.route("/api/mri/ingest", methods=["POST"])
 def api_mri_ingest():
-    """Commit path for the MRI page: SSE-streamed ingest (operator REQUIRED)."""
+    """Commit path for the MRI page: SSE-streamed ingest (operator REQUIRED).
+
+    `cleanup_staging` (set by the remote-pull flow): delete the local staging
+    batch after a fully-successful real ingest, so the operator never manages
+    staging by hand.
+    """
     data = request.get_json(silent=True) or {}
     staging_path = (data.get("staging_path") or "").strip()
     nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
     dry_run = bool(data.get("dry_run"))
     operator = (data.get("operator") or "").strip()
+    cleanup_staging = bool(data.get("cleanup_staging"))
 
     if not staging_path:
-        return jsonify({"error": "Pick a source folder first."}), 400
+        return jsonify({"error": "Pull at least one study from the scanner "
+                                 "first."}), 400
     if not operator:
         return jsonify({"error": "Operator is required for MRI (the person who "
                                  "ran the scanner)."}), 400
@@ -1058,7 +1109,9 @@ def api_mri_ingest():
         return jsonify({"error": str(e)}), 400
 
     stamp = runner.default_recipe_path(tpl_path)
-    return _ingest_sse_response(cfg, nas_root, dry_run, stamp)
+    cleanup_dir = staging_path if cleanup_staging else None
+    return _ingest_sse_response(cfg, nas_root, dry_run, stamp,
+                                cleanup_dir=cleanup_dir)
 
 
 # ============================================================ MRI SFTP remote-pull
@@ -1119,6 +1172,20 @@ def _under_known_root(remote):
     return False
 
 
+def _default_mri_staging_root():
+    """Default landing dir for pulled studies: `<nas_root>/staging`.
+
+    The MFB NAS has a top-level `staging/` dir on every root — pulling there
+    keeps the follow-on ingest NAS-local (no second SMB hop) and means the
+    operator never has to think about where the temporary copy goes. Falls back
+    to the documented local dir when the saved NAS root isn't a real dir yet.
+    """
+    nas = load_saved_nas_root()
+    if nas and os.path.isdir(nas):
+        return os.path.normpath(os.path.join(nas, "staging"))
+    return MRI_PULL_STAGING_ROOT
+
+
 @app.route("/api/sftp_status")
 def api_sftp_status():
     """Whether remote pull is usable on this machine: creds present + host."""
@@ -1135,7 +1202,7 @@ def api_sftp_status():
         "paramiko": has_paramiko,
         "available": present and has_paramiko,
         "roots": MRI_SFTP_ROOTS,
-        "staging_root": MRI_PULL_STAGING_ROOT,
+        "staging_root": _default_mri_staging_root(),
     })
 
 
@@ -1203,7 +1270,7 @@ def api_sftp_pull():
     from datetime import datetime
     data = request.get_json(silent=True) or {}
     remotes = [r for r in (data.get("remotes") or []) if isinstance(r, str)]
-    staging_root = (data.get("staging_root") or MRI_PULL_STAGING_ROOT).strip()
+    staging_root = (data.get("staging_root") or "").strip() or _default_mri_staging_root()
     batch = (data.get("batch") or "").strip()
     force = bool(data.get("force"))
 

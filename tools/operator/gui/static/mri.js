@@ -137,16 +137,50 @@ $("#fb-cancel").addEventListener("click", fbClose);
 fb.overlay.addEventListener("click", (e) => { if (e.target === fb.overlay) fbClose(); });
 $("#nas-browse").addEventListener("click", () =>
   browseInto(nasInput, "Select the destination NAS root (gjesus3-data)", () => saveNas()));
-$("#browse").addEventListener("click", () =>
-  browseInto($("#staging"), "Select a ParaVision exam, study folder, or batch root"));
 
 // ---------------------------------------------------------------- link field
 const MRI = window.MRI || {};
-const linkField = new TokenField($("#link-field"), { onChange: () => {} });
+const linkField = new TokenField($("#link-field"), { onChange: () => updateLinkExample() });
 linkField.setValue(MRI.linkDefault || "");
 renderPalette($("#link-palette"),
   paletteEntries(MRI.paletteKeys || [], MRI.paletteExtras || []), linkField);
-$("#link-reset").addEventListener("click", () => linkField.setValue(MRI.linkDefault || ""));
+$("#link-reset").addEventListener("click", () => { linkField.setValue(MRI.linkDefault || ""); updateLinkExample(); });
+
+// Live "this is what the link name will look like" example under the field,
+// mirroring the microscopy runner. Resolves ${discovered.*}/${synth} against the
+// first previewed scan (sampleCtx), set after each preview. Before a preview
+// runs there's no real scan to resolve against, so it stays blank.
+let linkSampleCtx = null;   // {ctx: {discovered...}, synth: {sample_id,...}}
+
+function resolveLinkExample(template, sample) {
+  if (!template || !sample) return { text: "", unresolved: false };
+  let unresolved = false;
+  const text = template.replace(/\$\{([^}]+)\}/g, (mm, ref) => {
+    ref = ref.trim();
+    if (ref.startsWith("discovered.")) {
+      const k = ref.slice("discovered.".length);
+      if (k in sample.ctx) return sample.ctx[k];
+      unresolved = true; return mm;
+    }
+    if (ref in sample.synth) return sample.synth[ref];
+    unresolved = true; return mm;
+  });
+  return { text, unresolved };
+}
+
+function updateLinkExample() {
+  const el = $("#link-example");
+  if (!el) return;
+  const tpl = linkField.serialize();
+  if (!linkSampleCtx) {
+    el.textContent = tpl ? "Preview to see an example link name." : "";
+    el.classList.remove("bad");
+    return;
+  }
+  const { text, unresolved } = resolveLinkExample(tpl, linkSampleCtx);
+  el.textContent = text ? "e.g.  " + text : "";
+  el.classList.toggle("bad", unresolved);
+}
 
 // ---------------------------------------------------------------- project mode
 const projectMode = $("#project-mode");
@@ -178,7 +212,6 @@ function buildPayload() {
     staging_path: $("#staging").value.trim(),
     nas_root: nasInput.value.trim(),
     operator: $("#operator").value.trim(),
-    model: $("#model").value,
     project_mode: mode,
     regenerate: $("#regenerate").checked,
   };
@@ -252,13 +285,28 @@ async function preview() {
   $("#warnings").textContent = "";
   $("#ingest").disabled = true;
   const payload = buildPayload();
-  if (!payload.staging_path) { $("#errors").textContent = "Pick a source folder first."; return; }
+  if (!payload.staging_path) { $("#errors").textContent = "Pull studies from the scanner first."; return; }
   $("#preview").disabled = true;
   try {
     const d = await postJSON("/api/mri/preview", payload);
     lastCases = d.cases || [];
     lastDicomifier = { available: d.dicomifier_available, version: d.dicomifier_version };
     updateDicomifierNote();
+    // Seed the live link-name example from the first real scan in the preview.
+    const first = lastCases[0];
+    if (first) {
+      const reg = first.registry_resolved || {};
+      linkSampleCtx = {
+        ctx: first.discovered || {},
+        synth: {
+          sample_id: reg.sample_id || "",
+          acq_date: first.acq_date || "",
+          acq_id: first.acq_id || "",
+          original_name: first.original_name || "",
+        },
+      };
+      updateLinkExample();
+    }
     renderCollisions(d.collisions, d.existing_targets);
     renderTable(lastCases);
 
@@ -323,6 +371,8 @@ async function readSSE(resp, handlers) {
 async function ingest() {
   const payload = buildPayload();
   payload.dry_run = $("#dry").checked;
+  // The source is always a pull into staging — remove it after a clean real ingest.
+  payload.cleanup_staging = true;
   if (!payload.operator) { $("#errors").textContent = "Operator is required (who ran the scanner)."; return; }
   $("#ingest").disabled = true;
   $("#preview").disabled = true;
@@ -386,16 +436,17 @@ dry.addEventListener("change", updateDryState);
 $("#regenerate").addEventListener("change", updateDicomifierNote);
 
 // ---------------------------------------------------------------- SFTP remote pull
-// Pull ParaVision study folders off the scanner over SFTP, drop them into a
-// local staging batch, then fill the Source-folder field so the normal
-// Preview/Ingest flow takes over. Read-only on the scanner (download only).
+// Pull ParaVision study folders off the scanner over SFTP into a staging batch
+// (on the NAS by default), then run Preview/Ingest on it — the operator never
+// sees or manages the staging path. Read-only on the scanner (download only).
 const sftp = {
   status: $("#sftp-status"), controls: $("#sftp-controls"),
   listBtn: $("#sftp-list"), allChk: $("#sftp-all"), count: $("#sftp-count"),
   listWrap: $("#sftp-listwrap"), items: $("#sftp-list-items"),
   search: $("#sftp-search"), selNone: $("#sftp-selnone"),
-  pullRow: $("#sftp-pullrow"), stagingRoot: $("#sftp-staging-root"),
-  batch: $("#sftp-batch"), pullBtn: $("#sftp-pull"),
+  pullRow: $("#sftp-pullrow"), pullNote: $("#sftp-pull-note"),
+  advanced: $("#sftp-advanced"), stagingRoot: $("#sftp-staging-root"),
+  pullBtn: $("#sftp-pull"),
   logWrap: $("#sftp-log-wrap"), log: $("#sftp-log"), result: $("#sftp-result"),
   exams: [],
 };
@@ -409,9 +460,9 @@ async function sftpInit() {
     sftp.status.innerHTML = `Scanner <code>${esc(d.host)}</code> — ready. List the studies, tick the ones you want, then pull.`;
     sftp.controls.hidden = false;
   } else if (!d.paramiko) {
-    sftp.status.textContent = "Remote pull needs the ‘paramiko’ package (ask the data office). You can still point at a folder already on this machine below.";
+    sftp.status.textContent = "Remote pull isn’t available on this machine (the ‘paramiko’ package is missing — ask the data office to install it).";
   } else {
-    sftp.status.textContent = "No scanner credentials on this machine (need ~/.ssh/gjesus3_mri.cred). You can still point at a folder already on this machine below.";
+    sftp.status.textContent = "No scanner credentials on this machine (the data office sets up ~/.ssh/gjesus3_mri.cred).";
   }
 }
 
@@ -445,6 +496,11 @@ async function sftpList() {
       (d.filter ? ` (MFB only)` : " (all groups)");
     sftp.listWrap.hidden = false;
     sftp.pullRow.hidden = false;
+    sftp.advanced.hidden = false;
+    const where = (sftp.stagingRoot.value || "").trim();
+    sftp.pullNote.textContent = where
+      ? "→ staged under " + where + ", then removed automatically after ingest."
+      : "";
     sftpRenderList();
   } catch (e) {
     sftp.count.textContent = "";
@@ -467,8 +523,8 @@ async function sftpPull() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         remotes,
+        nas_root: nasInput.value.trim(),
         staging_root: sftp.stagingRoot.value.trim(),
-        batch: sftp.batch.value.trim(),
       }),
     });
   } catch (e) {
@@ -481,21 +537,22 @@ async function sftpPull() {
     appendLog(sftp.log, "ERROR", msg);
     sftp.pullBtn.disabled = false; sftp.listBtn.disabled = false; return;
   }
+  let pulled = null;
   await readSSE(resp, {
     onLog: (lvl, msg) => appendLog(sftp.log, lvl, msg),
     onError: (msg) => appendLog(sftp.log, "ERROR", msg),
     onDone: (r) => {
-      const staging = $("#staging");
-      staging.value = r.staging_dir;
-      staging.dispatchEvent(new Event("input"));
+      pulled = r;
+      $("#staging").value = r.staging_dir;   // internal — drives Preview/Ingest
       sftp.result.className = "summary live-done";
       sftp.result.innerHTML = `✓ Pulled ${r.studies} stud${r.studies === 1 ? "y" : "ies"} ` +
-        `(${(r.bytes / 1e6).toFixed(1)} MB) to <code>${esc(r.staging_dir)}</code>. ` +
-        `Source folder set below — now click <strong>Preview</strong>.`;
+        `(${(r.bytes / 1e6).toFixed(1)} MB). Previewing…`;
     },
   });
   sftp.pullBtn.disabled = false;
   sftp.listBtn.disabled = false;
+  // Go straight to the preview so the operator never thinks about staging.
+  if (pulled && pulled.staging_dir) preview();
 }
 sftp.listBtn.addEventListener("click", sftpList);
 sftp.allChk.addEventListener("change", () => { if (!sftp.listWrap.hidden) sftpList(); });
@@ -505,9 +562,17 @@ sftp.selNone.addEventListener("click", () => {
   sftpUpdatePullBtn();
 });
 sftp.pullBtn.addEventListener("click", sftpPull);
+$("#sftp-staging-browse").addEventListener("click", () => {
+  browseInto(sftp.stagingRoot, "Select where pulled studies are staged", () => {
+    const where = (sftp.stagingRoot.value || "").trim();
+    sftp.pullNote.textContent = where
+      ? "→ staged under " + where + ", then removed automatically after ingest." : "";
+  });
+});
 
 // ---------------------------------------------------------------- init
 refreshNas();
 updateDryState();
 updateDicomifierNote();
+updateLinkExample();
 sftpInit();

@@ -29,11 +29,10 @@
     </div>
 
     <p class="muted">
-      Point at a ParaVision <strong>exam</strong>, a <strong>study folder</strong>, or a
-      <strong>batch root</strong> (a study already pulled from the scanner). The MRI
-      naming convention is locked in — you only set who ran the scanner, the
-      destination project, and (when linking) the project link name. Preview first,
-      then ingest. Re-running is safe: already-ingested scans are skipped.
+      Pick the scans you want from the scanner and pull them. The MRI naming
+      convention is locked in — you only set who ran the scanner, the destination
+      project, and (when linking) the project link name. Preview first, then
+      ingest. Re-running is safe: already-ingested scans are skipped.
     </p>
 
     <!-- REMOTE SOURCE — pull study folders off the scanner over SFTP -->
@@ -53,14 +52,22 @@
         <div id="sftp-list-items" class="sftp-list"></div>
       </div>
       <div class="row" id="sftp-pullrow" hidden>
-        <label class="grow">Save to <span class="muted">— local staging folder</span>
-          <input id="sftp-staging-root" type="text" placeholder="D:\projects\mri">
-        </label>
-        <label>Batch name <span class="muted">— optional</span>
-          <input id="sftp-batch" type="text" placeholder="auto (timestamp)">
-        </label>
         <button id="sftp-pull" type="button" class="primary" disabled>Pull selected</button>
+        <span id="sftp-pull-note" class="muted"></span>
       </div>
+      <details id="sftp-advanced" hidden>
+        <summary class="muted">Advanced — where files are staged</summary>
+        <p class="muted">Pulled studies land here temporarily, then are
+          <strong>deleted automatically</strong> after a successful ingest. The
+          default is the NAS <code>staging/</code> folder — change it only if you
+          have a reason to.</p>
+        <div class="row">
+          <label class="grow">Staging folder
+            <input id="sftp-staging-root" type="text">
+          </label>
+          <button id="sftp-staging-browse" type="button" class="browse">Browse…</button>
+        </div>
+      </details>
       <div id="sftp-log-wrap" class="log-wrap" hidden>
         <h3>Pull log</h3>
         <pre id="sftp-log"></pre>
@@ -68,26 +75,13 @@
       </div>
     </fieldset>
 
-    <p class="muted or-sep">— or point at a folder already on this machine —</p>
+    <!-- Internal: the local staging dir the pull produced (operator never edits it). -->
+    <input id="staging" type="hidden">
 
-    <!-- SOURCE (local) -->
-    <div class="row">
-      <label class="grow">Source folder <span class="muted">— a ParaVision exam, a study folder, or a batch root</span>
-        <input id="staging" type="text" placeholder="D:\projects\mri\&lt;pulled study&gt;">
-      </label>
-      <button id="browse" type="button" class="browse">Browse…</button>
-    </div>
-
-    <!-- WHO RAN IT + SCANNER -->
+    <!-- WHO RAN IT -->
     <div class="row">
       <label class="grow">Operator <span class="star">★</span> <span class="muted">— who RAN the scanner (= the researcher; required)</span>
         <input id="operator" type="text" placeholder="e.g. Irene">
-      </label>
-      <label>Scanner model <span class="muted">— optional</span>
-        <select id="model">
-          <option value="">— leave unset —</option>
-          {% for m in models %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
-        </select>
       </label>
     </div>
 
@@ -117,6 +111,7 @@
         two scans never clash. The preview <strong>warns</strong> if your edit would make
         two scans collide.</p>
       <div id="link-field" class="tokenfield is-empty" data-placeholder="leave blank to use the source name"></div>
+      <div class="example" id="link-example"></div>
       <div class="row">
         <button id="link-reset" type="button">Reset to default</button>
       </div>
