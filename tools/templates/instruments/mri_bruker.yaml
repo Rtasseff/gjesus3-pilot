@@ -64,6 +64,12 @@
 #                                        as registry acquisition_datetime)
 #   discovered.mri_modality             e.g. "MR"
 #   discovered.mri_sequence_name        e.g. "Bruker:IgFLASH"
+#   discovered.mri_station              e.g. "Biospec 70/30" — literal Bruker
+#                                        system name from acqp ACQ_station
+#   discovered.mri_scanner_model        e.g. "Bruker BioSpec 7T" — DERIVED from
+#                                        ACQ_station (or 1H frequency); drives
+#                                        registry.instrument_model. "" if
+#                                        unrecognised.
 #   discovered.mri_pulse_program        e.g. "IgFLASH.ppg"
 #   discovered.mri_nucleus              e.g. "1H"
 #   discovered.mri_echo_time_ms         TE in ms
@@ -123,9 +129,9 @@
 #                                             study folders)
 #   - `ingest.reconstructions`            <-- which pdata/<idx>/ recons
 #                                             to keep (all | int | list)
-#   - `registry.instrument_model`         <-- "Bruker BioSpec 7T" or
-#                                             "Bruker BioSpec 11.7T"
 #   - `registry.notes`                    <-- short batch description
+#   (registry.instrument_model is now AUTO-DERIVED from the metadata — see the
+#    registry: block. Only override via `mri-ingest --model` if it's wrong.)
 #
 # What you may want to change per batch (rarely):
 #   - `ingest.delete_source_after_ingest` (default false; opt in only
@@ -295,8 +301,12 @@ auto_discover:
 registry:
   instrument:           MRI
   data_ecosystem:       DICOM
-  # EDIT: which scanner produced this batch.
-  instrument_model:     "Bruker BioSpec <7T|11.7T>"
+  # AUTO-DERIVED — no edit needed. Comes from acqp `ACQ_station` (the literal
+  # Bruker system name, e.g. "Biospec 70/30" -> "Bruker BioSpec 7T"; "Biospec
+  # 117/16" -> "Bruker BioSpec 11.7T"), with the 1H reference frequency as a
+  # fallback. Override only if the metadata is missing/ambiguous: pass
+  # `mri-ingest --model 7T|11.7T`, or replace the value here on the YAML path.
+  instrument_model:     "${discovered.mri_scanner_model}"
   modalities_in_study:  NA
   # researcher = the person who set up the experiment (the registry person
   # column, RENAMED from `operator` 2026-06-09). REQUIRED. For MRI the researcher

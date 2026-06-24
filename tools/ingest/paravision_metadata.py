@@ -342,12 +342,60 @@ def _build_subject(md):
     }
 
 
+# 1H gyromagnetic ratio (Larmor) — MHz per tesla. Field strength = freq / this.
+_GYRO_1H_MHZ_PER_T = 42.577
+# BioSpec field strengths we recognise when snapping a frequency-derived value.
+_KNOWN_BIOSPEC_FIELD_T = (4.7, 7.0, 9.4, 11.7, 15.2)
+
+
+def _field_strength_label(field_t):
+    """A field strength in tesla -> the gjesus3 model suffix ('7T' / '11.7T')."""
+    f = round(float(field_t), 1)
+    s = f"{f:.1f}".rstrip("0").rstrip(".")   # 7.0 -> '7'; 11.7 -> '11.7'
+    return f"{s}T"
+
+
+def _scanner_model(md):
+    """Derive the BioSpec model string (e.g. 'Bruker BioSpec 7T') from metadata.
+
+    PRIMARY: acqp `ACQ_station` is the literal Bruker system name — e.g.
+    'Biospec 70/30' (7.0T / 30cm bore) or 'Biospec 117/16' (11.7T). The leading
+    number is the field strength x10. FALLBACK: derive the field strength from
+    the 1H reference frequency (Larmor ~42.577 MHz/T) and snap it to a known
+    BioSpec value. High-confidence only — anything unrecognised returns ''
+    (the registry then keeps the placeholder / WARNs, never guesses).
+    """
+    acqp = md.get("acqp", {})
+    station = str(acqp.get("ACQ_station", "") or "").strip()
+    if "biospec" in station.lower():
+        m = re.search(r"(\d{2,3})", station)
+        if m:
+            return f"Bruker BioSpec {_field_strength_label(int(m.group(1)) / 10.0)}"
+    # Fallback: 1H reference frequency -> field strength, snapped to a known value.
+    method = md.get("method", {})
+    nucleus = str(method.get("PVM_Nucleus1", "")).strip()
+    frq = method.get("PVM_FrqRef", "")
+    if isinstance(frq, list):
+        frq = frq[0] if frq else ""
+    if nucleus in ("", "1H") and frq not in ("", None):
+        try:
+            field_t = float(frq) / _GYRO_1H_MHZ_PER_T
+        except (TypeError, ValueError):
+            return ""
+        for known in _KNOWN_BIOSPEC_FIELD_T:
+            if abs(field_t - known) < 0.25:
+                return f"Bruker BioSpec {_field_strength_label(known)}"
+    return ""
+
+
 def _build_acquisition(md):
     acqp = md.get("acqp", {})
     method = md.get("method", {})
     vp = md.get("visu_pars", {})
     return {
         "method":           method.get("Method", ""),
+        "station":          acqp.get("ACQ_station", ""),
+        "scanner_model":    _scanner_model(md),
         "pulse_program":    acqp.get("PULPROG", ""),
         "creation_datetime": vp.get("VisuCreationDate", ""),
         "echo_time_ms":     method.get("PVM_EchoTime", ""),
@@ -509,6 +557,12 @@ EXPOSED_FIELDS = [
     ("mri_sequence_name",
         lambda md: _g(md, "method", "Method"),
         "Bruker method / sequence name (e.g. 'Bruker:IgFLASH')"),
+    ("mri_station",
+        lambda md: _g(md, "acqp", "ACQ_station"),
+        "Bruker system station string from acqp (e.g. 'Biospec 70/30')"),
+    ("mri_scanner_model",
+        lambda md: _scanner_model(md),
+        "Scanner model derived from ACQ_station / 1H frequency (e.g. 'Bruker BioSpec 7T'); '' if unrecognised"),
     ("mri_pulse_program",
         lambda md: _g(md, "acqp", "PULPROG"),
         "Pulse program file from acqp (e.g. 'IgFLASH.ppg')"),

@@ -559,13 +559,12 @@ def main(argv=None):
     )
     log(f"Reconstructions: {recon_desc}")
     if args.model:
-        log(f"Scanner model: {_MODEL_MAP[args.model]}")
+        log(f"Scanner model: {_MODEL_MAP[args.model]} (override; --model given)")
     else:
         log(
-            "Scanner model not given (--model); the registry instrument_model "
-            "will keep the template placeholder. Pass --model 7T or "
-            "--model 11.7T to record the real scanner.",
-            "WARN",
+            "Scanner model: auto-derived from the metadata (acqp ACQ_station, "
+            "e.g. 'Biospec 70/30' -> 'Bruker BioSpec 7T'). Pass --model 7T or "
+            "--model 11.7T only to override a missing/ambiguous value."
         )
 
     # --- DICOM regen status (so the operator knows what happens to no-DICOM

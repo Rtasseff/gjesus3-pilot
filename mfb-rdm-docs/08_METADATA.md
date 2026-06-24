@@ -255,7 +255,7 @@ For an internal MRI acquisition (Bruker ParaVision), the sidecar's `mri:` block 
     "study_datetime", "referral", "instance_uid"
   },
   "acquisition": {
-    "method", "pulse_program", "creation_datetime",
+    "method", "station", "scanner_model", "pulse_program", "creation_datetime",
     "echo_time_ms", "repetition_time_ms",
     "averages", "repetitions", "scan_time_str", "scan_time_ms",
     "nucleus", "frequency_mhz", "receiver_gain",

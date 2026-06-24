@@ -190,6 +190,8 @@ These are surfaced from each Bruker ParaVision exam at ingest time by `tools/ing
 | `mri_acquisition_datetime` | Per-exam creation datetime from `visu_pars` (used in registry's `acquisition_datetime`) | `visu_pars.VisuCreationDate` |
 | `mri_modality` | DICOM-style modality code from `visu_pars` (typically `"MR"`) | `visu_pars.VisuInstanceModality` |
 | `mri_sequence_name` | Bruker method / sequence name (e.g. `"Bruker:IgFLASH"`) | `method.Method` |
+| `mri_station` | Literal Bruker system name (e.g. `"Biospec 70/30"`) | `acqp.ACQ_station` |
+| `mri_scanner_model` | Scanner model **derived** from `ACQ_station` (e.g. `"Biospec 70/30"`→`"Bruker BioSpec 7T"`, `"Biospec 117/16"`→`"Bruker BioSpec 11.7T"`), 1H reference frequency as fallback; drives `registry.instrument_model`; `""` if unrecognised | derived from `acqp.ACQ_station` / `method.PVM_FrqRef` |
 | `mri_pulse_program` | Pulse program file (e.g. `"IgFLASH.ppg"`) | `acqp.PULPROG` |
 | `mri_nucleus` | Primary nucleus (e.g. `"1H"`) | `method.PVM_Nucleus1` |
 | `mri_echo_time_ms` | Echo time TE in ms | `method.PVM_EchoTime` |
