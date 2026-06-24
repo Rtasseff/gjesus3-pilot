@@ -71,9 +71,21 @@ serves both pages — ship two shortcuts: `gjesus3_ingest.exe` (microscopy `/`) 
 
 ```sh
 pip install flask paramiko pyinstaller czifile tifffile numpy pyyaml
-pyinstaller tools/operator/gui/gjesus3_ingest.spec
-# -> dist/gjesus3_ingest/gjesus3_ingest.exe
+# Build OUTSIDE OneDrive — see the warning below.
+pyinstaller --workpath D:/_build --distpath D:/_dist tools/operator/gui/gjesus3_ingest.spec
+# -> D:/_dist/gjesus3_ingest/gjesus3_ingest.exe   (~206 MB one-folder build)
 ```
+
+> **⚠️ Build OUTSIDE OneDrive.** This repo lives under a OneDrive-synced folder,
+> and OneDrive locks PyInstaller's build artifacts mid-build (`PermissionError`
+> on `PYZ-00.pyz`). Always pass `--workpath`/`--distpath` to a non-synced
+> location (e.g. `D:/`). The spec is read from the repo (fine); only the
+> write-heavy `build/`+`dist/` must be elsewhere.
+
+Smoke-tested 2026-06-24 (PyInstaller 6.18, py3.13): both pages render, static
+assets serve, **paramiko is bundled and functions at runtime** (a live read-only
+SFTP listing of 1083 studies through the frozen exe), and `~/.ssh/gjesus3_mri.cred`
+resolves.
 
 For the **MRI page**, the bundle also carries `paramiko` (lazy-imported → added as
 a hidden import) and `tools/ftp_mirror.py` (loaded by path). The MRI page also
