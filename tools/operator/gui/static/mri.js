@@ -294,6 +294,32 @@ function appendLog(el, level, msg) {
   el.scrollTop = el.scrollHeight;
 }
 
+// Drain a fetch() SSE stream (POST-based, so EventSource can't be used). Each
+// event is `data: {kind,level,msg}\n\n`; dispatch to the supplied handlers.
+// Shared by the ingest stream and the SFTP-pull stream.
+async function readSSE(resp, handlers) {
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const chunk = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const line = chunk.replace(/^data: /, "");
+      if (!line.trim()) continue;
+      let evt;
+      try { evt = JSON.parse(line); } catch (e) { continue; }
+      if (evt.kind === "log" && handlers.onLog) handlers.onLog(evt.level || "INFO", evt.msg);
+      else if (evt.kind === "error" && handlers.onError) handlers.onError(evt.msg);
+      else if (evt.kind === "done" && handlers.onDone) handlers.onDone(JSON.parse(evt.msg));
+    }
+  }
+}
+
 async function ingest() {
   const payload = buildPayload();
   payload.dry_run = $("#dry").checked;
@@ -324,39 +350,21 @@ async function ingest() {
     $("#ingest").disabled = false; $("#preview").disabled = false; return;
   }
 
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buf.indexOf("\n\n")) >= 0) {
-      const chunk = buf.slice(0, idx);
-      buf = buf.slice(idx + 2);
-      const line = chunk.replace(/^data: /, "");
-      if (!line.trim()) continue;
-      let evt;
-      try { evt = JSON.parse(line); } catch (e) { continue; }
-      if (evt.kind === "log") {
-        appendLog(logEl, evt.level || "INFO", evt.msg);
-      } else if (evt.kind === "error") {
-        appendLog(logEl, "ERROR", evt.msg);
-      } else if (evt.kind === "done") {
-        const r = JSON.parse(evt.msg);
-        const resEl = $("#result");
-        if (r.dry_run) {
-          resEl.className = "summary dry-done";
-          resEl.innerHTML = `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the NAS.</strong> ` +
-            `${r.ok}/${r.total} scans WOULD be ingested. Uncheck “Dry-run” and run again to ingest for real.`;
-        } else {
-          resEl.className = "summary live-done";
-          resEl.innerHTML = `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} scans written</strong> to ${esc(nasInput.value || "the NAS")}.`;
-        }
+  await readSSE(resp, {
+    onLog: (lvl, msg) => appendLog(logEl, lvl, msg),
+    onError: (msg) => appendLog(logEl, "ERROR", msg),
+    onDone: (r) => {
+      const resEl = $("#result");
+      if (r.dry_run) {
+        resEl.className = "summary dry-done";
+        resEl.innerHTML = `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the NAS.</strong> ` +
+          `${r.ok}/${r.total} scans WOULD be ingested. Uncheck “Dry-run” and run again to ingest for real.`;
+      } else {
+        resEl.className = "summary live-done";
+        resEl.innerHTML = `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} scans written</strong> to ${esc(nasInput.value || "the NAS")}.`;
       }
-    }
-  }
+    },
+  });
   $("#ingest").disabled = false;
   $("#preview").disabled = false;
 }
@@ -377,7 +385,129 @@ function updateDryState() {
 dry.addEventListener("change", updateDryState);
 $("#regenerate").addEventListener("change", updateDicomifierNote);
 
+// ---------------------------------------------------------------- SFTP remote pull
+// Pull ParaVision study folders off the scanner over SFTP, drop them into a
+// local staging batch, then fill the Source-folder field so the normal
+// Preview/Ingest flow takes over. Read-only on the scanner (download only).
+const sftp = {
+  status: $("#sftp-status"), controls: $("#sftp-controls"),
+  listBtn: $("#sftp-list"), allChk: $("#sftp-all"), count: $("#sftp-count"),
+  listWrap: $("#sftp-listwrap"), items: $("#sftp-list-items"),
+  search: $("#sftp-search"), selNone: $("#sftp-selnone"),
+  pullRow: $("#sftp-pullrow"), stagingRoot: $("#sftp-staging-root"),
+  batch: $("#sftp-batch"), pullBtn: $("#sftp-pull"),
+  logWrap: $("#sftp-log-wrap"), log: $("#sftp-log"), result: $("#sftp-result"),
+  exams: [],
+};
+
+async function sftpInit() {
+  let d;
+  try { d = await getJSON("/api/sftp_status"); }
+  catch (e) { sftp.status.textContent = "Remote pull unavailable."; return; }
+  if (d.staging_root && !sftp.stagingRoot.value) sftp.stagingRoot.value = d.staging_root;
+  if (d.available) {
+    sftp.status.innerHTML = `Scanner <code>${esc(d.host)}</code> — ready. List the studies, tick the ones you want, then pull.`;
+    sftp.controls.hidden = false;
+  } else if (!d.paramiko) {
+    sftp.status.textContent = "Remote pull needs the ‘paramiko’ package (ask the data office). You can still point at a folder already on this machine below.";
+  } else {
+    sftp.status.textContent = "No scanner credentials on this machine (need ~/.ssh/gjesus3_mri.cred). You can still point at a folder already on this machine below.";
+  }
+}
+
+function sftpSelected() {
+  return $$(".sftp-row input:checked", sftp.items).map((c) => c.dataset.remote);
+}
+function sftpUpdatePullBtn() {
+  const n = sftpSelected().length;
+  sftp.pullBtn.disabled = n === 0;
+  sftp.pullBtn.textContent = n ? `Pull ${n} selected` : "Pull selected";
+}
+function sftpRenderList() {
+  const q = sftp.search.value.trim().toLowerCase();
+  const rows = sftp.exams
+    .filter((e) => !q || e.name.toLowerCase().includes(q))
+    .map((e) =>
+      `<label class="sftp-row"><input type="checkbox" data-remote="${esc(e.remote)}">` +
+      `<span class="sftp-name">${esc(e.name)}</span>` +
+      `<span class="pill">${esc(e.version)}</span></label>`);
+  sftp.items.innerHTML = rows.join("") || "<div class='fb-empty'>(no matching studies)</div>";
+  $$(".sftp-row input", sftp.items).forEach((c) => c.addEventListener("change", sftpUpdatePullBtn));
+  sftpUpdatePullBtn();
+}
+async function sftpList() {
+  sftp.listBtn.disabled = true;
+  sftp.count.textContent = "Listing…";
+  try {
+    const d = await postJSON("/api/sftp_listdir", { all: sftp.allChk.checked });
+    sftp.exams = d.exams || [];
+    sftp.count.textContent = `${d.count} stud${d.count === 1 ? "y" : "ies"}` +
+      (d.filter ? ` (MFB only)` : " (all groups)");
+    sftp.listWrap.hidden = false;
+    sftp.pullRow.hidden = false;
+    sftpRenderList();
+  } catch (e) {
+    sftp.count.textContent = "";
+    sftp.status.textContent = "List failed: " + e.message;
+  } finally {
+    sftp.listBtn.disabled = false;
+  }
+}
+async function sftpPull() {
+  const remotes = sftpSelected();
+  if (!remotes.length) return;
+  sftp.pullBtn.disabled = true;
+  sftp.listBtn.disabled = true;
+  sftp.logWrap.hidden = false;
+  sftp.log.innerHTML = "";
+  sftp.result.innerHTML = "";
+  let resp;
+  try {
+    resp = await fetch("/api/sftp_pull", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        remotes,
+        staging_root: sftp.stagingRoot.value.trim(),
+        batch: sftp.batch.value.trim(),
+      }),
+    });
+  } catch (e) {
+    appendLog(sftp.log, "ERROR", e.message);
+    sftp.pullBtn.disabled = false; sftp.listBtn.disabled = false; return;
+  }
+  if (!resp.ok) {
+    let msg = `HTTP ${resp.status}`;
+    try { const j = await resp.json(); if (j.error) msg = j.error; } catch (e) { /* */ }
+    appendLog(sftp.log, "ERROR", msg);
+    sftp.pullBtn.disabled = false; sftp.listBtn.disabled = false; return;
+  }
+  await readSSE(resp, {
+    onLog: (lvl, msg) => appendLog(sftp.log, lvl, msg),
+    onError: (msg) => appendLog(sftp.log, "ERROR", msg),
+    onDone: (r) => {
+      const staging = $("#staging");
+      staging.value = r.staging_dir;
+      staging.dispatchEvent(new Event("input"));
+      sftp.result.className = "summary live-done";
+      sftp.result.innerHTML = `✓ Pulled ${r.studies} stud${r.studies === 1 ? "y" : "ies"} ` +
+        `(${(r.bytes / 1e6).toFixed(1)} MB) to <code>${esc(r.staging_dir)}</code>. ` +
+        `Source folder set below — now click <strong>Preview</strong>.`;
+    },
+  });
+  sftp.pullBtn.disabled = false;
+  sftp.listBtn.disabled = false;
+}
+sftp.listBtn.addEventListener("click", sftpList);
+sftp.allChk.addEventListener("change", () => { if (!sftp.listWrap.hidden) sftpList(); });
+sftp.search.addEventListener("input", sftpRenderList);
+sftp.selNone.addEventListener("click", () => {
+  $$(".sftp-row input:checked", sftp.items).forEach((c) => { c.checked = false; });
+  sftpUpdatePullBtn();
+});
+sftp.pullBtn.addEventListener("click", sftpPull);
+
 // ---------------------------------------------------------------- init
 refreshNas();
 updateDryState();
 updateDicomifierNote();
+sftpInit();

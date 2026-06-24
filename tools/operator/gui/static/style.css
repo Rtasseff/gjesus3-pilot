@@ -279,3 +279,14 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
 .req-label { font-weight: 600; padding-top: .4rem; }
 .req-val { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
 .star { color: var(--warn); }
+
+/* MRI remote-pull (SFTP) — the scrollable, checkable study list */
+.or-sep { text-align: center; font-size: .82rem; margin: .8rem 0; }
+.sftp-list { max-height: 320px; overflow: auto; border: 1px solid var(--border);
+  border-radius: 6px; margin: .4rem 0; }
+.sftp-row { display: flex; align-items: center; gap: .55rem; padding: .28rem .5rem;
+  border-bottom: 1px solid #eef1f5; font-weight: 400; cursor: pointer; }
+.sftp-row:last-child { border-bottom: none; }
+.sftp-row:hover { background: #eff6ff; }
+.sftp-name { flex: 1; font: 12.5px/1.4 ui-monospace, Consolas, monospace;
+  word-break: break-all; }

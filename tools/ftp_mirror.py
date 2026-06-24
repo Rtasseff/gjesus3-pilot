@@ -127,11 +127,17 @@ def needs_transfer(local_path, remote_st, force):
     return False
 
 
-def mirror(sftp, remote_root, local_root, dry_run=False, force=False):
+def mirror(sftp, remote_root, local_root, dry_run=False, force=False,
+           log_callback=None):
     """Mirror remote_root -> local_root over an existing SFTP connection.
+
+    Read-only on the remote (download only; never writes there).
+    `log_callback(msg, level="INFO")` overrides the module logger so a caller
+    (e.g. the GUI's SSE pull) can stream progress; defaults to print-logging.
 
     Returns (n_transferred, n_skipped, total_bytes_transferred).
     """
+    cb = log_callback or log
     n_transferred = 0
     n_skipped = 0
     bytes_transferred = 0
@@ -139,9 +145,9 @@ def mirror(sftp, remote_root, local_root, dry_run=False, force=False):
     if not is_dir(sftp, remote_root):
         raise RuntimeError(f"Remote path is not a directory: {remote_root}")
 
-    log(f"Walking remote tree: {remote_root}")
+    cb(f"Walking remote tree: {remote_root}")
     files = list(walk_remote(sftp, remote_root))
-    log(f"Found {len(files)} remote files")
+    cb(f"Found {len(files)} remote files")
 
     for i, (remote_path, st) in enumerate(files, 1):
         rel = remote_path[len(remote_root):].lstrip("/")
@@ -152,7 +158,7 @@ def mirror(sftp, remote_root, local_root, dry_run=False, force=False):
             continue
 
         if dry_run:
-            log(f"  [DRY-RUN] {rel} ({st.st_size:,} bytes)")
+            cb(f"  [DRY-RUN] {rel} ({st.st_size:,} bytes)")
             n_transferred += 1
             bytes_transferred += st.st_size
             continue
@@ -168,13 +174,13 @@ def mirror(sftp, remote_root, local_root, dry_run=False, force=False):
             # Preserve mtime so the idempotency check works on re-runs.
             os.utime(local_path, (st.st_atime, st.st_mtime))
         except Exception as e:
-            log(f"Failed: {rel} ({e})", "ERROR")
+            cb(f"Failed: {rel} ({e})", "ERROR")
             continue
 
         n_transferred += 1
         bytes_transferred += st.st_size
         if i % 25 == 0:
-            log(
+            cb(
                 f"  Progress: {i}/{len(files)} "
                 f"({bytes_transferred / 1_000_000:.1f} MB)"
             )

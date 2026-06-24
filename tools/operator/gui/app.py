@@ -127,6 +127,27 @@ MRI_LINK_PALETTE_KEYS = [
 MRI_LINK_PALETTE_EXTRAS = ["${sample_id}", "${acq_date}", "${acq_id}",
                            "${original_name}"]
 
+# --- MRI remote-pull (SFTP) source ------------------------------------------
+# Pull ParaVision study folders off the acquisition console over SFTP, then
+# ingest the local copy through the same MRI path. READ-ONLY on the remote
+# (list + download only — never writes there). Host + creds + source roots are
+# documented in equipment/historical_data_archives.md §MRI; creds resolve via
+# env.ftp_creds() (GJESUS3_FTP_* env vars > ~/.ssh/gjesus3_mri.cred). The two
+# roots are the concurrent ParaVision versions on the box.
+MRI_SFTP_ROOTS = [
+    {"path": "/opt/PV-7.0.0/data/nmr", "label": "ParaVision 7.0.0"},
+    {"path": "/opt/PV6.0.1/data/nmr",  "label": "ParaVision 6.0.1"},
+]
+# MFB naming convention: every MFB study folder carries the PI initials "jrc"
+# (Jesus Ruiz-Cabello). This is also what the mri_bruker ingest regex keys on,
+# so non-jrc folders wouldn't ingest anyway. Default the remote list to jrc-only.
+MRI_SFTP_FILTER = "jrc"
+# Where pulled study folders land locally (one batch subfolder per pull). The
+# operator can override per pull; this is the documented MRI staging root.
+MRI_PULL_STAGING_ROOT = r"D:\projects\mri"
+# Safety cap: never mirror more than this many studies in one pull request.
+MRI_PULL_MAX_STUDIES = 50
+
 # Controlled sample_type vocabulary — 06_REGISTRIES §2.4 (DRAFT, REG-07). Operators
 # pick one verbatim; a new kind is a vocab-extension decision, not an ad-hoc value.
 # Keep this list in sync with that table (value + a short operator-facing gloss).
@@ -1038,6 +1059,225 @@ def api_mri_ingest():
 
     stamp = runner.default_recipe_path(tpl_path)
     return _ingest_sse_response(cfg, nas_root, dry_run, stamp)
+
+
+# ============================================================ MRI SFTP remote-pull
+# Layer 2: pull ParaVision study folders off the acquisition console, then feed
+# the local copy to the SAME MRI preview/ingest path above. Read-only on the
+# remote. Two endpoints: /api/sftp_listdir (browse MFB exams) + /api/sftp_pull
+# (SSE-streamed mirror, like the ingest stream). Creds via env.ftp_creds().
+
+def _load_ftp_mirror():
+    """Load tools/ftp_mirror.py (SFTP mirror engine) under a private alias.
+
+    Lives at tools/ftp_mirror.py (one level above the operator package), so it
+    is loaded by path, not import. _MEIPASS-aware for the frozen bundle.
+    """
+    path = os.path.join(_TOOLS_DIR, "ftp_mirror.py")
+    spec = importlib.util.spec_from_file_location("gj_ftp_mirror", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _sftp_connect():
+    """Open an SFTP client to the MRI host using env.ftp_creds().
+
+    Returns (transport, sftp). Raises RuntimeError with a plain-language message
+    when creds are missing or paramiko is not installed — the caller surfaces it
+    as a 400 so the operator sees what to fix.
+    """
+    if not env.ftp_creds_present():
+        raise RuntimeError(
+            "No SFTP credentials found. Set the GJESUS3_FTP_* environment "
+            "variables, or create ~/.ssh/gjesus3_mri.cred (see "
+            "equipment/historical_data_archives.md §MRI)."
+        )
+    try:
+        import paramiko
+    except ImportError:
+        raise RuntimeError("paramiko is not installed. Run: pip install paramiko")
+    c = env.ftp_creds()
+    transport = paramiko.Transport((c["host"], c["port"]))
+    transport.connect(username=c["user"], password=c["password"])
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    return transport, sftp
+
+
+def _under_known_root(remote):
+    """True if `remote` sits directly under one of the documented SFTP roots.
+
+    Defence-in-depth: the operator only ever picks from the listed exams, but a
+    crafted request must not coax a pull of an arbitrary remote path. We only
+    ever READ/COPY, never write, so the blast radius is small — but bound it.
+    """
+    remote = (remote or "").rstrip("/")
+    for root in MRI_SFTP_ROOTS:
+        base = root["path"].rstrip("/")
+        if remote.startswith(base + "/") and "/" not in remote[len(base) + 1:]:
+            return True
+    return False
+
+
+@app.route("/api/sftp_status")
+def api_sftp_status():
+    """Whether remote pull is usable on this machine: creds present + host."""
+    present = env.ftp_creds_present()
+    host = env.ftp_creds().get("host") if present else None
+    try:
+        import paramiko  # noqa: F401
+        has_paramiko = True
+    except ImportError:
+        has_paramiko = False
+    return jsonify({
+        "creds_present": present,
+        "host": host,
+        "paramiko": has_paramiko,
+        "available": present and has_paramiko,
+        "roots": MRI_SFTP_ROOTS,
+        "staging_root": MRI_PULL_STAGING_ROOT,
+    })
+
+
+@app.route("/api/sftp_listdir", methods=["POST"])
+def api_sftp_listdir():
+    """List MFB (jrc) ParaVision study folders on the MRI host, newest first.
+
+    Read-only: a single non-recursive listdir of each documented root. Folder
+    names start with YYYYMMDD_HHMMSS, so a reverse name sort is a reliable
+    chronological order (st_mtime is also returned as a backstop).
+    """
+    import stat as _stat
+    data = request.get_json(silent=True) or {}
+    show_all = bool(data.get("all"))   # default False -> jrc-only
+    try:
+        transport, sftp = _sftp_connect()
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 400
+    try:
+        exams = []
+        root_errors = []
+        for root in MRI_SFTP_ROOTS:
+            try:
+                entries = sftp.listdir_attr(root["path"])
+            except IOError as e:
+                root_errors.append({"root": root["path"], "error": str(e)})
+                continue
+            for ent in entries:
+                if not _stat.S_ISDIR(ent.st_mode):
+                    continue
+                name = ent.filename
+                if not show_all and MRI_SFTP_FILTER not in name.lower():
+                    continue
+                exams.append({
+                    "name": name,
+                    "root": root["path"],
+                    "version": root["label"],
+                    "remote": root["path"].rstrip("/") + "/" + name,
+                    "mtime": int(ent.st_mtime or 0),
+                })
+        exams.sort(key=lambda d: d["name"], reverse=True)   # newest first
+        return jsonify({
+            "host": env.ftp_creds().get("host"),
+            "filter": None if show_all else MRI_SFTP_FILTER,
+            "count": len(exams),
+            "exams": exams,
+            "root_errors": root_errors,
+        })
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"SFTP listing failed: {e}"}), 500
+    finally:
+        transport.close()
+
+
+@app.route("/api/sftp_pull", methods=["POST"])
+def api_sftp_pull():
+    """Mirror the selected remote study folders into a local batch dir, SSE-streamed.
+
+    Each checked remote `/opt/.../nmr/<study>` is mirrored to
+    `<staging_root>/<batch>/<study>/`, so the batch dir holds study folders and
+    the existing MRI `*/*` scope matches. The final `done` event carries the
+    local `staging_dir` — the page drops it into the source field and the
+    operator runs Preview as usual. Read-only on the remote (download only).
+    """
+    from datetime import datetime
+    data = request.get_json(silent=True) or {}
+    remotes = [r for r in (data.get("remotes") or []) if isinstance(r, str)]
+    staging_root = (data.get("staging_root") or MRI_PULL_STAGING_ROOT).strip()
+    batch = (data.get("batch") or "").strip()
+    force = bool(data.get("force"))
+
+    # Validate up front so guard failures are a clean 400 (not mid-stream).
+    if not remotes:
+        return jsonify({"error": "Select at least one study to pull."}), 400
+    if len(remotes) > MRI_PULL_MAX_STUDIES:
+        return jsonify({"error": f"Too many studies selected "
+                                 f"({len(remotes)} > {MRI_PULL_MAX_STUDIES})."}), 400
+    bad = [r for r in remotes if not _under_known_root(r)]
+    if bad:
+        return jsonify({"error": f"Refusing to pull paths outside the known "
+                                 f"ParaVision roots: {bad[:3]}"}), 400
+    try:
+        ftp_mirror = _load_ftp_mirror()
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"Cannot load the SFTP engine: {e}"}), 500
+
+    # batch subfolder keeps each pull isolated; default to a timestamp.
+    if not batch:
+        batch = "sftp_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_batch = "".join(c if (c.isalnum() or c in "-_") else "_" for c in batch)
+    staging_dir = os.path.normpath(os.path.join(staging_root, safe_batch))
+
+    def generate():
+        import queue
+        q = queue.Queue()
+        SENTINEL = object()
+
+        def cb(msg, level="INFO"):
+            q.put(("log", level, str(msg)))
+
+        def worker():
+            transport = None
+            try:
+                transport, sftp = _sftp_connect()
+                cb(f"Connected. Pulling {len(remotes)} study folder(s) -> {staging_dir}")
+                tot_x = tot_s = tot_b = 0
+                for idx, remote in enumerate(remotes, 1):
+                    study = remote.rstrip("/").rsplit("/", 1)[-1]
+                    local = os.path.join(staging_dir, study)
+                    cb(f"[{idx}/{len(remotes)}] {study}")
+                    nx, ns, nb = ftp_mirror.mirror(
+                        sftp, remote, local, force=force, log_callback=cb,
+                    )
+                    tot_x += nx
+                    tot_s += ns
+                    tot_b += nb
+                cb(f"Done. transferred {tot_x} files "
+                   f"({tot_b / 1_000_000:.1f} MB); skipped {tot_s} already-present")
+                q.put(("done", "INFO", json.dumps({
+                    "staging_dir": staging_dir,
+                    "studies": len(remotes),
+                    "transferred": tot_x,
+                    "skipped": tot_s,
+                    "bytes": tot_b,
+                })))
+            except Exception as e:  # noqa: BLE001 — report to the stream
+                q.put(("error", "ERROR", str(e)))
+            finally:
+                if transport is not None:
+                    transport.close()
+                q.put(SENTINEL)
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        while True:
+            item = q.get()
+            if item is SENTINEL:
+                break
+            kind, level, msg = item
+            yield f"data: {json.dumps({'kind': kind, 'level': level, 'msg': msg})}\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
 
 
 # --------------------------------------------------------------------- runner

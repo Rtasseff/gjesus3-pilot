@@ -36,7 +36,41 @@
       then ingest. Re-running is safe: already-ingested scans are skipped.
     </p>
 
-    <!-- SOURCE -->
+    <!-- REMOTE SOURCE — pull study folders off the scanner over SFTP -->
+    <fieldset id="remote-fieldset">
+      <legend>Get data from the scanner <span class="muted">— pull over the network (SFTP)</span></legend>
+      <p class="muted" id="sftp-status">Checking connection to the scanner…</p>
+      <div class="row" id="sftp-controls" hidden>
+        <button id="sftp-list" type="button">List studies on the scanner</button>
+        <label class="check"><input id="sftp-all" type="checkbox"> show all groups (not just MFB)</label>
+        <span id="sftp-count" class="muted"></span>
+      </div>
+      <div id="sftp-listwrap" hidden>
+        <div class="row">
+          <input id="sftp-search" type="text" class="grow" placeholder="filter the list… (animal, date, protocol)">
+          <button id="sftp-selnone" type="button">Clear selection</button>
+        </div>
+        <div id="sftp-list-items" class="sftp-list"></div>
+      </div>
+      <div class="row" id="sftp-pullrow" hidden>
+        <label class="grow">Save to <span class="muted">— local staging folder</span>
+          <input id="sftp-staging-root" type="text" placeholder="D:\projects\mri">
+        </label>
+        <label>Batch name <span class="muted">— optional</span>
+          <input id="sftp-batch" type="text" placeholder="auto (timestamp)">
+        </label>
+        <button id="sftp-pull" type="button" class="primary" disabled>Pull selected</button>
+      </div>
+      <div id="sftp-log-wrap" class="log-wrap" hidden>
+        <h3>Pull log</h3>
+        <pre id="sftp-log"></pre>
+        <div id="sftp-result" class="summary"></div>
+      </div>
+    </fieldset>
+
+    <p class="muted or-sep">— or point at a folder already on this machine —</p>
+
+    <!-- SOURCE (local) -->
     <div class="row">
       <label class="grow">Source folder <span class="muted">— a ParaVision exam, a study folder, or a batch root</span>
         <input id="staging" type="text" placeholder="D:\projects\mri\&lt;pulled study&gt;">
