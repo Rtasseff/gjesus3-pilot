@@ -831,6 +831,14 @@ apart from a cross-link + a behaviour-identical refactor.
   targets (`tools/operator/collisions.py`); non-scan ParaVision sibling folders (AdjResult /
   subject / …) are skipped with a plain "not a scan folder" message; DICOM regeneration is
   default-on (graceful — empty `.data/` placeholder + WARN when Dicomifier is absent).
+- **No-DICOM deferral.** Dicomifier is Linux-only (conda-forge skips Windows — its `odil` C++
+  dep), so an operator's Windows box can't regenerate missing DICOMs. When a ParaVision exam
+  has no DICOMs and Dicomifier isn't present, the acq is registered with an empty `.data/` and
+  **queued to `registries/pending_dicom_regen.csv`** (`tools/ingest/pending_dicom.py`) recording
+  the `<study>/<exam>` identity on `kenia` (NOT the auto-deleted staging path) + the ParaVision
+  version. A later data-office Dicomifier pass (WSL / a Linux ingest host) re-pulls the source
+  from `kenia`, regenerates, and idempotently re-ingests to fill the `.data/`. See the
+  no-Windows-regen research note + the server-side-ingest architecture in `tasks/BACKLOG.md`.
 - **Only two operator-editable fields:** destination project (default = per animal-protocol
   code) and the project link name (token-field with a live resolved example). Operator name
   is required; everything else is template-locked.
