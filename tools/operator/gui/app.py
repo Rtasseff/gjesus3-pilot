@@ -1172,15 +1172,17 @@ def _under_known_root(remote):
     return False
 
 
-def _default_mri_staging_root():
+def _default_mri_staging_root(nas_root=None):
     """Default landing dir for pulled studies: `<nas_root>/staging`.
 
     The MFB NAS has a top-level `staging/` dir on every root — pulling there
     keeps the follow-on ingest NAS-local (no second SMB hop) and means the
-    operator never has to think about where the temporary copy goes. Falls back
-    to the documented local dir when the saved NAS root isn't a real dir yet.
+    operator never has to think about where the temporary copy goes. `nas_root`
+    overrides the saved one (so staging follows the destination chosen for this
+    pull). Falls back to the documented local dir when the NAS root isn't a real
+    dir yet.
     """
-    nas = load_saved_nas_root()
+    nas = nas_root or load_saved_nas_root()
     if nas and os.path.isdir(nas):
         return os.path.normpath(os.path.join(nas, "staging"))
     return MRI_PULL_STAGING_ROOT
@@ -1270,13 +1272,22 @@ def api_sftp_pull():
     from datetime import datetime
     data = request.get_json(silent=True) or {}
     remotes = [r for r in (data.get("remotes") or []) if isinstance(r, str)]
-    staging_root = (data.get("staging_root") or "").strip() or _default_mri_staging_root()
+    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    staging_root = (data.get("staging_root") or "").strip() or _default_mri_staging_root(nas_root)
     batch = (data.get("batch") or "").strip()
     force = bool(data.get("force"))
 
     # Validate up front so guard failures are a clean 400 (not mid-stream).
     if not remotes:
         return jsonify({"error": "Select at least one study to pull."}), 400
+    # Check the DESTINATION NAS before pulling — pulling is the expensive step,
+    # and a pull is pointless if the scans can't then be ingested. This stops the
+    # "pulled 75 MB, then preview says the NAS is invalid" surprise.
+    try:
+        env.validate_nas_root(nas_root)
+    except env.NasRootError as e:
+        return jsonify({"error": "Set a valid destination NAS first (top of the "
+                                 "page), then pull.\n\n" + str(e)}), 400
     if len(remotes) > MRI_PULL_MAX_STUDIES:
         return jsonify({"error": f"Too many studies selected "
                                  f"({len(remotes)} > {MRI_PULL_MAX_STUDIES})."}), 400

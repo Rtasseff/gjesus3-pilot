@@ -38,7 +38,9 @@ function getJSON(url) { return fetch(url).then((r) => r.json()); }
 const nasInput = $("#nas-root");
 const nasStatus = $("#nas-status");
 
+let nasValid = false;   // gates the pull — no point pulling to an unusable NAS
 function setNasStatus(valid) {
+  nasValid = !!valid;
   nasStatus.textContent = valid ? "OK" : "not a NAS root";
   nasStatus.className = "pill " + (valid ? "ok" : "no");
 }
@@ -512,6 +514,17 @@ async function sftpList() {
 async function sftpPull() {
   const remotes = sftpSelected();
   if (!remotes.length) return;
+  // Validate the DESTINATION before the expensive pull — don't pull GBs only to
+  // find at Preview that the NAS is unusable.
+  if (!nasValid) {
+    sftp.logWrap.hidden = false;
+    sftp.result.className = "summary";
+    sftp.result.innerHTML = '<span style="color:var(--bad)">⚠ Set a valid ' +
+      'destination NAS at the top of the page first — it must be a folder that ' +
+      'contains a <code>registries/</code> subfolder. Fix it, then pull.</span>';
+    nasInput.focus();
+    return;
+  }
   sftp.pullBtn.disabled = true;
   sftp.listBtn.disabled = true;
   sftp.logWrap.hidden = false;
