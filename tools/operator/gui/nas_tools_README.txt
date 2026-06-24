@@ -18,10 +18,20 @@ HOW OPERATORS USE IT
 
 ONE-TIME SETUP PER MACHINE (data office)
   - Any machine: must be able to reach \gjesus3\gjesus3\gjesus3-data.
-  - MRI ONLY: the machine needs the scanner password file at
+  - MRI ONLY (required): the machine needs the scanner password file at
         C:\Users\<user>\.ssh\gjesus3_mri.cred
     (INI: a [mri] section with host/user/password; password pasted in out-of-band).
     Without it the MRI page cannot pull from the scanner. Microscopy needs no creds.
+  - OPTIONAL, both tools (animal-facility subject metadata at ingest time):
+        C:\Users\<user>\.my.cnf
+    the MySQL config for the animal-facility DB (read-only; the DB user/password,
+    same file pattern used on the data-office machine). WITH it (and on-network),
+    species/strain/sex/DOB->age are filled into each acquisition immediately.
+    WITHOUT it, the ingest still succeeds and the acquisition is queued to
+    registries\pending_subject_metadata.csv for a later data-office pass to fill
+    (non-blocking, by design). So this is a convenience, not a requirement.
+    (Override the DB user/path via the GJESUS3_ANIMALDB_USER / GJESUS3_MYCNF env
+    vars if needed.)
 
 SAFETY
   - The MRI tool only READS/COPIES from the scanner; it never changes anything there.
