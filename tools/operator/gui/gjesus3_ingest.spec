@@ -101,24 +101,47 @@ a = Analysis(
 )
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
-    name="gjesus3_ingest",
-    console=True,           # keep the console so the operator sees the URL/log
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    name="gjesus3_ingest",
-)
+# ONEFILE (default): one self-extracting gjesus3_ingest.exe — chosen for NAS
+# distribution (a single file to drop on \\gjesus3\...\tools\, run in place).
+# Trade-off: ~3-5s self-extract on each launch. Set False for the faster-
+# starting one-folder build (operators copy the whole folder locally instead).
+ONEFILE = True
+
+if ONEFILE:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name="gjesus3_ingest",
+        console=True,       # keep the console so the operator sees the URL/log
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        runtime_tmpdir=None,
+    )
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name="gjesus3_ingest",
+        console=True,
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=True,
+        name="gjesus3_ingest",
+    )
