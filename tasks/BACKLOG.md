@@ -560,3 +560,45 @@ searched every parameter file (`recon_0/reconparams.txt` + `.xml`, `acqparams.xm
   on the NAS** — capturing these would mean extending the NI extractor (`ni_metadata.py`) to read
   `recon_<idx>/reconparams.txt` at ingest + a back-fill from the intact source `.tgz` on gnuclear2$. Defer
   unless the team wants the PET↔CT link or per-scan acquisition params surfaced.
+
+## Server-side raw ingest + a downstream Windows tool (architecture, 2026-06-24)
+
+**The idea (user, 2026-06-24).** Instead of pushing the full ingest (with all its
+credentials, network access, and tools) onto every operator's Windows machine,
+run the **raw ingest centrally on a Linux server people log into**, and give
+researchers a **lightweight Windows tool only for the downstream work** (find
+their uploads, assemble them into project folders, post-process). The split:
+
+- **Server (Linux, the "ingest host")** — has *everything* in one place: SSH
+  access to the MRI console (`kenia`), the animal-facility DB creds (`~/.my.cnf`),
+  **Dicomifier installed** (so no-DICOM ParaVision exams regenerate at ingest —
+  no Windows gap), the NAS mounted with hard-link semantics, and the repo
+  checkout with all paths/tools. Operators/researchers log in (SSH/web) and run
+  the raw ingest there. One trusted, fully-provisioned environment.
+- **Windows tool (downstream only)** — a small app researchers run on their own
+  machines to **search the registry for their acquisitions, pull/organize them
+  into project folders, and do post-processing** — no credentials, no scanner
+  access, no regen. (The Researcher Finder is already a step in this direction.)
+
+**Why it's compelling.** It dissolves three current operator-machine pain points
+at once: (1) the **Dicomifier-can't-run-on-Windows** gap — the server has it, so
+the `pending_dicom_regen.csv` deferral (added 2026-06-24) becomes unnecessary for
+server-ingested data; (2) **per-machine credential sprawl** — the MRI `.ssh` cred
+and optional `.my.cnf` live once on the server, not on N workstations; (3)
+**environment drift** — one Linux box vs. many Windows boxes with different states.
+
+**Why it's NOT the pilot path (deferred, not chosen now).** The current
+operator-self-service GUI (the frozen `gjesus3_ingest.exe`) is the *adoption*
+play — a one-click tool a non-technical researcher runs without logging into a
+server or touching a terminal. The server model trades that low-friction
+self-service for centralization. Revisit when: the no-DICOM volume makes the
+deferred-regen sweep painful; credential management across machines gets heavy;
+or we want a single audited ingest chokepoint. The hard-link requirement means
+the server still ingests onto the Windows/QNAP NAS over a mount that preserves
+SMB hard-link semantics (the linker is the platform-sensitive piece — see the
+2026-06-24 note that hard links are a Windows/QNAP-verified path, not a generic
+Linux one; confirm `os.link` behaviour on the server's NAS mount first).
+
+**Relationship to other backlog items.** Subsumes part of "Independent /
+second-stage tooling" and complements the Finder's "assemble a project" item —
+the downstream Windows tool IS that post-ingest project-assembly surface.
