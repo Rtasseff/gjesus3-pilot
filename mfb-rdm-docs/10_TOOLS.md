@@ -831,8 +831,10 @@ apart from a cross-link + a behaviour-identical refactor.
   targets (`tools/operator/collisions.py`); non-scan ParaVision sibling folders (AdjResult /
   subject / …) are skipped with a plain "not a scan folder" message; DICOM regeneration is
   default-on (graceful — empty `.data/` placeholder + WARN when Dicomifier is absent).
-- **No-DICOM deferral.** Dicomifier is Linux-only (conda-forge skips Windows — its `odil` C++
-  dep), so an operator's Windows box can't regenerate missing DICOMs. When a ParaVision exam
+- **No-DICOM deferral.** Dicomifier isn't packaged for Windows (conda-forge skips it; not on
+  PyPI; not bundleable in the exe), so an operator's Windows box can't regenerate missing
+  DICOMs out of the box (a native build is plausibly feasible but unverified — see the research
+  note in `tasks/BACKLOG.md`). When a ParaVision exam
   has no DICOMs and Dicomifier isn't present, the acq is registered with an empty `.data/` and
   **queued to `registries/pending_dicom_regen.csv`** (`tools/ingest/pending_dicom.py`) recording
   the `<study>/<exam>` identity on `kenia` (NOT the auto-deleted staging path) + the ParaVision

@@ -608,13 +608,20 @@ the downstream Windows tool IS that post-ingest project-assembly surface.
 **Q (user): is there literally no way to run Dicomifier or similar on Windows?**
 Researched 2026-06-24:
 
-- **Dicomifier itself: Linux-only, by design.** The conda-forge recipe carries
-  `skip: true  # [win or osx]` — no win-64 or osx-64 build exists. The blocker is
-  its compiled C++ DICOM dependency **`odil`** (Boost/CMake/pybind11 stack), which
-  isn't packaged for Windows. The only way to run it "on Windows" is **WSL** (a
-  full Linux subsystem) — not bundleable into the PyInstaller exe and impractical
-  to stand up on a novice operator's machine. This is exactly why the historical
-  regen ran in WSL on the data-office box.
+- **Dicomifier is not PACKAGED for Windows — but that's a packaging gap, not a
+  proven impossibility (CORRECTED 2026-06-25).** The conda-forge dicomifier recipe
+  carries `skip: true  # [win or osx]` (Linux-only) and dicomifier is not on PyPI,
+  so there is no off-the-shelf install. My first pass wrongly blamed its C++ DICOM
+  dependency **`odil`** — in fact **`odil` is fully Windows-supported**: conda-forge
+  `odil` builds win-64 (py3.10–3.14, no skip) and odil documents source builds on
+  Windows (CMake/Visual Studio + Boost/ICU/JsonCpp/DCMTK). So the dicomifier Windows
+  skip is a maintainer CI/packaging choice (reason not documented), NOT a hard block
+  from odil. Ways to run it on Windows TODAY: **WSL** (the historical approach) or
+  **Docker** (the Linux build in a container) — neither bundleable into the exe nor
+  fit for a novice operator's machine. A native-Windows dicomifier (enable the conda
+  recipe for win, or build from source against the Windows `odil`) is **plausibly
+  feasible but unverified** — someone has to attempt the build to learn whether a
+  second, non-odil blocker exists.
 - **Pure-Python Bruker readers DO run on Windows** — `brkraw`, `bruker2nifti`,
   `brukerapi-python` — but they all output **NIfTI, not DICOM**. They solve the
   *reading* of `2dseq`+JCAMP-DX, not the DICOM *writing*.
@@ -625,8 +632,11 @@ Researched 2026-06-24:
   already encode (the team earlier estimated ~2-4 weeks for a from-scratch DICOM
   generator, which is why Dicomifier was adopted instead).
 
-**Conclusion.** Off-the-shelf, there is **no way to regenerate DICOMs on a
-Windows operator box.** The three real options: (a) **Linux** (WSL or the
+**Conclusion.** There is **no off-the-shelf / one-click way to regenerate DICOMs
+on a Windows operator box that fits inside the frozen exe** — but "impossible" is
+too strong (odil is Windows-capable; a native build is plausibly feasible, just
+unverified and not worth it now). The real options: (a) **Linux** (WSL, Docker,
+or the
 server-side ingest host above) runs Dicomifier — current approach, and what the
 `pending_dicom_regen.csv` worklist defers to; (b) **build a pure-Python
 `2dseq`→`pydicom` writer** if Windows-native regen ever becomes worth ~weeks of
