@@ -1414,6 +1414,64 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     link_name = link_name.rstrip("/").rstrip("\\")
             if not link_name:
                 link_name = original_name
+
+            def _queue_pending_link(exc):
+                # Hard links need a hard-link-capable mount. On the NI Mac (SMB)
+                # os.link raises ENOTSUP — the acq is fully registered above, so
+                # record it for a later relink pass (tools/relink_pending.py) on a
+                # hard-link-capable machine. Non-blocking: a worklist hiccup must
+                # never fail an otherwise-successful ingest.
+                try:
+                    from ingest import pending_links
+                    raw_primary_rel = (
+                        "/" + os.path.relpath(raw_primary_abs, nas_root)
+                        .replace(os.sep, "/")
+                    )
+                    kind = primary_kind or (
+                        "folder" if os.path.isdir(raw_primary_abs) else "file"
+                    )
+                    errno_s = f" [Errno {exc.errno}]" if getattr(exc, "errno", None) else ""
+                    pending_links.append_pending_link(
+                        os.path.join(nas_root, "registries"),
+                        acq_id=acq_id_str,
+                        project_id=(proj_id or project_hint),
+                        link_name=link_name,
+                        raw_primary_canonical=raw_primary_rel,
+                        primary_kind=kind,
+                        reason=f"{type(exc).__name__}: {exc}{errno_s}",
+                        host_os=sys.platform,
+                    )
+                    log(
+                        f"Queued {acq_id_str} to registries/pending_links.csv "
+                        f"for a later relink pass (run tools/relink_pending.py from "
+                        f"a hard-link-capable machine).",
+                        "WARN",
+                    )
+                    # Visible stand-in so the project folder isn't empty where the
+                    # real link will go. A cheap text pointer — NOT a byte copy (NI
+                    # sessions can be GBs); the relink pass removes it.
+                    try:
+                        raw_linked_dir = os.path.join(project_folder_abs, "raw_linked")
+                        os.makedirs(raw_linked_dir, exist_ok=True)
+                        ptr = os.path.join(raw_linked_dir, f"{link_name}.PENDING-LINK.txt")
+                        if not os.path.exists(ptr):
+                            with open(ptr, "w", encoding="utf-8") as _pf:
+                                _pf.write(
+                                    "Placeholder — the real hard link could not be "
+                                    "created on this machine (this mount has no "
+                                    "hard-link support).\n"
+                                    f"Acquisition: {acq_id_str}\n"
+                                    f"Raw data:    {raw_primary_rel}\n"
+                                    "A data-office relink pass (tools/relink_pending.py, "
+                                    "run from a hard-link-capable machine) replaces this "
+                                    "with the real link. Tracked in "
+                                    "registries/pending_links.csv.\n"
+                                )
+                    except Exception:
+                        pass  # worklist is the durable record; pointer is cosmetic
+                except Exception as _qe:
+                    log(f"Could not queue pending link for {acq_id_str}: {_qe}", "WARN")
+
             try:
                 link_path = linker.create_hardlink(
                     project_folder_abs,
@@ -1452,8 +1510,10 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     log(f"Appended provenance entry {fid} to {prov_path}")
             except OSError as e:
                 log(f"Could not create hard link: {e}", "WARN")
+                _queue_pending_link(e)
             except Exception as e:
                 log(f"Unexpected error creating hard link: {e}", "WARN")
+                _queue_pending_link(e)
 
     # --- Step 13: Optional delete-source (cross-instrument) ---
     # MOVED to after the registry commit (F item 5): the source is removed only
