@@ -8,7 +8,7 @@
 > - **Archive mode** (round 8, 2026-05-22 — IMPLEMENTED): pull pre-archived `.tgz` files from `\\cicmgsp02\gnuclear2$\<year>\<PI>\`, extract locally, and ingest as folder-as-primary acquisitions. Per-instrument template at [`tools/templates/instruments/molecubes_ni.yaml`](../../tools/templates/instruments/molecubes_ni.yaml).
 > - **Live-machine mode** (future): direct ingest from the acquisition box (Molecubes / MILabs VECTor). Different source shape (a folder, not a .tgz) — will get its own per-instrument template when the workflow + access conversation with the platform manager closes.
 >
-> Companion docs: [`nuclearImaging_platform_description.md`](nuclearImaging_platform_description.md) (platform / equipment), [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../mri-platform/internal_mri_data_handling_workflow_notes.md) (analogous MRI workflow).
+> Companion docs: [`nuclear_imaging_platform_description.md`](nuclear_imaging_platform_description.md) (platform / equipment), [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../mri-platform/internal_mri_data_handling_workflow_notes.md) (analogous MRI workflow).
 
 ## Round 8 — archive-mode design (2026-05-22)
 
@@ -277,7 +277,7 @@ Example resolved: `PET_m14_20251029_20251029100641` (PET acquisition of mouse m1
 
 ## Related documents
 
-- [`nuclearImaging_platform_description.md`](nuclearImaging_platform_description.md) — equipment / vendor spec
+- [`nuclear_imaging_platform_description.md`](nuclear_imaging_platform_description.md) — equipment / vendor spec
 - [`../mri-platform/internal_mri_data_handling_workflow_notes.md`](../mri-platform/internal_mri_data_handling_workflow_notes.md) — analogous MRI walkthrough
 - `mfb-rdm-docs/13_GJESUS3_ROLE.md` — research-facing reframe (motivates the no-zip folder layout for internal modalities, archive-mode as a pragmatic Phase A)
 - `tools/templates/instruments/molecubes_ni.yaml` — per-instrument template (archive mode)

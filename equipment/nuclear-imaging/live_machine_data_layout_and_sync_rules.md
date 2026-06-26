@@ -640,7 +640,7 @@ is shared and mostly **already exists**.
 ## 9. Related
 
 - [`internal_ni_data_handling_workflow_notes.md`](internal_ni_data_handling_workflow_notes.md) — archive-mode (implemented); the inside-the-acquisition keep/drop rules and the `ni:` sidecar shape this doc reuses.
-- [`nuclearImaging_platform_description.md`](nuclearImaging_platform_description.md) — equipment/vendor spec (Molecubes + MILabs VECTor).
+- [`nuclear_imaging_platform_description.md`](nuclear_imaging_platform_description.md) — equipment/vendor spec (Molecubes + MILabs VECTor).
 - `tools/templates/instruments/molecubes_ni.yaml` — archive-mode template (the live variant derives from it).
 - `tools/operator/ni_ingest.py`, `tools/operator/metadata_prompt.py` — operator front-end to extend.
 - `tools/ingest_raw.py::copy_ni_acquisition`, `tools/ingest/ni_metadata.py` — slim-copy + metadata internals (reused unchanged).
