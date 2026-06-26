@@ -436,7 +436,7 @@ lean on what already exists (§6) and add only the live-mode discovery + field-d
   `(machine timestamp, modality)` (globally unique per acquisition) and/or the source relpath.
   Re-running must skip already-ingested acquisitions with **no** new ACQ-IDs and **no** duplicate
   rows. *(Note: this is the same idempotency concern flagged for archive ingest in
-  `tasks/correction_pass_handoff.md` item (4) — the live-mode key must be chosen so re-sync is a
+  `tasks/archive/correction_pass_handoff.md` item (4) — the live-mode key must be chosen so re-sync is a
   true no-op.)*
 
 - **R8 — Don't delete the source.** The live box / platform owns the originals; sync **copies**.
@@ -645,7 +645,7 @@ is shared and mostly **already exists**.
 - `tools/templates/instruments/molecubes_ni.yaml` — archive-mode template (the live variant derives from it).
 - `tools/operator/ni_ingest.py`, `tools/operator/metadata_prompt.py` — operator front-end to extend.
 - `tools/ingest_raw.py::copy_ni_acquisition`, `tools/ingest/ni_metadata.py` — slim-copy + metadata internals (reused unchanged).
-- `tasks/correction_pass_handoff.md` items (4)/(6)/(11) — idempotency, empty-folder guard, and the `os.link` diagnostic that this live path also depends on.
+- `tasks/archive/correction_pass_handoff.md` items (4)/(6)/(11) — idempotency, empty-folder guard, and the `os.link` diagnostic that this live path also depends on.
 - Evidence snapshot: `S:\gnuclear\2026\Jesus\Ryan\datapath.txt` (295,538-line recursive listing).
 
 **Field-practice references (multi-mouse + DICOM one-patient, for §3B):**

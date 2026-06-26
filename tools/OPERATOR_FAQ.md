@@ -88,7 +88,10 @@ Per-instrument templates live in `tools/templates/instruments/`:
 |---|---|
 | AxioScan 7 (`ZWSI`, `.czi`) | `tools/templates/instruments/axioscan7.yaml` |
 | Cell Observer cells-mode (`CELL`, `.czi`) | `tools/templates/instruments/cell_observer_cells.yaml` |
+| LSM 900 confocal (`LSM9`, `.czi`) | `tools/templates/instruments/lsm900.yaml` |
 | Internal MRI / Bruker ParaVision (`MRI`) | `tools/templates/instruments/mri_bruker.yaml` |
+| Nuclear Imaging archive-mode (`PET`/`SPECT`/`CT`) | `tools/templates/instruments/molecubes_ni.yaml` |
+| Nuclear Imaging live-box sync (`PET`/`SPECT`/`CT`) | `tools/templates/instruments/molecubes_ni_live.yaml` |
 
 To make a config for a batch: **copy** the matching template into
 `tools/configs/`, edit `staging_dir` + `notes`, save as

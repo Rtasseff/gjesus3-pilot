@@ -12,3 +12,5 @@ Nothing here is maintained — do not treat it as current. Any decision that was
 live was carried into `STATUS.md`, `BACKLOG.md`, the numbered specs, or the relevant
 `equipment/` note before archiving, so no decision trail is lost. Safe to delete once
 confirmed redundant; retained for now out of caution.
+
+*Note: relative links **inside** these archived files may point to pre-archive paths — each file sat one level higher (in `tasks/`) before being moved here. They are intentionally left as-is, since the archive is not maintained.*

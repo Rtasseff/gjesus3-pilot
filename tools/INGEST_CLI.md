@@ -187,7 +187,7 @@ Each template's **header comment block lists every `discovered.*` field** the op
 
 > **▶ Full operator procedure:** [`equipment/mri-platform/mri_no_dicom_regeneration_runbook.md`](../equipment/mri-platform/mri_no_dicom_regeneration_runbook.md) — the canonical step-by-step for the historical pull. This section is the quick CLI reference.
 
-**When:** internal MRI ingests where some source exams have **no `pdata/<idx>/dicom/` subfolders** because the researcher didn't run Bruker's GUI DICOM exporter. Round-6 v2 (2026-05-27) had 3 of 7 source projects in this state (m13/m14/m29 protocol 0423). The `mri_bruker` template now sets `auto_regenerate_dicom: true` by **default**, so ingest auto-regenerates the missing DICOMs via Dicomifier 2.5.3 (applying two confirmed PV-7 workarounds — see [`tasks/tasks.md §3.1`](../tasks/tasks.md)) **wherever Dicomifier is on PATH**. Where it isn't, the exam ingests as the empty `<ACQ-ID>.data/` placeholder (below) — no extra steps, never blocks.
+**When:** internal MRI ingests where some source exams have **no `pdata/<idx>/dicom/` subfolders** because the researcher didn't run Bruker's GUI DICOM exporter. Round-6 v2 (2026-05-27) had 3 of 7 source projects in this state (m13/m14/m29 protocol 0423). The `mri_bruker` template now sets `auto_regenerate_dicom: true` by **default**, so ingest auto-regenerates the missing DICOMs via Dicomifier 2.5.3 (applying two confirmed PV-7 workarounds — see [`tasks/archive/tasks.md §3.1`](../tasks/archive/tasks.md)) **wherever Dicomifier is on PATH**. Where it isn't, the exam ingests as the empty `<ACQ-ID>.data/` placeholder (below) — no extra steps, never blocks.
 
 **Pre-flight (one-time setup on the workstation):**
 

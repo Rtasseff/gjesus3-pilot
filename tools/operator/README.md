@@ -24,7 +24,7 @@ works — see [`mfb-rdm-docs/11_OPERATIONS.md §3.2`](../../mfb-rdm-docs/11_OPER
 and [`tools/INGEST_CLI.md`](../INGEST_CLI.md). This page is the simpler
 point-at-a-folder path.
 
-Design and build plan: [`tasks/operator_ingest_tooling_plan.md`](../../tasks/operator_ingest_tooling_plan.md).
+Design and build plan: [`tasks/archive/operator_ingest_tooling_plan.md`](../../tasks/archive/operator_ingest_tooling_plan.md).
 
 ---
 

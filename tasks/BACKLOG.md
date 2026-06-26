@@ -4,14 +4,14 @@ This file is for **improvements that can be finished later** — refinements,
 nice-to-haves, and second-/third-stage features that are *not* required to get
 the pilot into users' and operators' hands.
 
-It is deliberately **separate from [`tasks.md`](tasks.md)**, which tracks the
+It is deliberately **separate from [`STATUS.md`](STATUS.md)**, which tracks the
 **work to get this to users** (the active path to a usable, hand-off-ready
 pilot). Rule of thumb:
 
-- *"Users/operators can't start, or start safely, without this"* → **`tasks.md`**.
+- *"Users/operators can't start, or start safely, without this"* → **`STATUS.md`**.
 - *"This makes it better / cleaner / more automated later"* → **here**.
 
-When a backlog item becomes a blocker for delivery, promote it to `tasks.md`.
+When a backlog item becomes a blocker for delivery, promote it to `STATUS.md`.
 
 ---
 
@@ -84,13 +84,13 @@ Landed on branch `operator-ingest-tooling`. Deferred from it:
   folder-only OS dialog confused operators (every folder looked empty, since it
   hides files), so it was replaced by an **in-page folder browser** (`/api/listdir`
   + a modal) that shows folders AND greyed files for context. No extra freeze deps.
-- [ ] **Refresh `gui/README.md` + `TESTING.md` + `microscopy_ingest.spec` comment**
+- [ ] **Refresh `gui/README.md` + `TESTING.md` + `gjesus3_ingest.spec` comment**
   for the rebuilt Builder + token widget + the `operator` column + **recipes now
   saved as YAML to a configurable folder defaulting to `<NAS>/recipes`** (was JSON
   in the repo `tools/operator/recipes/`; that dir is now only a read-only seed
   source) — held until the operator accepts the new GUI (avoid documenting a UI
   still in flux). (The *pre-launch* recipe steps — NAS `recipes/` permission grant
-  + migrating the existing repo recipes — are in [`tasks.md §0`](tasks.md), not here.)
+  + migrating the existing repo recipes — are in [`STATUS.md`](STATUS.md), not here.)
 - [x] ~~Builder `is_control` as a recipe default.~~ **Resolved 2026-06-10** —
   removed the study-metadata trio (Animal role / `is_control`, `disease_model`,
   `disease_state`) from the **Builder** entirely. A recipe describes a stable
@@ -166,7 +166,7 @@ covers the exhibition data). Intel gathered 2026-06-10:
   early-adopter user) gave Ryan notes on the live NI import workflow — *Ryan to
   paste the specifics here*; address them as part of the live-mode design.
 
-Supersedes the live-mode items previously tracked in `tasks.md` §0 / §4.7
+Supersedes the live-mode items previously tracked in `STATUS.md` §0 / §4.7
 (`molecubes_ni_live.yaml`, the Unai naming-convention question). Archive-vs-live
 design context: `equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`.
 
@@ -174,32 +174,32 @@ design context: `equipment/nuclear-imaging/internal_ni_data_handling_workflow_no
 
 Tooling that improves the system but is **not** required for the operator
 hand-off or the true-production restart. Detailed descriptions remain at their
-original `tasks.md` locations (§3.1 / §3.2) as history; this is the active home.
+original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active home.
 
 - [ ] **`create_publication`** — formal publication-folder creation tool
-  (requirements defined; not implemented). `tasks.md` §3.2.
+  (requirements defined; not implemented). `STATUS.md` §3.2.
 - [ ] **`log_activity`** — provenance helper (requirements defined; not
-  implemented). `tasks.md` §3.2.
+  implemented). `STATUS.md` §3.2.
 - [ ] **Excel → study-metadata importer** (researcher-facing) — reads a
   per-project `study.xlsx` (study + biosamples + optional per-acq sheets),
   validates against a schema, writes `/projects/<proj>/metadata/*.json`. Unblocks
   researchers contributing REMBI study/biosample context. Schema needs design.
-  `tasks.md` §3.2.
+  `STATUS.md` §3.2.
 - [ ] **Project-level NIfTI generation tool** — `dcm2niix` / `bruker2nifti` per
   acquisition into `/projects/<proj>/derived_nifti/` (derivatives live in
   projects, not `/raw/`, per [13_GJESUS3_ROLE](../mfb-rdm-docs/13_GJESUS3_ROLE.md)).
-  `tasks.md` §3.2.
+  `STATUS.md` §3.2.
 - [ ] **DICOM full-mode metadata extraction for collaborator XMRI** — curated
   `discovered.dicom_*` + structured `dicom:` sidecar block + full `pydicom` dump,
   mirroring the `.czi` pattern. Prototype against the 75 existing XMRI acqs.
-  `tasks.md` §3.1 / §3.2.
+  `STATUS.md` §3.1 / §3.2.
 - [ ] **`--lightweight` ingest mode + `backfill_metadata` utility** — sparse
   registry entry (`extended_metadata_present=N`, no sidecar) for a fast first
-  pass; `backfill_metadata` later upgrades a lightweight ingest to full. `tasks.md`
+  pass; `backfill_metadata` later upgrades a lightweight ingest to full. `STATUS.md`
   §3.1.
 - [ ] **NIfTI handling at ingest** (only if the NI/MRI platforms actually emit
   NIfTI we want at `/raw/`) — single file, no archive, limited header metadata.
-  `tasks.md` §3.1 / §4.8.
+  `STATUS.md` §3.1 / §4.8.
 
 ## Misc
 

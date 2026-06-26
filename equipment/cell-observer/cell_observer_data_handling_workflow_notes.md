@@ -354,7 +354,7 @@ searchable, project-linked acquisition is:
    fields. **The template header lists every `discovered.*` field available — it is
    the operator's reference card; this note does not duplicate it.** (A separate
    *animal / histology-mode* template is deferred until a real example folder is
-   available — tracked in [`tasks/tasks.md`](../../tasks/tasks.md); historical
+   available — tracked in [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md); historical
    tissue/histology work has largely moved to the AxioScan 7.)
 3. **Land in `/raw/` + registry.** Each `.czi` is deposited under
    `/raw/MICROSCOPY/`, gets an immutable `metadata.json` sidecar, and one row per

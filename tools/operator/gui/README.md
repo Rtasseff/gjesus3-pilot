@@ -10,7 +10,7 @@ reuses the exact pipeline the data office uses (`ingest.*` + `ingest_raw`). The
 frozen Windows build, **`gjesus3_ingest.exe`**, serves **two pages**: microscopy
 (ZWSI / CELL / LSM9, the default `/`) and MRI (Bruker ParaVision, `/mri`).
 
-Phase 4 of [`tasks/operator_ingest_tooling_plan.md`](../../../tasks/operator_ingest_tooling_plan.md).
+Phase 4 of [`tasks/archive/operator_ingest_tooling_plan.md`](../../../tasks/archive/operator_ingest_tooling_plan.md).
 
 > **Operator-facing help:** the click-by-click usage lives in
 > [`tools/operator/README.md`](../README.md); plain-language troubleshooting is in

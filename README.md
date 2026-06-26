@@ -12,7 +12,7 @@ gjesus3 is the **research-facing working layer** for MFB imaging data in the 5-y
 
 > **✅ TRUE PRODUCTION since 2026-06-10.** All data is real and retained long-term.
 >
-> **~13,555 acquisitions** in `/raw/` · **~50 projects** (each hard-linked to its raw data) · **~716 subjects** in the subject registry · **all instruments live** (microscopy, MRI, Nuclear Imaging) · **operator GUI** (`gjesus3_ingest.exe`) and the **Finder** (`registries/index.html`) deployed.
+> **~13,555 acquisitions** in `/raw/` · **~50 projects** (each hard-linked to its raw data) · **~715 subjects** in the subject registry · **all instruments live** (microscopy, MRI, Nuclear Imaging) · **operator GUI** (`gjesus3_ingest.exe`) and the **Finder** (`registries/index.html`) deployed.
 
 The dated history of how the system got here — the earlier pilot, the per-instrument test rounds, and the 2026-06-10 production restart — lives in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -103,6 +103,7 @@ This repo deliberately separates **rules** (specs / conventions / schemas) from 
 | [`tools/`](tools/) | Implementation + tool docs. [`INDEX.md`](tools/INDEX.md) is the master tool map; [`INGEST_CLI.md`](tools/INGEST_CLI.md), [`FINDER.md`](tools/FINDER.md), [`FAQ.md`](tools/FAQ.md), [`OPERATOR_FAQ.md`](tools/OPERATOR_FAQ.md). | When code, templates, or tool docs change. |
 | [`tasks/STATUS.md`](tasks/STATUS.md) | Lean current-state snapshot — what's live, what's in flight, open questions. | During active work. |
 | [`tasks/BACKLOG.md`](tasks/BACKLOG.md) | Later improvements — refinements not required for the current hand-off. | When a future improvement is identified or promoted. |
+| [`tasks/archive/`](tasks/archive/) | Superseded handoffs + old planning notes — historical record only. | When preserving a past iteration for context. |
 | [`CHANGELOG.md`](CHANGELOG.md) | The single narrative history of design + tooling decisions. | When a decision lands. |
 
 ---
