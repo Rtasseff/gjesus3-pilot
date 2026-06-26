@@ -228,6 +228,17 @@ normal discovery + dedup (no "diff present-vs-captured" logic). Cost: the **122 
 stays as-is; only future/live ingests use per-recon. Mixed granularity old-vs-new is a minor,
 acceptable wart.)
 
+**Two NI-behaviour facts CONFIRMED (user, 2026-06-25) — they pin the design:**
+- **Recon indices are append-only / never reused.** A new reconstruction always lands in a
+  new, higher-numbered `recon_<idx>/`; an existing recon folder is never overwritten with
+  different content. ⇒ `<anchor>/recon_<idx>` is a **stable per-recon dedup key**; dedup-by-path
+  is fully correct (NO content-hashing), and a later recon is automatically a new acquisition.
+  A filled recon stays correct — re-syncs skip it.
+- **The anchor may have NO `recon_<idx>/` dirs yet** at sync time (reconstruction not started).
+  ⇒ when an anchor has zero recon dirs, register NOTHING — skip with a clean message; the
+  session is captured when the first recon dir appears. (Only the recon-dirs-exist-but-empty
+  case — the 5 failures — makes a placeholder.)
+
 **Implementation (per-recon) — the 7 pieces, build incrementally + test hard:**
 
 1. **Discovery fan-out (NI-specific).** Today `expand_batch` matches the anchor
@@ -253,11 +264,20 @@ acceptable wart.)
 5. **Template.** `molecubes_ni_live.yaml`: add the recon to `link_filename` (today
    `${...acq_datetime_full}` is identical across an anchor's recons → would collide) and expose
    `ni_recon_idx`. `session_id` unchanged (PET+CT+all-recons of one visit still group).
-6. **Placeholder-fill on re-sync (T1).** The dedup/skip step must treat a registered
-   `file_count=0` placeholder as "fill me," not "already done — skip": on a later sync, if the
-   recon now has DICOMs, fill the existing `<ACQ-ID>.data/`, update checksums + registry
-   `file_count`, dequeue. (Since the NI box source is never deleted, the recon is re-found at
-   its original box path — no re-pull needed, unlike MRI.)
+6. **Placeholder-fill on re-sync (T1) — a SEPARATE fill phase, NOT a dedup change.** Decision
+   after tracing `expand_batch` (config.py:605-617): the shared `(acq_date, original_name)`
+   dedup stays as-is — normal per-recon discovery **skips** any already-registered recon
+   (placeholder OR filled). A dedicated fill step (run by `ni_ingest` each sync, before/after
+   discovery) reads `pending_ni_recon.csv` and, for each `pending` row whose recon now has
+   DICOMs on the box (re-found at `staging_dir/original_name` — the box source is never
+   deleted), copies them into the existing `<ACQ-ID>.data/`, updates `checksums.json` + the
+   registry row's `file_count`/size **in place** (a targeted row-update helper — registries are
+   otherwise append-only, so this needs a careful rewrite-one-row function under the registry
+   lock), and calls `pending_ni_recon.mark_filled`. This keeps the shared discovery/dedup path
+   untouched (low regression risk to microscopy/MRI) and still makes "the next sync fills it"
+   true. New recon dirs that appear later are picked up by discovery as brand-new acquisitions
+   in the same run. *(Mirrors how MRI no-DICOM placeholders are filled by a separate pass, not
+   by re-running through the dedup.)*
 7. **Tests + end-to-end:** per-recon discovery, recon-scoped copy, empty-recon placeholder,
    placeholder→fill, new-recon→new-acquisition, idempotent re-sync. Then a sandbox re-ingest
    of Irene's batch.
