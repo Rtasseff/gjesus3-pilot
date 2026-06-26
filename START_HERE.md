@@ -12,18 +12,26 @@ knows the rest. No file-by-file copying, no editing config files.
 
 ## 1. Pick your front-end
 
-Three ready-to-go tools, one per instrument family. **You only use the one for
-your instrument** — find your row and use that command:
+A small set of ready-to-go front-ends covers every instrument family. **You only
+use the one for your instrument** — find your row and use that:
 
 | Your instrument | Use | Where |
 |---|---|---|
-| **Microscopy** — AxioScan 7 / Cell Observer / LSM 900 | the **microscopy GUI** (opens in your browser) | Windows |
+| **Microscopy** — AxioScan 7 / Cell Observer / LSM 900 | the **gjesus3 GUI** (opens in your browser) | Windows |
+| **MRI** — Bruker ParaVision | the **gjesus3 GUI**, MRI page | Windows |
 | **Nuclear Imaging** — Molecubes PET/CT | `ni-ingest` (one command) | Linux acquisition machine |
-| **MRI** — Bruker ParaVision | `mri-ingest` (one command) | Linux acquisition machine |
 
-**Microscopy (Windows):** double-click **`microscopy_ingest.exe`**. A browser tab
+There is **one program** for the GUI — **`gjesus3_ingest.exe`** — with a
+**microscopy page** and an **MRI page**. MRI can also be run from the Linux
+acquisition machine with `mri-ingest` if you prefer (see the full operator guide).
+
+**Microscopy (Windows):** double-click **`gjesus3_ingest.exe`**. A browser tab
 opens automatically. Leave the small console window open while you work. Then:
 pick your **recipe** → point at your **folder** → **Preview** → **Ingest**.
+
+**MRI (Windows):** double-click **`gjesus3_ingest.exe`** and open the **MRI page**
+(or start the shortcut that opens it directly). Point it at your ParaVision study,
+**Preview**, then **Ingest**.
 
 **Nuclear Imaging (Linux):**
 
@@ -31,7 +39,7 @@ pick your **recipe** → point at your **folder** → **Preview** → **Ingest**
 python tools/operator/ni_ingest.py /path/to/folder
 ```
 
-**MRI (Linux):**
+**MRI from Linux (alternative to the GUI's MRI page):**
 
 ```sh
 python tools/operator/mri_ingest.py /path/to/study --operator "Your Name"
@@ -59,7 +67,7 @@ $env:GJESUS3_ROOT = "J:\gjesus3-data"   # adjust to your NAS drive letter
 export GJESUS3_ROOT=/mnt/gjesus3
 ```
 
-The microscopy GUI has a **NAS-root box** instead — set it once and it remembers.
+The gjesus3 GUI has a **NAS-root box** instead — set it once and it remembers.
 If the path isn't a real NAS root, the tool stops with one clear message rather
 than writing into the wrong place.
 
@@ -71,10 +79,10 @@ Every front-end previews before it writes. **Preview, read the table** (one row
 per acquisition — sample, project, link name, file count), make sure it looks
 right, *then* ingest for real.
 
-- **Microscopy GUI:** there's a **Dry-run** checkbox. During the testing period
-  it is **ON by default** (a banner shows while it's on); a dry run ends with a
-  clear **"NOTHING was written"** summary. Do a dry run, check it, then turn the
-  checkbox off and ingest for real.
+- **gjesus3 GUI (microscopy + MRI pages):** there's a **Dry-run** checkbox. It is
+  **ON by default for safety** (a banner shows while it's on); a dry run ends with
+  a clear **"NOTHING was written"** summary. Do a dry run, check it, then turn the
+  checkbox off when you're ready and ingest for real.
 - **Linux tools (`ni-ingest` / `mri-ingest`):** they preview and then ask
   `Proceed? [y/N]`. Add **`--dry-run`** any time you want a preview that writes
   nothing.
@@ -87,6 +95,8 @@ Nothing on your instrument is deleted — source files are kept by default.
 
 | If you want… | Go to |
 |---|---|
+| Quick answers to common operator questions | [`tools/OPERATOR_FAQ.md`](tools/OPERATOR_FAQ.md) |
+| To find data already on the NAS (the searchable Finder) | [`tools/FINDER.md`](tools/FINDER.md) |
 | The full operator guide (all options, troubleshooting) | [`tools/operator/README.md`](tools/operator/README.md) |
 | The self-service ingest overview, then the data-office YAML path | [`mfb-rdm-docs/11_OPERATIONS.md`](mfb-rdm-docs/11_OPERATIONS.md) §3.3, then §3.2 |
 | A word you don't recognise | [`GLOSSARY.md`](GLOSSARY.md) |
