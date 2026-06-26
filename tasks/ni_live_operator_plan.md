@@ -219,19 +219,56 @@ metadata copied from the sibling (same scan/subject/session/date) — only the r
 differs. It does **not** mutate the already-committed acquisition (acqs stay immutable once
 filled).
 
-**Why this needs a per-recon dedup key.** Dedup is `(acq_date, original_name)` where
-`original_name` = the anchor relpath. To let a later recon be a *new* acquisition under the
-*same* anchor without colliding, the NI dedup key must carry the **recon identity** — i.e.
-`original_name` becomes `<anchor-relpath>#recon=<idx-set>` (or the bundle vs. each-late-recon
-gets a distinct suffix). The captured-recon set lives in the sidecar/registry so T2 can diff
-"present now" vs "already captured." **Design carefully + test hard** — this is the subtle part.
+**D4 RESOLVED (user, 2026-06-25): ONE ACQUISITION PER RECONSTRUCTION (uniform).** Each
+`recon_<idx>/` is its own acquisition with its own ACQ-ID — from the first sync, not just
+late-added ones. This is cleaner and makes "new recon = new acquisition" fall straight out of
+normal discovery + dedup (no "diff present-vs-captured" logic). Cost: the **122 sandbox** cases
+(currently bundling recons) must be re-ingested to match — cheap, they're test data in
+`J:\gjesus3-sandbox`, not production. (The 132 NI **archive** preload already in production
+stays as-is; only future/live ingests use per-recon. Mixed granularity old-vs-new is a minor,
+acceptable wart.)
 
-**Open sub-decision D4 (granularity):** the model above keeps today's behaviour for the FIRST
-real data (all recons present at T1 = one bundled acquisition) and only splits *later-added*
-recons into new acquisitions — which matches the user's wording ("the actual acquisition"
-singular at T1; "new reconstructions … new acquisitions" at T2). The alternative (every recon
-= its own acquisition, uniformly) is cleaner but changes the 122 already-ingested cases.
-Proceeding with the bundle-first / split-late reading; confirm if the uniform model is wanted.
+**Implementation (per-recon) — the 7 pieces, build incrementally + test hard:**
+
+1. **Discovery fan-out (NI-specific).** Today `expand_batch` matches the anchor
+   `<ts>_<MODALITY>` folder (one case) via `pattern:"**/"` + the anchor regex. Add an
+   NI-only fan-out (guard on `copy_strategy: ni_molecubes`): expand each matched anchor case
+   into one case **per `recon_<idx>/`**, each carrying `discovered.ni_recon_idx` and
+   `original_name = <anchor-relpath>/recon_<idx>` (the per-recon dedup key — `(acq_date,
+   original_name)` is now per-recon, so a later recon is a *new* key = a new acquisition,
+   automatically). Each recon-case then flows through the **unchanged** single-acquisition
+   pipeline (its own ACQ-ID, registry row, copy).
+2. **Copy scoping.** `copy_ni_acquisition(..., recon_idx=X)` copies only recon X's DICOMs into
+   that acquisition's `<ACQ-ID>.data/` (default `None` = all recons = current behaviour, kept
+   working until the fan-out is wired).
+3. **Empty recon → placeholder (fixes the 5).** When recon X has recon dir(s) but **no DICOMs
+   yet**, the copy returns ZERO files instead of raising; the caller registers the acquisition
+   with an empty `.data/` (`file_count=0`) and queues to `registries/pending_ni_recon.csv`
+   (new `tools/ingest/pending_ni_recon.py`, §3.5a below). **Exactly mirrors the MRI no-DICOM
+   placeholder** (`ingest_raw.py:992-1009`). The "no `recon_<idx>/` dirs at all" case (truly
+   nothing reconstructed yet) is SKIPPED with a clean message — nothing to register until a
+   recon dir appears (avoids an orphan anchor-placeholder with no recon to bind to).
+4. **Sidecar scoping.** `ni.reconstruction` reflects the single recon this acquisition
+   represents (anchor-level study/subject/acquisition buckets unchanged — they're shared).
+5. **Template.** `molecubes_ni_live.yaml`: add the recon to `link_filename` (today
+   `${...acq_datetime_full}` is identical across an anchor's recons → would collide) and expose
+   `ni_recon_idx`. `session_id` unchanged (PET+CT+all-recons of one visit still group).
+6. **Placeholder-fill on re-sync (T1).** The dedup/skip step must treat a registered
+   `file_count=0` placeholder as "fill me," not "already done — skip": on a later sync, if the
+   recon now has DICOMs, fill the existing `<ACQ-ID>.data/`, update checksums + registry
+   `file_count`, dequeue. (Since the NI box source is never deleted, the recon is re-found at
+   its original box path — no re-pull needed, unlike MRI.)
+7. **Tests + end-to-end:** per-recon discovery, recon-scoped copy, empty-recon placeholder,
+   placeholder→fill, new-recon→new-acquisition, idempotent re-sync. Then a sandbox re-ingest
+   of Irene's batch.
+
+### 3.5a `tools/ingest/pending_ni_recon.py` — the placeholder worklist
+Mirrors `pending_dicom.py` / `pending_links.py` (BOM-tolerant, header-checked, atomic,
+idempotent on `acq_id`, status preserved). `registries/pending_ni_recon.csv`. Fields:
+`acq_id · original_name (<anchor>/recon_<idx> box identity) · recon_index · session_id ·
+canonical_path (the empty .data/ fill target) · ingest_config · queued_datetime · status
+(pending | filled)`. Because the NI box source persists, the fill pass (or the next normal
+sync) re-finds the recon by its box path and fills in place.
 
 ### 3.6 Phase E — Mac-compiled GUI (LAST, explicitly deferred)
 Once the CLI flow (A–D) is solid, build the NI analogue of the HTML ingest tools, **compiled on
@@ -273,9 +310,8 @@ until A–D are proven on the box.
   worklist alone). Recommend pointer file.
 - **D3 — Scope of THIS branch:** RESOLVED — user wants §1 + §2 + §3 **all on this one branch**
   (`feat/ni-live-hardening`). Not split.
-- **D4 — Recon granularity (§3.5):** bundle-first / split-late (recommended, matches the user's
-  wording) vs. uniform per-recon acquisitions (cleaner but re-shapes the 122). Proceeding with
-  bundle-first; confirm if uniform is preferred.
+- **D4 — Recon granularity (§3.5):** RESOLVED (user 2026-06-25) — **one acquisition per
+  reconstruction** (uniform). Re-ingest the sandbox 122 to match; production archive 132 stays.
 
 ---
 
