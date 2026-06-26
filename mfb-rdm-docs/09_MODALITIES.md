@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-06-12 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
+**Last Updated:** 2026-06-26 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `discovered.czi_*` / `discovered.mri_*` field tables re-verified against `tools/ingest/czi_metadata.py` and `tools/ingest/paravision_metadata.py` `EXPOSED_FIELDS` (in sync — 21 CZI + 22 MRI fields); `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
 
 ---
 
@@ -358,7 +358,7 @@ For each confirmed data type, we need a short walkthrough covering:
 | Carl Zeiss Image | .czi | Zeiss microscopes | Rich | Native format; preserves all metadata |
 | TIFF | .tif, .tiff | Various | Variable | Common export; metadata depends on source |
 | OME-TIFF | .ome.tif | Various/export | Rich | Open standard; embedded OME-XML |
-| DICOM | .dcm (stored as .zip/.tar.gz on gjesus3) | Medical imaging | Rich | Standard for medical images |
+| DICOM | .dcm (on-disk shape varies by ecosystem — see §1 / [03_RAW_STORAGE §4](03_RAW_STORAGE.md)) | Medical imaging | Rich | Standard for medical images. Internal MRI + Nuclear Imaging land as flat per-frame `.dcm` in `<ACQ-ID>.data/` (folder-as-primary, no zip); collaborator DICOM uses the legacy zipped-archive shape |
 | NIfTI | .nii, .nii.gz | Medical imaging / analysis | Limited (header) | Common neuroimaging format; may come from Nuclear Imaging platform |
 | JPEG | .jpg, .jpeg | Various | Minimal | Lossy; avoid for quantitative work |
 | PNG | .png | Various | Minimal | Lossless; limited metadata |
@@ -371,7 +371,7 @@ For each confirmed data type, we need a short walkthrough covering:
 | .czi | Deposit as-is | No |
 | .tif (native) | Deposit as-is | No |
 | .ome.tif | Deposit as-is | No |
-| DICOM | Compress to archive (.zip/.tar.gz) before deposit | No (compressed, not converted) |
+| DICOM | Platform DICOM (MRI / Nuclear Imaging): deposit as flat `.dcm` in `<ACQ-ID>.data/` (folder-as-primary). Collaborator DICOM: compress to archive (.zip/.tar.gz) before deposit | No (not converted) |
 | .jpg (primary) | ⚠️ Discourage | Convert to TIFF if possible |
 | Proprietary | Deposit native + OME-TIFF export | Recommended |
 
@@ -429,4 +429,4 @@ For each confirmed data type, we need a short walkthrough covering:
 | MOD-05 | Confirm DICOM as output format from MRI and Nuclear Imaging platforms | Data Mgmt Lead + Platforms | ⚠️ Needs confirmation |
 | ~~MOD-06~~ | ~~Assign instrument codes for Cell Observer and LSM 900~~ | — | ✅ Resolved: `CELL` and `LSM9` |
 | ~~MOD-07~~ | ~~Confirm Cell Observer and LSM 900 .czi metadata is similar to WSI .czi~~ | — | ✅ Resolved (Cell Observer): round-5 ingest 2026-05-15 confirmed `.czi` from Cell Observer surfaces the same 21 curated `discovered.czi_*` fields as AxioScan; `tools/ingest/czi_metadata.py` reused 1:1. LSM 900 confirmation still pending (awaiting Ainhize Urkola Arsuaga's example) but expected to follow the same pattern given shared format + vendor + ZEN software family. |
-| MOD-08 | Internal MRI: `discovered.mri_*` table mirrors `paravision_metadata.EXPOSED_FIELDS` — when the extractor grows fields, update §1.4 in lockstep | Data Mgmt Lead | ✅ Convention documented (CLAUDE.md cross-ref rule); currently in sync as of 2026-05-27 (round-6 v2 redo) |
+| MOD-08 | Per-instrument "Auto-discovered fields" tables mirror each extractor's `EXPOSED_FIELDS` — when an extractor grows/renames fields, update §1.1–§1.5 in lockstep | Data Mgmt Lead | ✅ Convention documented (CLAUDE.md cross-ref rule); re-verified in sync 2026-06-26 — §1.1/§1.3 ↔ `czi_metadata.py` (21 `czi_*` fields), §1.4 ↔ `paravision_metadata.py` (22 `mri_*` fields) |

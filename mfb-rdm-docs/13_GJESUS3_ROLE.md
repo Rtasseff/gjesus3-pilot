@@ -1,8 +1,10 @@
 # 13 — The Role of gjesus3 (vs. Platform Archives)
 
 **Parent:** [Documentation Index](00_INDEX.md)
-**Status:** 🔶 Draft (reframe captured 2026-05-20; §5.6/§5.7 added 2026-05-26 after round-8 NI redo)
-**Last Updated:** 2026-05-26
+**Status:** ✅ DECIDED (reframe captured 2026-05-20; §5.6/§5.7 added 2026-05-26 after round-8 NI redo)
+**Last Updated:** 2026-06-26
+
+> **The two-tier model is IMPLEMENTED and live.** Tier 2 (gjesus3, the research-facing working layer) is in true production since the 2026-06-10 restart — ~13,555 acquisitions in `/raw/`, ~50 projects, alongside the Tier 1 platform archives described below.
 
 ---
 
@@ -36,7 +38,7 @@ This tier exists, it works (clear limitations but reliably), and **gjesus3 does 
 
 **Owned by:** The MFB group, run via the Data Office.
 
-**What it stores:** A research-facing organised view of imaging data — acquisitions registered in a structured registry, metadata in JSON sidecars, project workspaces with raw shortcuts, publication packages with provenance.
+**What it stores:** A research-facing organised view of imaging data — acquisitions registered in a structured registry, metadata in JSON sidecars, project workspaces that reference raw via hard links, publication packages with provenance.
 
 **How researchers access it:** SMB share, hardwired on-site machines. Files are directly viewable, listable, searchable. Acquisitions don't have to be unzipped to be opened.
 
@@ -87,7 +89,7 @@ The longer-term vision is that gjesus3 evolves toward (or feeds into) a richer s
 The constraints today:
 - XNAT typically wants to ingest data itself, on its own terms
 - Institutional XNAT availability is uncertain
-- We're in pilot
+- gjesus3 is in early true production; the migration target is not yet committed
 
 The design principle this drives:
 - gjesus3's organisational structure (raw registry + JSON sidecars + project workspaces) should be **migratable** to XNAT-style systems
@@ -171,7 +173,7 @@ Per-platform reliability of the upstream archive (drives how much we lean on it 
 
 | Class | What lives at `/raw/<ACQ-ID>/` | What stays only on the platform |
 |---|---|---|
-| **Biomedical imaging (NI, MRI — "DICOM ecosystem")** | The reconstructed DICOM files (the analysis-ready images) + a curated `metadata.json` sidecar pulling key acquisition / reconstruction / instrument-side subject context from aux files; plus (DRAFT 2026-05-29) a top-level `subject:` block carrying the ARRIVE-required preclinical fields (species / strain / sex / DOB→age — auto-filled from the animal-facility DB, see [08_METADATA §4.4](08_METADATA.md)), a top-level `condition:` block carrying the disease/control state (`is_control` highly-recommended tri-state boolean + `disease_model` / `disease_state` — see [08_METADATA §4.5](08_METADATA.md)), and an `anatomy:` block (`is_whole_body` + UBERON `region` — §4.6). All three are **non-blocking** ([08_METADATA §4.7](08_METADATA.md)): recommended, WARN-if-missing, never refuse the ingest. | Raw detector data (event lists, k-space, sinograms, attenuation maps, calibration logs). Useless to 99% of analysis; voluminous; the platform owns this. |
+| **Biomedical imaging (NI, MRI — "DICOM ecosystem")** | The reconstructed DICOM files (the analysis-ready images) + a curated `metadata.json` sidecar pulling key acquisition / reconstruction / instrument-side subject context from aux files; plus (✅ DECIDED) a top-level `subject:` block carrying the ARRIVE-required preclinical fields (species / strain / sex / DOB→age — auto-filled from the animal-facility DB, see [08_METADATA §4.4](08_METADATA.md)), a top-level `condition:` block carrying the disease/control state (`is_control` highly-recommended tri-state boolean + `disease_model` / `disease_state` — see [08_METADATA §4.5](08_METADATA.md)), and an `anatomy:` block (`is_whole_body` + UBERON `region` — §4.6). All three are **non-blocking** ([08_METADATA §4.7](08_METADATA.md)): recommended, WARN-if-missing, never refuse the ingest. | Raw detector data (event lists, k-space, sinograms, attenuation maps, calibration logs). Useless to 99% of analysis; voluminous; the platform owns this. |
 | **Optical microscopy (.czi)** | The `.czi` container as-deposited (one acquisition = one file natively) + `metadata.json` sidecar; for animal-derived samples (the typical case), the same `subject:` + `condition:` blocks as above. | (nothing — gjesus3 IS the primary copy for microscopy) |
 
 For biomedical, the **DICOM + sidecar pair gives a researcher ~99% of their value** (open in 3D Slicer / PMOD / ITK-SNAP / pydicom; metadata browsable without opening a viewer). The remaining 1% (raw event detection, hyper-detailed instrument logs) routes back through the platform — slower, messier, with some loss of control, but the platform is the right owner.
@@ -181,7 +183,7 @@ For biomedical, the **DICOM + sidecar pair gives a researcher ~99% of their valu
 - ARRIVE-grade `subject:` (species/strain/sex/age) turns a `.dcm` blob from "some MRI of some mouse" into "the cardiac scan of female C57BL/6J P12W animal MFB-2025-0420-m17" — searchable, reusable, publishable.
 - The `condition:` block adds the experimental dimension: `is_control` (boolean) + `disease_model` + `disease_state` turn the same acquisition into "the cardiac scan of a wild-type baseline control" vs. "the cardiac scan of MI day-7 post-surgery case" — the *what was being studied* axis that makes cross-cohort and case-vs-control queries trivial. Without it, "give me all healthy controls" requires manually reading every study notebook.
 
-Until the animal-facility-DB integration lands for `subject:` (`tasks/tasks.md §3.2`) AND the Phase 3 sidecar-writer + bulk-enrichment tools fill `condition.is_control` / `anatomy.is_whole_body` (non-blocking — recommended, not enforced; see [08_METADATA §4.7](08_METADATA.md)), these are the most consequential metadata gaps on gjesus3 for preclinical work.
+The animal-facility-DB integration for `subject:` and the Phase 3 sidecar-writer + enrichment tools that fill `condition.is_control` / `anatomy.is_whole_body` are live (non-blocking — recommended, not enforced; see [08_METADATA §4.7](08_METADATA.md)); where these blocks are still unpopulated they remain the most consequential metadata gaps on gjesus3 for preclinical work (status in [tasks/STATUS.md](../tasks/STATUS.md)).
 
 **Implications for ingest design:**
 - Folder-as-primary acquisitions for biomedical imaging use **selective inclusion** — explicit allowlists of what to copy, not "copy everything." Cf. internal NI `copy_ni_acquisition` and internal MRI `copy_mri_paravision` (v2 slim-folder; the v1 `copy_paravision_exam` was retired 2026-05-27).
@@ -207,7 +209,7 @@ The instruments in scope fall into two structurally distinct paradigms — visib
 - Microscopy ingest is trivially clean: one file in, one file out. The complexity is in the metadata extraction (XML parsing inside the `.czi`).
 - Biomedical ingest needs selective folder copy + multi-source metadata aggregation. The `mri:` and `ni:` sidecar blocks effectively re-concentrate metadata that the instrument scattered.
 
-This is also the reason internal MRI and NI on gjesus3 use folder-as-primary (no zip): the per-frame-DICOM packaging is a legacy 1990s format choice (one image per file), not a fundamental limit. A modern Enhanced MR / Multi-Frame DICOM could collapse that back to one file (tracked as future work in `tasks/tasks.md §3.1`). Until then, the folder bundle IS the unit and the sidecar carries the aggregated metadata.
+This is also the reason internal MRI and NI on gjesus3 use folder-as-primary (no zip): the per-frame-DICOM packaging is a legacy 1990s format choice (one image per file), not a fundamental limit. A modern Enhanced MR / Multi-Frame DICOM could collapse that back to one file (tracked as future work in [tasks/BACKLOG.md](../tasks/BACKLOG.md)). Until then, the folder bundle IS the unit and the sidecar carries the aggregated metadata.
 
 ---
 

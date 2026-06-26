@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** ❓ Under Evaluation
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-06-26
 
 ---
 
@@ -10,7 +10,7 @@
 
 This document specifies the *proposed* Curated Datasets storage area — a permanent, controlled space for high-value derived datasets (starting with segmentation ground truth) that accumulate across projects and support long-term reuse such as model training and benchmarking.
 
-> **❓ EVALUATING:** This area addresses a real need (permanent storage for derived assets that span projects), but represents a scope expansion beyond the original "archival storage for original imaging data" mandate. The specification is written here so the design is captured. Deployment timing depends on pilot progress with RAW and PUBLICATIONS.
+> **❓ EVALUATING:** This area addresses a real need (permanent storage for derived assets that span projects), but represents a scope expansion beyond the original "archival storage for original imaging data" mandate. The specification is written here so the design is captured; it is **not deployed** — `curated_datasets/` exists on **none** of the live system today, and the `registry_datasets.csv` registry is not initialized. With the system now in true production (RAW carrying the full historical ingest; `publications/` deferred and empty), this remains a later-stage scope decision rather than a current work item — tracked in [tasks/BACKLOG.md](../tasks/BACKLOG.md). Nothing below is built; it is the design to reach for if and when the segmentation-ground-truth need becomes concrete.
 
 ---
 
@@ -315,9 +315,9 @@ PUBLICATIONS/                 ◀──── references ────          �
 
 ## 10. Immediate Scope (If Approved)
 
-If this area is approved for the pilot:
+If this area is approved for deployment:
 
-1. Create `/gjesus3/curated_datasets/` with `README_START_HERE.txt`
+1. Create `curated_datasets/` (under the live system root) with `README_START_HERE.txt`
 2. Create `segmentation/MICROSCOPY/` and `segmentation/DICOM/` scaffolding
 3. Initialize `registry_datasets.csv` with headers
 4. Promote first segmentation dataset as proof of concept

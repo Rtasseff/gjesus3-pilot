@@ -1,14 +1,14 @@
 # 02 — Infrastructure
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-04-08
+**Status:** ⚠️ Some IT details still open (filesystem type, snapshot retention, offsite backup); access + permission model APPLIED.
+**Last Updated:** 2026-06-26
 
 ---
 
 ## Purpose
 
-This document describes the hardware infrastructure, access model, and risk assessment for the gjesus3 storage system.
+This document describes the hardware infrastructure, access model, and data-protection (risk) assessment for the gjesus3 storage system. gjesus3 has been in **true production** since the 2026-06-10 restart — the data is real and retained long-term — so the protection gaps flagged here (no offsite backup; snapshot retention unverified) matter operationally, not just on paper.
 
 ---
 
@@ -41,6 +41,8 @@ This document describes the hardware infrastructure, access model, and risk asse
 | **Filesystem** | ext4 or ZFS | ⚠️ Needs confirmation |
 
 > **Note:** A portion of the ~100 TB system-usable space is reserved for the snapshot policy, leaving ~63 TB available for user data. Plan capacity against the 63 TB figure, not 100 TB.
+>
+> **Snapshot scope ≠ backup.** Snapshots are **on-device, same-array** point-in-time copies — they protect against accidental deletion / overwrite and let recent state be rolled back, but they live on the *same six drives* as the live data. They do **not** protect against multi-drive/array loss, controller/enclosure failure, ransomware that reaches the share, or site disaster. There is **no offsite backup configured** (see §3, §4.2). Daily snapshots are confirmed active (visible via the `@Recently-Snapshot` view); the retention window and restore timeline are still unverified.
 >
 > **TODO (Ryan):** Log into the QNAP admin UI directly to inspect how snapshot reservation is configured (size of reserved pool, retention schedule, which volumes/shares it covers). IT confirmed verbally that the ~37 TB gap is the snapshot reservation, but the exact configuration has not yet been verified at the source.
 
@@ -96,21 +98,23 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 |----------|------------|------------|
 | Multiple simultaneous drive failures | ❌ No | Consider RAID 6 for critical data (trades 1 drive of capacity) |
 | Failure during rebuild | ❌ No | Rebuild stresses remaining drives; URE risk on large drives |
-| Accidental deletion | 🔶 Partial | Daily snapshots are active; read-only permissions after deposit |
-| Ransomware/malware | ❌ No | Snapshots; offsite backup; access controls |
-| Controller/enclosure failure | ❌ No | Offsite backup |
-| Site disaster (fire, flood) | ❌ No | Offsite backup |
-| User error (overwrite, corruption) | ❌ No | Snapshots; checksums for detection |
+| Accidental deletion | 🔶 Partial | Daily snapshots active **(applied)**; read-only-after-deposit ACLs on `/raw/` **(applied 2026-06-02, see §6)** |
+| Ransomware/malware | ❌ No | Snapshots are same-array (no defence against share-reachable ransomware); needs offsite backup + access controls |
+| Controller/enclosure failure | ❌ No | Offsite backup (none configured) |
+| Site disaster (fire, flood) | ❌ No | Offsite backup (none configured) |
+| User error (overwrite, corruption) | 🔶 Partial | Snapshots for rollback; per-acquisition `checksums.json` for detection **(applied)** |
 
 ### 3.3 Risk Rating
 
 | Risk | Likelihood | Impact | Mitigation Status |
 |------|------------|--------|-------------------|
 | Single drive failure | Medium | Low (recoverable) | ✅ RAID 5 handles |
-| Multi-drive failure | Low | Critical | ⚠️ No mitigation |
-| Accidental deletion | Medium | High | 🔶 Snapshots active + permissions planned |
-| Ransomware | Low | Critical | ⚠️ No mitigation |
-| Site disaster | Very Low | Critical | ⚠️ No mitigation |
+| Multi-drive failure | Low | Critical | ⚠️ No mitigation (no offsite backup) |
+| Accidental deletion | Medium | High | 🔶 Snapshots active + read-only ACLs **applied** (§6) |
+| Ransomware | Low | Critical | ⚠️ No mitigation (snapshots are same-array) |
+| Site disaster | Very Low | Critical | ⚠️ No mitigation (no offsite backup) |
+
+> **Now that gjesus3 is in true production, the Critical-impact rows are live exposures, not pilot-phase abstractions.** The single largest open mitigation is **offsite backup**, which remains a PI decision (§4.2, §5.3). The applied snapshot + read-only-ACL combination covers the *common* failure (someone deletes or overwrites a file) but nothing array-wide or offsite.
 
 ---
 
@@ -126,8 +130,8 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 | Drive model/manufacturer | URE risk assessment for 20 TB drives |
 | Filesystem (ext4, ZFS, other) | ZFS offers better integrity checking |
 | Snapshot reservation size | Confirm the ~37 TB gap between system-usable (~100 TB) and user-available (~63 TB) |
-| Snapshot capability and configuration | Key mitigation for accidental deletion |
-| Snapshot retention policy (if any) | How far back can we recover? |
+| ~~Snapshot capability~~ Confirmed active (daily) | Key mitigation for accidental deletion — capability resolved; configuration detail still needed |
+| Snapshot retention policy (if any) | How far back can we recover? (still unverified) |
 | Restore procedure and timeline | How long to recover from snapshot? |
 | Current permissions model | Inform access control design |
 | Monitoring/alerting for drive failures | Ensure timely replacement |
@@ -150,10 +154,10 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 
 | Mitigation | Implementation | Status |
 |------------|----------------|--------|
-| **Checksums on deposit** | SHA-256 for all raw files; verify periodically | 🔶 Planned |
-| **Read-only after deposit** | chmod or ACL on raw acquisition folders | 🔶 Planned |
-| **Minimal write access** | Only operators can deposit; no delete permissions | 🔶 Planned |
-| **Registry as manifest** | Registries serve as inventory for verification | 🔶 Planned |
+| **Checksums on deposit** | SHA-256 for all files, written to per-acquisition `checksums.json` at ingest; verify periodically | ✅ Applied (write); periodic re-verify still manual |
+| **Read-only after deposit** | NTFS/SMB ACLs on raw acquisition folders (operators write-but-not-modify; see §6) | ✅ Applied 2026-06-02 |
+| **Minimal write access** | Operators deposit only (create-but-not-modify on `/raw/`); superusers retain Full for corrections | ✅ Applied 2026-06-02 |
+| **Registry as manifest** | `registries/registry_raw.csv` is the inventory of record; the generated `registries/index.html` Finder makes it searchable for verification | ✅ Applied |
 
 ### 5.2 Dependent on IT Confirmation
 
@@ -175,26 +179,29 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 
 ## 6. Access Control Model
 
-### 6.1 Proposed Tiers
+> **✅ DECIDED + APPLIED 2026-06-02** on `J:\gjesus3-data\`. This section is the **conceptual summary**; the authoritative *applied* model — NTFS/SMB ACLs via the existing `CICBIOMAGUNE\GJesus` group (IT will not create custom QNAP groups), grant-only / never-DENY, with the per-role grants — lives in **[11_OPERATIONS §2.1.1 + §2.3](11_OPERATIONS.md)**. The tables below use the doc role names; the permission-role labels were renamed during the role-terminology pass (Operator→Tech, User→Researcher) — see [11_OPERATIONS](11_OPERATIONS.md) for the current labels.
+
+### 6.1 Tiers
 
 | Tier | Access | Typical Users |
 |------|--------|---------------|
-| **Admin** | Full read/write everywhere; registry management | Data Management Lead, PI |
-| **Operator** | Write to staging; deposit to raw (via workflow); read/write to publications/projects | Trained group members |
+| **Admin (superuser)** | Full read/write everywhere; registry management; corrections / project close-out | Data Management Lead, PI |
+| **Operator** | Write to staging; deposit to raw (create-but-not-modify, via the ingest workflow); Modify on registries; read/write to publications/projects | Trained group members |
+| **Researcher (user)** | Read-only to `/raw/`; read/write to their own `/projects/` (incl. the `metadata/` subfolder) | Group researchers |
 | **Viewer** | Read-only to specified areas | Collaborators (if needed) |
 
 ### 6.2 Area-Specific Permissions
 
-| Area | Admin | Operator | Viewer |
-|------|-------|----------|--------|
-| `/staging/` | RW | RW | — |
-| `/raw/` (before deposit) | RW | Create folder, write files | — |
-| `/raw/` (after deposit) | RO | RO | RO |
-| `/publications/` | RW | RW (own) | RO |
-| `/projects/` | RW | RW (own) | RO |
-| `/registries/` | RW | RO | RO |
+| Area | Admin | Operator | Researcher | Viewer |
+|------|-------|----------|------------|--------|
+| `/staging/` | RW | RW | RW | — |
+| `/raw/` (during deposit) | RW | Create files/folders | — | — |
+| `/raw/` (after deposit) | RW (corrections) | RO | RO | RO |
+| `/publications/` | RW | RW | RO | RO |
+| `/projects/` | RW | RW | RW (own) | RO |
+| `/registries/` | RW | Modify | RO | RO |
 
-> **🔶 DRAFT:** Exact implementation depends on NAS permissions model capabilities.
+> **Hard links and the read-only carry-through.** Project workspaces reference raw data via **NTFS/SMB hard links** (DECIDED + APPLIED 2026-06-02; the older Windows `.lnk` shortcut method is retired). A hard-linked project copy is a *real directory entry sharing the raw file's inode*, so it inherits the same ACL — the read-only-after-deposit lock on `/raw/` carries through to the project copy automatically, and the link costs zero extra storage. This is why "Researcher RW on own `/projects/`" does **not** open a back door to mutate raw bytes: the shared inode is still read-only. See [10_TOOLS §2.1.1](10_TOOLS.md) for the linking mechanics and [03_RAW_STORAGE §8](03_RAW_STORAGE.md) for the raw→project linking rule.
 
 ---
 
@@ -220,7 +227,9 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 ## 8. Related Documents
 
 - [01_OVERVIEW](01_OVERVIEW.md) — System purpose and constraints
-- [11_OPERATIONS](11_OPERATIONS.md) — Operational workflows including access requests
+- [03_RAW_STORAGE](03_RAW_STORAGE.md) — Raw area structure + raw→project hard-link rule (§8)
+- [10_TOOLS §2.1.1](10_TOOLS.md) — Project linking mechanics (NTFS/SMB hard links; `.lnk` retired)
+- [11_OPERATIONS](11_OPERATIONS.md) — Operational workflows; authoritative *applied* permission model (§2.1.1 + §2.3)
 
 ---
 

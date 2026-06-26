@@ -2,13 +2,23 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** ✅ Current
-**Last Updated:** 2026-05-20 (system role reframed — see §2 and [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md))
+**Last Updated:** 2026-06-26
 
 ---
 
 ## Purpose
 
 This document describes the purpose, scope, and constraints of the MFB gjesus3 research data management system.
+
+---
+
+> ## ✅ Status: TRUE PRODUCTION
+>
+> **gjesus3 is live and holding real, retained research data.** The system has been in **true production since the 2026-06-10 restart**. As of 2026-06-26 it holds **~13,555 registered acquisitions** across microscopy, MRI, and nuclear imaging, organised into **~50 projects** and covering **~715 subjects** (see [06_REGISTRIES](06_REGISTRIES.md)).
+>
+> **The pilot phase is complete and historical.** During the pilot, each instrument iterated *test → purge → accept*, and after the team exhibition the whole quasi-production dataset was **purged on 2026-06-10** and the container restarted as true production. **That purge has already happened. There is no future exhibition, purge, or restart pending.** All data deposited now is real and kept for the long term — treat the registry and `/raw/` with production care. ("Done" in this system means "done in true production.")
+>
+> For where the project stands today, see [tasks/STATUS.md](../tasks/STATUS.md).
 
 ---
 
@@ -25,7 +35,7 @@ The MFB group has historically accumulated hundreds of GB of microscopy and biom
 
 ### 1.2 The Trigger
 
-A new whole-slide imaging instrument (Zeiss Axio Scan 7) will substantially increase data volume, making the need for organized storage urgent. The PI (Jesús Ruiz-Cabello) does not want to wait for uncertain institutional platform timelines.
+A new whole-slide imaging instrument (Zeiss Axio Scan 7) substantially increased data volume, making the need for organized storage urgent. The PI (Jesús Ruiz-Cabello) did not want to wait for uncertain institutional platform timelines. (The AxioScan is now one of the highest-volume contributors in production.)
 
 ### 1.3 The Opportunity
 
@@ -63,11 +73,11 @@ The group has access to a dedicated NAS (gjesus3 — QNAP TS-864eU, 6 × 20 TB i
 
 | Category | Details |
 |----------|---------|
-| **Microscopes** (direct raw) | Zeiss Axio Scan 7 (WSI), Zeiss Axio Observer (Cell Observer), Zeiss LSM 900 (confocal) — instrument output (.czi) deposited directly |
-| **Platform imaging** (reconstructed) | MRI (Bruker BioSpec 11.7T and 7T), Nuclear Imaging (Molecubes PET/SPECT/CT, MILabs VECTor PET/SPECT/CT/OI) — reconstructed images (DICOM, possibly NIfTI; TBC) from platforms; platforms archive true raw data |
+| **Microscopes** (direct raw) | Zeiss Axio Scan 7 (WSI, code ZWSI), Zeiss Axio Observer (Cell Observer, CELL), Zeiss LSM 900 (confocal, LSM9) — instrument output (.czi) deposited directly |
+| **Platform imaging** (reconstructed) | MRI (Bruker ParaVision — BioSpec 11.7T and 7T, code MRI), Nuclear Imaging (Molecubes PET/SPECT/CT, MILabs VECTor PET/SPECT/CT/OI — codes PET, SPECT, CT) — reconstructed images (DICOM) from platforms; platforms archive true raw data |
 | **Storage areas** | Raw archive, Publication archive, Project workspaces, Staging (temporary) |
 | **Users** | MFB group members with approved access |
-| **Timeline** | Indefinite long-term retention for raw and publication data |
+| **Timeline** | Indefinite long-term retention for raw and publication data (in true production since 2026-06-10 — data is real and kept) |
 
 > For detailed equipment specs, see [equipment/INDEX.md](../equipment/INDEX.md).
 
@@ -98,7 +108,7 @@ The group has access to a dedicated NAS (gjesus3 — QNAP TS-864eU, 6 × 20 TB i
 | **Access restrictions** | Only specific hardwired on-site machines can connect (includes instruments and some researcher workstations, but excludes laptops); inconvenient but not unusable | Position as archival, not working storage; batch deposits from accessible machines |
 | **2.5 GbE networking** | Adequate for archival; not optimized for real-time analysis | Acceptable for intended use case |
 
-> **🔶 DRAFT:** Snapshots are confirmed active (daily). Retention policy and offsite backup strategy still TBD — see [02_INFRASTRUCTURE](02_INFRASTRUCTURE.md).
+> **⚠️ GAP:** Daily snapshots are confirmed active (✅ DECIDED). Retention policy and offsite backup strategy are still TBD — see [02_INFRASTRUCTURE](02_INFRASTRUCTURE.md).
 
 ### 4.2 Organizational Constraints
 
@@ -158,13 +168,19 @@ Decisions should not preclude future integration with institutional platforms or
 
 ## 6. Success Criteria
 
-The pilot is successful if:
+These were the original design-intent criteria. With the system now in true production, this section records both the **intent** and the **status as of 2026-06-26**.
 
-1. **All new acquisitions** from covered modalities are deposited and registered within defined timelines
-2. **Publication archives** can demonstrate complete provenance for all included outputs
-3. **Any published figure** can be traced to its source raw data within 15 minutes
-4. **Researchers comply** without significant resistance or workarounds
-5. **The system survives** handoff to new group members
+| # | Design-intent criterion | Status |
+|---|-------------------------|--------|
+| 1 | **All new acquisitions** from covered modalities are deposited and registered within defined timelines | ✅ **Achieved** — all six in-scope instruments (AxioScan 7, Cell Observer, LSM 900, Bruker ParaVision MRI, Molecubes/MILabs PET·SPECT·CT) are operational; **~13,555 acquisitions** registered in `registry_raw.csv`, each with a JSON metadata sidecar. |
+| 2 | **Publication archives** can demonstrate complete provenance for all included outputs | 🕗 **Deferred** — the provenance + project-link machinery is live (hard links, registry, enrichment writer); the `publications/` area itself is intentionally empty/planned until the first package is assembled (see [04_PUBLICATIONS](04_PUBLICATIONS.md)). |
+| 3 | **Any published figure** can be traced to its source raw data within 15 minutes | ✅ **Achieved** — the [registries/index.html Finder](../tools/FINDER.md) (live since 2026-06-23; a global index plus a per-project `index.html`, auto-refreshed after every successful ingest) makes any acquisition searchable in seconds, and project folders hold hard links straight back to `/raw/`. |
+| 4 | **Researchers comply** without significant resistance or workarounds | ✅ **Largely achieved** — a single frozen Windows operator GUI, `gjesus3_ingest.exe` (microscopy + MRI pages), was deployed to the NAS on 2026-06-24, reducing deposit to a few clicks; the non-blocking enrichment model means missing metadata never blocks an ingest. |
+| 5 | **The system survives** handoff to new group members | 🔶 **In progress** — the public documentation refactor (3-role gateway, [RESEARCHER_GUIDE.md](../RESEARCHER_GUIDE.md), [START_HERE.md](../START_HERE.md) for operators, [GLOSSARY.md](../GLOSSARY.md)) is the handoff vehicle; survivability is proven only once the next owner runs it. |
+
+Beyond the original list, true production has also delivered **cross-modality projects** — single project workspaces holding hard-linked raw from microscopy, MRI, and nuclear imaging side by side — which was the core promise of the research-facing working layer (see [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md)).
+
+> Current operational state lives in [tasks/STATUS.md](../tasks/STATUS.md); later refinements in [tasks/BACKLOG.md](../tasks/BACKLOG.md).
 
 ---
 
@@ -193,4 +209,4 @@ The pilot is successful if:
 
 ## Open Questions
 
-None at this level — scope decisions have been made. See individual module documents for specific gaps.
+None at this level — scope decisions have been made and the system is in true production. See individual module documents for specific gaps, and [tasks/STATUS.md](../tasks/STATUS.md) for current operational state.

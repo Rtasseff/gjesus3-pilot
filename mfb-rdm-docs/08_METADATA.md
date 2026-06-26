@@ -1,8 +1,8 @@
 # 08 — Metadata
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** 🔶 Draft  
-**Last Updated:** 2026-06-12 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: Phase-3 enrichment writer (`subject:`/`condition:`/`anatomy:` sidecar blocks, non-blocking §4.7); the registry `subject_ids` column — added 2026-06-11 (S1) as `subject_id`, **renamed to packed `subject_ids` 2026-06-12 (NI-LIVE-08)** — auto from `subject.facility_animal_id` (§4.4).
+**Status:** 🔶 Draft (acquisition-level sidecar shape is ✅ DECIDED + live)  
+**Last Updated:** 2026-06-26 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: study-level `/projects/<proj>/metadata/` marked 🕗 PLANNED/DEFERRED (Phase 4 — exists on 0 of 50 live projects; see [tasks/BACKLOG.md](../tasks/BACKLOG.md)); concrete real-sidecar examples added (§4.3a); Phase-3 enrichment writer (`subject:`/`condition:`/`anatomy:` sidecar blocks, non-blocking §4.7) live + promoted to ✅ DECIDED; the registry `subject_ids` column — added 2026-06-11 (S1) as `subject_id`, **renamed to packed `subject_ids` 2026-06-12 (NI-LIVE-08)** — auto from `subject.facility_animal_id` (§4.4).
 
 ---
 
@@ -15,14 +15,18 @@ This document specifies the metadata requirements for raw acquisitions, includin
 ## 1. Where Metadata Lives
 
 > **✅ DECIDED (2026-05-12):** Metadata is split between **acquisition-level** (in `/raw/`, immutable after ingest) and **study-level** (in `/projects/`, writeable by researchers during the project's life). The split aligns with REMBI's hierarchy and lets `/raw/` enforce strict permissions without blocking researcher metadata work.
+>
+> **Deployment status (2026-06-26).** The two halves are at different maturities:
+> - **Acquisition-level `/raw/<ACQ-ID>/metadata.json` — ✅ LIVE + immutable.** Written by the ingest for every acquisition in true production; read-only after deposit. See the real examples in §4.3a.
+> - **Study-level `/projects/<proj>/metadata/` — 🕗 PLANNED/DEFERRED (Phase 4).** The directory and its writer (the Excel → study-metadata importer) are not yet deployed: it exists on **0 of the 50 live projects** today. The architectural split is decided; the *implementation* is a backlog item — see [tasks/BACKLOG.md](../tasks/BACKLOG.md) ("Excel → study-metadata importer"). Everything in §1.1–§1.5 about `/projects/<proj>/metadata/` describes the **intended** layout, not a deployed one.
 
 ### 1.1 Three locations
 
 | Location | What lives there | Set by | When | Mutable post-ingest? |
 |----------|------------------|--------|------|----------------------|
 | `registry_raw.csv` | Indexed core fields (`acq_id`, `instrument`, `sample_id`, `sample_type`, `project_hint`, etc.). See [06_REGISTRIES](06_REGISTRIES.md). | Auto + Operator (via YAML `registry:` block) | At ingest | Admin-only (corrections) |
-| `/raw/<ACQ-ID>/metadata.json` | Per-acquisition sidecar — `user_supplied` (researcher + operator, at ingest), `discovered` (filename chunks + embedded auto-extracts), `<ecosystem_section>` (structured + `_raw_metadata` lossless). | Auto + ingest | At ingest | No (raw is read-only post-deposit) |
-| `/projects/<proj>/metadata/` | Study-level metadata — experimental aim, biological subject details (strain, age, sex, treatment), experimental groups, per-acquisition supplements. REMBI's **Study** + **Biosample** context. | Researcher (eventually via the Excel-import tool — see [10_TOOLS](10_TOOLS.md)) | After ingest, iteratively | Yes (project owners write during the project's life) |
+| `/raw/<ACQ-ID>/metadata.json` ✅ **live** | Per-acquisition sidecar — `user_supplied` (researcher + operator, at ingest), `discovered` (filename chunks + embedded auto-extracts), the enrichment blocks (`subject`/`condition`/`anatomy`), `<ecosystem_section>` (structured + `_raw_metadata` lossless). | Auto + ingest | At ingest | No (raw is read-only post-deposit) |
+| `/projects/<proj>/metadata/` 🕗 **planned (Phase 4)** | Study-level metadata — experimental aim, biological subject details (strain, age, sex, treatment), experimental groups, per-acquisition supplements. REMBI's **Study** + **Biosample** context. **Not yet deployed** (0 of 50 live projects); the Excel-import writer is a backlog item ([tasks/BACKLOG.md](../tasks/BACKLOG.md)). | Researcher (eventually via the Excel-import tool — see [10_TOOLS](10_TOOLS.md)) | After ingest, iteratively | Yes (project owners write during the project's life) |
 
 ### 1.2 Why the split
 
@@ -35,41 +39,43 @@ Collapsing both into `/raw/<ACQ-ID>/metadata.json` worked while the only writer 
 - `/raw/` and `/publications/` are **permanent archives.** RAID-protected; eventually cold storage. Anything that must survive in perpetuity lives here.
 - `/projects/` is **temporary working space.** Projects are created, used, then closed and **deleted** (see [05_PROJECTS §5](05_PROJECTS.md)). Study-level metadata in `/projects/<proj>/metadata/` is therefore at risk of loss without an explicit preservation step.
 
-**Implication: at project close-out, study-level metadata must migrate into the permanent archive** before the project folder is deleted. The intended mechanism is a close-out tool (run by the Data Mgmt Lead) that appends/merges the contents of `/projects/<proj>/metadata/` into the corresponding `/raw/<ACQ-ID>/metadata.json` files — a controlled, one-time admin write to `/raw/`. Tracked in `tasks/tasks.md` §3.2.
+**Implication: at project close-out, study-level metadata must migrate into the permanent archive** before the project folder is deleted. The intended mechanism is a close-out tool (run by the Data Mgmt Lead) that appends/merges the contents of `/projects/<proj>/metadata/` into the corresponding `/raw/<ACQ-ID>/metadata.json` files — a controlled, one-time admin write to `/raw/`. 🕗 PLANNED/DEFERRED — see [tasks/BACKLOG.md](../tasks/BACKLOG.md). (Moot until study-level metadata is actually deployed, since there is nothing yet to preserve.)
 
 ### 1.4 Joining the two locations
 
-Consumers (OMERO, future indexing DB, ad-hoc analysis scripts) join `/raw/<ACQ-ID>/metadata.json` and `/projects/<proj>/metadata/<acq_id>.json` on `acq_id`. A small utility `tools/gather_metadata.py` will produce a merged view on demand; tracked in `tasks/tasks.md` §3.2. Until that ships, joins are a two-file read.
+Consumers (OMERO, future indexing DB, ad-hoc analysis scripts) join `/raw/<ACQ-ID>/metadata.json` and `/projects/<proj>/metadata/<acq_id>.json` on `acq_id`. A small utility `tools/gather_metadata.py` produces a merged view on demand (it tolerates the study-level file being absent, which is the case on every live project today). Until study-level metadata is deployed (Phase 4 — see [tasks/BACKLOG.md](../tasks/BACKLOG.md)), the "join" is just the single `/raw/` sidecar.
 
 ### 1.5a Project-level tool family (the things that write to `/projects/`)
 
-A small family of project-scoped tools share the same pattern: read from `/raw/` (immutable), do their work under `/projects/<proj>/`, and accept that anything written under `/projects/` is **ephemeral** (lost at project close-out unless explicitly preserved). Tracked in `tasks/tasks.md` §3.2:
+A small family of project-scoped tools share the same pattern: read from `/raw/` (immutable), do their work under `/projects/<proj>/`, and accept that anything written under `/projects/` is **ephemeral** (lost at project close-out unless explicitly preserved). These are 🕗 PLANNED/DEFERRED (Phase 4) — see [tasks/BACKLOG.md](../tasks/BACKLOG.md):
 
 | Tool | What it does | Status |
 |---|---|---|
-| `gather_metadata.py` | Read-only join of `/raw/<ACQ-ID>/metadata.json` + `/projects/<proj>/metadata/<acq_id>.json` | Planned |
-| Excel → study-metadata importer | Researcher-facing tool that writes `/projects/<proj>/metadata/{study,biosamples,<acq_id>}.json` from a per-project Excel | Planned (schema in design) |
-| Project close-out tool | Admin tool that merges `/projects/<proj>/metadata/` into the corresponding `/raw/<ACQ-ID>/metadata.json` files **before** the project folder is deleted; controlled one-time write to `/raw/` | Planned |
-| Project-level NIfTI generation (NEW, planned 2026-05-20) | For MRI projects: read chosen ACQ-IDs via the project's `raw_linked/` shortcuts, run `dcm2niix` (or `bruker2nifti`) per acquisition, write `<ACQ-ID>.nii.gz` under `/projects/<proj>/derived_nifti/`. Removed at project close-out — regenerable from raw if needed later. Aligns with the [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) reframe (research-facing derivatives belong in projects). | Planned |
+| `gather_metadata.py` | Read-only join of `/raw/<ACQ-ID>/metadata.json` + `/projects/<proj>/metadata/<acq_id>.json` | ✅ Implemented (raw side live; study side absent until Phase 4) |
+| Excel → study-metadata importer | Researcher-facing tool that writes `/projects/<proj>/metadata/{study,biosamples,<acq_id>}.json` from a per-project Excel | 🕗 Planned (Phase 4 — schema in design) |
+| Project close-out tool | Admin tool that merges `/projects/<proj>/metadata/` into the corresponding `/raw/<ACQ-ID>/metadata.json` files **before** the project folder is deleted; controlled one-time write to `/raw/` | 🕗 Planned (Phase 4) |
+| Project-level NIfTI generation | For MRI projects: read chosen ACQ-IDs via the project's hard-linked raw data, run `dcm2niix` (or `bruker2nifti`) per acquisition, write `<ACQ-ID>.nii.gz` under `/projects/<proj>/derived_nifti/`. Removed at project close-out — regenerable from raw if needed later. Aligns with the [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) reframe (research-facing derivatives belong in projects). | 🕗 Planned (Phase 4) |
 
 All of these are post-deposit; none of them modify `/raw/` except the close-out tool (which does a single controlled merge).
 
 ### 1.5 Project metadata layout
 
-The intended layout under each project folder:
+The intended layout under each project folder (the `metadata/` subtree is 🕗 PLANNED/DEFERRED — Phase 4):
 
 ```
 /projects/proj-<short_name>/
 ├── _project.yaml
 ├── provenance.csv
-├── raw_linked/             # .lnk shortcuts to raw acquisitions
-└── metadata/               # study-level metadata (this section)
+├── <hard-linked raw data>  # raw acquisitions referenced via hard links (DECIDED 2026-06-02)
+└── metadata/               # 🕗 study-level metadata (this section) — NOT yet deployed
     ├── study.json          # study aim, hypothesis, principal contact, biological-subject defaults
     ├── biosamples.json     # mouse-by-mouse details: strain, age, sex, treatment, timepoints
     └── <acq_id>.json       # per-acquisition supplements (optional, one per acq when needed)
 ```
 
-Shape details are deferred to the Excel-import tool spec (`tasks/tasks.md` §3.2). For now the architectural rule is: **study/biosample/experimental-context metadata lives under `/projects/<proj>/metadata/`, period.**
+> Project links are **hard links** (✅ DECIDED + APPLIED 2026-06-02), not Windows `.lnk` shortcuts — the older shortcut method is retired. See [10_TOOLS §2.1.1](10_TOOLS.md).
+
+Shape details are deferred to the Excel-import tool spec (🕗 Phase 4 — see [tasks/BACKLOG.md](../tasks/BACKLOG.md)). For now the architectural rule is: **study/biosample/experimental-context metadata lives under `/projects/<proj>/metadata/`, period** — once that layer ships.
 
 ---
 
@@ -239,9 +245,162 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 | `anatomy` (when `sample_type = organism`) | DRAFT 2026-06-03; **non-blocking**. Anatomical coverage of an in-vivo scan: `is_whole_body` (highly-recommended **tri-state** — WARN if null, never blocks — the dead-simple full-body-vs-ROI flag) + UBERON-coded `region` (recommended when not whole-body) + optional `additional_regions` / `auto_hint`. **Per-acquisition.** Source: operator-entered (not in the animal-DB; DICOM `BodyPartExamined` empty upstream); optional non-authoritative auto-hint from MRI ProtocolName+FOV / NI bed-range. See §4.6 + §4.7. |
 | `<ecosystem_section>` | The structured embedded-metadata block keyed by ecosystem subfield: `microscopy` (for .czi), `mri` (for Bruker ParaVision — new 2026-05-20). Each has curated buckets at the top for human skimming + a `_raw_metadata` dump for forensic preservation. |
 
-> **✅ Enrichment writer IMPLEMENTED (Phase 3, 2026-06-03).** The `subject:` / `condition:` / `anatomy:` blocks above are no longer planned-only — they are written at ingest. New orchestrator `tools/ingest/enrichment.py` (`build_enrichment`) is called from `ingest_raw.py` **Step 8.4** and its result is nested by `metadata_sidecar.build_sidecar(... subject=, condition=, anatomy=)` in the key order `acq_id, generated, generator, user_supplied, discovered, subject, condition, anatomy, <ecosystem_section>`. The writer is **non-blocking** (§4.7): it never raises on missing data, writing explicit sentinels (`is_control`/`is_whole_body` `null`, free-text `""`, `source: "unknown"` or `"pending-db"`) + a WARN. Supporting modules: `ingest/subject_id.py` (short-code parser `m13→13`, `ID13B→13`+organ; project-alias from `project_hint`), `ingest/pending.py` (the deferred-recovery pending list, §4.4.6), `ingest/resolver.py` (validate/resolve for `condition`/`anatomy`/`subject`/`subject_lookup`/`subject_from_db` + `to_tristate`/`to_number` coercers), and the animal-facility-DB lookup `tools/animal_db.py`. The YAML surface that feeds it (`auto_discover.subject_from_db` + `subject_lookup:`, top-level `condition:` / `anatomy:` / optional `subject:`) is documented in [10_TOOLS §2.1](10_TOOLS.md). The registry **`subject_id` column shipped 2026-06-11 (S1)** — auto-populated from the sidecar `subject.facility_animal_id` ([06_REGISTRIES §2.2](06_REGISTRIES.md)). The per-block status tables (§4.4.5 / §4.5.5 / §4.6.4) still mark **backfill of existing acqs** and the **`anatomical_entity` column** as deferred to the true-production restart.
+> **✅ Enrichment writer IMPLEMENTED (Phase 3, 2026-06-03).** The `subject:` / `condition:` / `anatomy:` blocks above are no longer planned-only — they are written at ingest. New orchestrator `tools/ingest/enrichment.py` (`build_enrichment`) is called from `ingest_raw.py` **Step 8.4** and its result is nested by `metadata_sidecar.build_sidecar(... subject=, condition=, anatomy=)` in the key order `acq_id, generated, generator, user_supplied, discovered, subject, condition, anatomy, <ecosystem_section>`. The writer is **non-blocking** (§4.7): it never raises on missing data, writing explicit sentinels (`is_control`/`is_whole_body` `null`, free-text `""`, `source: "unknown"` or `"pending-db"`) + a WARN. Supporting modules: `ingest/subject_id.py` (short-code parser `m13→13`, `ID13B→13`+organ; project-alias from `project_hint`), `ingest/pending.py` (the deferred-recovery pending list, §4.4.6), `ingest/resolver.py` (validate/resolve for `condition`/`anatomy`/`subject`/`subject_lookup`/`subject_from_db` + `to_tristate`/`to_number` coercers), and the animal-facility-DB lookup `tools/animal_db.py`. The YAML surface that feeds it (`auto_discover.subject_from_db` + `subject_lookup:`, top-level `condition:` / `anatomy:` / optional `subject:`) is documented in [10_TOOLS §2.1](10_TOOLS.md). The registry **`subject_id` column shipped 2026-06-11 (S1)** — auto-populated from the sidecar `subject.facility_animal_id`, then **renamed to packed `subject_ids` 2026-06-12** ([06_REGISTRIES §2.2](06_REGISTRIES.md)). The **`anatomical_entity` column** shipped at the true-production restart (2026-06-10). What remains is the **Phase 4 enrichment backfill** of the still-empty recommended fields across the historical archive (§4.7.5; [tasks/BACKLOG.md](../tasks/BACKLOG.md)).
 
 **Per-column registry mapping is in YAML, not Python.** The Python `SPECIAL_FIELDS` promotion mechanism (used briefly in early 2026-05) is gone — adding or renaming a column promotion is a YAML-only edit (see [10_TOOLS §2.1](10_TOOLS.md) for schema, validation rules, and template).
+
+### 4.3a Concrete examples (real live sidecars)
+
+The two examples below are **abridged from real `metadata.json` files on the live NAS** (`_raw_metadata` forensic dumps and the per-DICOM `dicoms[]` lists are elided with `…` for length; everything shown is verbatim). They illustrate the top-level keys plus one ecosystem block. Use them as the canonical reference for sidecar shape.
+
+#### Example A — internal MRI (Bruker ParaVision)
+
+Source: `J:\gjesus3-data\raw\DICOM\2026\2026-02\ACQ-20260219-MRI-005\metadata.json`. `sample_type = organism`, so all three enrichment blocks (`subject` / `condition` / `anatomy`) are present; the ecosystem block is `mri:`.
+
+```json
+{
+  "acq_id": "ACQ-20260219-MRI-005",
+  "generated": "2026-06-13T10:27:14Z",
+  "generator": "ingest_raw.py",
+  "user_supplied": {
+    "researcher": "",
+    "operator": "<REQUIRED - set via mri-ingest --operator, or replace here>",
+    "data_source": "internal",
+    "instrument": "MRI",
+    "sample_id": "m25_0525",
+    "sample_type": "organism",
+    "original_name": "20260219_093419_jrc260219_m25_0525_jrc260219_m25_0525_1_1/14",
+    "notes": "Internal MRI Bruker:IgFLASH exam 14 (animal m25, protocol 0525); recons kept: 1,3"
+  },
+  "discovered": {
+    "folder_name": "...", "jrc_id": "...", "pi_initials": "...", "animal_num": "...",
+    "mri_study_name": "jrc260219_m25_0525", "mri_animal_id": "...", "mri_sequence_name": "...",
+    "mri_echo_time_ms": "...", "...": "... ~20 curated discovered.mri_* fields ..."
+  },
+  "subject": {
+    "facility_animal_id": "25-AE-biomaGUNE-0525",
+    "species": "Mus musculus",
+    "strain": "C57BL/6J",
+    "sex": "M",
+    "date_of_birth": "2025-10-30",
+    "age_at_acquisition": "P16W",
+    "genotype": "",
+    "weight_at_acquisition_g": null,
+    "cohort_id": "",
+    "procedures": [
+      {"type": "Tattoo", "date": "2026-01-28"},
+      {"type": "I.P. Administration", "date": "2026-02-03"},
+      {"type": "MRI 7T", "date": "2026-02-19"}
+    ],
+    "source": "animal-facility-db"
+  },
+  "condition": {
+    "is_control": null,
+    "disease_model": "",
+    "disease_state": "",
+    "control_type": "",
+    "treatment": null,
+    "timepoint_days": null,
+    "study_arm": "",
+    "source": "operator-entered"
+  },
+  "anatomy": {
+    "is_whole_body": false,
+    "region": {"label": "heart", "ontology": "UBERON", "id": "UBERON:0000948"},
+    "additional_regions": [],
+    "source": "auto-derived-override",
+    "auto_hint": "one-time historical override (cardiac-flow): cine-FLASH = cardiac cine"
+  },
+  "mri": {
+    "subject": {
+      "id": "jrc260219_m25_0525", "study_name": "jrc260219_m25_0525",
+      "type": "Quadruped", "sex": "unknown", "position": "SUBJ_POS_Supine",
+      "study_datetime": "2026-02-19T09:34:19,336+0100",
+      "instance_uid": "2.16.756.5.5.100.8323328.4474.1771490059.5489"
+    },
+    "acquisition": {
+      "method": "Bruker:IgFLASH", "pulse_program": "IgFLASH.ppg",
+      "echo_time_ms": 2.82175379087853, "repetition_time_ms": 6.87033938197492,
+      "averages": 1, "repetitions": 1, "scan_time_str": "0h3m17s865ms",
+      "nucleus": "1H", "frequency_mhz": 300.321370755693, "frame_count": 15,
+      "frame_group_desc": [15, "FG_CARDIAC_MOVIE", "", 0, 2]
+    },
+    "geometry": {
+      "spatial_dim": "2D", "matrix": [256, 128], "fov": [25, 25],
+      "slice_thickness": 0.8, "core_units": ["mm", "mm"]
+    },
+    "reconstruction": {
+      "indices_present": ["1", "3"],
+      "by_index": {"1": {"...": "...", "dicoms": ["... one entry per recon1_frame<NN>.dcm ..."]}}
+    },
+    "_raw_metadata": { "subject": {"...": "..."}, "acqp": {"...": "..."}, "method": {"...": "..."}, "...": "... parsed JCAMP-DX dumps ..." }
+  }
+}
+```
+
+Things to note from this real record: `subject:` was filled from the animal-facility DB (`source: "animal-facility-db"`, with the structured `procedures` list); `condition.is_control` is the unknown sentinel `null` (the WARN-but-don't-block path of §4.7); and `anatomy.region` was filled by the MRI auto-derive (§4.6.4) since the operator left it unset.
+
+#### Example B — microscopy (Cell Observer, .czi)
+
+Source: `J:\gjesus3-data\raw\MICROSCOPY\2026\2026-01\ACQ-20260126-CELL-001\metadata.json`. `sample_type = tissue`, so `condition:` and `anatomy:` apply but `subject:` does **not** (no DB-linked animal — it was a `tissue` sample with only the organ recorded); the ecosystem block is `microscopy:`. (This is an archive acquisition with low-confidence operator notes — note the honest `notes` text.)
+
+```json
+{
+  "acq_id": "ACQ-20260126-CELL-001",
+  "generated": "2026-06-15T15:44:42Z",
+  "generator": "ingest_raw.py",
+  "user_supplied": {
+    "researcher": "",
+    "operator": "jguser",
+    "data_source": "internal",
+    "instrument": "CELL",
+    "sample_id": "ID113_1022_tumor_PB_20_1.czi",
+    "sample_type": "tissue",
+    "original_name": "1022 RGD/ID113_1022_tumor_PB_20_1.czi",
+    "notes": "BEST-GUESS / LOW-CONFIDENCE - legacy CELL, no naming standard; project = source folder 'Claudia', sample_id = filename; sample_type/anatomy guessed post-ingest. Verify before scientific reuse."
+  },
+  "discovered": {
+    "filename": "ID113_1022_tumor_PB_20_1.czi",
+    "czi_acquisition_datetime": "2026-01-26T13:40:14.1717992Z",
+    "czi_microscope_name": "Axio Observer.Z1 / 7", "czi_objective_name": "EC Plan-Neofluar 20x/0.50 M27",
+    "czi_objective_mag": "20", "czi_objective_na": "0.5",
+    "czi_pixel_size_x_um": "0.69", "czi_size_x": "1232", "czi_size_y": "1028",
+    "...": "... ~21 curated discovered.czi_* fields ..."
+  },
+  "microscopy": {
+    "geometry": {
+      "size_x": "1232", "size_y": "1028", "size_c": "1",
+      "pixel_type": "Bgr48", "component_bit_count": "12", "compression": "Uncompressed",
+      "pixel_size_x_um": "0.69", "pixel_size_y_um": "0.69"
+    },
+    "instrument": {
+      "microscope_name": "Axio Observer.Z1 / 7", "microscope_type": "Inverted",
+      "objectives": [
+        {"id": "Objective:1", "name": "EC Plan-Neofluar 20x/0.50 M27",
+         "nominal_mag": "20", "lens_na": "0.5", "immersion": "Air"}
+      ],
+      "channels": [
+        {"id": "Channel:0", "name": "Bright", "fluor": "TL Brightfield",
+         "acquisition_mode": "WideField", "contrast_method": "Brightfield",
+         "illumination": "Transmitted", "exposure_us": "15000000", "binning": "2,2",
+         "detector_id": "Detector:Axiocam 305"}
+      ]
+    },
+    "acquisition": {"acquisition_datetime": "2026-01-26T13:40:14.1717992Z"},
+    "mosaic": {"scene_count": "", "tile_count": ""},
+    "document_info": {
+      "creation_date": "2026-01-26T14:40:14.2028223+01:00", "user_name": "jguser",
+      "application_name": "ZEN 2.3 (blue edition)", "application_version": "2.3.69.1018"
+    },
+    "_raw_metadata": { "...": "... full CZI XML ..." }
+  },
+  "anatomy": {
+    "...": "... region UBERON-coded from the .czi sample-id organ suffix (§4.6.4); is_whole_body null (N/A for a section) ..."
+  }
+}
+```
+
+Things to note: microscopy fields land both as flat `discovered.czi_*` (the curated subset YAML can reference) **and** as the structured `microscopy:` buckets (geometry / instrument / acquisition / mosaic / document_info) plus the lossless `_raw_metadata` CZI XML. For this `tissue` acquisition there is **no `subject:` block** (cell/tissue lines aren't in the animal-facility DB), and `anatomy.is_whole_body` stays `null` because a section is never whole-body (§4.6).
 
 #### `mri:` block shape (round-6 v2 2026-05-27)
 
@@ -445,13 +604,13 @@ Whenever `registry_raw.csv` has `sample_type ∈ {organism, tissue}` (see [06_RE
 When the sidecar is built, `subject:` is populated from the highest-confidence source available:
 
 1. **Animal facility DB** — authoritative. **Explored 2026-06-02** (MariaDB `animal_facility` schema; read-only via `~/.my.cnf`). Lookup = `projects.projectAlias = <NNNN>` (from `project_hint` `ae-biomegune-NNNN`) + `animals.animal_code` (the leading number of the instrument short code, `m13`→`13`); returns species/strain/sex/DOB + the structured `procedures` list. Set `source: "animal-facility-db"`. When the DB lookup at ingest fails (animal not yet in the DB, or no credentials on the operator's machine), fall through to the deferred-recovery path (§4.4.6) — write `source: "pending-db"` and queue for superuser recovery, rather than dropping straight to the lower-confidence sources below.
-2. **Study-level metadata** at `/projects/<proj>/metadata/subjects.yaml`, keyed by `sample_id` (operator-entered via the Excel importer when it ships). Set `source: "operator-entered"`.
+2. **Study-level metadata** at `/projects/<proj>/metadata/subjects.yaml`, keyed by `sample_id` (operator-entered via the Excel importer when it ships — 🕗 Phase 4, [tasks/BACKLOG.md](../tasks/BACKLOG.md)). Set `source: "operator-entered"`.
 3. **Instrument auto-extracts** — last-resort fallback from the existing `_raw_metadata` extracts:
    - ParaVision: `mri._raw_metadata.subject.SUBJECT_sex` / `SUBJECT_weight` / `SUBJECT_type` / `SUBJECT_id` (often partially populated; species/strain/age typically empty unless the user entered them in ParaVision's subject form).
    - Molecubes: `ni._raw_metadata.protocol_txt["Animal ID"]` / `"Animal weight (g)"` (no species/strain/sex/age fields in the Molecubes form).
    - Set `source: "bruker-auto-extracted"` or `"molecubes-auto-extracted"`.
 
-The sidecar holds a **frozen snapshot** at ingest time, refreshed at project close-out before the `/projects/<proj>/` folder is deleted (see [§1.3](#13-permanent-vs-ephemeral-storage)). The mutable source-of-truth during the project's life lives at `/projects/<proj>/metadata/subjects.yaml`; the sidecar copy is what survives close-out into `/raw/`.
+The sidecar holds a **frozen snapshot** at ingest time, to be refreshed at project close-out before the `/projects/<proj>/` folder is deleted (see [§1.3](#13-permanent-vs-ephemeral-storage)). The mutable source-of-truth during the project's life will live at `/projects/<proj>/metadata/subjects.yaml`; the sidecar copy is what survives close-out into `/raw/`. (Both the study-level YAML and the close-out merge are 🕗 Phase 4 — today the sidecar snapshot from ingest, enriched in place by the deferred-recovery tool of §4.4.6, is the only live copy.)
 
 #### 4.4.4 Why these required fields
 
@@ -479,9 +638,9 @@ Capturing these four fields at ingest time — rather than recovering them later
 | Animal-facility-DB fetcher (`tools/animal_db.py`) | ✅ IMPLEMENTED — read-only lookup via `~/.my.cnf` + pymysql; injectable into the writer (fail-soft without credentials) |
 | Deferred-recovery pending list + superuser retro-update | ✅ IMPLEMENTED (2026-06-03) — pending list `registries/pending_subject_metadata.csv` written by `tools/ingest/pending.py`; superuser retro-update `tools/recover_subject_metadata.py` (dry-run by default). Design in §4.4.6 |
 | Registry `subject_id` + `anatomical_entity` + `sample_organism` columns | ✅ ADDED at the true-production restart (2026-06-10) — Auto projections of the enrichment blocks (`subject.facility_animal_id` → `subject_id`, `subject.species` → `sample_organism`, `anatomy.region.label` → `anatomical_entity`); built in `registry.build_row` from the Step 8.4 blocks. Fresh 28-col header, no migration (quasi-prod registry purged). The correction-pass S1 added `subject_id` independently — consolidated here. [06_REGISTRIES §2](06_REGISTRIES.md). **NI-LIVE-08 (2026-06-12, ✅ DONE):** the column was **renamed `subject_id` → packed `subject_ids`** (`;`-joined, always-a-list) — applied in code + sandbox header migrated; multi-animal list-packing of the 1–4 ids stays in the live-sync glue. |
-| Backfill of existing 97 MRI + 84 NI acqs + animal-derived microscopy | ⚠️ Queued — `tasks/tasks.md §3.2` Phase 4 |
+| Backfill of historical MRI + NI + animal-derived microscopy acqs | ⚠️ Queued — 🕗 Phase 4, [tasks/BACKLOG.md](../tasks/BACKLOG.md) |
 
-Until the animal-DB integration lands, operators may set `subject:` manually via study-level YAML (once the Excel importer ships) or fall back to whatever the instrument auto-extracted into `_raw_metadata`.
+The animal-DB integration is live: at ingest the writer auto-fills `subject:` from the facility DB, or queues a `pending-db` placeholder (§4.4.6) for later superuser recovery. The study-level-YAML and instrument-auto-extract fallbacks remain available where the DB has no row.
 
 ### 4.4.6 Deferred recovery — ingest-time DB miss + superuser retro-update (DRAFT 2026-06-02)
 
@@ -531,7 +690,7 @@ The ingest exit status stays success. Nothing about the gap is hidden — the pe
 
 #### 4.4.6.4 Superuser retro-update
 
-A separate tool (superuser-run; tracked in `tasks/tasks.md §3.2`) walks `registries/pending_subject_metadata.csv`, and for each `status: pending` row:
+A separate tool — `tools/recover_subject_metadata.py` (superuser-run, ✅ implemented, dry-run by default) — walks `registries/pending_subject_metadata.csv`, and for each `status: pending` row:
 
 1. Looks up `facility_animal_id` in the animal-facility DB (now populated / now with credentials).
 2. If found, **modifies the `/raw/.../metadata.json` sidecar in place** — fills the `subject:` required fields, sets `source: "animal-facility-db"`, recomputes `age_at_acquisition` from `date_of_birth` + the acquisition datetime.
@@ -619,9 +778,9 @@ The disease/control state is largely a property of the **study design**, not the
      disease_model: "wild_type"
      disease_state: "baseline"
    ```
-3. **Per-acquisition override** in `/projects/<proj>/metadata/<acq_id>.json` — only for the rare batch that genuinely mixes conditions; not the default.
+3. **Per-acquisition override** in `/projects/<proj>/metadata/<acq_id>.json` (🕗 study-level, Phase 4) — only for the rare batch that genuinely mixes conditions; not the default.
 4. **Project-level auto-seed** — `disease_model` pre-filled from the DB `projects.name` (`source: "auto-guess"`), overridable.
-5. **Excel → study-metadata importer** (`tasks/tasks.md §3.2`) — researcher-driven bulk fill at the study level, the main tool for enriching archive data after the fact.
+5. **Excel → study-metadata importer** (🕗 Phase 4 — [tasks/BACKLOG.md](../tasks/BACKLOG.md)) — researcher-driven bulk fill at the study level, the main tool for enriching archive data after the fact.
 
 If none supply it, the block is still written with `is_control: null` + `source: "unknown"` and a WARN — the acquisition ingests and is flagged for later enrichment (§4.7). The sidecar holds a **frozen snapshot at ingest**, refreshed at project close-out before `/projects/<proj>/` deletion. Same lifecycle as `subject:`.
 
@@ -636,9 +795,9 @@ If none supply it, the block is still written with `is_control: null` + `source:
 | Writer | ✅ IMPLEMENTED (Phase 3, 2026-06-03) — `tools/ingest/enrichment.py`, called from `ingest_raw.py` Step 8.4; WARN-not-raise (§4.7) |
 | YAML-level `condition:` block support in per-batch configs | ✅ IMPLEMENTED — top-level `condition:` block, resolver-evaluated, set-once-per-batch; in the per-instrument templates (`mri_bruker`, `molecubes_ni`, `axioscan7`) |
 | Operator-CLI capture (`ni-ingest` / `mri-ingest` `--is-control` / `--disease-model` / `--disease-state` / `--is-whole-body`, or interactive prompts) | ✅ IMPLEMENTED (2026-06-08) — `tools/operator/metadata_prompt.py`; set once per run, applied to all acquisitions; disease fields gated to cases + optional; gate-aware WARNs (no disease nag for a control) |
-| Backfill of existing 97 MRI + 84 NI + animal-derived microscopy | ⚠️ Queued — Phase 4; ingests now with `null`+WARN, enriched later via the Excel importer / bulk tools (§4.7) |
+| Backfill of historical MRI + NI + animal-derived microscopy | ⚠️ Queued — 🕗 Phase 4, [tasks/BACKLOG.md](../tasks/BACKLOG.md); ingests today carry the `null`+WARN sentinel, enriched later via the Excel importer / bulk tools (§4.7) |
 
-Until the writer ships, operators may include a `condition:` block in YAML configs as forward-compatible documentation; the loader will pick it up once Phase 3 lands.
+The writer is live: operators set the `condition:` block once per batch (YAML config or the operator front-end's *Study metadata* panel/prompts), and the loader applies it to every acquisition in the batch.
 
 ### 4.6 `anatomy:` Block — Anatomical Coverage and Region (✅ DECIDED 2026-06-11 — promoted from DRAFT 2026-06-03)
 
@@ -761,12 +920,12 @@ A hard-block on a field that no automation can supply and that the operator may 
 - **Per-batch YAML blocks** — ✅ IMPLEMENTED (Phase 3): the set-once-per-ingest path; top-level `condition:` / `anatomy:` / optional `subject:` resolver-evaluated blocks (and `auto_discover.subject_from_db` + `subject_lookup:`), in the per-instrument templates.
 - **Metadata-completeness report** — ✅ IMPLEMENTED: `tools/metadata_completeness.py` (read-only) lists which acquisitions have `is_control:null` / `is_whole_body:null` / `subject.source:"pending-db"`; `tools/validate_registries.py` (REG-04 validator) additionally emits Phase 3 enrichment-gap WARNs. Both extend the `registries/pending_subject_metadata.csv` idea into a general "what's missing" view. (Companion read-only tools landed alongside: `tools/gather_metadata.py` merged raw+study view, `tools/verify_checksums.py` fixity re-check.)
 - **Deferred-recovery** — ✅ IMPLEMENTED: `tools/recover_subject_metadata.py` (superuser, dry-run by default) fills `pending-db` sidecars in place from the DB; see §4.4.6.
-- **Excel → study-metadata importer** (`tasks/tasks.md §3.2`) — Planned: the main bulk-fill tool for archive data; a researcher fills a per-project sheet (one row per animal/session), and it writes `condition:`/`anatomy:`/`subject:` overrides at the study level.
+- **Excel → study-metadata importer** — 🕗 Planned (Phase 4, [tasks/BACKLOG.md](../tasks/BACKLOG.md)): the main bulk-fill tool for archive data; a researcher fills a per-project sheet (one row per animal/session), and it writes `condition:`/`anatomy:`/`subject:` overrides at the study level.
 - **Auto-hint pre-fill** — Planned: surfaces the protocol/FOV/bed-range guess so the operator *confirms* rather than types.
 
-#### 4.7.5 What this means for the existing 365+ acquisitions
+#### 4.7.5 What this means for the bulk-ingested historical acquisitions
 
-They ingest cleanly today: `subject:` auto-fills from the DB, `condition.disease_model` gets a project-name seed, everything else is `null`/`unknown` + WARN. Nothing is lost, nothing is blocked, and the completeness report + Excel importer drive enrichment at the post-exhibition true-production restart (Phase 4).
+They ingest cleanly: `subject:` auto-fills from the DB, `condition.disease_model` gets a project-name seed, everything else is the `null`/`unknown` sentinel + WARN. Nothing is lost, nothing is blocked. Filling the still-empty recommended fields across the historical archive (now ~13,555 acquisitions in `/raw/`) is the **Phase 4 enrichment pass** — driven by the completeness report (live) plus the Excel importer (🕗 Phase 4, [tasks/BACKLOG.md](../tasks/BACKLOG.md)).
 
 ---
 
@@ -818,8 +977,8 @@ For SEM/TEM imaging of nanomaterials (if included):
 | META-02 | Audit embedded metadata per instrument | Data Mgmt Lead | ⚠️ Open |
 | ~~META-03~~ | ~~Develop metadata extraction scripts~~ | — | ✅ Resolved: integrated into full-mode ingest; see [10_TOOLS](10_TOOLS.md). Implementation pending. |
 | META-04 | ISA-TAB-Nano for nanomaterials? | Data Mgmt Lead | ❓ If SEM/TEM included |
-| META-05 | Animal-facility-DB programmatic access + auto-populate `subject:` block (§4.4) | Data Mgmt Lead + IT | 🔶 **Access obtained 2026-06-02** — Phase 1 exploration (schema/auth/field mapping) in progress; then fetcher + deferred-recovery tooling. 4-phase plan in `tasks/tasks.md §3.2` |
+| META-05 | Animal-facility-DB programmatic access + auto-populate `subject:` block (§4.4) | Data Mgmt Lead + IT | ✅ Largely resolved — read-only fetcher (`tools/animal_db.py`) + the enrichment writer are live (auto-fills `subject:` at ingest; `pending-db` + deferred recovery §4.4.6 for misses). Remaining: the Phase 4 enrichment backfill ([tasks/BACKLOG.md](../tasks/BACKLOG.md)). |
 | ~~META-06~~ | ~~Tighten `disease_model`/`disease_state`/`is_control` to DECIDED-required (hard-block)~~ | Data Mgmt Lead | ✅ Resolved 2026-06-03 — **superseded by the non-blocking model (§4.7).** Hard-required checks are off the table (adoption + archive-data killer); all enrichment fields are recommended-WARN, never blocking. |
 | ~~META-07~~ | ~~How to fill optional `procedure_tags` from the `procedures` free-text~~ | Data Mgmt Lead | ✅ Retired 2026-06-03 — DB exploration showed procedures are **already a structured controlled vocabulary** (`animal_procedures`→`procedures.type`+date); we carry the `[{type,date}]` list directly, no free-text parsing needed (§4.4.7). Reopens only if free-text `animal_observations` notes are ever pulled. |
 | META-08 | Subject/Sample two-tier identity model (reused facility animal ID as subject; registry `subject_id`/`anatomical_entity` columns) | Data Mgmt Lead (+ users) | ✅ Registry columns ADDED 2026-06-10 (true-prod restart) — `subject_id` + `anatomical_entity` + `sample_organism`, Auto projections of the enrichment blocks. Model (Option B) grounded in FAIR/ISA/REMBI/BIDS/XNAT; no PI sign-off gate in this project. **NI-LIVE-08 (2026-06-12):** the column was **renamed `subject_id` → packed `subject_ids`** (✅ DONE — code + sandbox header) + a one-row-per-subject `registry_subjects.csv` (still the designer's redesign; [origin_main_merge_review.md](../tasks/origin_main_merge_review.md)). The `sample_id`-rule template update (organism→subject id / tissue→specimen label) is the remaining step. See [06_REGISTRIES §2](06_REGISTRIES.md) |
-| META-09 | `anatomy:` block — `is_whole_body` (highly-recommended tri-state, non-blocking §4.7) + UBERON `region` (§4.6). Confirm UBERON starter vocabulary per study; decide whether/when to build the optional auto-hint extractor (MRI ProtocolName+FOV, NI bed-range) | Data Mgmt Lead | 🔶 DRAFT 2026-06-03 — block adopted; operator-entered (not auto-derivable); writer is Phase 3 |
+| META-09 | `anatomy:` block — `is_whole_body` (highly-recommended tri-state, non-blocking §4.7) + UBERON `region` (§4.6). Confirm UBERON starter vocabulary per study; decide whether/when to build the optional auto-hint extractor (MRI ProtocolName+FOV, NI bed-range) | Data Mgmt Lead | ✅ Block DECIDED 2026-06-11 + writer live (Phase 3); MRI + microscopy auto-derive shipped 2026-06-14 (§4.6.4). Remaining: NI bed-range hint/back-fill ([tasks/BACKLOG.md](../tasks/BACKLOG.md)). |

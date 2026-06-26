@@ -1,8 +1,8 @@
 # 10 — Tools and Automation
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** 🔶 Draft
-**Last Updated:** 2026-06-03 (Phase 3 preclinical-metadata enrichment writer IMPLEMENTED: new `auto_discover.subject_from_db` + `auto_discover.subject_lookup` keys and new top-level `condition:` / `anatomy:` / `subject:` blocks (§2.1.6); five new standalone tools — `gather_metadata`, `validate_registries`, `verify_checksums`, `metadata_completeness`, `recover_subject_metadata` (§3))
+**Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
+**Last Updated:** 2026-06-26
 
 ---
 
@@ -17,14 +17,15 @@ This document specifies the scripts and tools needed to support the data managem
 | Priority | Tool | Purpose | Status |
 |----------|------|---------|--------|
 | **P1** | `ingest_raw` | Batch deposit from staging to raw | ✅ Implemented (`tools/ingest_raw.py`) |
-| **P1** | `create_publication` | Create publication folder with templates | 📋 Requirements defined |
-| **P2** | `log_activity` | Helper for provenance logging | 📋 Requirements defined |
 | **P1** | `create_project` | Create project folder with templates | ✅ Implemented (`tools/create_project.py`) |
-| **P1** | Metadata extraction | Auto-extract embedded metadata (integrated into full-mode ingest) | 🔶 Design decided; implementation pending |
+| **P1** | Metadata extraction | Auto-extract embedded metadata (integrated into full-mode ingest) | ✅ Implemented (`czi_metadata.py`, `paravision_metadata.py`, `dicom_utils.py`) |
 | **P1** | Preclinical-metadata enrichment | Write `subject:` / `condition:` / `anatomy:` blocks at ingest (Phase 3, non-blocking) | ✅ Implemented (`tools/ingest/enrichment.py`; §2.1.6) |
+| **P1** | Operator GUI — `gjesus3_ingest` | Browser front-end (microscopy + MRI pages) over the same pipeline | ✅ Shipped 2026-06-24 (frozen `gjesus3_ingest.exe` on the NAS; §5.2) |
 | **P3** | Validation scripts | Verify registry integrity + fixity + enrichment gaps | ✅ Implemented (`validate_registries`, `verify_checksums`, `metadata_completeness`; §3) |
 | **P3** | `recover_subject_metadata` | Superuser deferred-recovery of `pending-db` subject metadata | ✅ Implemented (`tools/recover_subject_metadata.py`; §3.7) |
 | **P3** | `gather_metadata` | Merged raw + study metadata view | ✅ Implemented (`tools/gather_metadata.py`; §3.5) |
+| **P1** | `create_publication` | Create publication folder with templates | 🕗 PLANNED — publications deferred (`publications/` empty today; see `tasks/BACKLOG.md`) |
+| **P2** | `log_activity` | Helper for provenance logging | 🕗 PLANNED — requirements defined (§2.3) |
 
 ---
 
@@ -35,6 +36,38 @@ This document specifies the scripts and tools needed to support the data managem
 **Purpose:** Copy data from staging (or local source) to the structured raw area with proper naming, checksums, verification, and registry update.
 
 **Location:** `tools/ingest_raw.py` (with supporting modules in `tools/ingest/`)
+
+**Pipeline at a glance** (full-mode, per acquisition — the numbered steps are detailed in "Two Ingest Modes" below):
+
+```
+  staging/<batch>            ingest_raw.py (one acquisition at a time)
+  (or local source)   ┌─────────────────────────────────────────────────────────────┐
+        │             │  parse        →  extract        →  ACQ-ID                     │
+        └────────────▶│  filename/      embedded           date+instrument+seq        │
+                      │  path/regex     metadata           (locked, no dupes)         │
+                      │  → discovered.* → metadata.json                               │
+                      │       │              │                  │                     │
+                      │       └──────────────┴──────────────────┘                     │
+                      │                      ▼                                        │
+                      │              /raw/ DEPOSIT                                     │
+                      │   raw/<ECO>/<YYYY>/<YYYY-MM>/<ACQ-ID>/                         │
+                      │   (primary + metadata.json + checksums.json + README.txt,     │
+                      │    SHA-256 verified source→dest)                              │
+                      │                      ▼                                        │
+                      │              REGISTRY APPEND   ◀── commit point (locked)      │
+                      │   registry_raw.csv  +  ingest_manifest.csv (always)           │
+                      │                      ▼                                        │
+                      │              HARD-LINK INTO PROJECT   (if --project / hint)   │
+                      │   projects/<proj>/raw_linked/<link_filename>                  │
+                      │   (one hard link for a file primary; a real folder of         │
+                      │    per-file hard links for a <ACQ-ID>.data folder primary)    │
+                      │                      ▼                                        │
+                      │              FINDER REFRESH   (end of successful batch)       │
+                      │   registries/index.html + per-project index.html             │
+                      └─────────────────────────────────────────────────────────────┘
+```
+
+The **registry append is the commit point** — everything before it rolls back cleanly on failure; the hard-link and Finder-refresh steps are post-commit and non-fatal (a failure WARNs, never aborts). See the per-step contract in "Two Ingest Modes" and the locking guarantees in the Registry-integrity note.
 
 **Architecture:**
 ```
@@ -59,19 +92,25 @@ tools/
 │   └── linker.py            # Create project hard link (file / folder-of-links) + manifest CSV (see §2.1.1)
 ├── configs/                 # Committed ingest configs, one per batch / day folder
 │   ├── axioscan7_20260422.yaml
-│   └── axioscan7_20260506.yaml
+│   ├── mri_jrc_animalfirst.yaml
+│   └── ...                  # one per ingested batch (relative path stamped into each row's ingest_config)
 ├── templates/
 │   ├── README_raw.txt       # README template (per-acquisition README content)
 │   ├── ingest_template.yaml # Universal starter template for new batch configs
 │   └── instruments/         # Per-instrument templates (conventions locked-in)
-│       └── axioscan7.yaml   # Zeiss AxioScan 7 (.czi) — MFB filename convention
+│       ├── axioscan7.yaml          # Zeiss AxioScan 7 (.czi) — MFB filename convention
+│       ├── cell_observer_cells.yaml# Cell Observer (.czi) — path+filename parse, auto-create project
+│       ├── lsm900.yaml             # LSM 900 confocal (.czi)
+│       ├── mri_bruker.yaml         # Bruker ParaVision internal MRI (folder primary, JCAMP-DX)
+│       ├── molecubes_ni.yaml       # Molecubes NI archive ingest (PET/SPECT/CT)
+│       └── molecubes_ni_live.yaml  # Molecubes NI live-machine layout
 ├── INGEST_CLI.md            # CLI reference (flags, schema cheat-sheet, templates layout)
 └── requirements.txt         # pydicom, pyyaml, tqdm, czifile
 ```
 
-### 2.1.1 Project Linking — Hard Links (current) over `.lnk` shortcuts
+### 2.1.1 Project Linking — Hard Links
 
-> **✅ DECIDED + IMPLEMENTED 2026-06-02 — NTFS/SMB hard links.** Project links are **hard links** to the raw primary, created by `linker.create_hardlink` via `os.link`. The project copy is a **real file identical to the raw primary** — same inode, **zero extra storage**, and it shares raw's single security descriptor, so a read-only raw file stays read-only through the project link even inside a read/write `projects` folder. This **supersedes** the original Windows `.lnk` shortcut mechanism (kept as `linker.create_lnk` for the porting seam; see "History" below). The driver is adoption: change-averse researchers trust a project copy that looks and behaves like a normal file far more than a shortcut.
+> **✅ DECIDED + APPLIED 2026-06-02 — NTFS/SMB hard links are the project-linking method.** Project links are **hard links** to the raw primary, created by `linker.create_hardlink` via `os.link`. The project copy is a **real file identical to the raw primary** — same inode, **zero extra storage**, and it shares raw's single security descriptor, so a read-only raw file stays read-only through the project link even inside a read/write `projects` folder. This **retired** the original Windows `.lnk` shortcut mechanism (the 283 then-existing `.lnk` links were migrated in place — see "Migration of existing links" — and `linker.create_lnk` is kept only as a non-default porting seam; see "History"). The driver is adoption: change-averse researchers trust a project copy that looks and behaves like a normal file far more than a shortcut.
 
 When `ingest_raw.py` is run with `--project <PROJ-ID>` (or `project_hint` set in the YAML config), Step 12 of full-mode ingest creates the link at:
 
@@ -108,11 +147,11 @@ This unified model gives "real files" across every instrument and removes the di
 
 #### Migration of existing links
 
-`tools/relink_projects.py` converts pre-existing `.lnk` shortcuts to hard links in place **without re-ingesting** — it maps each `.lnk` to its acquisition via the project `provenance.csv` + `registry_raw.csv`, creates the hard link (file or folder-of-links), verifies it, removes the `.lnk`, and logs a provenance row. Idempotent; supports `--dry-run`, `--keep-lnk`, and `--project`.
+`tools/relink_projects.py` converted the pre-existing `.lnk` shortcuts to hard links in place **without re-ingesting** — it maps each `.lnk` to its acquisition via the project `provenance.csv` + `registry_raw.csv`, creates the hard link (file or folder-of-links), verifies it, removes the `.lnk`, and logs a provenance row. This one-time migration moved **all 283 then-existing `.lnk` links** to hard links and is complete; the tool remains available (idempotent; supports `--dry-run`, `--keep-lnk`, and `--project`) for any future folder that still carries a legacy shortcut.
 
 #### History / porting seam
 
-The pilot originally used **Windows `.lnk` shell shortcuts** (`linker.create_lnk`, PowerShell `WScript.Shell`) — chosen because WSL→SMB symlinks didn't work cleanly and IT couldn't provide SSH for server-side POSIX symlinks. That mechanism is retained as the porting seam for future deployments that can't use hard links (e.g. links that must cross volumes, or a non-Windows browse experience):
+The pilot originally used **Windows `.lnk` shell shortcuts** (`linker.create_lnk`, PowerShell `WScript.Shell`) — chosen because WSL→SMB symlinks didn't work cleanly and IT couldn't provide SSH for server-side POSIX symlinks. That mechanism is **retired in this deployment** (hard links replaced it 2026-06-02) but is retained in code as a porting seam for future deployments that can't use hard links (e.g. links that must cross volumes, or a non-Windows browse experience):
 
 | Target environment | Likely method | Implementation note |
 |--------------------|---------------|---------------------|
@@ -151,9 +190,9 @@ We get every field surfaced in `09_MODALITIES.md §1.1` plus the full structured
 
 The extractor is the natural seam to swap libraries: today it's `czi_metadata.extract(czi_path)` calling `czifile`; tomorrow that function can wrap pylibCZIrw or call out to Bio-Formats without touching the rest of the pipeline.
 
-### 2.1.2b Bruker ParaVision metadata extraction (round 6, 2026-05-20)
+### 2.1.2b Bruker ParaVision metadata extraction
 
-> **🔶 IN PROGRESS:** Internal MRI ingest uses **JCAMP-DX text aux files** (`subject`, `acqp`, `method`, `visu_pars`, per-recon `visu_pars`/`reco`) as the canonical metadata source — *not* the embedded DICOM headers. ParaVision aux files carry pulse sequence parameters, gating values, reconstruction index, animal subject info that the DICOM headers strip. Pure-DICOM-header extraction (for collaborator XMRI) stays deferred as an independent stream.
+> **✅ DECIDED + APPLIED (since 2026-05-20; in true production):** Internal MRI ingest uses **JCAMP-DX text aux files** (`subject`, `acqp`, `method`, `visu_pars`, per-recon `visu_pars`/`reco`) as the canonical metadata source — *not* the embedded DICOM headers. ParaVision aux files carry pulse sequence parameters, gating values, reconstruction index, animal subject info that the DICOM headers strip. Pure-DICOM-header extraction (for collaborator XMRI) stays deferred as an independent stream.
 
 | Module | Role |
 |---|---|
@@ -297,7 +336,7 @@ See each per-instrument template under `tools/templates/instruments/` for the in
 
 ### 2.1.6 Preclinical-metadata enrichment — `subject:` / `condition:` / `anatomy:` + `subject_from_db` (Phase 3, 2026-06-03)
 
-> **✅ IMPLEMENTED (Phase 3 of `tasks/tasks.md §3.2`).** For acquisitions with `sample_type ∈ {organism, tissue}`, full-mode ingest writes a `subject:` + `condition:` block (and, for `organism` only, an `anatomy:` block) into `metadata.json`. The writer is **NON-BLOCKING** ([08_METADATA §4.7](08_METADATA.md), DECIDED): it never raises on missing data — unknowns are written as explicit sentinels (`is_control` / `is_whole_body` `null`, free-text `""`, `source` `"unknown"` / `"pending-db"`) and a WARN is logged. The orchestrator is `tools/ingest/enrichment.py`, invoked at **Step 8.4** of full-mode ingest. The field contract for each block lives in [08_METADATA §4.4 (`subject:`)](08_METADATA.md) / [§4.5 (`condition:`)](08_METADATA.md) / [§4.6 (`anatomy:`)](08_METADATA.md); this section documents only the YAML surface that drives them. The `subject:` source enum + the `condition:` / `anatomy:` field sets are **DRAFT**; the registry `subject_id` / `anatomical_entity` **columns remain DEFERRED** to the true-production restart — the blocks live in the sidecar only, not in `registry_raw.csv`.
+> **✅ IMPLEMENTED + IN PRODUCTION.** For acquisitions with `sample_type ∈ {organism, tissue}`, full-mode ingest writes a `subject:` + `condition:` block (and, for `organism` only, an `anatomy:` block) into `metadata.json`. The writer is **NON-BLOCKING** ([08_METADATA §4.7](08_METADATA.md), DECIDED): it never raises on missing data — unknowns are written as explicit sentinels (`is_control` / `is_whole_body` `null`, free-text `""`, `source` `"unknown"` / `"pending-db"`) and a WARN is logged. The orchestrator is `tools/ingest/enrichment.py`, invoked at **Step 8.4** of full-mode ingest. The field contract for each block lives in [08_METADATA §4.4 (`subject:`)](08_METADATA.md) / [§4.5 (`condition:`)](08_METADATA.md) / [§4.6 (`anatomy:`)](08_METADATA.md); this section documents only the YAML surface that drives them. The `subject:` source enum + the `condition:` / `anatomy:` field sets are 🔶 DRAFT (still refinable). The enrichment-projection registry columns these blocks feed — `sample_organism`, packed `subject_ids` (`;`-joined, multi-animal-aware; renamed from `subject_id` 2026-06-12), and `anatomical_entity` — were added at the 2026-06-10 true-production restart and are now **live in `registry_raw.csv`** (auto-populated from the blocks; see the projection note in §2.1's "Key features" and [06_REGISTRIES §2](06_REGISTRIES.md)).
 
 #### `auto_discover.subject_from_db` + `auto_discover.subject_lookup`
 
@@ -406,13 +445,13 @@ Three required top-level blocks plus one optional. `defaults:` is gone — non-r
 | `archive_primary_from` | (none) | New 2026-06-01. Required with `acquisition_layout: archive`. Directory holding the original source archives; the ingest stores `<archive_primary_from>/<case>.<ext>` (matched by `discovered.folder_name`, any of `.zip/.rar/.7z/.tgz/.tar/.gz`) as the acquisition's primary. Metadata (date / modality / instance count) is still read from the extracted `staging_dir` case dir; only the compact archive is copied to the NAS. Avoids the small-file SMB latency of copying an extracted DICOM tree (~20k loose files/case). |
 | `reconstructions` | (none) | New 2026-05-20 (MRI-specific). Selects which reconstruction indices to retain from a ParaVision exam. Values: `all` \| an integer (e.g. `3`) \| a list of integers (e.g. `[3]` or `[1, 3]`). The platform convention is `/3` user-trusted, but the user explicitly decides per-batch; there is no implicit default. Indices not listed stay only on the platform's deep-archive. The registry's `discovered.mri_recon_indices` column records what was kept. |
 | `copy_strategy` | `paravision_exam` | New 2026-05-27 (round-6 v2). Per-instrument selector for the folder-as-primary copy function when `acquisition_layout: folder`. Values: `mri_paravision_v2` (slim DICOM-only layout for internal MRI; v2 fix to v1's piggyback bug), `ni_molecubes` (Molecubes NI archive-mode), `paravision_exam` (legacy v1 path; preserved for back-compat — should not be selected for new batches). See per-instrument templates under `tools/templates/instruments/`. |
-| `auto_regenerate_dicom` | `false` (field) / **`true` in the `mri_bruker` template since 2026-06-22** | New 2026-06-01 (MRI-specific, Phase 2 of `tasks/tasks.md §3.1`). When `true` AND `copy_strategy: mri_paravision_v2` AND the source has no DICOMs in any selected `pdata/<idx>/` recon, invoke `tools/ingest/paravision_regen.py` to call Dicomifier 2.5.3 + apply the two confirmed PV-7 workarounds (PixelSpacing axis-swap; Window-tag fix) per generated DICOM. Output lands in `<ACQ-ID>.data/` with the standard `recon<idx>_frame<NN>.dcm` naming. **Requires `dicomifier` on PATH** at ingest time (`conda activate dicomifier-pilot` before running). If unavailable or regeneration fails, the ingest falls through to the existing empty-`.data/` placeholder behaviour with a clear WARN — does NOT abort the batch. The config-builder field default stays `false` (keeps the Dicomifier dependency optional for non-MRI), but the `mri_bruker` per-instrument template now ships it `true` so no-DICOM MRI exams are regenerated by default where Dicomifier is present; `mri-ingest --no-regenerate-dicom` forces the placeholder. See [equipment/mri-platform/internal_mri_data_handling_workflow_notes.md](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) "ParaVision → DICOM regeneration" section for operator setup. |
+| `auto_regenerate_dicom` | `false` (field) / **`true` in the `mri_bruker` template since 2026-06-22** | MRI-specific (ParaVision → DICOM regeneration). When `true` AND `copy_strategy: mri_paravision_v2` AND the source has no DICOMs in any selected `pdata/<idx>/` recon, invoke `tools/ingest/paravision_regen.py` to call Dicomifier 2.5.3 + apply the two confirmed PV-7 workarounds (PixelSpacing axis-swap; Window-tag fix) per generated DICOM. Output lands in `<ACQ-ID>.data/` with the standard `recon<idx>_frame<NN>.dcm` naming. **Requires `dicomifier` on PATH** at ingest time (`conda activate dicomifier-pilot` before running). If unavailable or regeneration fails, the ingest falls through to the existing empty-`.data/` placeholder behaviour with a clear WARN — does NOT abort the batch. The config-builder field default stays `false` (keeps the Dicomifier dependency optional for non-MRI), but the `mri_bruker` per-instrument template now ships it `true` so no-DICOM MRI exams are regenerated by default where Dicomifier is present; `mri-ingest --no-regenerate-dicom` forces the placeholder. See [equipment/mri-platform/internal_mri_data_handling_workflow_notes.md](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) "ParaVision → DICOM regeneration" section for operator setup. |
 
 The user-controllable `registry:` columns are: `instrument`, `data_ecosystem`, `instrument_model`, `modalities_in_study`, `operator`, `data_source`, `sample_id`, `sample_type`, `session_id` (DRAFT — see [06_REGISTRIES §2.2 + §2.3a](06_REGISTRIES.md)), `acquisition_datetime`, `project_hint`, `notes`. Of these, **`instrument`, `data_ecosystem`, `operator`, `data_source` must be present** (NA allowed where intentional); the rest are optional. Auto-populated columns (`acq_id`, `registration_datetime`, `primary_kind` (DRAFT), `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) must NOT appear in `registry:`.
 
 **`acquisition_datetime` resolution** (updated 2026-06-01). A literal (ISO `YYYY-MM-DD…` or `YYYYMMDD`) or `discovered.<field>` value sets both the ACQ-ID date prefix and the registry column. When `acquisition_datetime` resolves empty / `NA`, the ingest first falls back to the **DICOM `StudyDate`** the summarizer reads from the headers — collaborator / external DICOM carries the real acquisition date in the data, not the filename, so its configs can legitimately set `acquisition_datetime: NA` — and backfills the registry column from it. Only if no usable StudyDate is found does it default to today's date with a WARN. Caveat: a batch relying on this fallback is not strictly idempotent on re-run (the stored row keys off the discovered date while `expand_batch` keys off the empty config value); supply an explicit `acquisition_datetime` when strict idempotency matters. Microscopy and other ecosystems with no DICOM headers are unaffected (no StudyDate → today, as before).
 
-**Templates layout** — start from the per-instrument template under [`tools/templates/instruments/`](../tools/templates/instruments/) (currently: `axioscan7.yaml`); the universal starter [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml) is the fallback for instruments not yet onboarded. Edited copies are saved under [`tools/configs/`](../tools/configs/) (under git, version-locked with the script — the relative path is stamped into each registry row's `ingest_config` column). See [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md) for the full templates/configs layout table.
+**Templates layout** — start from the per-instrument template under [`tools/templates/instruments/`](../tools/templates/instruments/) (currently: `axioscan7.yaml`, `cell_observer_cells.yaml`, `lsm900.yaml`, `mri_bruker.yaml`, `molecubes_ni.yaml`, `molecubes_ni_live.yaml`); the universal starter [`tools/templates/ingest_template.yaml`](../tools/templates/ingest_template.yaml) is the fallback for instruments not yet onboarded. Edited copies are saved under [`tools/configs/`](../tools/configs/) (under git, version-locked with the script — the relative path is stamped into each registry row's `ingest_config` column). See [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md) for the full templates/configs layout table.
 
 **Batch configuration — file-mode with filename parsing (AxioScan and similar):**
 
@@ -568,6 +607,8 @@ python tools/ingest_raw.py --interactive --lightweight             # lightweight
 
 ### 2.2 `create_publication` — Publication Package Setup
 
+> 🕗 **PLANNED / DEFERRED.** Publications are deferred — `publications/` is empty in production today and `registry_publications.csv` is the planned/empty registry ([06_REGISTRIES](06_REGISTRIES.md)). Requirements below are settled; build is tracked in `tasks/BACKLOG.md`.
+
 **Purpose:** Create a new publication folder with required structure and registry entry.
 
 **Inputs:**
@@ -597,6 +638,8 @@ create_publication \
 ```
 
 ### 2.3 `log_activity` — Provenance Helper
+
+> 🕗 **PLANNED / DEFERRED.** Requirements defined; not yet built. Tracked in `tasks/BACKLOG.md`.
 
 **Purpose:** Simplify adding entries to the provenance log.
 
@@ -697,7 +740,7 @@ python tools/verify_checksums.py --scope /raw/MICROSCOPY/2026/                  
 - Writes `metadata.json` sidecar in the acquisition folder
 - Sets `extended_metadata_present` = `Y` in registry
 
-**`backfill_metadata` — upgrade lightweight ingests:**
+**`backfill_metadata` — upgrade lightweight ingests** (🕗 PLANNED — pairs with lightweight mode, which is itself planned; `tasks/BACKLOG.md`):
 
 **Purpose:** Retroactively extract metadata from acquisitions that were ingested in lightweight mode. Decompresses the archive to a temp directory, extracts metadata, writes `metadata.json`, updates registry.
 
@@ -745,7 +788,7 @@ python tools/recover_subject_metadata.py --nas-root J:\gjesus3-data --apply    #
 
 ### 4.1 Language
 
-> **🔶 RECOMMENDATION:** Python 3.10+
+> **✅ DECIDED:** Python 3.10+ (all tools and the operator GUI are Python).
 
 Rationale:
 - Good library support for file handling, CSV, JSON
@@ -754,7 +797,11 @@ Rationale:
 
 ### 4.2 Where Scripts Run
 
-> **⚠️ GAP:** Need to decide execution environment.
+> **✅ DECIDED (in production).** Two execution paths, by audience:
+> - **CLI tools** (`ingest_raw`, `create_project`, the validators) run from the **repo checkout on the data-office machine** with the NAS mapped at `J:\gjesus3-data` (network access to the share). This is the controlled, consistent environment the options table below favoured.
+> - **Operators** run the frozen **`gjesus3_ingest.exe`** directly from the NAS (`\\GJESUS3\gjesus3\gjesus3-data\tools\`) — no Python/admin install on their machine (§4.3, §5.2).
+
+The original options weighed during design:
 
 | Option | Pros | Cons |
 |--------|------|------|
@@ -762,11 +809,11 @@ Rationale:
 | **User machines** | Convenient; work where you are | Dependency management; consistency |
 | **NAS (QNAP apps)** | Runs where data is | Limited environment; complexity |
 
-**Tentative:** Designated workstation with network access to NAS
+The CLI took the **designated-workstation** path; the operator GUI sidesteps the "user machines / dependency management" cons by shipping as a self-contained frozen exe run off the NAS.
 
 ### 4.3 Distribution and Versioning
 
-> **⚠️ GAP:** Need to establish script management.
+> **✅ DECIDED (in production).** Source of truth is the **Git repository**; the operator GUI is distributed as a **frozen exe copied to the NAS** (the "releases copied to a shared folder" pattern, applied). Approaches weighed:
 
 | Approach | Description |
 |----------|-------------|
@@ -774,7 +821,7 @@ Rationale:
 | Shared folder | Scripts on network drive; single source |
 | Package | pip-installable package (more overhead) |
 
-**Tentative:** Git repository with periodic releases copied to shared folder.
+**Decided:** Git repository for the CLI tools (data-office machine pulls updates); periodic frozen-exe builds of the operator GUI copied to the NAS `tools/` folder (see the Operator-GUI note immediately below).
 
 **Operator GUI (DECIDED 2026-06-24):** the `gjesus3_ingest` front-end (§5.2) is frozen to a
 single Windows `.exe` and copied to `\\gjesus3\gjesus3\gjesus3-data\tools\` on the NAS;
@@ -896,7 +943,7 @@ NAS (≈3-5 s self-extract on first launch). Build/deploy reference: `tools/oper
 
 | ID | Question | Owner | Status |
 |----|----------|-------|--------|
-| TOOL-01 | Where will scripts run? | Data Mgmt Lead + IT | ⚠️ Needs decision |
-| TOOL-02 | Git repo location and access | Data Mgmt Lead | ⚠️ Needs setup |
-| TOOL-03 | User training on CLI tools | Data Mgmt Lead | 📋 Planned |
-| TOOL-04 | GUI wrapper priority | Users | 📣 Need feedback |
+| TOOL-01 | Where will scripts run? | Data Mgmt Lead + IT | ✅ RESOLVED — CLI from the data-office repo checkout; operator GUI as a frozen exe off the NAS (§4.2) |
+| TOOL-02 | Git repo location and access | Data Mgmt Lead | ✅ RESOLVED — repo is the source of truth; GUI ships as a frozen exe to the NAS `tools/` (§4.3) |
+| TOOL-03 | Operator/researcher training on the tools | Data Mgmt Lead | 🕗 PLANNED — see `tasks/STATUS.md` |
+| TOOL-04 | GUI wrapper priority | Users | ✅ RESOLVED — operator GUI shipped 2026-06-24 (§5.2) |

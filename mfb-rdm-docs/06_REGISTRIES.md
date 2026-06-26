@@ -1,8 +1,8 @@
 # 06 — Registries
 
 **Parent:** [Documentation Index](00_INDEX.md)
-**Status:** 🔶 Draft
-**Last Updated:** 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
+**Status:** ✅ DECIDED — the `registry_raw.csv` schema (28 columns) is finalized and live in true production; subjects/projects registries are live. (Some forward-looking refinements remain 🔶 Draft, flagged inline and in the Open Questions table.)
+**Last Updated:** 2026-06-26 (doc refactor: corrected the §2.5 example to the real 28-column schema — every example row had been short an `operator` value plus the three enrichment columns; documented `registry_subjects.csv` (§2.8); moved the Publications registry to 🕗 Planned/empty; promoted the settled schema to ✅ DECIDED). Prior: 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
 
 ---
 
@@ -22,12 +22,13 @@ Registries are **CSV files** that serve as indexes (manifests) for each storage 
 
 > **✅ DECIDED:** All registries live in a single top-level `registries/` directory — centralized, not distributed within each storage area.
 
-| Registry | Location | Purpose |
-|----------|----------|---------|
-| Raw Registry | `/gjesus3/registries/registry_raw.csv` | Indexes all raw acquisitions |
-| Publications Registry | `/gjesus3/registries/registry_publications.csv` | Indexes all publication folders |
-| Projects Registry | `/gjesus3/registries/registry_projects.csv` | Indexes all project folders |
-| Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets (if used) |
+| Registry | Location | Purpose | Status |
+|----------|----------|---------|--------|
+| Raw Registry | `/gjesus3/registries/registry_raw.csv` | Indexes all raw acquisitions | ✅ Live (~13,555 rows) |
+| Subjects Registry | `/gjesus3/registries/registry_subjects.csv` | One row per animal subject (the static per-animal record; §2.8) | ✅ Live (~716 rows) |
+| Projects Registry | `/gjesus3/registries/registry_projects.csv` | Indexes all project folders | ✅ Live (~50 rows) |
+| Publications Registry | `/gjesus3/registries/registry_publications.csv` | Indexes all publication folders | 🕗 Planned (empty — publications deferred) |
+| Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets (if used) | ❓ Evaluating |
 
 The `registries/` directory also holds a few **generated / bookkeeping artifacts** that are NOT registries and NOT hand-edited sources of truth:
 
@@ -81,7 +82,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `sample_organism` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 (REG-07). Binomial species, e.g. `Mus musculus`. **Projection of the `subject:` block's `species`** ([08_METADATA §4.4](08_METADATA.md)), sourced from the animal-facility DB. Blank for non-animal samples (`cells`/`material`/`phantom`) and where the subject is unresolved. Pipeline-derived — NOT a `registry:` key. |
 | `subject_ids` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 as `subject_id` (REG-01 Option B, §2.3.2); **RENAMED `subject_id` → `subject_ids` 2026-06-12 (NI-LIVE-08 — DONE; code + sandbox header migrated).** Packed, `;`-joined, **always-a-list** of canonical `<animal_code>-AE-biomaGUNE-<NNNN>` facility ids — **projection of `subject:`.`facility_animal_id`**. A single-animal scan is a length-1 list (the bare id, no `;`); a multi-animal NI scan packs its 1–4 ids (packing done by the live-sync glue). Cohort queries ride on the column instead of the sidecar; the scan→animal link lives here, with `registry_subjects.csv` holding **one row per animal** (the static record; the acq×animal relationship is recovered by joining `subject_ids` against it — **not** a junction/mapping table). Blank for non-animal samples. Pipeline-derived. See [origin_main_merge_review.md §3](../tasks/origin_main_merge_review.md). |
 | `anatomical_entity` | String | Optional | Auto (enrichment) | ADDED 2026-06-10 (REG-07 / META-09). UBERON organ/region label (e.g. `heart`) — **projection of `anatomy:`.`region.label`** ([08_METADATA §4.6](08_METADATA.md)). For in-vivo `organism` scans the region imaged (blank when whole-body), and for ex-vivo `tissue` the organ the section was cut from. Blank when unset / non-animal. Pipeline-derived. |
-| `session_id` | String | 🔶 Recommended | User | In use since 2026-05-20; **✅ DECIDED 2026-06-11 (S2)**. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc251016_m17_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. |
+| `session_id` | String | 🔶 Recommended | User | In use since 2026-05-20; **✅ DECIDED 2026-06-11 (S2)**. Groups acquisitions that share a session (one animal session, one MR study, one microscopy slide-loading round, etc.). Maps to the ISA "study" level — see §2.3a. For MRI, value is typically the JRC study identifier (`jrc_251016_m18_0424`). For microscopy where acquisitions don't share a meaningful session, may be empty / NA. |
 | `primary_kind` | String | ✅ Yes | Auto | In use since 2026-05-20; **✅ DECIDED 2026-06-11 (S2)**. One of `file` \| `archive` \| `folder` — the shape of the primary entity on disk. `file` = single canonical file (microscopy `.czi`). `archive` = compressed archive (legacy collaborator DICOM `.zip`). `folder` = the acquisition folder itself is the unit (internal MRI ParaVision bundle). See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
 | `primary_file_name` | String | ✅ Yes | Auto | Canonical name of the primary entity. When `primary_kind` = `file` or `archive`, this is a filename (`<ACQ-ID>.czi`, `<ACQ-ID>.zip`). When `primary_kind` = `folder`, this is the folder name (`<ACQ-ID>`) — the unit IS the folder, see [03_RAW_STORAGE §4.3](03_RAW_STORAGE.md). |
 | `original_name` | String | ✅ Yes | Auto | Source filename / folder name before ingestion. |
@@ -91,7 +92,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `canonical_path` | String | ✅ Yes | Auto | Full path to acquisition folder. |
 | `checksum_present` | String (Y/N) | ✅ Yes | Auto | `Y` or `N` — is checksums.json present? |
 | `extended_metadata_present` | String (Y/N) | ✅ Yes | Auto | `Y` (full mode) or `N` (lightweight mode). |
-| `project_hint` | String | Optional | User | Associated project ID if known at deposit. Triggers `.lnk` creation when set. |
+| `project_hint` | String | Optional | User | Associated project ID if known at deposit. Triggers **hard-link** creation into the project folder when set (the hard-link method — DECIDED + APPLIED 2026-06-02 — superseded the legacy `.lnk` shortcut; see [10_TOOLS §2.1.1](10_TOOLS.md)). |
 | `ingest_config` | String | 🔶 Recommended | Auto | Path (relative to repo root) of the YAML config that produced this row. Empty for interactive ingests or pre-2026-05-06 rows. Used for auditability and reproducibility. |
 | `notes` | String | Optional | User | Free-text notes. Supports `${discovered.<field>}` interpolation. |
 
@@ -122,7 +123,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | ISA term | gjesus3 equivalent | Where recorded | Example |
 |---|---|---|---|
 | **Investigation** | Project | `registry_projects.csv` → `project_id` + `short_name` | `PROJ-0007` / `itziar-alphasma` (or for MRI, an animal-protocol-coded project like `PROJ-NNNN` with short_name `ae-biomegune-0525`) |
-| **Study** | Session — a coherent acquisition session (one animal session, one slide-loading round) | `registry_raw.csv` → new `session_id` column (DRAFT, see §2.2) | `jrc251016_m17_0424` for an internal MRI session |
+| **Study** | Session — a coherent acquisition session (one animal session, one slide-loading round) | `registry_raw.csv` → `session_id` column (✅ DECIDED, see §2.2) | `jrc_251016_m18_0424` for an internal MRI session |
 | **Assay** | Acquisition — one scan with a distinct protocol | `registry_raw.csv` → `acq_id` (one row) | `ACQ-20251016-MRI-029` |
 
 **Why this matters:**
@@ -212,15 +213,20 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 
 ### 2.5 Example
 
-> **Note:** The CSV example below shows the schema **including** the DRAFT `session_id` and `primary_kind` columns. Production registry rows pre-2026-05-20 do not have these columns; the schema grows column-by-column with a defensive header check (see [10_TOOLS](10_TOOLS.md)) preventing silent shift.
+> **Note:** The CSV example below shows the **full 28-column** production header (verified against the live `registries/registry_raw.csv` on 2026-06-26). The schema grows column-by-column with a defensive header check (see [10_TOOLS](10_TOOLS.md)) preventing silent shift; the last header growth was the 2026-06-10 restart, which was born with all 28 columns (`operator` + the three enrichment projections `sample_organism` / `subject_ids` / `anatomical_entity`). The rows below are **representative of real live rows**, lightly cleaned for readability (operator names abbreviated, notes trimmed). Note that microscopy rows leave `researcher` empty (the AxioScan filename carries only the `operator`), and NI/MRI rows set `operator == researcher`.
 
 ```csv
 acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,researcher,operator,data_source,sample_id,sample_type,sample_organism,subject_ids,anatomical_entity,session_id,primary_kind,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
-ACQ-20260215-ZWSI-001,2026-02-15T16:30:00Z,2026-02-15T14:00:00Z,MICROSCOPY,ZWSI,Zeiss Axio Scan 7,,MBC,internal,MOUSE-2024-042,tissue,,file,ACQ-20260215-ZWSI-001.czi,MFB_MBC_PROJ-0003_MOUSE-2024-042_HE_20x.czi,.czi,2450,1,/raw/MICROSCOPY/2026/2026-02/ACQ-20260215-ZWSI-001/,Y,Y,PROJ-0003,tools/configs/axioscan7_20260215.yaml,Microscopy single-file
-ACQ-20251016-MRI-029,2025-10-16T17:00:00Z,2025-10-16T08:38:22Z,DICOM,MRI,Bruker BioSpec 7T,,IFF,internal,jrc251016_m17_0424_heart,organism,jrc251016_m17_0424,folder,ACQ-20251016-MRI-029,29,folder,150,17,/raw/DICOM/2025/2025-10/ACQ-20251016-MRI-029/,Y,Y,PROJ-0009,tools/configs/mri_bruker_20251016_TEST.yaml,Internal MRI ParaVision exam 29 (cine cardiac)
-ACQ-20260220-PET-001,2026-02-20T11:00:00Z,2026-02-20T09:00:00Z,DICOM,PET,Molecubes beta-CUBE,PT;CT,CLM,internal,MOUSE-2024-042,organism,,archive,ACQ-20260220-PET-001.zip,,.zip,2100,4,/raw/DICOM/2026/2026-02/ACQ-20260220-PET-001/,Y,Y,,tools/configs/pet_20260220.yaml,Legacy PET/CT zip-per-session (pre-folder-bundle)
-ACQ-20260301-XMRI-001,2026-03-01T09:00:00Z,,DICOM,XMRI,,,RT,collaborator:HPIC,HPIC-case-01,,,archive,ACQ-20260301-XMRI-001.zip,case_01.zip,.zip,450,3,/raw/DICOM/2026/2026-03/ACQ-20260301-XMRI-001/,Y,N,,,Lightweight collaborator zip
+ACQ-20260219-ZWSI-001,2026-06-14T20:31:27Z,2026-02-19T11:21:18.6309642Z,MICROSCOPY,ZWSI,Axioscan 7,,,MBC,internal,0424_ID29H,tissue,Mus musculus,29-AE-biomaGUNE-0424,heart,,file,ACQ-20260219-ZWSI-001.czi,20260219/MFB_MBC_0424_ID29H_WGA_10x.czi,.czi,490.1,1,/raw/MICROSCOPY/2026/2026-02/ACQ-20260219-ZWSI-001/,Y,Y,PROJ-0002,tools/configs/axioscan7_mfb_20260614.yaml,MFB AxioScan 7 WSI (WGA stain at 10x)
+ACQ-20251029-PET-001,2026-06-12T20:42:25Z,2025-10-29T10:03:11Z,DICOM,PET,Molecubes (PET/SPECT/CT),PT,irene,irene,internal,m13_0525,organism,Mus musculus,13-AE-biomaGUNE-0525,,irene_0525_251029_m13,folder,ACQ-20251029-PET-001.data,irene_0525_251029_0525_m13_20251029100311_PET,,28.6,1,/raw/DICOM/2025/2025-10/ACQ-20251029-PET-001/,Y,Y,PROJ-0001,tools/configs/ni_jesus_archive_2025.yaml,Archive-mode NI preload: PET of m13 (protocol 0525)
+ACQ-20220118-MRI-001,2026-06-13T07:05:18Z,2022-01-18T10:21:42.100+01:00,DICOM,MRI,Bruker BioSpec 11.7T,MR,jrc,jrc,internal,m1_1521,organism,Mus musculus,1-AE-biomaGUNE-1521,,jrc220118_m1_1521,folder,ACQ-20220118-MRI-001.data,20220118_100109_jrc220118_m1_1521_1_1/1,,0.6,9,/raw/DICOM/2022/2022-01/ACQ-20220118-MRI-001/,Y,Y,PROJ-0003,tools/configs/mri_jrc_animalfirst.yaml,"Internal MRI Bruker FcFLASH exam 1 (animal m1, protocol 1521)"
 ```
+
+**Reading the rows:**
+
+- **ZWSI (microscopy, `file`):** one `.czi` per slide; `researcher` blank, `operator` from the AxioScan filename; `subject_ids` / `anatomical_entity` resolved from the animal-facility DB (`29-AE-biomaGUNE-0424`, `heart`); `primary_file_name` is the renamed canonical file.
+- **PET (Nuclear Imaging, `folder`):** the acquisition folder is the unit, so `primary_kind = folder` and `primary_file_name` is the `<ACQ-ID>.data` folder name; `operator == researcher`; `session_id` groups the day's scans of one animal; `file_format` is blank for folder-mode bundles.
+- **MRI (Bruker ParaVision, `folder`):** one numbered exam per row; the shared `session_id` (`jrc220118_m1_1521`, the JRC study identifier) lets the whole study be reconstructed by registry query.
 
 ### 2.6 Update Rules
 
@@ -240,11 +246,55 @@ The raw registry is operator-visible, Excel-bound, and may be written by more th
 
 See [10_TOOLS](10_TOOLS.md) (ingest flow) and `CLAUDE.md` (registry-integrity rules).
 
+### 2.8 Subjects Registry (`registry_subjects.csv`) — one row per animal
+
+**File:** `/gjesus3/registries/registry_subjects.csv`
+
+> **✅ DECIDED 2026-06-12 (NI-LIVE-08).** The static per-animal record. This is the second half of the one-to-many subject model: `registry_raw.csv` carries the packed **`subject_ids`** column (the scan→animal link, §2.3.2), and this file holds **exactly one row per animal subject** — the durable facts about that animal. The acquisition×animal relationship is recovered by **joining** `registry_raw.subject_ids` against `registry_subjects.facility_id` — there is deliberately **no separate junction/mapping table** (that was explicitly vetoed; see [origin_main_merge_review.md §3](../tasks/origin_main_merge_review.md)).
+
+Rows are written by the enrichment writer at ingest, sourced from the animal-facility DB (the same `subject:` block that populates the sidecar, [08_METADATA §4.4](08_METADATA.md)). A subject seen across many acquisitions is registered once (first-write) and its `last_updated` refreshed on later re-resolution; `facility_id` is the unique key.
+
+#### 2.8.1 Schema
+
+| Field | Type | Required | Population | Description |
+|-------|------|----------|------------|-------------|
+| `facility_id` | String | ✅ Yes | Auto (enrichment) | The canonical subject ID, reused verbatim from the facility — `<animal_code>-AE-biomaGUNE-<NNNN>` (e.g. `13-AE-biomaGUNE-0525`). Unique key; the join target for `registry_raw.subject_ids` (§2.3.2). |
+| `animal_code` | String | ✅ Yes | Auto (enrichment) | The leading facility animal code (the `13` in the example) — the DB `animals.animal_code`. |
+| `project_alias` | String | ✅ Yes | Auto (enrichment) | The facility project alias (the `0525` in the example) — DB `projects.projectAlias`; the other half of the `(project, animal_code)` DB lookup key. |
+| `species` | String | 🔶 Recommended | Auto (enrichment) | Binomial species (e.g. `Mus musculus`). Same value projected into `registry_raw.sample_organism`. |
+| `strain` | String | Optional | Auto (enrichment) | Strain / background (e.g. `C57BL/6J`). |
+| `sex` | String | Optional | Auto (enrichment) | `M` / `F` (normalized from the DB). |
+| `date_of_birth` | Date | Optional | Auto (enrichment) | DOB; the basis for the sidecar's derived `age_at_acquisition`. |
+| `genotype` | String | Optional | Auto (enrichment) | Genotype, when recorded in the DB. |
+| `cohort_id` | String | Optional | Auto (enrichment) | Cohort identifier, when recorded. |
+| `source` | String | ✅ Yes | Auto | Provenance of the row — `animal-facility-db` for DB-resolved subjects. |
+| `first_registered` | ISO DateTime | ✅ Yes | Auto | When this subject row was first written. |
+| `last_updated` | ISO DateTime | ✅ Yes | Auto | When this subject row was last refreshed. |
+
+#### 2.8.2 Example
+
+```csv
+facility_id,animal_code,project_alias,species,strain,sex,date_of_birth,genotype,cohort_id,source,first_registered,last_updated
+13-AE-biomaGUNE-0525,13,0525,Mus musculus,C57BL/6J,M,2025-07-31,,,animal-facility-db,2026-06-19T21:15:13Z,2026-06-19T21:15:13Z
+14-AE-biomaGUNE-0525,14,0525,Mus musculus,C57BL/6J,M,2025-07-31,,,animal-facility-db,2026-06-19T21:15:13Z,2026-06-19T21:15:13Z
+```
+
+#### 2.8.3 Update Rules
+
+| Action | Allowed | Who | When |
+|--------|---------|-----|------|
+| Add new subject | ✅ Yes | Enrichment writer (via ingest) | First time an animal is resolved |
+| Refresh fields | ✅ Yes | Enrichment writer | On later re-resolution (`last_updated` bumped) |
+| Correct a field | ⚠️ Limited | Admin | Only to fix errors (e.g. a DB correction) |
+| Delete a subject | ❌ No | — | Rows are permanent |
+
 ---
 
 ## 3. Publications Registry
 
 **File:** `/gjesus3/registries/registry_publications.csv`
+
+> **🕗 PLANNED / DEFERRED.** The publications area is not in use yet — `publications/` is empty and `registry_publications.csv` holds no rows in true production today. The schema below is the planned shape; it ships when the publications workflow is built. See [04_PUBLICATIONS](04_PUBLICATIONS.md) and [`tasks/BACKLOG.md`](../tasks/BACKLOG.md).
 
 ### 3.1 Purpose
 
@@ -450,12 +500,12 @@ Generation: Next available number within each type.
 
 | ID | Question | Owner | Status |
 |----|----------|-------|--------|
-| REG-01 | Include sample_id in raw registry as required or recommended? Composite recommendation superseded by the Option B subject/sample identity model (§2.3); a Data Office decision (user input welcome; no PI sign-off gate). | Data Office (+ users) | 🔶 Draft |
+| REG-01 | Subject/sample identity model (§2.3). **Resolved:** the Option B two-tier model is adopted in production — `sample_id` is **Recommended** (not required); the subject ID is the reused facility `<animal_code>-AE-biomaGUNE-<NNNN>`, carried packed in `subject_ids` (§2.3.2) with the static per-animal record in `registry_subjects.csv` (§2.8). | Data Office (+ users) | ✅ DECIDED 2026-06-11 |
 | REG-02 | What additional fields needed for REMBI/ISA alignment? | Data Mgmt Lead | 🔶 See [08_METADATA](08_METADATA.md) |
 | REG-03 | Git versioning for registries? | Data Mgmt Lead | 📋 Future consideration |
 | REG-04 | Validation script requirements | Data Mgmt Lead | 📋 Planned |
 | REG-05 | Curated datasets registry: finalize schema after pilot experience | Data Mgmt Lead | ❓ Evaluating |
 | REG-06 | Track DICOM instance count (.dcm files) in registry or only in extended metadata? | Data Mgmt Lead | 🔶 Draft |
-| REG-07 | Sample type controlled vocabulary (`tissue`/`organism`/`cells`/`material`/`phantom`) DRAFT in §2.4; first round of cross-instrument application pending (a Data Office decision; user input welcome — no PI sign-off gate). Future split of species/anatomy into dedicated columns. | Data Office (+ users) | 🔶 Draft |
-| REG-08 | DRAFT `session_id` column (§2.2) — groups acquisitions that share an ISA "study" (one animal session, one MR study, etc.). For MRI typically the JRC study identifier; for microscopy may be empty/NA. | Data Office (+ users) | 🔶 Draft — pending a Data Office decision (user input welcome; this project has no PI sign-off gate) |
-| REG-09 | DRAFT ISA terminology mapping (§2.3a) — Investigation=Project / Study=Session / Assay=Acquisition. Adopting ISA vocabulary improves REMBI compatibility + future XNAT/OMERO portability. | Data Office (+ users) | 🔶 Draft — pending a Data Office decision (user input welcome; this project has no PI sign-off gate) |
+| REG-07 | Sample type controlled vocabulary (`tissue`/`organism`/`cells`/`material`/`phantom`), §2.4. **Resolved:** the 5-value vocabulary is adopted in production, and the once-future split of species/anatomy into dedicated columns has shipped — `sample_organism` + `anatomical_entity` are live Auto columns (§2.2). | Data Office (+ users) | ✅ DECIDED 2026-06-11 |
+| REG-08 | `session_id` column (§2.2) — groups acquisitions that share an ISA "study" (one animal session, one MR study, etc.). For MRI typically the JRC study identifier; for microscopy may be empty/NA. **Resolved:** adopted + live in production. | Data Office (+ users) | ✅ DECIDED 2026-06-11 |
+| REG-09 | ISA terminology mapping (§2.3a) — Investigation=Project / Study=Session / Assay=Acquisition. Adopting ISA vocabulary improves REMBI compatibility + future XNAT/OMERO portability. **Resolved:** adopted in production. | Data Office (+ users) | ✅ DECIDED 2026-06-11 |
