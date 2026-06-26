@@ -189,6 +189,76 @@ def _build_dedupe_index(registry_path):
     return keys
 
 
+def fanout_ni_recons(case, rel_match):
+    """Split one NI anchor case into one case PER `recon_<idx>/` that has DICOMs.
+
+    Opt-in, NI-live only: called from `expand_batch` ONLY when the case's
+    `ingest.per_recon_acquisitions` flag is set (it lives in
+    `molecubes_ni_live.yaml` alone). One acquisition per reconstruction
+    (decided 2026-06-25): each reconstruction is an independent acquisition, so
+    a reconstruction added on a later sync is automatically a new acquisition.
+
+    Reads the ALREADY-PARSED NI sidecar section (no extra disk I/O) to learn
+    which recons have copyable DICOMs:
+      - recons WITH DICOMs  -> one case each (the fan-out).
+      - recons that exist but are EMPTY (reconstruction not finished yet) ->
+        skipped + logged; a later sync picks them up (recon indices are
+        append-only, so `<anchor>/recon_<idx>` is a stable identity).
+      - no recon with DICOMs at all -> [] (the whole anchor is skipped).
+
+    Each emitted case gets a per-recon `original_name = <anchor>/recon_<idx>`
+    (the stable dedup key — `(acq_date, original_name)` is now per-recon, so the
+    registry naturally dedups per reconstruction), `discovered.ni_recon_idx` for
+    the link name, and its sidecar `reconstruction` block scoped to that recon.
+    Everything else (archive NI, microscopy, MRI) never reaches here — no flag.
+    """
+    import copy as _copy
+
+    def _key(x):
+        return int(x) if str(x).isdigit() else x
+
+    sec = case.get("ecosystem_section") or {}
+    by_index = ((sec.get("reconstruction") or {}).get("by_index")) or {}
+    indices = sorted(by_index, key=_key)
+    with_dicoms = [i for i in indices if (by_index[i] or {}).get("dicoms")]
+    empty = [i for i in indices if not (by_index[i] or {}).get("dicoms")]
+
+    if empty:
+        print(
+            f"[expand_batch] {rel_match}: recon(s) {empty} have no DICOMs yet - "
+            f"skipped (reconstruction pending); will pick up on a later sync."
+        )
+    if not with_dicoms:
+        print(
+            f"[expand_batch] SKIP {rel_match}: no reconstructed DICOMs yet "
+            f"(0 recon_<idx>/ with .dcm)."
+        )
+        return []
+
+    out = []
+    for idx in with_dicoms:
+        rc = _copy.deepcopy(case)
+        rc["original_name"] = f"{rel_match}/recon_{idx}"
+        rc["ni_recon_idx"] = idx
+        disc = rc.get("discovered") or {}
+        disc["ni_recon_idx"] = idx
+        rc["discovered"] = disc
+        # Scope the sidecar reconstruction block to just this recon (the
+        # acquisition only carries this recon's DICOMs).
+        rsec = rc.get("ecosystem_section") or {}
+        rb = rsec.get("reconstruction")
+        if isinstance(rb, dict) and "by_index" in rb:
+            rb = dict(rb)
+            rb["recons_present"] = [idx]
+            rb["by_index"] = {idx: (by_index.get(idx) or {})}
+            rsec["reconstruction"] = rb
+        rm = rsec.get("_raw_metadata")
+        if isinstance(rm, dict) and isinstance(rm.get("reconparams_by_idx"), dict):
+            rm["reconparams_by_idx"] = {idx: rm["reconparams_by_idx"].get(idx, {})}
+        out.append(rc)
+    return out
+
+
 def apply_registry_block(case, registry_block):
     """Resolve cfg["registry"] against case["discovered"] and merge into case top-level.
 
@@ -601,6 +671,25 @@ def expand_batch(cfg, nas_root=None):
                 print(f"[expand_batch] SKIP {match_basename}: {e}")
             continue
         _apply_operator(case, cfg.get("operator"))
+
+        # NI per-recon fan-out — OPT-IN via ingest.per_recon_acquisitions
+        # (set only in molecubes_ni_live.yaml). One acquisition per
+        # reconstruction: each recon_<idx>/ with DICOMs becomes its own case
+        # (its own ACQ-ID + registry row + project link). Empty recons are
+        # skipped (reconstruction pending) and a later sync picks them up.
+        # Everything without the flag (archive NI, microscopy, MRI) falls
+        # through to the unchanged single-case path below.
+        if (case.get("ingest") or {}).get("per_recon_acquisitions"):
+            for rc in fanout_ni_recons(case, rel_match):
+                adt_rc = (rc.get("acquisition_datetime") or "")[:10].replace("-", "")
+                if (adt_rc, rc["original_name"]) in existing_keys:
+                    print(
+                        f"[expand_batch] SKIP {rc['original_name']}: "
+                        f"already in registry (idempotent re-run)"
+                    )
+                    continue
+                cases.append(rc)
+            continue
 
         # Idempotency: skip if already ingested. Key is (acq_date,
         # original_name) where original_name is the relpath set above.

@@ -2,8 +2,16 @@
 
 **Branch:** `feat/ni-live-hardening` (off `main`, which already carries all NI live-sync code).
 **ALL of §1 + §2 + §3 land on THIS one branch** (user directive 2026-06-25 — not split).
-**Status:** APPROVED — building. §1 first (independent), then the unified incremental-recon
-capability (§2 + §3.4 merged), then the rest of §3, GUI last.
+**Status:** §1 DONE. §2 + §3.5 (per-recon, **Tier B**) DONE + verified end-to-end. Next:
+§3.1–3.3 (no-YAML operator CLI + corrections CSV + per-session tracer metadata), GUI last.
+
+**SCOPE NOTE (creep check, user 2026-06-25):** chose **Tier B** — per-recon acquisitions with
+NO registry mutation. Empty recons (reconstruction pending) are **skipped + logged**, picked up
+on a later sync; they are NOT registered as placeholders. The "register-before-DICOMs + in-place
+fill" option (**Tier C**) is **deferred** — its `pending_ni_recon.csv` scaffold was removed
+(revivable from commit `3e0896d`). The functional change is NI-only and opt-in (the
+`ingest.per_recon_acquisitions` flag lives in `molecubes_ni_live.yaml` alone); microscopy/MRI/
+archive-NI are untouched.
 **Origin:** Irene live-sync test run, 2026-06-25. Outputs reviewed:
 `S:\gnuclear\2026\Jesus\Ryan\p0_p2_outputs.txt` (Steps 0–2) and
 `S:\gnuclear\2026\Jesus\Ryan\ni-live-test\p_5_output.txt` (Step 5, full ingest into `J:\gjesus3-sandbox`).
@@ -252,43 +260,38 @@ acceptable wart.)
 2. **Copy scoping.** `copy_ni_acquisition(..., recon_idx=X)` copies only recon X's DICOMs into
    that acquisition's `<ACQ-ID>.data/` (default `None` = all recons = current behaviour, kept
    working until the fan-out is wired).
-3. **Empty recon → placeholder (fixes the 5).** When recon X has recon dir(s) but **no DICOMs
-   yet**, the copy returns ZERO files instead of raising; the caller registers the acquisition
-   with an empty `.data/` (`file_count=0`) and queues to `registries/pending_ni_recon.csv`
-   (new `tools/ingest/pending_ni_recon.py`, §3.5a below). **Exactly mirrors the MRI no-DICOM
-   placeholder** (`ingest_raw.py:992-1009`). The "no `recon_<idx>/` dirs at all" case (truly
-   nothing reconstructed yet) is SKIPPED with a clean message — nothing to register until a
-   recon dir appears (avoids an orphan anchor-placeholder with no recon to bind to).
+3. **Empty recon → SKIP (Tier B; fixes the 5).** DONE in the fan-out: a recon dir that exists
+   but has **no DICOMs yet** is skipped with a clear log line ("reconstruction pending; will
+   pick up on a later sync") — NOT registered, NOT a failure. An anchor with no recon dirs at
+   all is likewise skipped. The fan-out reads the already-parsed sidecar to decide, so no extra
+   disk I/O. (Tier C's register-a-placeholder-now option is deferred — see scope note.)
 4. **Sidecar scoping.** `ni.reconstruction` reflects the single recon this acquisition
    represents (anchor-level study/subject/acquisition buckets unchanged — they're shared).
 5. **Template.** `molecubes_ni_live.yaml`: add the recon to `link_filename` (today
    `${...acq_datetime_full}` is identical across an anchor's recons → would collide) and expose
    `ni_recon_idx`. `session_id` unchanged (PET+CT+all-recons of one visit still group).
-6. **Placeholder-fill on re-sync (T1) — a SEPARATE fill phase, NOT a dedup change.** Decision
-   after tracing `expand_batch` (config.py:605-617): the shared `(acq_date, original_name)`
-   dedup stays as-is — normal per-recon discovery **skips** any already-registered recon
-   (placeholder OR filled). A dedicated fill step (run by `ni_ingest` each sync, before/after
-   discovery) reads `pending_ni_recon.csv` and, for each `pending` row whose recon now has
-   DICOMs on the box (re-found at `staging_dir/original_name` — the box source is never
-   deleted), copies them into the existing `<ACQ-ID>.data/`, updates `checksums.json` + the
-   registry row's `file_count`/size **in place** (a targeted row-update helper — registries are
-   otherwise append-only, so this needs a careful rewrite-one-row function under the registry
-   lock), and calls `pending_ni_recon.mark_filled`. This keeps the shared discovery/dedup path
-   untouched (low regression risk to microscopy/MRI) and still makes "the next sync fills it"
-   true. New recon dirs that appear later are picked up by discovery as brand-new acquisitions
-   in the same run. *(Mirrors how MRI no-DICOM placeholders are filled by a separate pass, not
-   by re-running through the dedup.)*
+6. **Placeholder-fill on re-sync — DEFERRED (Tier C).** Not built. In Tier B there is nothing to
+   fill: an empty recon is simply skipped and, once its DICOMs appear, ingested fresh as its own
+   acquisition by the normal per-recon discovery (recon indices are append-only, so the
+   `<anchor>/recon_<idx>` key is stable). The early-register-then-fill option — which would need
+   an in-place registry row update under the lock — is the only part that touches the registry
+   integrity layer; deferred unless specifically wanted (scaffold removed, revivable from
+   `3e0896d`).
+
+**VERIFIED end-to-end (2026-06-25, synthetic NI tree → throwaway nas-root):** a CT scan with
+recon_0 + recon_1 filled and recon_2 empty → two acquisitions (CT-001=`/recon_0`,
+CT-002=`/recon_1`), each `.data/` holding only its own recon; the empty recon_2 + a no-recon PET
+both skipped (Total 2, **Failed 0** — the 5 fails are gone). Re-run = idempotent (0 new). Adding
+recon_2's DICOMs then re-running → exactly one new acquisition CT-003=`/recon_2`. Unit test
+`tools/test_ni_per_recon.py` (12 checks) + full suite (10 suites) green.
 7. **Tests + end-to-end:** per-recon discovery, recon-scoped copy, empty-recon placeholder,
    placeholder→fill, new-recon→new-acquisition, idempotent re-sync. Then a sandbox re-ingest
    of Irene's batch.
 
-### 3.5a `tools/ingest/pending_ni_recon.py` — the placeholder worklist
-Mirrors `pending_dicom.py` / `pending_links.py` (BOM-tolerant, header-checked, atomic,
-idempotent on `acq_id`, status preserved). `registries/pending_ni_recon.csv`. Fields:
-`acq_id · original_name (<anchor>/recon_<idx> box identity) · recon_index · session_id ·
-canonical_path (the empty .data/ fill target) · ingest_config · queued_datetime · status
-(pending | filled)`. Because the NI box source persists, the fill pass (or the next normal
-sync) re-finds the recon by its box path and fills in place.
+### 3.5a `pending_ni_recon.py` placeholder worklist — REMOVED (Tier C only)
+Built then removed once Tier B was chosen (Tier B skips empty recons rather than registering
+placeholders, so there is nothing to queue/fill). Revivable from commit `3e0896d` if the
+register-before-DICOMs option is ever wanted.
 
 ### 3.6 Phase E — Mac-compiled GUI (LAST, explicitly deferred)
 Once the CLI flow (A–D) is solid, build the NI analogue of the HTML ingest tools, **compiled on
