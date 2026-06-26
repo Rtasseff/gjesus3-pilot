@@ -645,3 +645,24 @@ changes the stored format away from the DICOM standard the MRI `.data/` uses.
 This finding reinforces both the worklist (defer to Linux) and the server-side
 ingest architecture (the server has Dicomifier). Sources: conda-forge
 dicomifier-feedstock `recipe/meta.yaml`; brkraw.github.io; bruker2nifti docs.
+
+## Enrichment `condition:` block — verify it writes for tissue/cells (doc-audit finding 2026-06-26)
+
+**Finding (doc-refactor verification pass, 2026-06-26).** A live tissue acquisition
+`ACQ-20250319-CELL-001` (`sample_type = tissue`) has an `anatomy:` block in its
+`metadata.json` but **no `condition:` block** — while
+[`08_METADATA.md`](../mfb-rdm-docs/08_METADATA.md) §4.5/§4.7 and
+[`09_MODALITIES.md`](../mfb-rdm-docs/09_MODALITIES.md) §1 state the `condition:`
+block is written for **every** acquisition with `sample_type ∈ {organism, tissue,
+cells}` (non-blocking, 2026-06-09).
+
+**To do — code check, not a doc edit:** inspect `tools/ingest/enrichment.py` — is the
+`condition:`-block writer actually firing for `tissue` (and `cells`), or only for
+`organism`?
+- If it's an implementation gap → write the `condition:` block (null/sentinel values
+  when not provided) for all of `{organism, tissue, cells}`, consistent with the
+  non-blocking model (unknowns → sentinels + WARN, never a failure).
+- If `condition:` is intentionally organism-only in practice → correct the docs
+  (08_METADATA §4.1/§4.5 + 09_MODALITIES §1) to state the real applicability.
+
+Surfaced by the verification pass; parked here so it isn't lost.
