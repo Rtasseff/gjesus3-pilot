@@ -1,8 +1,15 @@
 # Runbook — MRI sessions with NO DICOM files (ParaVision → DICOM regeneration)
 
-**Status:** Official operator procedure (DECIDED 2026-06-01; validated visually against Bruker GUI export). This is
-the canonical "how to" for the historical MRI pull. The design trail + bug analysis is in
-[`tasks/tasks.md §3.1`](../../tasks/tasks.md); the in-context workflow note is in
+> **Runbook** (this file): the step-by-step operator procedure for the specific case of a ParaVision MRI
+> exam that arrives **without DICOMs**. For the broader picture, see the sibling docs in this folder:
+> [`internal_mri_data_handling_workflow_notes.md`](internal_mri_data_handling_workflow_notes.md)
+> (**workflow notes** — the full MRI workflow + gjesus3 integration),
+> [`mri_data_access_strategy.md`](mri_data_access_strategy.md) (**strategy** — how we reach the platform),
+> and [`mri_platform_description.md`](mri_platform_description.md) (**platform description** — hardware).
+
+**Status:** ✅ Official operator procedure (DECIDED 2026-06-01; validated visually against Bruker GUI export). This is
+the canonical "how to" for the historical MRI pull. The design trail + bug analysis is summarized in
+[`tasks/STATUS.md`](../../tasks/STATUS.md); the in-context workflow note is in
 [`internal_mri_data_handling_workflow_notes.md`](internal_mri_data_handling_workflow_notes.md) (§ "ParaVision → DICOM
 regeneration via Dicomifier").
 
@@ -198,5 +205,5 @@ These are the WSL-specific gotchas the historical pull surfaced:
 - **Env spec:** [`tools/dicomifier-pilot.environment.yml`](../../tools/dicomifier-pilot.environment.yml).
 - **Template / config:** `tools/templates/instruments/mri_bruker.yaml` (commented opt-in block) · `tools/configs/mri_bruker_20251016_TEST.yaml` (worked example).
 - **Metadata extractor:** `tools/ingest/paravision_metadata.py` (builds the `metadata.json.mri` block from JCAMP-DX).
-- **Design trail + full bug analysis:** [`tasks/tasks.md §3.1`](../../tasks/tasks.md) (findings 1 / 1b / 2; the 16/16 validation; commit log `0e9d61b` → `5b02ef2`).
+- **Design trail + full bug analysis:** [`tasks/STATUS.md`](../../tasks/STATUS.md) (the no-DICOM/regeneration line; findings 1 / 1b / 2; the 16/16 validation; commit log `0e9d61b` → `5b02ef2`).
 - **CLI setup notes:** [`tools/INGEST_CLI.md`](../../tools/INGEST_CLI.md).

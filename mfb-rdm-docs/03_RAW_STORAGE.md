@@ -1,14 +1,14 @@
 # 03 — Raw Storage Area
 
 **Parent:** [Documentation Index](00_INDEX.md)
-**Status:** 🔶 Draft
-**Last Updated:** 2026-05-27 (Round-6 v2 MRI redo: §4.4 rewritten for `<ACQ-ID>.data/` flat layout + no-DICOM handling; §4.2 MRI row updated; §4.5/§4.6 numbering fix)
+**Status:** 🔶 Draft (in production use — structure + conventions stable; a few sub-rules still 🔶/❓)
+**Last Updated:** 2026-06-26
 
 ---
 
 ## Purpose
 
-This document specifies the structure, conventions, and workflows for the Raw storage area — the authoritative archive for original imaging acquisitions.
+This document specifies the structure, conventions, and workflows for the Raw storage area — the authoritative, research-facing archive for original imaging acquisitions on gjesus3. It is **live in true production**: `/raw/` holds ~13,555 acquisitions across the MICROSCOPY and DICOM ecosystems and is read-only after deposit.
 
 ---
 
@@ -47,17 +47,19 @@ Organizing by data ecosystem rather than by instrument solves several problems:
 |------------------|----------------|----------------|---------------------|
 | `MICROSCOPY/` | Light microscopy: WSI, confocal, epifluorescence, etc. | CZI, OME-TIFF, TIFF, ND2, etc. (Bio-Formats compatible) | OMERO, Bio-Formats, QuPath |
 | `DICOM/` | Biomedical/preclinical imaging: MRI, PET, SPECT, CT, hybrid | DICOM (.dcm), possibly NIfTI | XNAT, PACS, 3D Slicer, PMOD |
-| `EM/` | Electron microscopy: SEM, TEM | .tif, .dm3, .dm4, proprietary | Specialized EM tools |
+| `EM/` [^em] | Electron microscopy: SEM, TEM | .tif, .dm3, .dm4, proprietary | Specialized EM tools |
 
 ### 2.3 Directory Tree
 
 ```
 /gjesus3/
 ├── registries/
-│   ├── registry_raw.csv                # Master registry (see 06_REGISTRIES)
-│   └── index.html                      # GENERATED researcher "Finder" — auto-refreshed
-│                                       # at the end of each successful ingest; not a
-│                                       # source of truth, not in git (see 06_REGISTRIES §1.2)
+│   ├── registry_raw.csv                # Master raw registry, 28 cols (see 06_REGISTRIES)
+│   └── index.html                      # GENERATED researcher "Finder" (global, ~19 MB) —
+│                                       # self-contained searchable index, auto-refreshed at
+│                                       # the end of each successful ingest; not a source of
+│                                       # truth, not in git (see 06_REGISTRIES §1.2, tools/FINDER.md).
+│                                       # Each /projects/<proj>/ also gets its own index.html.
 │
 └── raw/
     ├── MICROSCOPY/                              # Bio-Formats / OMERO ecosystem
@@ -76,41 +78,35 @@ Organizing by data ecosystem rather than by instrument solves several problems:
     │               └── README.txt
     │
     ├── DICOM/                              # DICOM ecosystem — shape varies (see §4)
-    │   ├── 2026/
-    │   │   └── 2026-02/
-    │   │       └── ACQ-20260215-XMRI-001/  # Collaborator DICOM (LEGACY shape: zip)
-    │   │           ├── ACQ-20260215-XMRI-001.zip   # Compressed archive — primary
-    │   │           ├── metadata.json
+    │   ├── 2025/                           # CURRENT shape: internal MRI/NI folder bundle, no zip
+    │   │   └── 2025-10/
+    │   │       └── ACQ-20251016-MRI-029/   # Internal MRI (Bruker ParaVision)
+    │   │           ├── metadata.json              # Rich mri: block from ParaVision JCAMP-DX
     │   │           ├── checksums.json
-    │   │           └── README.txt
+    │   │           ├── README.txt
+    │   │           └── ACQ-20251016-MRI-029.data/ # The data bundle (parallels microscopy <ACQ-ID>.czi)
+    │   │               ├── recon1_frame01.dcm     # Per-frame DICOMs, renamed flat
+    │   │               ├── recon1_frame02.dcm     # recon<idx>_frame<NN>.dcm
+    │   │               └── recon3_frame01.dcm     # (a second kept reconstruction, /3)
     │   │
-    │   └── 2025/
-    │       └── 2025-10/
-    │           └── ACQ-20251016-MRI-029/   # Internal MRI (CURRENT shape: folder bundle, no zip)
-    │               ├── metadata.json              # Rich mri: block from ParaVision JCAMP-DX
+    │   └── 2026/                           # LEGACY shape: collaborator DICOM as a zip archive
+    │       └── 2026-02/                    # (rounds 1-2 historical; NOT in the current
+    │           └── ACQ-20260215-XMRI-001/  #  true-production /raw/ — kept here as the
+    │               ├── ACQ-20260215-XMRI-001.zip  #  documented archive shape, primary_kind=archive)
+    │               ├── metadata.json
     │               ├── checksums.json
-    │               ├── README.txt
-    │               ├── reconstructions/           # User-selected recon indices preserved
-    │               │   └── pdata_3/               # (e.g. /3 is the user-trusted reconstruction)
-    │               │       ├── 2dseq              # Reconstructed image binary
-    │               │       ├── visu_pars
-    │               │       ├── reco
-    │               │       └── dicom/             # Bruker-exported DICOM frames as-found
-    │               │           ├── MRIm01.dcm
-    │               │           └── MRIm15.dcm
-    │               └── acquisition_aux/           # Study/exam-level ParaVision aux files
-    │                   ├── acqp
-    │                   ├── method
-    │                   └── visu_pars
+    │               └── README.txt
     │
-    └── EM/                                 # Electron microscopy ecosystem
-        └── 2026/
+    └── EM/                                 # RESERVED — not deployed (see footnote on §2.2)
+        └── 2026/                           #  intended shape only; no EM acqs in production
             └── 2026-03/
                 └── ACQ-20260310-SEM-001/
                     ├── ACQ-20260310-SEM-001.tif    # Primary data file (renamed to acq_id)
                     ├── checksums.json
                     └── README.txt
 ```
+
+> The internal MRI / Nuclear-Imaging on-disk shape is **folder-as-primary**: the acquisition folder holds `metadata.json` + `checksums.json` + `README.txt` + a single `<ACQ-ID>.data/` subfolder of flat-renamed DICOMs. The verbose ParaVision/Molecubes aux files (`acqp`, `method`, `visu_pars`, `subject`, `2dseq`, `reco`, raw `fid`, listmode, …) are **not** copied to gjesus3 — their parsed content lives inside `metadata.json` and the byte-originals stay on the platform deep-archive. See §4.3 (NI) and §4.4 (MRI) for the full layout and the "what is NOT copied" lists.
 
 ### 2.4 Path Pattern
 
@@ -120,7 +116,7 @@ Organizing by data ecosystem rather than by instrument solves several problems:
 
 | Component | Description |
 |-----------|-------------|
-| `<ECOSYSTEM>` | Data ecosystem: `MICROSCOPY`, `DICOM`, or `EM` |
+| `<ECOSYSTEM>` | Data ecosystem: `MICROSCOPY` or `DICOM` (live); `EM` reserved, not deployed [^em] |
 | `<YYYY>` | Year of acquisition |
 | `<YYYY-MM>` | Year-month of acquisition |
 | `<ACQ-ID>` | Unique acquisition identifier (see Section 3.1) |
@@ -133,7 +129,7 @@ When depositing raw data:
 |-------------------|------------|----------|
 | Microscopy vendor files or Bio-Formats compatible | `MICROSCOPY/` | .czi, .nd2, .lif, .ome.tif |
 | DICOM or originated as DICOM | `DICOM/` | .dcm folders, DICOM-derived .nii |
-| Electron microscopy | `EM/` | .tif (from SEM/TEM), .dm3, .dm4 |
+| Electron microscopy | `EM/` (reserved — not yet in scope) [^em] | .tif (from SEM/TEM), .dm3, .dm4 |
 | Unclear / unclassifiable | `staging/` first | Classify before promotion to raw |
 
 ### 2.6 Acquisition Folder Contents
@@ -246,10 +242,10 @@ The **primary entity** is:
 | Ecosystem / Source | Primary entity shape | Reasoning | Registry `primary_kind` |
 |---|---|---|---|
 | **Microscopy** (Zeiss `.czi`) | Single file `<ACQ-ID>.czi` | `.czi` is a modern container; one acquisition = one file natively | `file` |
-| **Collaborator DICOM** (XMRI/XCT/XPET/XSPECT) | Compressed archive `<ACQ-ID>.zip` | LEGACY shape — many `.dcm` per session, zipped on deposit; existing 75 acqs (rounds 1-2) follow this pattern. Not the recommended shape going forward but stays for already-deposited data. | `archive` |
+| **Collaborator DICOM** (XMRI/XCT/XPET/XSPECT) | Compressed archive `<ACQ-ID>.zip` | LEGACY shape — many `.dcm` per session, zipped on deposit. Used by the rounds 1-2 collaborator cohort historically; **not present in the current true-production `/raw/`** and not the recommended shape going forward. Retained as a documented, registry-supported shape (`primary_kind: archive`) for any future already-zipped collaborator drop. | `archive` |
 | **Internal MRI** (Bruker ParaVision) | Folder `<ACQ-ID>/` containing a `<ACQ-ID>.data/` data bundle (per-frame DICOMs only, renamed flat: `recon<idx>_frame<NN>.dcm`) + `metadata.json` carrying the parsed JCAMP-DX content. Round-6 v2 2026-05-27 (mirrors NI v2.1). | Bruker exports per-frame DICOMs (15-ish per recon, a 1990s-era one-image-per-file choice, not a conceptual mismatch — see [13_GJESUS3_ROLE §5.2](13_GJESUS3_ROLE.md)). The `.data/` subfolder mirrors microscopy's `<ACQ-ID>.czi` and NI's `<ACQ-ID>.data/` conventions; parsed `metadata.json.mri._raw_metadata` preserves what would otherwise live in scattered JCAMP-DX aux files. The raw `fid` (k-space signal) stays only on the platform acquisition machine — see §4.4. | `folder` (primary_file_name = `<ACQ-ID>.data`) |
 | **Internal PET/SPECT/CT** (Molecubes / MILabs) | Folder `<ACQ-ID>/` containing a `<ACQ-ID>.data/` data bundle (DICOMs only, renamed flat: `recon<X>.dcm` for CT, `recon<X>_frame<Y>.dcm` for PET/SPECT) + `metadata.json` carrying the parsed aux content. Round-8 v2 2026-05-27. | Source archives contain a mix of analysis-ready DICOMs and raw detector data the platform owns long-term ([13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md)). The `.data` subfolder mirrors microscopy's `<ACQ-ID>.czi` single-file convention; the parsed `metadata.json.ni._raw_metadata` preserves what would otherwise live in scattered aux files. | `folder` (primary_file_name = `<ACQ-ID>.data`) |
-| **EM** (planned) | Single file `<ACQ-ID>.<ext>` | One acquisition = one file natively for SEM/TEM | `file` |
+| **EM** (reserved — not deployed) [^em] | Single file `<ACQ-ID>.<ext>` | Intended shape only: one acquisition = one file natively for SEM/TEM. No EM acquisitions in production. | `file` |
 
 ### 4.3 Internal Nuclear Imaging folder bundle — detail (round-8 v2 2026-05-27)
 
@@ -314,7 +310,7 @@ ACQ-<YYYYMMDD>-MRI-<exam>/
 
 **Reconstruction selection** (`reconstructions:` YAML flag in `mri_bruker.yaml`): operator picks `all` (default — DICOMs are tiny under this layout), `<int>` (e.g. `3`), or `[<int>, ...]` (e.g. `[1, 3]`). Indices not listed stay on the platform deep-archive. The original cardiac-flow workflow convention (`[3]` = user-trusted reconstruction) is still appropriate when an operator wants to minimise storage — but `all` is the safer default.
 
-**No-DICOM acquisitions** (students who didn't run Bruker's DICOM exporter): the ingest still registers the acquisition. The `<ACQ-ID>.data/` folder is created empty; `metadata.json.mri:` is fully populated from the parsed JCAMP-DX (subject, acquisition parameters, geometry, per-recon parameters); `metadata.json.mri.reconstruction.by_index.<idx>.dicoms[]` is empty. Idempotent re-run after the student converts will skip the placeholder and ingest the freshly-available DICOMs. See [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) "No-DICOM acquisition handling" section. The future-work FID→DICOM regeneration capability (tracked in `tasks/tasks.md §3.1`) would close this gap.
+**No-DICOM acquisitions** (students who didn't run Bruker's DICOM exporter): the ingest still registers the acquisition. The `<ACQ-ID>.data/` folder is created empty; `metadata.json.mri:` is fully populated from the parsed JCAMP-DX (subject, acquisition parameters, geometry, per-recon parameters); `metadata.json.mri.reconstruction.by_index.<idx>.dicoms[]` is empty. Idempotent re-run after the student converts will skip the placeholder and ingest the freshly-available DICOMs. See [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) "No-DICOM acquisition handling" section. The future-work FID→DICOM regeneration capability (tracked in [`tasks/BACKLOG.md`](../tasks/BACKLOG.md)) would close this gap.
 
 **What's explicitly NOT copied** (lives only on the platform acquisition machine):
 - Exam-root JCAMP-DX aux: `acqp`, `method`, `visu_pars`, `subject`, `pulseprogram`, `specpar`, `uxnmr.info`, `uxnmr.par`, `configscan`, `AdjStatePerScan` (parsed content in sidecar)
@@ -405,9 +401,9 @@ See [13_GJESUS3_ROLE §5.6](13_GJESUS3_ROLE.md) for the framing this implements,
 
 > **✅ DECIDED:** Two ingest modes — full (default) and lightweight. Both are script-assisted via `ingest_raw.py`.
 
-**Full Mode** (default): Source on fast local storage. Analyzes data, extracts embedded metadata to `metadata.json`, compresses DICOM to archive, copies result to NAS, populates all registry fields.
+**Full Mode** (default): Source on fast local storage. Analyzes data, extracts embedded metadata to `metadata.json`, organises the primary entity into its canonical shape, copies the result to the NAS, and populates all registry fields. The "organise the primary entity" step is **per-ecosystem** (see §4.2): microscopy is renamed in place (`<ACQ-ID>.czi`); internal MRI/NI build the `<ACQ-ID>.data/` flat-DICOM bundle; the **legacy collaborator-DICOM path** is the one that compresses many `.dcm` into a `<ACQ-ID>.zip` archive (not used for the current internal-imaging ecosystems).
 
-**Lightweight Mode** (`--lightweight`): Source on NAS staging or any path. Copies archive as-is, populates minimum registry fields, sets `extended_metadata_present` = `N`. Can be upgraded later using `backfill_metadata`.
+**Lightweight Mode** (`--lightweight`): Source on NAS staging or any path. Copies the primary entity as-is, populates minimum registry fields, sets `extended_metadata_present` = `N`. Can be upgraded later using `backfill_metadata`.
 
 > See [10_TOOLS](10_TOOLS.md) Section 2.1 for the detailed step-by-step workflow for each mode.
 
@@ -458,7 +454,7 @@ This ensures metadata is captured while fresh and prevents accumulation of unreg
 | After registration | Folder set to read-only for all users |
 | Corrections needed | Admin temporarily unlocks; changes logged |
 
-**Implementation (APPLIED 2026-06-02 on `J:\gjesus3-data\`):** NTFS/SMB ACLs via the existing `CICBIOMAGUNE\GJesus` group (no custom QNAP groups — IT will not create them). The "write during deposit, read-only after" rule is realised with a **write-but-not-modify** grant for operator accounts on `raw\`: "create files/folders" scoped to *folders only* + read-only on *files*, so operators can deposit new acquisitions but cannot modify or delete existing raw files. Superusers (Data Mgmt Lead + PI) retain Full for corrections / project close-out merges. **Caveat:** this fine-grained NTFS semantics may not map cleanly to the QNAP filesystem over SMB — pending verification with a real operator account (`tasks/tasks.md §4.3`); fallback is a tool-applied read-only lock at end-of-ingest. Traceability is backstopped by per-acquisition `checksums.json` (detects any change) and `@Recently-Snapshot` (recovery). Full applied model: [11_OPERATIONS §2.1.1](11_OPERATIONS.md).
+**Implementation (APPLIED 2026-06-02 on `J:\gjesus3-data\`):** NTFS/SMB ACLs via the existing `CICBIOMAGUNE\GJesus` group (no custom QNAP groups — IT will not create them). The "write during deposit, read-only after" rule is realised with a **write-but-not-modify** grant for operator accounts on `raw\`: "create files/folders" scoped to *folders only* + read-only on *files*, so operators can deposit new acquisitions but cannot modify or delete existing raw files. Superusers (Data Mgmt Lead + PI) retain Full for corrections / project close-out merges. **Caveat:** this fine-grained NTFS semantics may not map cleanly to the QNAP filesystem over SMB — pending verification with a real operator account (see [`tasks/STATUS.md`](../tasks/STATUS.md)); fallback is a tool-applied read-only lock at end-of-ingest. Traceability is backstopped by per-acquisition `checksums.json` (detects any change) and `@Recently-Snapshot` (recovery). Full applied model: [11_OPERATIONS §2.1.1](11_OPERATIONS.md).
 
 ---
 
@@ -466,9 +462,13 @@ This ensures metadata is captured while fresh and prevents accumulation of unreg
 
 > **✅ DECIDED — NTFS/SMB hard links (2026-06-02; supersedes the original Windows `.lnk` choice):** Cross-references from project (and, in future, publication) folders back into raw use **NTFS/SMB hard links** — the project copy is a real file sharing raw's inode (zero extra storage; raw's read-only descriptor carries through). The original Windows `.lnk` shell shortcuts remain the cross-platform porting seam. Still a pilot-specific choice (MFB Windows user base; no SSH-to-NAS for server-side symlinks) and **not** the recommended default for future RDM deployments — see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts) for the full rationale, tradeoffs, and porting guide.
 
-**Behavior at ingest time:** When `ingest_raw.py` is run with `--project <PROJ-ID>`, full-mode ingest creates a shortcut at `/projects/<project_folder>/raw_linked/<original_archive_name>.lnk` pointing at the canonical archive on the NAS via UNC path. Idempotent — re-running ingest skips any shortcut already in place.
+**Behavior at ingest time:** When `ingest_raw.py` is run with `--project <PROJ-ID>`, full-mode ingest creates a **hard link** under `/projects/<project_folder>/raw_linked/` that points at the canonical primary entity in `/raw/`:
+- **File-primary** (microscopy `<ACQ-ID>.czi`, legacy collaborator `<ACQ-ID>.zip`) → a single hard link (one `os.link`) — the project copy is byte-for-byte the same inode as the raw file.
+- **Folder-primary** (internal MRI/NI `<ACQ-ID>.data/`) → a real folder of per-file hard links mirroring the `.data/` bundle.
 
-**Manifest as portable fallback:** Independent of `.lnk` creation, every ingest appends a row to `registries/ingest_manifest.csv` mapping the original source name to its ACQ-ID and canonical path. Scripts and non-Windows tooling that can't (or don't want to) follow `.lnk` files should consume the manifest instead.
+Because it is a hard link, the project copy looks and opens like a normal file/folder, costs zero extra storage, and shares raw's read-only ACL (so it cannot be used to mutate raw bytes). The step is idempotent — re-running ingest skips any link already in place. The retired Windows `.lnk` shortcut method is kept only as the cross-platform porting seam (see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts)); since 2026-06-02 it is **not** how live links are created (283 pre-existing `.lnk` links were migrated to hard links).
+
+**Manifest as portable fallback:** Independent of the hard-link creation, every ingest appends a row to `registries/ingest_manifest.csv` mapping the original source name to its ACQ-ID and canonical path. Scripts and non-Windows tooling that can't (or don't want to) resolve project links should consume the manifest — or the searchable Finder (`registries/index.html`) — instead.
 
 ---
 
@@ -492,6 +492,10 @@ This ensures metadata is captured while fresh and prevents accumulation of unreg
 | RAW-04 | Verification automation approach | Data Mgmt Lead | 📋 Future |
 | ~~RAW-05~~ | ~~Organize by instrument or by abstract modality?~~ | — | ✅ Resolved: ecosystem-based (see Section 2) |
 | ~~RAW-06~~ | ~~Generic instrument codes for collaborator / external data~~ | — | ✅ Resolved: X-prefix codes (e.g., `XMRI`, `XCT`); see Section 3.2 |
-| ~~RAW-07~~ | ~~DICOM storage format (expanded vs. archive)?~~ | — | ✅ Resolved: compressed archives (.zip/.tar.gz); see Sections 2.3, 4.3 |
+| ~~RAW-07~~ | ~~DICOM storage format (expanded vs. archive)?~~ | — | ✅ Resolved per-ecosystem (see §4.2): internal MRI/NI = folder-as-primary `<ACQ-ID>.data/` (no zip); legacy collaborator DICOM = compressed archive |
 | ~~RAW-08~~ | ~~Primary staging location (NAS vs. off-NAS)?~~ | — | ✅ Resolved: primary off-NAS (fast local); NAS staging secondary; see Section 5.2 |
 | RAW-09 | Archive format preference: .zip vs .tar.gz? | Data Mgmt Lead | ❓ Evaluating — .zip has Windows compatibility edge |
+
+---
+
+[^em]: **`EM/` is reserved, not deployed.** Electron microscopy (SEM/TEM) is a planned-but-not-confirmed scope item (see [09_MODALITIES §2.1](09_MODALITIES.md), MOD-01); no `EM/` folder exists in production and no EM acquisitions have been ingested. The two live ecosystems are `MICROSCOPY/` and `DICOM/`. The `EM/` rows in this document describe the *intended* shape should EM be brought in scope. Its instrument codes (`SEM`, `TEM`) are likewise reserved.

@@ -1,4 +1,17 @@
-# MRI platform
+# MRI platform — platform description
+
+> **Platform description** (this file): vendor / hardware specifications for the MFB-accessible MRI
+> systems. For data handling and gjesus3 ingest, see the three sibling docs in this folder:
+> [`internal_mri_data_handling_workflow_notes.md`](internal_mri_data_handling_workflow_notes.md) (the
+> operator **workflow notes** + parsable naming convention),
+> [`mri_data_access_strategy.md`](mri_data_access_strategy.md) (the access **strategy** —
+> how we reach a platform-controlled acquisition machine), and
+> [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) (the operator
+> **runbook** for exams that arrive without DICOMs).
+>
+> A condensed hardware summary also lives in [`../INDEX.md`](../INDEX.md) (§"MRI Platform — Bruker
+> BioSpec 11.7T and 7T"); this file is the longer vendor-style writeup.
+
 ## Description
 The MRI Laboratory is equipped with an actively-shielded ultra-refrigerated superconducting 11.7 and 7 Tesla magnet.
 

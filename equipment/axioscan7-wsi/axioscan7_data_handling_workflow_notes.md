@@ -1,5 +1,21 @@
 # Axio Scan 7 workflow notes
 
+**Last updated:** 2026-06-26 · **Instrument code:** `ZWSI` · **Ecosystem:** `MICROSCOPY`
+
+> **Researchers — 2-line summary:** Name your slide files at the scanner with the
+> `<group>_<operator>_<project>_<sample>_<stain>_<magnification>` convention (see
+> [§4 Data identification / naming](#4-data-identification--naming)); a good name lets gjesus3 auto-extract your
+> sample, source animal, and project. Then it's ingested into gjesus3 and you find
+> it in the [Finder](../../RESEARCHER_GUIDE.md). Everything below is the operator /
+> developer detail.
+
+> **Audience:** operator- and developer-oriented. These notes capture the
+> acquisition + post-scan data-handling reality of the Axio Scan 7 so the
+> per-instrument ingest template ([`tools/templates/instruments/axioscan7.yaml`](../../tools/templates/instruments/axioscan7.yaml))
+> can parse it correctly. Researchers who only need to *find and use* their data
+> should start at [`RESEARCHER_GUIDE.md`](../../RESEARCHER_GUIDE.md); the
+> naming convention in §4 is the part that matters to them.
+
 ## Scope
 
 These notes summarize the current observed and documented workflow for use of the **Axio Scan 7** at CIC biomaGUNE, with emphasis on **data handling and storage** rather than user training or imaging technique details.
@@ -318,6 +334,62 @@ These are not deep analysis points, but they are practical features of the curre
 8. In at least one observed workflow, retained files are manually copied from Gopticals to an **external drive** because the group server is too small.
 9. On the receiving storage, files may be reorganized into a separate manual project folder structure.
 10. Files are then deleted from Gopticals.
+
+---
+
+## Integration with gjesus3
+
+AxioScan 7 is **live in gjesus3 true production** (instrument code `ZWSI`,
+ecosystem `MICROSCOPY`). The `.czi` files described above are ingested with the
+AxioScan-7 per-instrument template; the path from the scanner to a searchable,
+project-linked acquisition is:
+
+1. **Stage.** Slides are scanned to the `goptical` day folder
+   (`\\goptical\GOpticalUsers data\AxioScan\<YYYYMMDD>\`) as described above. That
+   day folder (or a copy of it) is the ingest **staging_dir**. Historical batches
+   are pulled from the archived `goptical` source catalogued in
+   [`../historical_data_archives.md`](../historical_data_archives.md).
+2. **Ingest.** Run `tools/ingest_raw.py` with a per-batch config copied from the
+   AxioScan template
+   [`tools/templates/instruments/axioscan7.yaml`](../../tools/templates/instruments/axioscan7.yaml)
+   (set `staging_dir` + `notes`, set the researcher), **or** use the frozen GUI
+   **`gjesus3_ingest.exe`** (microscopy page). The template parses the §4 filename
+   convention into `discovered.*` chunks (`group_code` / `operator` / `project` /
+   `sample_short` / `stain` / `magnification`) and pulls the 21 `czi_*` fields from
+   each file. **The template header lists every `discovered.*` field available —
+   it is the operator's reference card; this note does not duplicate it.**
+3. **Land in `/raw/` + registry.** Each `.czi` is deposited under
+   `/raw/MICROSCOPY/`, gets an immutable `metadata.json` sidecar (including the
+   auto-filled `subject:` block — for a tissue slide the *source animal* is looked
+   up in the animal-facility DB from the `project` + `sample_short` chunks — plus a
+   per-batch `condition:` block), and one row per acquisition is appended to
+   `registries/registry_raw.csv`. The subject lookup is **non-blocking**: a DB miss
+   queues to `registries/pending_subject_metadata.csv` and the acquisition still
+   ingests.
+4. **Hard-link into a project.** The acquisition is hard-linked into its project
+   under `/projects/<proj>/raw_linked/` (project named from the
+   `AE-biomeGUNE-<project>` animal-project code). A hard link opens like the real
+   file but takes no extra space.
+5. **Finder.** The Finder (`registries/index.html` global + the project's own
+   `index.html`) auto-refreshes, so the slide is immediately searchable by sample,
+   source animal, stain, project, etc.
+
+This is the system path that addresses the **risks/weaknesses** flagged above
+(single-copy external drives, manual handoff, no structured metadata): once
+ingested, the slide has a durable home in `/raw/`, a registry row, structured
+metadata, and a project link. The naming convention in §4 is what makes the
+auto-extraction work — it is the highest-leverage thing the operator controls.
+
+For the full operator workflow see [`START_HERE.md`](../../START_HERE.md) and
+[`tools/INGEST_CLI.md`](../../tools/INGEST_CLI.md); for the system-wide rationale
+see [`equipment/INDEX.md`](../INDEX.md) and
+[`13_GJESUS3_ROLE`](../../mfb-rdm-docs/13_GJESUS3_ROLE.md).
+
+> 🕗 The few filename-only fields that the `.czi` doesn't carry (e.g. per-slide
+> cohort overrides) are intended for the **study-level** project metadata area
+> (`/projects/<proj>/metadata/<acq_id>.json`), which is **planned, not yet
+> deployed** (Phase 4 — see [05_PROJECTS §3](../../mfb-rdm-docs/05_PROJECTS.md) and
+> [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md)).
 
 ---
 

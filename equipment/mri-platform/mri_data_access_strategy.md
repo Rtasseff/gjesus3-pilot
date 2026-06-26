@@ -1,7 +1,18 @@
 # Internal MRI — data access and ingestion strategy
 
-**Status:** 🔶 In progress — pending platform manager input
-**Last updated:** 2026-05-15
+> **Strategy** (this file): why the MRI acquisition machine is the one in-scope instrument not directly
+> network-reachable, the architectural **options** for getting data off it, and the platform-manager
+> conversation that gates them. For the concrete operator path, see the sibling docs in this folder:
+> [`internal_mri_data_handling_workflow_notes.md`](internal_mri_data_handling_workflow_notes.md)
+> (**workflow notes** — acquisition, naming, ingest integration),
+> [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) (**runbook** — no-DICOM
+> exams), and [`mri_platform_description.md`](mri_platform_description.md) (**platform description** —
+> hardware specs).
+
+**Status:** 🔶 DRAFT — **Option A (read-only SFTP pull → ingest) executed and operational**; MRI data is
+in true production. The remaining content here (Phase 2 on-machine push, the forward-looking
+platform-manager questions) is still open and pending platform-manager input.
+**Last updated:** 2026-06-26
 
 ## Why this doc exists
 
@@ -9,7 +20,9 @@ The Internal MRI platform is the **only in-scope instrument that isn't directly 
 
 Companion files:
 - [`mri_platform_description.md`](mri_platform_description.md) — vendor specs (Bruker BioSpec 11.7T and 7T)
-- `tasks/tasks.md` §4.5 — task-level pickup context for the MRI ingestion round
+- [`internal_mri_data_handling_workflow_notes.md`](internal_mri_data_handling_workflow_notes.md) — the operator workflow + how ingested MRI data integrates with gjesus3
+- [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) — the no-DICOM-exam regeneration procedure
+- [`tasks/STATUS.md`](../../tasks/STATUS.md) — current MRI ingest state (pickup context)
 
 ## What we know about the acquisition environment
 
@@ -87,11 +100,18 @@ Two clusters: **technical** (what we need to know to build) and **forward-lookin
 
 ## What Phase 1 unblocks (when FTP access lands)
 
+> **Mostly realized (as of 2026-06-26).** This was the original Phase-1 plan; the SFTP pull has since
+> happened and most items below shipped — the MRI metadata extractor landed as
+> [`tools/ingest/paravision_metadata.py`](../../tools/ingest/paravision_metadata.py) (JCAMP-DX, not the
+> generic `dicom_metadata.py` first sketched here), the per-instrument template is
+> [`tools/templates/instruments/mri_bruker.yaml`](../../tools/templates/instruments/mri_bruker.yaml),
+> and MRI runs in true production. The list is kept as the record of the original sequence and rationale.
+
 Pull 2–3 representative experiment folders into local staging (ideally a mix of DICOM-exported and NIfTI-exported, ideally one from each ParaVision version if convenient). From there:
 
 1. **Probe DICOM headers** (separate audit from collaborator XMRI; this is the internal `MRI` code path).
-2. **Build `tools/ingest/dicom_metadata.py`** — DICOM full-mode metadata extractor, mirroring `tools/ingest/czi_metadata.py`. Curated `discovered.dicom_*` subset + structured `dicom:` sidecar block + full `_raw_metadata` dump. **Prerequisite for both Internal MRI and Internal Nuclear Imaging.** Tracked in `tasks/tasks.md` §3.1.
-3. **Build compress-on-ingest** (.zip archive of source `.dcm` collection); `file_count` from archive central directory per the registry convention. Same prerequisite. Also §3.1.
+2. **Build a DICOM/JCAMP-DX metadata extractor** — curated `discovered.*` subset + structured ecosystem sidecar block + full `_raw_metadata` dump, mirroring `tools/ingest/czi_metadata.py`. **Prerequisite for both Internal MRI and Internal Nuclear Imaging.** *(Realized as `tools/ingest/paravision_metadata.py` for MRI and `tools/ingest/ni_metadata.py` for NI; see [`tasks/STATUS.md`](../../tasks/STATUS.md).)*
+3. **Build compress-on-ingest** (.zip archive of source `.dcm` collection); `file_count` from archive central directory per the registry convention. Same prerequisite. *(Note: internal MRI ultimately landed as a no-zip folder-as-primary layout — see the workflow notes "Round-6 v2 reshape" — so compress-on-ingest stayed a collaborator-DICOM concern.)*
 4. **Author first `mri_bruker_*.yaml` per-instrument template** under `tools/templates/instruments/`. Likely needs path_parse to capture experiment/subject context from the deep ParaVision dir tree. May need separate templates per ParaVision version if export shapes differ.
 5. **Author first per-batch config + Phase A test** under `tools/configs/`. Same rhythm as round-4 (AxioScan) and round-5 (Cell Observer).
 6. **Resolve open question on instrument code:** do the 7T and 11.7T systems share `MRI` or need separate codes (e.g. `MRI7` / `MRI11`)? Tracked in `09_MODALITIES.md`.
@@ -102,13 +122,13 @@ Until FTP access lands, none of the above is blocked at the code level — we ca
 
 | ID | Question | Owner | Status |
 |----|----------|-------|--------|
-| MRI-ACC-01 | FTP credentials + connection details (hostname, network reach) | Platform manager | 📣 Need to ask |
-| MRI-ACC-02 | Folder layout conventions inside an experiment, DICOM vs NIfTI export locations | Platform manager | 📣 Need to ask |
-| MRI-ACC-03 | Custom NIfTI export script — can we see a copy? | Platform manager | 📣 Need to ask |
-| MRI-ACC-04 | ParaVision version layout/export differences (v3.6 / v6 / v7) | Platform manager | 📣 Need to ask |
-| MRI-ACC-05 | Future openness to on-acq-machine helper (Option B signal) | Platform manager | 📣 Gauge, don't push |
-| MRI-ACC-06 | Outbound network access from acq machine — currently permitted? | Platform manager | 📣 Gauge, don't push |
-| MRI-ACC-07 | Stability of FTP server (always-on? on-request? versus when machine is rebooted) | Platform manager | 📣 Need to ask |
+| MRI-ACC-01 | FTP credentials + connection details (hostname, network reach) | Platform manager | 📋 Need to ask |
+| MRI-ACC-02 | Folder layout conventions inside an experiment, DICOM vs NIfTI export locations | Platform manager | 📋 Need to ask |
+| MRI-ACC-03 | Custom NIfTI export script — can we see a copy? | Platform manager | 📋 Need to ask |
+| MRI-ACC-04 | ParaVision version layout/export differences (v3.6 / v6 / v7) | Platform manager | 📋 Need to ask |
+| MRI-ACC-05 | Future openness to on-acq-machine helper (Option B signal) | Platform manager | 📋 Gauge, don't push |
+| MRI-ACC-06 | Outbound network access from acq machine — currently permitted? | Platform manager | 📋 Gauge, don't push |
+| MRI-ACC-07 | Stability of FTP server (always-on? on-request? versus when machine is rebooted) | Platform manager | 📋 Need to ask |
 
 ## Meta-framing for the manager conversation
 

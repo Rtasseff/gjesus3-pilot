@@ -1,8 +1,12 @@
 # 04 — Publications Area
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** 🔶 Draft  
-**Last Updated:** 2026-02-02
+**Status:** 🔶 Draft — design only; the Publications area is **undeployed** (`publications/` is empty in true production, 0 publication folders; creation tooling deferred — see banner below).  
+**Last Updated:** 2026-06-26
+
+---
+
+> **🕗 PLANNED / DEFERRED:** The Publications area is **not yet deployed**. In true production the top-level `publications/` directory exists but is **empty** (zero publication folders), and the `create_publication` tool has not been built. Everything below is the intended design; treat it as a forward-looking spec, not a description of live state. Deferred work is tracked in [tasks/BACKLOG.md](../tasks/BACKLOG.md). Provenance and raw-data linking will reuse the same mechanisms already live for projects (hard links — see [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts)).
 
 ---
 
@@ -34,8 +38,8 @@ This document specifies the structure, conventions, and workflows for the Public
     ├── lung-fibrosis-markers-2026/         # Publication folder (short name)
     │   ├── _publication.yaml               # Publication metadata
     │   ├── provenance.csv                  # Local provenance log
-    │   ├── raw_linked/                     # Windows .lnk shortcuts to source raw acquisitions (see Section 5)
-    │   │   ├── ACQ-20260115-ZWSI-001      # Link or reference to raw acquisition
+    │   ├── raw_linked/                     # Hard links to source raw acquisitions (see Section 5)
+    │   │   ├── ACQ-20260115-ZWSI-001      # Hard link to raw acquisition
     │   │   └── ACQ-20260116-ZWSI-002      # ...
     │   ├── figures/                        # Final publication figures
     │   │   ├── fig1_panel_a.tiff
@@ -140,7 +144,7 @@ The PUB-ID is used in the registry. The folder uses a **short name** for human r
 
 ### 4.2 In Progress
 
-- **Link raw data:** Add Windows `.lnk` shortcuts to source acquisitions in `raw_linked/` (see Section 5)
+- **Link raw data:** Add hard links to source acquisitions in `raw_linked/` (see Section 5)
 - **Log provenance:** Every derived file added to folder gets a provenance entry
 - **Iterate freely:** Internal structure can change; update provenance as needed
 
@@ -170,11 +174,11 @@ Closure happens when the paper is published (or abandoned). Required steps:
 
 The `raw_linked/` folder creates a clear connection between this publication and its source data without duplicating files.
 
-### 5.2 Method — Windows `.lnk` shell shortcuts
+### 5.2 Method — NTFS/SMB hard links
 
-> **✅ DECIDED — NTFS/SMB hard links (2026-06-02; supersedes the original Windows `.lnk` choice):** Links use **NTFS/SMB hard links** (the project copy is a real shared-inode file). Same convention as projects (see [05_PROJECTS](05_PROJECTS.md) and [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts)); the original `.lnk` shell shortcuts remain the porting seam. This is a **pilot-specific** choice for the gjesus3 environment (Windows user base, no SSH-into-NAS); see the full rationale and porting guide in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts). (The publications linking tool is future work — `create_publication`; it will follow the same hard-link mechanism.)
+> **✅ DECIDED — NTFS/SMB hard links (2026-06-02; supersedes the original Windows `.lnk` choice):** Links use **NTFS/SMB hard links** (the publication copy is a real shared-inode file). Same convention as projects (see [05_PROJECTS](05_PROJECTS.md) and [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts)); the original `.lnk` shell shortcuts are **retired** for the live gjesus3 environment and survive only as the documented porting seam for deployments that can't use hard links (cross-volume links, non-Windows browse). This is a **pilot-specific** choice for the gjesus3 environment (Windows user base, no SSH-into-NAS); see the full rationale and porting guide in [10_TOOLS §2.1.1](10_TOOLS.md#211-project-linking--hard-links-current-over-lnk-shortcuts). (The publications linking tool is future work — `create_publication`; it will follow the same hard-link mechanism. See the 🕗 banner at the top of this document.)
 
-For each linked acquisition, `raw_linked/` contains one `.lnk` file named with the original archive name (e.g. `LEONE_1.01.zip.lnk`), targeting the canonical archive on the NAS via UNC path. Windows users browsing via SMB see familiar names with the right icon and can double-click to open. Scripts and non-Windows tooling should consume the canonical paths via `registry_raw.csv` (or the per-publication provenance log) rather than following `.lnk` files.
+For each linked acquisition, `raw_linked/` contains a hard link to the raw primary — a single hard link for a file primary (e.g. a microscopy `.czi` or a collaborator `.zip`/`.rar` archive), or a real folder of per-file hard links for a `<ACQ-ID>.data/` folder primary (internal MRI / NI flat-DICOM bundles). The link shares the raw file's inode (no extra storage) and its read-only ACL, and opens identically. Windows users browsing via SMB see a real file with the right icon and can double-click to open. Scripts and non-Windows tooling can consume either the link directly or the canonical paths via `registry_raw.csv` (or the per-publication provenance log).
 
 ---
 

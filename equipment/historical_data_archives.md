@@ -36,7 +36,7 @@ The live-machine box (`REMIW11` / the Molecubes `…/remiW11/data/` tree) and it
 > the live sync keeps current. Dedup both on `(acq_datetime_full, modality)` so they reconcile. ⚠️
 > When preloading from the archive, confirm the `.tgz` for a **multi-animal** scan exposes the full
 > animal list (the live-box folder does; round 8 was single-animal). See
-> [`tasks/ni_live_sync_handoff.md`](../tasks/ni_live_sync_handoff.md).
+> [`tasks/archive/ni_live_sync_handoff.md`](../tasks/archive/ni_live_sync_handoff.md).
 
 ---
 

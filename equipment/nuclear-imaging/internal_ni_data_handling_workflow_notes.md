@@ -1,20 +1,55 @@
 # Internal Nuclear Imaging — data-handling workflow notes
 
-**Status:** ✅ Round-8 ingest landed on the v2.1 slim shape 2026-05-27 (DICOMs only, flat-renamed under `<ACQ-ID>.data/`; parsed aux content in sidecar; no aux files duplicated to disk; multi-frame DICOMs kept alongside per-frame as `recon<X>_frameMULTI.dcm`). Live-machine workflow still future.
-**Last updated:** 2026-05-27 (v2.1: multi-frame DICOMs now included)
+> **Workflow notes** (this file): the systematic naming, archive structure, and keep/drop rules for the
+> internal Nuclear Imaging platform in **archive mode** (the implemented path). Companions in this folder:
+> [`nuclear_imaging_platform_description.md`](nuclear_imaging_platform_description.md) (**platform
+> description** — Molecubes + MILabs VECTor equipment) and
+> [`live_machine_data_layout_and_sync_rules.md`](live_machine_data_layout_and_sync_rules.md) (the
+> **live-machine** sync design — the messier acquisition-box path this mode defers). The analogous MRI
+> doc is [`../mri-platform/internal_mri_data_handling_workflow_notes.md`](../mri-platform/internal_mri_data_handling_workflow_notes.md).
+
+**Status:** ✅ Archive-mode ingest landed on the v2.1 slim shape 2026-05-27 (DICOMs only, flat-renamed under `<ACQ-ID>.data/`; parsed aux content in sidecar; no aux files duplicated to disk; multi-frame DICOMs kept alongside per-frame as `recon<X>_frameMULTI.dcm`). NI is in **true production** (the round 8 cohort was ingested and is retained). The **live-machine** workflow is still future — see [`live_machine_data_layout_and_sync_rules.md`](live_machine_data_layout_and_sync_rules.md).
+**Last updated:** 2026-06-26
 
 > This document captures the systematic naming and archive structure of the **internal Nuclear Imaging (NI) platform** at CIC biomaGUNE. Two ingest paths are documented separately below:
 >
 > - **Archive mode** (round 8, 2026-05-22 — IMPLEMENTED): pull pre-archived `.tgz` files from `\\cicmgsp02\gnuclear2$\<year>\<PI>\`, extract locally, and ingest as folder-as-primary acquisitions. Per-instrument template at [`tools/templates/instruments/molecubes_ni.yaml`](../../tools/templates/instruments/molecubes_ni.yaml).
 > - **Live-machine mode** (future): direct ingest from the acquisition box (Molecubes / MILabs VECTor). Different source shape (a folder, not a .tgz) — will get its own per-instrument template when the workflow + access conversation with the platform manager closes.
 >
-> Companion docs: [`nuclearImaging_platform_description.md`](nuclearImaging_platform_description.md) (platform / equipment), [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../mri-platform/internal_mri_data_handling_workflow_notes.md) (analogous MRI workflow).
+> Companion docs: [`nuclear_imaging_platform_description.md`](nuclear_imaging_platform_description.md) (platform / equipment), [`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../mri-platform/internal_mri_data_handling_workflow_notes.md) (analogous MRI workflow).
+
+## Integration with gjesus3
+
+Each NI acquisition is ingested into gjesus3 the same way every other instrument's data is: one
+acquisition under `/raw/DICOM/<year>/<year-month>/ACQ-<date>-<modality>-NNN/`, with a parsed
+`metadata.json` sidecar (the `ni:` block, built by `tools/ingest/ni_metadata.py`) and a `checksums.json`.
+Projects reference that raw data by **hard link** (DECIDED + APPLIED 2026-06-02; the older `.lnk`
+Windows-shortcut method is retired) — a project's copy of an acquisition points straight at the
+`<ACQ-ID>.data/` DICOM bundle and costs no extra disk. After a successful ingest the searchable
+[Finder](../../tools/FINDER.md) (`registries/index.html` on the NAS) is refreshed automatically. gjesus3 keeps
+only the slim DICOM surface; the Molecubes platform archive on `\\cicmgsp02\gnuclear2$` remains the
+deep-time store for the dropped raw bytes (see [13_GJESUS3_ROLE](../../mfb-rdm-docs/13_GJESUS3_ROLE.md)
+for the two-tier model and [`equipment/INDEX.md`](../INDEX.md) for where NI sits among the instruments).
+
+**How an operator ingests NI data.** The operator front-end is the dead-simple command-line script
+**`ni-ingest`** ([`tools/operator/ni_ingest.py`](../../tools/operator/ni_ingest.py)) — point it at a
+staged acquisition folder, preview the per-acquisition table, confirm. It runs the same validated
+pipeline as the data-office YAML path, with no YAML to hand-edit. *(Note: the frozen Windows GUI
+`gjesus3_ingest.exe` covers the **microscopy and MRI** pages; NI is handled by the `ni-ingest` script
+rather than a GUI page.)*
+
+**Getting the data off the platform first (read-only pull).** In the implemented **archive mode**, the
+session `.tgz` archives are pulled **read-only** from the SMB share `\\cicmgsp02\gnuclear2$` and extracted
+into staging (`tools/extract_ni_archives.py`) before ingest — nothing is written back to the platform.
+The future **live-machine** path will instead read directly from the acquisition box; its access posture,
+the recursive-discovery rules, and the read-only/no-delete copy contract are designed in
+[`live_machine_data_layout_and_sync_rules.md`](live_machine_data_layout_and_sync_rules.md).
 
 ## Round 8 — archive-mode design (2026-05-22)
 
 The user / Data Mgmt Lead requested in round 8: ingest "everything available for Jesus's lab in the archive under `\\cicmgsp02\gnuclear2$\2025\Jesus\`" as a Phase A test against the framework — knowing the eventual live-machine workflow will look different.
 
-**Why archive mode first:** access to the live acquisition machine is still pending (Platform Manager Unai owes us an answer on the workflow + a naming-convention question — see `tasks/tasks.md §4.7`). The archive is reachable + readable today, and exercising the framework against it is enough to validate the ingest pipeline + register a representative cohort for the team exhibition. All round-8 data is quasi-production (purged after the exhibition).
+**Why archive mode first:** access to the live acquisition machine is still pending (Platform Manager Unai owes us an answer on the workflow + a naming-convention question — see [`tasks/STATUS.md`](../../tasks/STATUS.md)). The archive is reachable + readable today, and exercising the framework against it validated the ingest pipeline and produced the archive-mode design now used in **true production**. (Round 8 was originally run in the pre-2026-06-10 quasi-production phase, which has since been purged and re-ingested into the live system; the *archive-mode shape* it established is what NI now runs on.)
 
 **Round-8 pipeline (orchestrated by the operator):**
 
@@ -192,7 +227,7 @@ The Molecubes reconstruction engine generates two parallel DICOM representations
 
 **Round-8 v2 → v2.1 history:** v2 (initial decision) skipped the multi-frame DICOMs entirely and recorded their existence in a separate `multi_frame_dicoms_on_platform` sidecar field. After review the user requested keeping them inline (this section's current behaviour); v2.1 landed via a one-acquisition spot-fix (only m17 PET, `ACQ-20251022-PET-001` → re-ingested as `ACQ-20251022-PET-007`). The `multi_frame_dicoms_on_platform` sidecar field was retired.
 
-**Future-work:** validate the multi-frame DICOM's advanced metadata (per-frame timing tags, frame reference time, dose history vector). If clean, consider making it the canonical single primary file and dropping the per-frame copies. Sidecar shape supports the transition without code changes. Tracked in `tasks/tasks.md` §3.1.
+**Future-work:** validate the multi-frame DICOM's advanced metadata (per-frame timing tags, frame reference time, dose history vector). If clean, consider making it the canonical single primary file and dropping the per-frame copies. Sidecar shape supports the transition without code changes. Tracked in [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md).
 
 ### Round-8 v2 (2026-05-27)
 
@@ -207,7 +242,7 @@ Following round-8 v1 (2026-05-26, which fixed the original 2026-05-22 piggyback-
 | protocol.txt in sidecar | Verbatim string | Parsed dict (every line, no allowlist) |
 | DICOM UIDs in sidecar | Not captured | `StudyInstanceUID` / `SeriesInstanceUID` / `SOPInstanceUID` first in curated headers |
 | Multi-frame DICOMs | Copied to disk (mixed into `reconstructions/`) | Not copied; existence + headers recorded in sidecar |
-| .lnk shortcut target | The ACQ folder | The `.data` subfolder (direct to DICOMs) |
+| Project link target | The ACQ folder | The `<ACQ-ID>.data/` subfolder — a project's hard link points straight at the DICOMs |
 
 ### Round-8 retrospective (the original bug fixed 2026-05-26)
 
@@ -258,7 +293,7 @@ Round-8 ingest exposes these `discovered.*` fields per acquisition:
 - `discovered.modality` — `PET` / `CT` / `SPECT` / `OI` — drives the per-case `instrument` registry column
 - `discovered.folder_name` — standard auto-discovery, same as the archive basename
 
-DICOM-header / XML-aux extraction (analogous to ParaVision's `discovered.mri_*`) is **deferred** — Molecubes archives are .bin + XML, not .dcm, so a future-work extractor would target the XML files instead. Queued in `tasks/tasks.md §3.1`.
+DICOM-header / XML-aux extraction (analogous to ParaVision's `discovered.mri_*`) is **deferred** — Molecubes archives are .bin + XML, not .dcm, so a future-work extractor would target the XML files instead. Queued in [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md).
 
 ## Default `link_filename` pattern (round 8)
 
@@ -271,18 +306,18 @@ Example resolved: `PET_m14_20251029_20251029100641` (PET acquisition of mouse m1
 ## What's deferred / open
 
 - **Live-machine NI ingest** — blocked on Unai answering the workflow question. Round-8 archive mode is the only NI path operational today.
-- **XML-aux metadata extraction** (analogous to ParaVision's JCAMP-DX extractor) — `discovered.ni_*` fields from `protocol.xml`, `acqparams.xml`, etc. Queued in `tasks.md §3.1`. Currently the YAML regex gives us most of what we need at registry level.
+- **XML-aux metadata extraction** (analogous to ParaVision's JCAMP-DX extractor) — `discovered.ni_*` fields from `protocol.xml`, `acqparams.xml`, etc. Queued in [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md). Currently the YAML regex gives us most of what we need at registry level.
 - **Multi-modality project reconciliation** (funded-project id from NI vs animal-protocol short id from MRI → same researcher, same gjesus3 project?). Current convention uses the animal-protocol id (`short_project`) for project `short_name` — cross-modality demos work when the protocol matches.
-- **User-as-operator permissions:** NI is run directly by researchers (no dedicated technician); same model gap as internal MRI. Tracked in `tasks/tasks.md §3.3`.
+- **User-as-operator permissions:** NI is run directly by researchers (no dedicated technician); same model gap as internal MRI. Tracked in [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md).
 
 ## Related documents
 
-- [`nuclearImaging_platform_description.md`](nuclearImaging_platform_description.md) — equipment / vendor spec
+- [`nuclear_imaging_platform_description.md`](nuclear_imaging_platform_description.md) — equipment / vendor spec
 - [`../mri-platform/internal_mri_data_handling_workflow_notes.md`](../mri-platform/internal_mri_data_handling_workflow_notes.md) — analogous MRI walkthrough
 - `mfb-rdm-docs/13_GJESUS3_ROLE.md` — research-facing reframe (motivates the no-zip folder layout for internal modalities, archive-mode as a pragmatic Phase A)
 - `tools/templates/instruments/molecubes_ni.yaml` — per-instrument template (archive mode)
 - `tools/configs/ni_jesus_archive_2025_TEST.yaml` — round-8 batch config (Jesus's 2025 archive)
 - `tools/extract_ni_archives.py` — pre-ingest extraction utility
-- `tasks/tasks.md §4.7` — round-8 task detail trail
+- [`tasks/STATUS.md`](../../tasks/STATUS.md) — current NI ingest state (round-8 archive-mode detail trail)
 
 

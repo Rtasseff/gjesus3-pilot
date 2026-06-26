@@ -1,10 +1,21 @@
 # The gjesus3 Finder — searchable index of the registry (MVP)
 
+*Last Updated: 2026-06-26*
+
+> **Researcher entry points:** for the plain-language "how do I find my data"
+> view, start at [`RESEARCHER_GUIDE.md` §1](../RESEARCHER_GUIDE.md) and the
+> [Researcher FAQ](FAQ.md). This page is the full reference — what the Finder is,
+> how it's generated, and its limitations.
+
 **Give researchers their data back, today, on the NAS you already have** — no
 XNAT/OMERO, no server, no Python on their side. A generated, self-contained
 `index.html` lives on the share; a researcher double-clicks it over SMB, types
 `m17` / `MRI` / `2026-02` / `heart` / a project, and gets the matching
 acquisitions with a one-click **Copy path** straight to their data.
+
+It is **live in production** since 2026-06-23: a global
+`registries/index.html` plus a per-project `index.html` in each project folder,
+auto-refreshed at the end of every successful ingest.
 
 Two pieces, one join (registry_raw + registry_projects):
 - **`tools/find_acq.py`** — the join engine + a CLI (you / power users).

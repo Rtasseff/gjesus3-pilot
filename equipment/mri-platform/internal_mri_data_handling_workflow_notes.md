@@ -1,5 +1,14 @@
 # Internal MRI workflow notes
 
+> **Workflow notes** (this file): how internal MRI data is acquired, pre-processed, named, and moved
+> off the instrument — the source of truth for the parsable naming convention and the `discovered.*`
+> fields the MRI ingest template can expose. Sibling docs in this folder serve different readers:
+> [`mri_platform_description.md`](mri_platform_description.md) (**platform description** — vendor/hardware
+> specs), [`mri_data_access_strategy.md`](mri_data_access_strategy.md) (**strategy** — how we negotiate
+> read access to a platform-controlled acquisition machine), and
+> [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) (**runbook** — the
+> step-by-step procedure for exams that arrive without DICOMs).
+
 ## Scope
 
 These notes summarize the current observed and documented workflow for use of the **internal MRI** facility at CIC biomaGUNE, with emphasis on **data handling and storage** rather than imaging technique, anesthesia, animal handling, or scientific interpretation.
@@ -31,6 +40,39 @@ Capture, in a simple and updateable form, how internal MRI data are:
 It also documents the **forward strategy** for inserting a scripted ingestion step that pushes pre-processed data toward **gjesus3** under platform-manager review.
 
 No conclusions are drawn here beyond documenting the workflow, the strategy, and identifying open questions.
+
+---
+
+## Integration with gjesus3
+
+Once an MRI exam has been pulled off the platform, it is ingested into gjesus3 like any other
+acquisition: each ParaVision examination becomes one acquisition under `/raw/DICOM/<year>/<year-month>/`,
+with a parsed `metadata.json` sidecar (the `mri:` block, built by `tools/ingest/paravision_metadata.py`)
+and a `checksums.json`. Projects reference that raw data by **hard link** (DECIDED + APPLIED 2026-06-02;
+the older `.lnk` Windows-shortcut method is retired) — a project's copy of an exam points straight at the
+`<ACQ-ID>.data/` DICOM bundle and costs no extra disk. After a successful ingest the searchable
+[Finder](../../tools/FINDER.md) (`registries/index.html` on the NAS) is refreshed automatically, so the
+new acquisition is immediately findable. See [`equipment/INDEX.md`](../INDEX.md) for where MRI sits among the
+in-scope instruments, and [13_GJESUS3_ROLE](../../mfb-rdm-docs/13_GJESUS3_ROLE.md) for the two-tier model
+(gjesus3 = research-facing working layer; the MRI platform = deep-time raw archive).
+
+**How an operator ingests MRI data.** Two front-ends run the same validated pipeline:
+
+- **Operator GUI — `gjesus3_ingest.exe`** (the frozen Windows executable deployed to the NAS; opens in
+  your browser). It has a dedicated **MRI page** alongside the microscopy page: point it at a staged
+  ParaVision folder, preview the per-acquisition table, and confirm. No YAML to hand-edit.
+- **Command line — `mri-ingest`** ([`tools/operator/mri_ingest.py`](../../tools/operator/mri_ingest.py)),
+  the dead-simple script for running the same import from a Linux/WSL shell.
+
+**Getting the data off the platform first (read-only SFTP pull).** The acquisition machines are *not*
+network-mounted for users; data is retrieved by a **read-only SFTP pull** from a separate work computer
+(FileZilla interactively, or `tools/ftp_mirror.py` for a scripted mirror) into a staging directory, then
+ingested. Nothing is written back to the acquisition machine. The access posture, credentials model, and
+the architectural options behind this are the subject of
+[`mri_data_access_strategy.md`](mri_data_access_strategy.md); the §5 walkthrough below documents the manual
+FileZilla flow in detail. When an exam arrives *without* DICOMs, follow the
+[`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) (the ingest regenerates them
+from `2dseq` + JCAMP-DX).
 
 ---
 
@@ -282,7 +324,7 @@ The leading lowercase run is captured as **`pi_initials`** (the PI initials, MRI
 
 **Subject-id alignment with NI (2026-06-09).** The registry `sample_id` is built as `m<animal_num>_<project_code>` → `m17_0424`, matching NI's `m13_0525` form, so MRI and NI subjects line up at the registry level. `session_id` keeps the fuller `jrc_id` (it groups all exams of one session). The **canonical** cross-instrument subject id is the DB-driven `subject.facility_animal_id` (`17-AE-biomaGUNE-0424`), which already matches NI's `13-AE-biomaGUNE-0525` ([06_REGISTRIES §2.3](../../mfb-rdm-docs/06_REGISTRIES.md)). The raw ParaVision `SUBJECT_id` stays verbatim in `metadata.json.mri.subject.id`.
 
-A **long-term fix** is to ask the platform manager to standardise the `jrc`/`jrc_` convention; that's tracked as future work in `tasks/tasks.md`.
+A **long-term fix** is to ask the platform manager to standardise the `jrc`/`jrc_` convention; that's tracked as a later improvement in [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md).
 
 ### Terminology confusion: "project" in MRI vs Nuclear Imaging
 
@@ -319,7 +361,7 @@ Following round-6 v1 (2026-05-22) and the NI v2/v2.1 work, the on-disk MRI layou
 | DICOM names | Source `MRIm01.dcm`...`MRIm15.dcm` per pdata/<idx>/dicom/ | Renamed flat across recons: `recon<idx>_frame<NN>.dcm` (e.g. `recon1_frame01.dcm` ... `recon3_frame15.dcm`) |
 | Default `reconstructions:` | `[3]` (user-trusted cardiac-flow recon) | `all` — DICOMs are tiny under v2; preserve everything by default. Operator can override to `[3]` for cardiac-flow workflows |
 | DICOM UIDs in sidecar | Not captured | `StudyInstanceUID` / `SeriesInstanceUID` / `SOPInstanceUID` first in per-DICOM `headers` (critical for XNAT/PACS interop) |
-| .lnk shortcut target | The ACQ folder itself | The `<ACQ-ID>.data/` subfolder — Explorer opens directly to the DICOMs, matching the microscopy `.lnk → .czi` semantics |
+| Project link target | The ACQ folder itself | The `<ACQ-ID>.data/` subfolder — a project's hard link points straight at the DICOM bundle, matching the microscopy `link → .czi` semantics |
 | Sidecar `reconstruction.by_index.<idx>` | High-level summary (`methods`, `frame_labels`) | Per-DICOM `dicoms[]` list with `dst_basename` + `src_relpath` + full curated headers (UIDs + MRI-specific tags `MagneticFieldStrength`/`EchoTime`/`RepetitionTime`/`FlipAngle`) |
 
 ### No-DICOM acquisition handling
@@ -328,7 +370,7 @@ A real-world gap surfaced during the v2 source-data inventory: **3 of 7 round-6 
 
 **Round-6 v2 decision:** ingest these acquisitions anyway, with empty `<ACQ-ID>.data/` folders. The `metadata.json.mri:` block is fully populated from the parsed JCAMP-DX (subject, acquisition parameters, geometry, per-recon `visu_pars`/`reco`) — researchers can still query the acquisition metadata. The `mri.reconstruction.by_index.<idx>.dicoms[]` list is empty.
 
-**Recovery path:** the operator (Data Mgmt Lead) flags the no-DICOM acquisitions in the round-6 report and either (a) asks the originating researcher to re-run Bruker's exporter, then re-runs the ingest (idempotency dedup means only the freshly-available DICOMs get copied; placeholder gets converted in place), or (b) waits for the future FID→DICOM regeneration capability (tracked in `tasks/tasks.md §3.1`).
+**Recovery path:** the operator (Data Mgmt Lead) flags the no-DICOM acquisitions in the round-6 report and either (a) asks the originating researcher to re-run Bruker's exporter, then re-runs the ingest (idempotency dedup means only the freshly-available DICOMs get copied; placeholder gets converted in place), or (b) uses the FID→DICOM regeneration capability (now built — see the Dicomifier section below and the [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md)).
 
 **Why not skip the exam outright?** The acquisition is still real — the animal was scanned, the parameters were captured. Registering it preserves the audit trail and lets a later DICOM conversion fill in the image data without needing to re-acquire registry information. Empty `.data/` is honest about the gap.
 
@@ -345,7 +387,7 @@ A real-world gap surfaced during the v2 source-data inventory: **3 of 7 round-6 
 1. **PixelSpacing axis-order** — Dicomifier emits `[col, row]` instead of DICOM Part 3's `[row, col]`. Workaround: swap. Verified across 16 m17 anisotropic series (cardiac CINE / Localizer / Planning / T1_FLASH / T2_TurboRARE).
 2. **Invalid Window tags** — Dicomifier emits `WindowWidth=0` (invalid; viewers produce a gray cast). Workaround: delete bogus `WindowCenter`/`WindowWidth`; add `SmallestImagePixelValue` + `LargestImagePixelValue` from the pixel array's min/max. Restores high-contrast B&W matching Bruker GUI behaviour.
 
-**Visual verification 2026-06-01:** B-v2 set (both workarounds applied) renders identically to Bruker GUI export (m17 exam 29 / pdata/3 cardiac CINE on `J:\raw\DICOM\2025\2025-10\ACQ-20251016-MRI-018\`).
+**Visual verification 2026-06-01:** B-v2 set (both workarounds applied) renders identically to Bruker GUI export (m17 exam 29 / pdata/3 cardiac CINE on `J:\gjesus3-data\raw\DICOM\2025\2025-10\ACQ-20251016-MRI-018\`).
 
 **Earlier assessment was wrong.** A previous version of this section said "no open-source Python library exists, 2-4 week build-from-scratch." That missed Dicomifier entirely. Revised actual effort: pilot validation (1 day) + module (1 day) + wiring (1 day) + backfill (pending user approval). Both upstream bugs documented with reproduction text at `memory/dicomifier_pixelspacing_upstream_issue.md`.
 
@@ -370,7 +412,7 @@ In the YAML config, set `ingest.auto_regenerate_dicom: true` to opt in to regene
 
 **Other tools surveyed (still not the right fit, but worth knowing):** `bruker2nifti` and `brkraw` go to NIfTI not DICOM; `dcm2niix` runs the opposite direction (DICOM → NIfTI); Bruker's own GUI exporter is closed-source.
 
-The 3 currently-empty `.data/` placeholders from round-6 v2 (m13/m14 protocol 0423 + m29 protocol 0423) will be filled in by idempotent re-ingest after user approval — see `tasks/tasks.md §3.1`.
+The 3 currently-empty `.data/` placeholders from round-6 v2 (m13/m14 protocol 0423 + m29 protocol 0423) will be filled in by idempotent re-ingest after user approval — tracked in [`tasks/STATUS.md`](../../tasks/STATUS.md).
 
 ---
 
@@ -397,7 +439,15 @@ This is **one researcher's practice**. It is well-organized, but it is not neces
 
 ---
 
-## Forward strategy (not current practice, but in scope to document)
+## Forward strategy (the end-state; the pull+ingest path is already operational)
+
+> **Status note (as of 2026-06-26).** The first rung of this strategy is **done**: representative MRI
+> data has been pulled by read-only SFTP and ingested into true production (see "Integration with
+> gjesus3" above), and an operator can run that import via the `gjesus3_ingest.exe` **MRI page** or the
+> `mri-ingest` script — this is **Option A** in [`mri_data_access_strategy.md`](mri_data_access_strategy.md).
+> What remains aspirational is the **local-machine push** below (a script that runs *on* the
+> instrument computer under platform-manager review). The phased plan is kept as the record of that
+> end-state; the "current"/"future" labels in it predate the operational pull+ingest path.
 
 The medium-term aim is to insert a **managed ingestion step** that:
 

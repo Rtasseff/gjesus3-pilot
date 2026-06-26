@@ -1,5 +1,15 @@
 # Cell Observer workflow notes
 
+**Last updated:** 2026-06-26 · **Instrument code:** `CELL` · **Ecosystem:** `MICROSCOPY`
+
+> **Audience:** operator- and developer-oriented (acquisition + post-scan data
+> handling, so the ingest template can parse it). Researchers who only need to
+> *find and use* their data should start at
+> [`RESEARCHER_GUIDE.md`](../../RESEARCHER_GUIDE.md). The part that matters most to
+> a researcher here: for cells-mode work the **folder structure carries most of the
+> context**, so organise your folders well — file names are lighter than on the
+> AxioScan.
+
 ## Scope
 These notes summarize the current observed workflow for use of the **Cell Observer** at CIC biomaGUNE, with emphasis on **data handling and storage** rather than imaging technique, training, or scientific interpretation.
 
@@ -318,6 +328,65 @@ These are not deep analysis points, but they are practical features that should 
 8. The researcher later retrieves and moves the files elsewhere.
 9. The operator-controlled network-drive location is treated as a **temporary staging area** rather than a permanent archive.
 10. The operator indicated that the **confocal follows the same practical data-handling model**.
+
+---
+
+## Integration with gjesus3
+
+Cell Observer is **live in gjesus3 true production** (instrument code `CELL`,
+ecosystem `MICROSCOPY`). The `.czi` files share the same extractor as the other
+two Zeiss microscopes; the path from the operator's staging folder to a
+searchable, project-linked acquisition is:
+
+1. **Stage.** The operator's group-drive folder (the staging area described in
+   [§3](#3-save-destination-after-acquisition) / [§4](#4-operator-controlled-folder-organization)) is the ingest **staging_dir**.
+   Because **folder structure carries most of the context** here, the template
+   relies on the folder path, not the filename, for sample/experiment context.
+   Source/historical locations are catalogued in
+   [`../historical_data_archives.md`](../historical_data_archives.md).
+2. **Ingest.** Run `tools/ingest_raw.py` with a per-batch config copied from the
+   cells-mode template
+   [`tools/templates/instruments/cell_observer_cells.yaml`](../../tools/templates/instruments/cell_observer_cells.yaml)
+   (set `staging_dir` + `notes`), **or** use the frozen GUI
+   **`gjesus3_ingest.exe`** (microscopy page). That template `path_parse`s the
+   `<researcher>/<cell_line>/<experiment>/` folder levels and `filename_parse`s the
+   lighter filename chunks into `discovered.*`, plus the 21 `czi_*` embedded
+   fields. **The template header lists every `discovered.*` field available — it is
+   the operator's reference card; this note does not duplicate it.** (A separate
+   *animal / histology-mode* template is deferred until a real example folder is
+   available — tracked in [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md); historical
+   tissue/histology work has largely moved to the AxioScan 7.)
+3. **Land in `/raw/` + registry.** Each `.czi` is deposited under
+   `/raw/MICROSCOPY/`, gets an immutable `metadata.json` sidecar, and one row per
+   acquisition is appended to `registries/registry_raw.csv`. For `sample_type:
+   cells` a per-batch `condition:` block (control-vs-case, treatment) is written;
+   `subject:` / `anatomy:` are **not** written for cells (cell lines aren't in the
+   animal-facility DB). The condition writer is **non-blocking** — unknowns become
+   sentinels + a WARN, never a failure.
+4. **Hard-link into a project.** The acquisition is hard-linked into its project
+   under `/projects/<proj>/raw_linked/`. (Project naming is a provisional
+   `<researcher>-<experiment>` stopgap — PROJ-05; the right durable handle comes
+   from the group's project-naming consensus.) A hard link opens like the real file
+   but takes no extra space.
+5. **Finder.** The Finder (`registries/index.html` global + the project's own
+   `index.html`) auto-refreshes, so the acquisition is immediately searchable.
+
+This system path is exactly the **standardized staging → ingestion** that the
+"Documented standard vs. observed practice" and "Risks / weaknesses" sections
+above were pointing toward: an operator-organised staging folder becomes a durable
+`/raw/` acquisition with a registry row, structured metadata, and a project link.
+
+For the full operator workflow see [`START_HERE.md`](../../START_HERE.md) and
+[`tools/INGEST_CLI.md`](../../tools/INGEST_CLI.md); the system map is
+[`equipment/INDEX.md`](../INDEX.md). The confocal **LSM 900** (same operator, same
+K: share, same `.czi` format) is documented in
+[`../lsm900/lsm900_data_handling_workflow_notes.md`](../lsm900/lsm900_data_handling_workflow_notes.md).
+
+> 🕗 Filename/folder context the `.czi` doesn't carry, and per-acquisition cohort
+> overrides, are intended for the **study-level** project metadata area
+> (`/projects/<proj>/metadata/<acq_id>.json`), which is **planned, not yet
+> deployed** (Phase 4 — see [05_PROJECTS §3](../../mfb-rdm-docs/05_PROJECTS.md) and
+> [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md)).
 
 ---
 

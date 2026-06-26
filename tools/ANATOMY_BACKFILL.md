@@ -1,5 +1,15 @@
 # Operator runbook — anatomy back-fill (MRI + microscopy)
 
+*Last Updated: 2026-06-26*
+
+> **Historical / reference.** The one-time back-fills described here have
+> **already been run** against the live production archive — this page is kept as
+> the record of *how* it was done and as the runbook for the rare repeat (e.g.
+> after an operator confirms a new organ code, or a fresh batch of legacy data is
+> ingested with anatomy left unset). Live ingests auto-derive anatomy with the
+> **same** mapping, so new data needs no back-fill. The dry-run figures quoted
+> below are the snapshots taken when the back-fills were run.
+
 Fill the `anatomy.region` (UBERON) on **already-ingested** acquisitions whose
 anatomy was left null, so the archive is searchable by body region. Two tools,
 same safe shape. **Run the dry-run, eyeball it, then `--apply`.** Nothing is

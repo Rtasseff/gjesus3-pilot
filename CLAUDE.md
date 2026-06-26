@@ -1,115 +1,74 @@
-# Claude Code Instructions — gjesus3 RDM Pilot
+# Claude Code Instructions — gjesus3 RDM
+
+Agent operating rules: where to start, what to never edit, the must-obey conventions. The **full doc-governance detail** — the complete documentation-architecture table, status-marker definitions, cross-reference / integrity-mirror rules, and style conventions — lives in [`CONTRIBUTING-docs.md`](CONTRIBUTING-docs.md). Read it before adding or restructuring documentation.
 
 ## On Startup
 
-1. Read [`tasks/tasks.md`](tasks/tasks.md) to understand current priorities and what to work on next. §0 "Active Pass / Up Next" is the entry point.
-2. Update `tasks/tasks.md` as work progresses — mark items done, add new items as they emerge.
+1. Read [`tasks/STATUS.md`](tasks/STATUS.md) for current priorities and what to work on next — it's the lean current-state entry point. Later improvements live in [`tasks/BACKLOG.md`](tasks/BACKLOG.md); the dated history is in [`CHANGELOG.md`](CHANGELOG.md).
+2. Update `tasks/STATUS.md` as work progresses — mark items done, add new items as they emerge.
 3. For system design context, see [`mfb-rdm-docs/00_INDEX.md`](mfb-rdm-docs/00_INDEX.md) (master map), [`mfb-rdm-docs/01_OVERVIEW.md`](mfb-rdm-docs/01_OVERVIEW.md) (scope and rationale), and [`mfb-rdm-docs/13_GJESUS3_ROLE.md`](mfb-rdm-docs/13_GJESUS3_ROLE.md) (the research-facing-working-layer reframe — explains many downstream design choices).
 4. For per-instrument workflows / systematic naming conventions, see [`equipment/INDEX.md`](equipment/INDEX.md) and the per-instrument folders.
 
 ## Project Type
 
-This is a **design, documentation, and tooling project** for a research data management system — **as much about documenting conventions, standards, schemas, and operational procedures as it is about writing code.** The primary deliverables are specifications in `mfb-rdm-docs/`, per-instrument workflow notes in `equipment/`, the operational task list in `tasks/tasks.md`, and Python scripts in `tools/`. See [README.md](README.md) for project overview.
+A **design, documentation, and tooling project** for a research data management system — as much about documenting conventions, standards, schemas, and operational procedures as about writing code. Primary deliverables: specs in [`mfb-rdm-docs/`](mfb-rdm-docs/), per-instrument notes in [`equipment/`](equipment/), the current-state list in [`tasks/STATUS.md`](tasks/STATUS.md), and Python scripts in [`tools/`](tools/). See [`README.md`](README.md) for the 3-role overview.
 
 ## Project Context
 
 - **Organization:** CIC biomaGUNE (research institute, Spain)
 - **Group:** MFB (led by PI Jesus Ruiz-Cabello)
 - **Data Management Lead:** Ryan Tasseff (Data Office)
-- **Infrastructure:** QNAP NAS "gjesus3" (TS-864eU, 6 × 20 TB, RAID 5, ~63 TB user-available after snapshot reservation), SMB share `\\GJESUS3\gjesus3`
-- **Access:** Hardwired on-site machines only (no laptops)
-- **Status:** **True production.** The team exhibition is over and the quasi-production pilot (four test rounds — collaborator DICOM, AxioScan 7, Cell Observer, internal MRI) was **purged 2026-06-10**; `J:\gjesus3-data` was restarted as the live **true-production** system. Historical data is now being ingested into it round by round (nuclear-imaging + internal MRI done as of 2026-06-14; microscopy preloads still pending). **"Done" in this project means "done in true production"** unless explicitly noted. (The pre-purge quasi-prod phase is complete and historical — do **not** treat a future purge/restart as pending.)
-
-## Documentation architecture — what belongs where
-
-This repo deliberately separates **rules** (specs / conventions / schemas) from **state** (current work / open questions) from **instrument-specific reality** (per-platform workflows). Respect the boundaries when adding new content:
-
-| Location | Role | Don't put here |
-|---|---|---|
-| `README.md` | Newcomer orientation only — one-glance "what is this, where do I go." | Detailed decisions or specs (those belong in `mfb-rdm-docs/`). |
-| `CLAUDE.md` (this file) | Agent-facing operating rules: where to start, cross-ref rules, status markers, doc-architecture. | The actual specs themselves; only pointers to them. |
-| `mfb-rdm-docs/` (00–13) | **Authoritative design specs** — decisions, conventions, schemas, principles. Numbered modules. `00_INDEX.md` is the master map + version history. | Operational state ("what's done this week"), per-instrument quirks, code implementation details. |
-| `tasks/tasks.md` | Operational state — the **work to get the pilot to users/operators** (active delivery path), open questions, per-round detail trails. | Permanent rules (those belong in `mfb-rdm-docs/`); per-instrument workflow notes (those belong in `equipment/`); **later improvements** (those belong in `tasks/BACKLOG.md`). |
-| `tasks/BACKLOG.md` | **Later improvements** — refinements and second-/third-stage features not required for the hand-off. Promote to `tasks.md` when an item becomes a delivery blocker. | Anything required for users/operators to start (that's `tasks.md`). |
-| `equipment/<instrument>/` | Per-instrument workflow notes, platform descriptions, observed user behaviour, systematic naming conventions. The bridge between abstract specs and concrete instrument reality. `equipment/INDEX.md` is the map. | System-wide specs / schemas (those belong in `mfb-rdm-docs/`). |
-| `tools/` | Implementation. Top-level CLIs (`ingest_raw.py`, `create_project.py`) + `ingest/` modules + `templates/` + `configs/` + standalone utilities. `tools/INGEST_CLI.md` is the CLI reference. | Spec documentation (point at `mfb-rdm-docs/` from inline docstrings instead). |
-| `mfb-rdm-docs/depricated/` | Historical drafts preserved for context. | **Never edit.** Add a new doc and link/contrast with the old if needed. |
-
-When you're about to write something, ask which of the above it most closely matches. If it's a permanent rule about how the system works → `mfb-rdm-docs/`. If it's a "this is what happens at Instrument X" → `equipment/`. If it's "we should do this later" → `tasks/tasks.md`. If it's "what does this YAML field do" → either `10_TOOLS.md` (spec) or `tools/INGEST_CLI.md` (operator-facing CLI ref) — most often both.
+- **Infrastructure:** QNAP NAS "gjesus3" (TS-864eU, 6 × 20 TB, RAID 5, ~63 TB user-available after snapshot reservation), SMB share `\\GJESUS3\gjesus3`. On Ryan's workstation: mapped at `J:\gjesus3-data` (Windows) / `/mnt/gjesus3` in WSL, always mounted at boot. Read live state from the NAS before trusting docs.
+- **Access:** Hardwired on-site machines only (no laptops).
+- **Status:** **TRUE PRODUCTION since the 2026-06-10 restart.** All data is real and retained long-term — treat the registry and `/raw/` with production care. **The quasi-production pilot (per-instrument test → purge → accept, then a whole-system purge after the team exhibition) is COMPLETE and HISTORICAL — that purge already happened on 2026-06-10; there is NO future exhibition / purge / restart pending.** "Done" in this project means "done in true production" unless explicitly noted. Lifecycle context: [`CONTRIBUTING-docs.md`](CONTRIBUTING-docs.md#production-lifecycle-context-for-ongoing-work); dated history: [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Development Environment
 
 - **Scripting/development:** Use WSL (Ubuntu) for building scripts, extraction, checksums, etc.
-- **NAS mount:** On Ryan's workstation, the NAS is mapped at `J:\` (Windows) and `/mnt/gjesus3` in WSL. Always mounted at boot. Use the J:\ paths from Bash/Git Bash on Windows.
 - **User-facing tools:** Write in Python (cross-platform) so Windows users can run them without WSL.
 - **User handles:** `sudo` commands for WSL setup.
 
-## Key Rules
+## Status markers
 
-### Documentation discipline
+Respect these throughout the documentation (full definitions in [`CONTRIBUTING-docs.md`](CONTRIBUTING-docs.md#status-markers)):
 
-- Core deliverables live in `mfb-rdm-docs/`. Use `00_INDEX.md` as the map. Per-instrument context lives in `equipment/<instrument>/`.
-- Always read relevant docs before suggesting changes.
-- When updating one document, check for cross-reference impacts on others (see Cross-reference consistency below).
-- **Never edit** files in `mfb-rdm-docs/depricated/` — they are historical records.
-- When a new convention or schema is added, update **all** of: the spec doc (in `mfb-rdm-docs/`), any per-instrument templates that exercise it (`tools/templates/instruments/*.yaml`), the CLI reference (`tools/INGEST_CLI.md` if operator-visible), and the master map (`00_INDEX.md` version history).
+- ✅ `DECIDED` — do not change without explicit user instruction
+- 🔶 `DRAFT` — can be refined, but flag substantive changes
+- ⚠️ `GAP` — information or decision needed; don't invent answers
+- ❓ `EVALUATING` — under active consideration; present options rather than choosing
+- 📋 `INPUT NEEDED` — waiting on stakeholder feedback; don't fill in assumptions
+- 🕗 `PLANNED / DEFERRED` — intended but not built/deployed yet; document as planned, point to [`tasks/BACKLOG.md`](tasks/BACKLOG.md)
 
-### Status markers
+## Documentation architecture — pointer
 
-Respect these throughout the documentation:
+This repo separates **rules** (specs / schemas) from **state** (current work) from **instrument reality** (per-platform workflows) from **audience entry points** (role gateways). Quick map — **full table + the boundary rules are in [`CONTRIBUTING-docs.md`](CONTRIBUTING-docs.md#documentation-architecture--what-belongs-where):**
 
-- `DECIDED` — Do not change without explicit user instruction
-- `DRAFT` — Can be refined, but flag substantive changes
-- `GAP` — Information or decision needed; don't invent answers
-- `EVALUATING` — Under active consideration; present options rather than making choices
-- `INPUT NEEDED` — Waiting on stakeholder feedback; don't fill in assumptions
+| Location | Role |
+|---|---|
+| [`README.md`](README.md) | 3-role gateway (Researcher / Operator / Developer). |
+| [`RESEARCHER_GUIDE.md`](RESEARCHER_GUIDE.md) · [`START_HERE.md`](START_HERE.md) · [`GLOSSARY.md`](GLOSSARY.md) | Researcher entry point · operator one-pager · term definitions. |
+| [`CLAUDE.md`](CLAUDE.md) (this file) · [`CONTRIBUTING-docs.md`](CONTRIBUTING-docs.md) | Agent must-obey rules · full doc-governance detail. |
+| [`mfb-rdm-docs/`](mfb-rdm-docs/) (00–13) | **Authoritative design specs.** [`00_INDEX.md`](mfb-rdm-docs/00_INDEX.md) is the master map. |
+| [`equipment/<instrument>/`](equipment/) | Per-instrument workflow notes + platform reality. [`INDEX.md`](equipment/INDEX.md) is the map. |
+| [`tools/`](tools/) | Implementation + tool docs ([`INDEX.md`](tools/INDEX.md), [`INGEST_CLI.md`](tools/INGEST_CLI.md), [`FINDER.md`](tools/FINDER.md), [`FAQ.md`](tools/FAQ.md), [`OPERATOR_FAQ.md`](tools/OPERATOR_FAQ.md)). |
+| [`tasks/STATUS.md`](tasks/STATUS.md) · [`tasks/BACKLOG.md`](tasks/BACKLOG.md) | Lean current-state · later improvements. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Single dated narrative of decisions. |
 
-### Cross-reference consistency
+When you're about to write something, ask which row it matches: a permanent rule → `mfb-rdm-docs/`; "what happens at Instrument X" → `equipment/`; "do this later" → `tasks/BACKLOG.md`; current work → `tasks/STATUS.md`; a YAML field's meaning → `10_TOOLS.md` (spec) and/or `tools/INGEST_CLI.md` (CLI ref).
 
-When updating one document, check for impacts on others:
+## Must-obey rules
 
-- `00_INDEX.md` — Key Decisions table, Key Gaps, and Version History; bump Last Updated.
-- `13_GJESUS3_ROLE.md` — the reframe rationale that drives many downstream choices (research-facing working layer, ISA terminology, derivatives-belong-in-projects). If you're changing scope or design principles, check here first.
-- `01_OVERVIEW.md` — system purpose and design principles; should stay aligned with `13_GJESUS3_ROLE`.
-- `03_RAW_STORAGE.md` — per-ecosystem primary-entity shapes (file / archive / folder) live in §4. Instrument codes here must match `09_MODALITIES.md` and `equipment/INDEX.md`.
-- `06_REGISTRIES.md` — registry schemas must match field references elsewhere. `session_id` + `primary_kind` are DRAFT columns; `subject_ids` is an **Auto** column (added 2026-06-11 as `subject_id`, **renamed to packed `subject_ids` 2026-06-12, NI-LIVE-08** — the facility animal id(s) from the enrichment subject block, `;`-joined always-a-list; lives in `AUTO_COLUMNS`, never user-set). The `USER_CONTROLLABLE_COLUMNS` / `AUTO_COLUMNS` sets in `tools/ingest/resolver.py` and the `REGISTRY_FIELDS` list in `tools/ingest/registry.py` must match the documented schema (§2.2); the defensive header check in `append_row` enforces this at runtime. **Registry-integrity (§2.7):** every CSV append goes through the BOM-tolerant, trailing-newline-safe helper `tools/ingest/csv_safe.py` (new CSV writers MUST use it); ACQ-ID allocation + the row append are serialized by `tools/ingest/locking.py` (`registries/.registry.lock` + the `.acq_id_seq.json` high-water reservation).
-- `07_PROVENANCE.md` — referenced by `04_PUBLICATIONS.md` and `05_PROJECTS.md`.
-- `08_METADATA.md` — `metadata.json` sidecar shape; the file written by `tools/ingest/metadata_sidecar.py` must match what's documented here. The `mri:` block shape comes from `tools/ingest/paravision_metadata.py::build_mri_section`; the `microscopy:` block from `tools/ingest/czi_metadata.py::build_microscopy_section`. Section name overrides (e.g. ParaVision data → `mri:` not `dicom:`) flow through the 3-tuple extractor return form documented in §4.3.
-- `09_MODALITIES.md` — per-instrument "Auto-discovered fields" subsection MUST mirror `EXPOSED_FIELDS` in the matching `tools/ingest/<eco>_metadata.py` module (currently `czi_metadata.py` and `paravision_metadata.py`). When you add or rename a field, update both.
-- `10_TOOLS.md` — YAML ingest schema. If you add/rename a `registry:` column or `discovered.*` source, update `06_REGISTRIES.md` (schema), `08_METADATA.md` (sidecar), `tools/templates/ingest_template.yaml` (universal), AND every `tools/templates/instruments/*.yaml` (per-instrument) together. The `link_filename:` field's context dict (resolved registry fields + `discovered.*` + `acq_id` + `acq_date`) is documented in §2.1.5.
-- `equipment/<instrument>/` — when an instrument's naming convention or workflow changes, update the per-instrument workflow notes there AND any per-instrument template under `tools/templates/instruments/`.
+- **Respect status markers** (above) — never silently change a ✅ `DECIDED` item.
+- **Never edit historical / archived material:** files in `tasks/archive/`, and the dated history in [`CHANGELOG.md`](CHANGELOG.md) (append new entries; do not rewrite past ones). The numbered specs carry the *current* state; the CHANGELOG carries the narrative of how we got there.
+- **On the numbered specs (00–13),** change STATUS / dates / wording surgically; **preserve all schema / field / logic content exactly.** If a real logic change seems needed, raise it rather than slipping it into a doc edit.
+- **Always read the relevant docs before suggesting changes.** When updating one document, check cross-reference impacts on others — especially the **integrity mirrors** where spec and code MUST agree (06↔`resolver.py`/`registry.py`, 08↔`metadata_sidecar.py` + the per-eco builders, 09↔`<eco>_metadata.py` `EXPOSED_FIELDS`, 10↔the templates). Full rules: [`CONTRIBUTING-docs.md`](CONTRIBUTING-docs.md#cross-reference-consistency).
+- **When a new convention or schema is added,** update all of: the spec doc (`mfb-rdm-docs/`), the per-instrument templates that exercise it (`tools/templates/instruments/*.yaml`), the CLI reference ([`tools/INGEST_CLI.md`](tools/INGEST_CLI.md) if operator-visible), and the master map ([`00_INDEX.md`](mfb-rdm-docs/00_INDEX.md) — bump **Last Updated**; the dated narrative goes in [`CHANGELOG.md`](CHANGELOG.md)).
+- **Vocabulary / convention decisions are Data Office calls** informed by user input — never write "pending PI sign-off" or treat them as blocked-on-stakeholder.
 
-### Ingest configs
+## Git
 
-- **Per-instrument templates** live in `tools/templates/instruments/` (e.g. `axioscan7.yaml`, `cell_observer_cells.yaml`, `mri_bruker.yaml`) — they lock in the instrument-specific patterns (filename parse, registry mapping, project_hint convention, `link_filename:` default). Each template's **header comments must list every `discovered.*` field auto-populated for that instrument** as the operator's reference card. Copy and edit; never edit in place. Add a new template when bringing a new instrument online.
-- **Universal starter** at `tools/templates/ingest_template.yaml` — fallback for instruments not yet onboarded.
-- **Per-batch configs** live in `tools/configs/` (under git, version-locked with the scripts) — produced by copying the matching per-instrument template, editing `staging_dir` + `notes`, saving as `<instrument>_<batch>.yaml`. Each row's `ingest_config` column records the relative path of the config that produced it.
+- Write clear commit messages (what changed and why). **Stage specific files**, not `git add -A`. The repo holds large binaries (xlsx, docx) and `contacts.xlsx` — **don't stage these unless asked.** One commit per logical unit of work.
 
-### Production lifecycle (true production since the 2026-06-10 restart)
+## Style
 
-**History (now complete):** the pilot ran a deliberate two-phase setup — each instrument iterated **test → purge → accept-as-quasi-production**, and after the team exhibition the **whole quasi-prod dataset was purged (2026-06-10)** and `J:\gjesus3-data` was restarted as true production. That purge has **already happened**; there is **no future exhibition purge pending**. Implications for ongoing work:
-
-- **The live data is real and retained.** Historical data is being ingested round by round into the true-production system (nuclear-imaging + internal MRI done 2026-06-14; microscopy preloads pending). Treat the registry and `/raw/` with production care — an ingest that goes wrong is now *damaging*, not ephemeral. (The old "the 365+ quasi-prod acqs are annoying-but-not-damaging if it goes wrong" stance retired with the purge.)
-- **TEST tags are now the exception, not the norm.** A genuinely experimental run may still carry a "TEST INGEST — purge after review" tag, but most ingests are real and retained. Don't read a TEST tag as "will be wiped at the next exhibition purge" — that lifecycle is over.
-- The `tools/migrate_registry_columns.py` pattern (back up → migrate → register the .bak path) is still the right shape when the schema needs to evolve; the defensive header check in `registry.append_row` enforces correct migration order. (The restart already applied a fresh-header schema — `sample_organism` + `subject_id`→packed `subject_ids` + `anatomical_entity` — so this pattern is for *future* evolution, not the restart itself.)
-
-### Equipment reference
-
-- `equipment/INDEX.md` is the starting point for in-scope imaging instruments.
-- Two categories: **microscopes** (raw = direct instrument output) and **platform instruments** (raw = reconstructed images provided by the platform).
-- Each instrument's folder may include a `*_data_handling_workflow_notes.md` describing the operator workflow + systematic naming convention. These notes are the source of truth for what `discovered.*` fields a per-instrument template can expose.
-
-## Git Usage
-
-- Write clear commit messages describing what changed and why.
-- Stage specific files rather than using `git add -A`.
-- Repo contains large binary files (xlsx, docx) in `shared/` and `contacts.xlsx` — avoid staging these unless asked.
-- One commit per logical unit of work; multiple small commits over one giant atomic dump.
-
-## Style and Conventions
-
-- Documentation is written in Markdown.
-- Use existing document conventions (status markers, cross-references, open questions tables).
-- Keep language precise but accessible — end users are researchers, not IT professionals.
-- When in doubt about a design choice, present options rather than picking one.
-- Per-instrument template comments must be **operator-readable** — list every `discovered.*` they can reference and what the default `link_filename:` produces.
+- Markdown; use existing conventions (status markers, cross-references, open-questions tables). Keep language **precise but accessible** — end users are researchers, not IT professionals. When in doubt about a design choice, **present options rather than picking one.** Windows path examples use backslash style (`J:\`). Full style guide: [`CONTRIBUTING-docs.md`](CONTRIBUTING-docs.md#style-conventions).

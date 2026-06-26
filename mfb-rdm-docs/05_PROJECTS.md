@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft
-**Last Updated:** 2026-05-14
+**Last Updated:** 2026-06-26
 
 ---
 
@@ -19,11 +19,12 @@ The Projects area provides semi-structured workspaces on gjesus3 for ongoing res
 **What Projects are for:**
 - Organizing work that spans multiple potential publications
 - Working on data before it becomes publication-ready
-- Holding researcher-supplied **study-level metadata** (the experimental context that isn't captured at ingest — see [08_METADATA §1](08_METADATA.md))
+- Reaching the project's raw acquisitions through hard links (see §3) — every project that was populated via `ingest_raw.py` carries a hard-linked copy of each acquisition it owns
+- Holding researcher-supplied **study-level metadata** (the experimental context that isn't captured at ingest — see [08_METADATA §1](08_METADATA.md)) — 🕗 **PLANNED/DEFERRED** (Phase 4); see §3 and [tasks/BACKLOG.md](../tasks/BACKLOG.md)
 - Tracking provenance for work-in-progress
 - Shared workspace within the group
 
-> **⚠️ Important — projects are ephemeral.** `/projects/` is **temporary working space**, not permanent archive. Projects are created, used, and then closed and **deleted**. Only `/raw/` and `/publications/` are permanent archives. Anything in a project folder that needs to survive long-term (most importantly the **study-level metadata** in `metadata/`) must be preserved into the permanent archive at close-out — see §4 and [08_METADATA §1.3](08_METADATA.md). The Data Mgmt Lead is responsible for the preservation step.
+> **⚠️ Important — projects are ephemeral.** `/projects/` is **temporary working space**, not permanent archive. Projects are created, used, and then closed and **deleted**. Only `/raw/` and `/publications/` are permanent archives. Anything in a project folder that needs to survive long-term (most importantly the **study-level metadata** in `metadata/`, once that layer is in use) must be preserved into the permanent archive at close-out — see §4 and [08_METADATA §1.3](08_METADATA.md). The Data Mgmt Lead is responsible for the preservation step.
 
 **Known limitations:**
 - gjesus3 is accessible only from specific hardwired on-site machines (not laptops)
@@ -55,18 +56,21 @@ Researchers who do most of their analysis on local machines or other drives can 
     └── proj-ipf-biomarkers/
         ├── _project.yaml
         ├── provenance.csv
-        ├── raw_linked/                 # Windows .lnk shortcuts to raw acquisitions
+        ├── index.html                  # per-project searchable finder (auto-refreshed each ingest — see tools/FINDER.md)
+        ├── raw_linked/                 # hard links to raw acquisitions (NOT shortcuts)
         │   └── ...                     # (created by ingest_raw.py when project_hint set — see 10_TOOLS §2.1.1;
-        │                               #  shortcut filename comes from the per-instrument `link_filename:`
+        │                               #  link filename comes from the per-instrument `link_filename:`
         │                               #  template — see 10_TOOLS §2.1.5)
-        ├── metadata/                   # Study-level metadata (researcher-supplied)
+        ├── metadata/                   # 🕗 PLANNED/DEFERRED — study-level metadata (researcher-supplied)
         │   ├── study.json              #   study aim, hypothesis, principal contact
         │   ├── biosamples.json         #   biosample-level details (strain, age, sex, treatment)
         │   └── <acq_id>.json           #   optional per-acquisition supplements
         └── ... (researcher-organized analysis output, notes, working files)
 ```
 
-`metadata/` is **the only place researchers should edit study-level metadata.** It is the writeable counterpart to the read-only `/raw/<ACQ-ID>/metadata.json` sidecars. Architecture rationale in [08_METADATA §1](08_METADATA.md). The file shapes (`study.json`, `biosamples.json`, per-acq supplements) are deferred to the Excel-import tool spec — see `tasks/tasks.md` §3.2.
+> **🕗 PLANNED/DEFERRED — `metadata/` is not deployed yet.** The study-level metadata layer is the writeable counterpart to the read-only `/raw/<ACQ-ID>/metadata.json` sidecars, but as of the current state it exists on **none** of the live projects — the tools that populate it (Excel → study-metadata importer, `gather_metadata.py`, close-out merge) are all planned (Phase 4). Architecture rationale in [08_METADATA §1](08_METADATA.md); the writer family and their status are in [08_METADATA §1.5a](08_METADATA.md). The file shapes (`study.json`, `biosamples.json`, per-acq supplements) are deferred to the Excel-import tool spec — see [tasks/BACKLOG.md](../tasks/BACKLOG.md). When the layer ships, `metadata/` will be **the only place researchers should edit study-level metadata.**
+
+**`raw_linked/` uses hard links, not Windows shortcuts.** Each entry is a real filesystem hard link to the acquisition's primary entity in `/raw/` — to a researcher it looks and opens exactly like the original file (or folder, via a per-file-hard-linked `.data/`), with no extra disk space consumed and no broken-shortcut failure mode. This superseded the earlier `.lnk` shortcut method (DECIDED + APPLIED 2026-06-02). Mechanism in [10_TOOLS §2.1.1](10_TOOLS.md).
 
 ---
 
@@ -85,9 +89,9 @@ Created ──▶ Active ──▶ Paused ──▶ Closed ──▶ DELETED
 
 ### 4.x Close-out: preserving study-level metadata
 
-Whatever the closure path, **`/projects/<proj>/metadata/` does not get to disappear with the project folder.** The study-level metadata in there is critical for long-term archive value of the raw acquisitions (without it, future analysts won't know what experiment the imaging belonged to).
+Whatever the closure path, **`/projects/<proj>/metadata/` does not get to disappear with the project folder.** The study-level metadata in there is critical for long-term archive value of the raw acquisitions (without it, future analysts won't know what experiment the imaging belonged to). (This applies once the `metadata/` layer is in use — see the 🕗 note in §3.)
 
-Mechanism (intended; tracked in `tasks/tasks.md` §3.2):
+Mechanism (intended; tracked in [tasks/BACKLOG.md](../tasks/BACKLOG.md)):
 
 1. The Data Mgmt Lead runs a close-out tool against the project before deletion.
 2. The tool reads `/projects/<proj>/metadata/` and merges its contents into the corresponding `/raw/<ACQ-ID>/metadata.json` files (per the architecture in [08_METADATA §1.3](08_METADATA.md)) — a controlled, one-time admin write to `/raw/`. The merge is additive only; nothing in the existing acquisition-level metadata is overwritten.
@@ -115,7 +119,7 @@ Until this tool exists, projects should not be deleted — pause them indefinite
 
 Same format as Publications (see [07_PROVENANCE](07_PROVENANCE.md)):
 - An empty `provenance.csv` with the canonical 12-field header is created at project setup by `create_project.py`.
-- Any tool that adds/removes/changes files under the project (today: `ingest_raw.py` Step 12 writing `.lnk` shortcuts into `raw_linked/`; tomorrow: the Excel-to-metadata importer and the close-out tool) auto-appends a provenance row. The schema lives in `tools/ingest/provenance.py` so writers stay aligned.
+- Any tool that adds/removes/changes files under the project (today: `ingest_raw.py` Step 12 writing **hard links** into `raw_linked/`; tomorrow: the Excel-to-metadata importer and the close-out tool) auto-appends a provenance row. The schema lives in `tools/ingest/provenance.py` so writers stay aligned.
 - Manual analysis output: still strongly recommended; required for anything that will feed into a publication or external sharing.
 
 ---
