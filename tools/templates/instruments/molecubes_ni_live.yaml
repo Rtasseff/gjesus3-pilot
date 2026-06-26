@@ -13,14 +13,22 @@
 #
 # discovered.* available: series, date, subject (path_parse) · acq_datetime_full,
 #   modality (anchor regex) · project, animal_codes, subject_flags (subject_parse) ·
-#   ni_* (ni_metadata). Multi-animal (1-4 mice in one scan) packs subject_ids
-#   automatically via subject_parse + subject_from_db (NI-LIVE-08).
+#   ni_recon_idx (per-recon fan-out) · ni_* (ni_metadata). Multi-animal (1-4 mice in
+#   one scan) packs subject_ids automatically via subject_parse + subject_from_db
+#   (NI-LIVE-08).
 
 ingest:
   acquisition_layout: folder
   copy_strategy: ni_molecubes
   auto_create_projects: true
   delete_source_after_ingest: false        # NEVER delete from the live box
+  # ONE ACQUISITION PER RECONSTRUCTION (NI live, 2026-06-25). Each recon_<idx>/
+  # with DICOMs is its own acquisition; a reconstruction added on a later sync is
+  # automatically a new acquisition (recon indices are append-only). A recon dir
+  # with no DICOMs yet (reconstruction still running) is skipped and picked up on
+  # a later sync. Opt-in: this flag is what enables the per-recon fan-out — archive
+  # NI / microscopy / MRI never set it and are unaffected.
+  per_recon_acquisitions: true
 
 auto_discover:
   # EDIT per sync: the chosen researcher's data folder on the box.
@@ -57,9 +65,10 @@ auto_create_project:
   description: "Auto-created during live-box NI sync; animal protocol ${discovered.project}. PROVISIONAL."
   notes:       "Auto-created on first live NI sync. Edit owner via _project.yaml."
 
-# Name of the project hard link under /projects/<proj>/raw_linked/. Unique per scan
-# (timestamp + modality is globally unique on the box).
-link_filename: "${discovered.modality}_${discovered.subject}_${acq_date}_${discovered.acq_datetime_full}"
+# Name of the project hard link under /projects/<proj>/raw_linked/. Unique per
+# RECONSTRUCTION: timestamp+modality is globally unique per scan, and recon<idx>
+# disambiguates the per-recon acquisitions of that scan (per_recon_acquisitions).
+link_filename: "${discovered.modality}_${discovered.subject}_${acq_date}_${discovered.acq_datetime_full}_recon${discovered.ni_recon_idx}"
 
 # condition: / anatomy: — set once per batch when the control/disease/whole-body
 # state is known (same shape as molecubes_ni.yaml). Omitted here so the sync writes
