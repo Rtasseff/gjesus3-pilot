@@ -574,8 +574,9 @@ from a clean filename (R4), (3) the date tie-break/flag (R5), and (4) the idempo
 dry-run + DB-validate + flag-on-miss path**, because two messiness sources survive *any* naming
 standard: (1) humans still mislabel, and (2) the facility DB still lags (§3A/§5). So "force a standard"
 shrinks the parser to near-nothing but does **not** remove the validate/flag/queue safety net. Also:
-the bounded historical set is quasi-production (slated for the post-exhibition purge/reload anyway), so
-a hand-vetted one-shot carries low risk and high clarity — exactly the right place to absorb the mess.
+because the live-machine path has **never run in production** and lands in true production (data is real
+and retained), the historical one-shot is staged into the sandbox first (Stage A2 → `J:\gjesus3-sandbox`)
+and **human-vetted before commit** — exactly the right place to absorb the mess at low risk and high clarity.
 
 ### Sequencing
 

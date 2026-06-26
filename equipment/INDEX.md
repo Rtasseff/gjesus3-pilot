@@ -1,6 +1,12 @@
 # Equipment Index
 
-This folder contains reference documentation for all imaging equipment whose data is in scope for the gjesus3 archival system.
+**Last Updated:** 2026-06-26
+
+This folder contains reference documentation for all imaging equipment whose data is in scope for the gjesus3 archival system. It is the map between the abstract system specs in [`mfb-rdm-docs/`](../mfb-rdm-docs/00_INDEX.md) and the concrete reality of each instrument: what its "raw" data looks like, how operators name and stage it, and how it reaches gjesus3.
+
+> **Researchers:** to *find and use* your data (rather than understand the instruments), start at [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md). The one thing on this page that matters most to you is your instrument's **naming convention** — see the [naming quick-reference](#naming-convention-quick-reference) below.
+>
+> **Where the source/historical data lives** for each instrument (the archives we ingest *from*) is catalogued separately in [`historical_data_archives.md`](./historical_data_archives.md).
 
 ---
 
@@ -12,12 +18,53 @@ There are two categories of equipment, and the meaning of "raw" data on gjesus3 
 
 **Institutional imaging platforms (MRI, Nuclear Imaging):** The platforms operate the instruments and manage their own long-term storage of true acquisition data (e.g., PET listmode files, raw k-space MRI data). This truly raw data is usually not useful to end-user researchers. What the platforms provide to researchers are **reconstructed images** — internal MRI as Bruker ParaVision exam folders (with JCAMP-DX aux files + per-frame DICOM); Nuclear Imaging primarily as DICOM (possibly NIfTI from MILabs VECTor).
 
-**On-disk shape on gjesus3 varies per ecosystem** (see [03_RAW_STORAGE §4](../mfb-rdm-docs/03_RAW_STORAGE.md)):
-- **Collaborator DICOM** (legacy, rounds 1-2) = compressed archive (.zip / .tar.gz). 75 acqs deposited 2026-03; not re-shaped.
-- **Internal MRI** (since round 6, 2026-05-22) = **folder-as-primary** (no zip). Acquisition folder contains `acquisition_aux/` + `reconstructions/pdata_<idx>/`. See [`mri-platform/internal_mri_data_handling_workflow_notes.md`](./mri-platform/internal_mri_data_handling_workflow_notes.md) "Systematic naming convention" section.
-- **Internal Nuclear Imaging** (future round) — convention documented in [`nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](./nuclear-imaging/internal_ni_data_handling_workflow_notes.md); on-disk shape TBD when implementation begins.
+**On-disk shape on gjesus3 varies per ecosystem** (see [03_RAW_STORAGE §4](../mfb-rdm-docs/03_RAW_STORAGE.md)). `/raw/` is organised into **data-family ecosystems** — currently two are deployed plus one reserved:
+- **`MICROSCOPY`** — the three Zeiss `.czi`-producing microscopes (AxioScan 7, Cell Observer, LSM 900). Primary entity = the single instrument file.
+- **`DICOM`** — internal MRI and (legacy) collaborator DICOM, plus future Nuclear Imaging. Internal MRI (since round 6, 2026-05-22) is **folder-as-primary** (no zip); the acquisition folder contains `acquisition_aux/` + `reconstructions/pdata_<idx>/` (see [`mri-platform/internal_mri_data_handling_workflow_notes.md`](./mri-platform/internal_mri_data_handling_workflow_notes.md) "Systematic naming convention"). Legacy collaborator DICOM (rounds 1-2) is a compressed archive (.zip / .tar.gz), not re-shaped. Internal Nuclear Imaging convention is documented in [`nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](./nuclear-imaging/internal_ni_data_handling_workflow_notes.md); on-disk shape will be finalised when that ingest round begins.
+- **`EM`** — **reserved, not deployed.** The electron-microscopy ecosystem is allocated in the `/raw/` layout for future use; no instrument is onboarded and the folder is not populated. See [03_RAW_STORAGE §4](../mfb-rdm-docs/03_RAW_STORAGE.md).
+
+The instrument's identity is recorded in the **ACQ-ID** and the registry (instrument code column), not in the ecosystem folder name (RAW-05) — so all three microscopes share `MICROSCOPY` and are told apart by code (`ZWSI` / `CELL` / `LSM9`).
 
 These reconstructed images are treated as gjesus3's "raw" data — the authoritative starting point for the MFB group's research-facing analysis and archiving. The reframe in [13_GJESUS3_ROLE](../mfb-rdm-docs/13_GJESUS3_ROLE.md) elaborates on the two-tier model: gjesus3 as research-facing working layer, platforms as deep-time raw archive.
+
+---
+
+## Metadata architecture (two levels)
+
+Every acquisition carries metadata at two levels — keep the distinction clear when reading any per-instrument note:
+
+- **Acquisition-level — `/raw/<ACQ-ID>/metadata.json` — ✅ LIVE + immutable.** A `metadata.json` sidecar sits next to each acquisition in `/raw/`. It holds what the operator supplied plus fields auto-extracted at ingest (including the 21 `czi_*` fields pulled from each Zeiss `.czi`), and — for animal-derived data — `subject` / `condition` / `anatomy` blocks. It is written once and never edited in place. The enrichment writer that fills `subject`/`condition`/`anatomy` is **non-blocking**: an unknown becomes an explicit sentinel plus a WARN, never an ingest failure. Spec: [08_METADATA](../mfb-rdm-docs/08_METADATA.md).
+- **Study-level — `/projects/<proj>/metadata/` — 🕗 PLANNED/DEFERRED (Phase 4).** A richer, *study-level* metadata area inside each project (study aim, biosample sheets, per-acquisition overrides) is designed but **not deployed** — it exists on none of the live projects today. Until it lands, study context that isn't captured at the instrument is kept in researcher notes and flagged to the Data Management Lead. Status/plan: [tasks/BACKLOG.md](../tasks/BACKLOG.md); design: [05_PROJECTS §3](../mfb-rdm-docs/05_PROJECTS.md). Several per-instrument notes below mention this `/projects/<proj>/metadata/<acq_id>.json` override path — read those mentions as **planned**, not deployed.
+
+The split (immutable acquisition facts in `/raw/`, mutable study context in `/projects/`) and its close-out implications are decided in [08_METADATA §1](../mfb-rdm-docs/08_METADATA.md).
+
+---
+
+## Naming-convention quick-reference
+
+The single highest-leverage thing a researcher or operator controls is the **file/folder name at the instrument** — a good name lets the ingest auto-extract sample, subject, and project context; a poor one means that information has to be re-entered by hand. Each instrument's authoritative convention (and the `discovered.*` fields its per-instrument template can therefore expose) lives in its workflow note:
+
+| Instrument | Code | Convention anchor | Naming-convention note | Per-instrument template |
+|---|---|---|---|---|
+| Axio Scan 7 (WSI) | `ZWSI` | Filename: `<group>_<operator>_<project>_<sample>_<stain>_<mag>.czi` in a `<YYYYMMDD>` day folder | [`axioscan7-wsi/…workflow_notes.md`](./axioscan7-wsi/axioscan7_data_handling_workflow_notes.md) | [`axioscan7.yaml`](../tools/templates/instruments/axioscan7.yaml) |
+| Cell Observer | `CELL` | Folder path carries most context (`<researcher>/<cell_line>/<experiment>/`); lighter filename | [`cell-observer/…workflow_notes.md`](./cell-observer/cell_observer_data_handling_workflow_notes.md) | [`cell_observer_cells.yaml`](../tools/templates/instruments/cell_observer_cells.yaml) |
+| LSM 900 (confocal) | `LSM9` | Batch folder `<researcher>_<experiment>_<cell_line>`; `.czi`-embedded metadata is the canonical truth | [`lsm900/…workflow_notes.md`](./lsm900/lsm900_data_handling_workflow_notes.md) | [`lsm900.yaml`](../tools/templates/instruments/lsm900.yaml) |
+| Bruker MRI (ParaVision) | `MRI` | `<project_folder>/<protocol_number>/pdata/<reconstruction>` | [`mri-platform/internal_mri_…workflow_notes.md`](./mri-platform/internal_mri_data_handling_workflow_notes.md) | [`mri_bruker.yaml`](../tools/templates/instruments/mri_bruker.yaml) |
+| Nuclear Imaging (PET/SPECT/CT) | `PET` `SPECT` `CT` | `<YYYYMMDDhhmmss>_<MODALITY>` folder anchor (live); archive layout for historical | [`nuclear-imaging/internal_ni_…workflow_notes.md`](./nuclear-imaging/internal_ni_data_handling_workflow_notes.md) | [`molecubes_ni.yaml`](../tools/templates/instruments/molecubes_ni.yaml) |
+
+> Per-instrument templates are **operator reference cards** — each template's header comments list every `discovered.*` field auto-populated for that instrument. The workflow notes never invent `discovered.*` fields; they point at the template header.
+
+---
+
+## How data reaches gjesus3 (the ingest path)
+
+All instruments follow the same shape, with the per-instrument template supplying the instrument-specific parse:
+
+1. **Stage** the acquisition(s) — at the instrument's network/group-drive location, or copied to a staging area.
+2. **Ingest** with `tools/ingest_raw.py` (the engine), driven by the matching per-instrument template under [`tools/templates/instruments/`](../tools/templates/instruments/) copied into a per-batch config. Microscopy and MRI operators can use the frozen GUI **`gjesus3_ingest.exe`** instead of the CLI (it has microscopy + MRI pages). See [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md) and [`START_HERE.md`](../START_HERE.md).
+3. The ingest deposits the acquisition into the right ecosystem under **`/raw/`** (microscopy → `/raw/MICROSCOPY/`, MRI/NI → `/raw/DICOM/`), writes the immutable `metadata.json` sidecar, and appends one row per acquisition to **`registries/registry_raw.csv`** (the live registry — 28 columns; the packed `subject_ids` column is auto-populated for animal-derived data).
+4. The acquisition is **hard-linked** into its project (`/projects/<proj>/raw_linked/`) — a hard link looks and opens like the real file but takes no extra space and never copies or moves the original. (Hard links are the linking method, DECIDED + APPLIED 2026-06-02; the older Windows `.lnk` shortcut method is retired. See [10_TOOLS §2.1.1](../mfb-rdm-docs/10_TOOLS.md).)
+5. The **Finder** (`registries/index.html` — a self-contained searchable web page, plus a per-project `index.html` in each project folder) is auto-refreshed so the new acquisition is immediately searchable. See [`tools/FINDER.md`](../tools/FINDER.md).
 
 ---
 
@@ -118,7 +165,7 @@ The MRI platform has **two** preclinical MRI systems:
   - Data handling workflow notes (md) — full operator walkthrough + **the systematic naming convention** (parsable `<project_folder>/<protocol_number>/pdata/<reconstruction>` structure, `jrc` vs `jrc_` PI-initials ambiguity, `<short sample id>` shape, animal-id composition, MRI "project" vs NI funded-project-id terminology distinction). The reference for what `discovered.*` fields the MRI per-instrument template can expose.
   - **No-DICOM regeneration runbook** ([`mri-platform/mri_no_dicom_regeneration_runbook.md`](./mri-platform/mri_no_dicom_regeneration_runbook.md)) — **the procedure for the historical pull** when an exam arrives without DICOMs (researcher skipped Bruker's exporter): the ingest regenerates them from `2dseq`+JCAMP-DX via Dicomifier (in WSL), applies the two PV-7 image fixes, and deposits into `/raw/`. Setup → config flag → run → verify.
 
-**Round 6 outcome (2026-05-22):** 97 ParaVision exam acquisitions ingested in quasi-production state across PROJ-0003 (26) and PROJ-0004 (71) — cross-modality reuse with round-4 AxioScan project workspaces. No-zip folder-as-primary layout; ParaVision JCAMP-DX metadata in `metadata.json.mri`; unique `MRI_<jrc_id>_<acq_date>_<exam>_<recon>.lnk` shortcut names. Per-instrument template at [`../tools/templates/instruments/mri_bruker.yaml`](../tools/templates/instruments/mri_bruker.yaml).
+**Round 6 outcome (2026-05-22, historical quasi-production round — now superseded by the true-production system):** 97 ParaVision exam acquisitions ingested across PROJ-0003 (26) and PROJ-0004 (71) — cross-modality reuse with round-4 AxioScan project workspaces. No-zip folder-as-primary layout; ParaVision JCAMP-DX metadata in `metadata.json.mri`; project links named `MRI_<jrc_id>_<acq_date>_<exam>_<recon>` (hard links into `raw_linked/` — the current method; the older `.lnk` shortcut form is retired). Per-instrument template at [`../tools/templates/instruments/mri_bruker.yaml`](../tools/templates/instruments/mri_bruker.yaml).
 
 ### 5. Nuclear Imaging Platform — PET/SPECT/CT/OI
 
