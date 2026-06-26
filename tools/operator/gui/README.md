@@ -1,12 +1,21 @@
-# Microscopy operator ingest GUI
+# Ingest GUI (`gjesus3_ingest.exe`) — microscopy + MRI
 
-A local Flask web-app that lets a microscopy operator (ZWSI / CELL / LSM9) run
-the validated ingest pipeline from the browser — no hand-written YAML. It is a
-**thin front-end** over the shared operator core
+*Last Updated: 2026-06-26*
+
+A local Flask web-app that lets an operator run the validated ingest pipeline
+from the browser — no hand-written YAML. It is a **thin front-end** over the
+shared operator core
 (`tools/operator/{templates,config_builder,scope,preview,runner,env}.py`) and
-reuses the exact pipeline the data office uses (`ingest.*` + `ingest_raw`).
+reuses the exact pipeline the data office uses (`ingest.*` + `ingest_raw`). The
+frozen Windows build, **`gjesus3_ingest.exe`**, serves **two pages**: microscopy
+(ZWSI / CELL / LSM9, the default `/`) and MRI (Bruker ParaVision, `/mri`).
 
 Phase 4 of [`tasks/operator_ingest_tooling_plan.md`](../../../tasks/operator_ingest_tooling_plan.md).
+
+> **Operator-facing help:** the click-by-click usage lives in
+> [`tools/operator/README.md`](../README.md); plain-language troubleshooting is in
+> [`tools/OPERATOR_FAQ.md`](../../OPERATOR_FAQ.md). This page is the developer /
+> data-office reference (architecture, freezing, the core endpoint map).
 
 ## Two paths
 
@@ -73,8 +82,15 @@ serves both pages — ship two shortcuts: `gjesus3_ingest.exe` (microscopy `/`) 
 pip install flask paramiko pyinstaller czifile tifffile numpy pyyaml
 # Build OUTSIDE OneDrive — see the warning below.
 pyinstaller --workpath D:/_build --distpath D:/_dist tools/operator/gui/gjesus3_ingest.spec
-# -> D:/_dist/gjesus3_ingest/gjesus3_ingest.exe   (~206 MB one-folder build)
+# -> D:/_dist/gjesus3_ingest.exe   (single self-extracting file, ~95 MB)
 ```
+
+The spec defaults to `ONEFILE = True` — one self-extracting `gjesus3_ingest.exe`,
+chosen so the data office can drop a single file onto the NAS
+(`...\tools\gjesus3_ingest.exe`) and run it in place. (Set `ONEFILE = False` in
+the spec for the faster-starting one-folder build, where operators copy the whole
+folder locally.) The deployed production exe (NAS, 2026-06-24) is the ~95 MB
+single-file build.
 
 > **⚠️ Build OUTSIDE OneDrive.** This repo lives under a OneDrive-synced folder,
 > and OneDrive locks PyInstaller's build artifacts mid-build (`PermissionError`

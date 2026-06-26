@@ -1,5 +1,7 @@
 # `tools/operator/` import contract — READ BEFORE ADDING A FRONT-END
 
+*Last Updated: 2026-06-26*
+
 This package is the shared, GUI-agnostic core for the operator-facing ingest
 front-ends (Phase 1 of `tasks/operator_ingest_tooling_plan.md`). It reuses the
 validated pipeline (`ingest.*`, `ingest_raw`) and never reimplements ingest

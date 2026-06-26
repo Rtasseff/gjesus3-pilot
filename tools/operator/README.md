@@ -1,14 +1,23 @@
 # Operator self-service ingest — `tools/operator/`
 
+*Last Updated: 2026-06-26*
+
 This is the **no-YAML** way for operators to ingest their own data, running the
 exact validated pipeline the data office uses. Three thin front-ends sit over
 one shared core; none of them reimplements ingest logic.
 
 | You are... | Use | Platform |
 |---|---|---|
-| an **MRI** (Bruker ParaVision) operator | `mri-ingest` (command line) | Linux acquisition machine |
+| an **MRI** (Bruker ParaVision) operator | `mri-ingest` (command line) — or the **MRI page** of the GUI | Linux acquisition machine — or Windows |
 | a **Nuclear Imaging** (Molecubes PET/CT) operator | `ni-ingest` (command line) | Linux acquisition machine |
-| a **microscopy** operator (AxioScan 7 / Cell Observer / LSM 900) | the **microscopy GUI** (`.exe`, opens in your browser) | Windows |
+| a **microscopy** operator (AxioScan 7 / Cell Observer / LSM 900) | the **GUI** (`gjesus3_ingest.exe`, opens in your browser) | Windows |
+
+The Windows front-end is a **single frozen executable, `gjesus3_ingest.exe`**,
+with two pages — **microscopy** (`/`) and **MRI** (`/mri`). One file serves both;
+the data office ships a shortcut per page.
+
+> **Stuck? Plain-language answers to the most common operator questions are in
+> [`tools/OPERATOR_FAQ.md`](../OPERATOR_FAQ.md).**
 
 If you would rather hand-edit a YAML config (the data-office path), that still
 works — see [`mfb-rdm-docs/11_OPERATIONS.md §3.2`](../../mfb-rdm-docs/11_OPERATIONS.md)
@@ -178,15 +187,18 @@ mri-ingest /path/to/study --is-control false --disease-model "EAE" \
 
 ## Microscopy operators (Windows GUI)
 
-The microscopy front-end is a small web app that opens in your browser. On a
-locked-down Windows microscopy machine it ships as a **single `.exe`** — no
-Python install, no admin rights needed.
+The Windows front-end is a small web app that opens in your browser. On a
+locked-down Windows machine it ships as a **single frozen executable,
+`gjesus3_ingest.exe`** (~95 MB) — no Python install, no admin rights needed. It
+has a **microscopy page** (the default, described here) and an **MRI page** (the
+Windows alternative to `mri-ingest`).
 
 ### Running the GUI
 
-1. **Double-click `microscopy_ingest.exe`.** A browser tab opens automatically
-   (at `http://127.0.0.1:5000`). Leave the little console window open while you
-   work — closing it stops the app.
+1. **Double-click `gjesus3_ingest.exe`** (microscopy page), or the
+   `gjesus3_ingest.exe --mri` shortcut for the MRI page. A browser tab opens
+   automatically (at `http://127.0.0.1:5000`). Leave the little console window
+   open while you work — closing it stops the app.
 2. **Set the NAS root once.** In the NAS-root box, enter where the NAS is mounted
    (e.g. `J:\gjesus3-data`) and save. The app remembers it next time.
 3. **Run a recipe** (the everyday case):
@@ -225,19 +237,21 @@ Python install, no admin rights needed.
 
 ### Building the `.exe` (data office, one-time per release)
 
-The microscopy machine runs the `.exe` only. To produce it:
+The instrument machine runs the `.exe` only. **One** exe serves both pages. To
+produce it (build **outside** OneDrive — it locks PyInstaller's artifacts):
 
 ```sh
-pip install flask pyinstaller czifile tifffile numpy pyyaml pydicom tqdm
-pyinstaller tools/operator/gui/microscopy_ingest.spec
-# -> dist/microscopy_ingest/microscopy_ingest.exe
+pip install flask paramiko pyinstaller czifile tifffile numpy pyyaml
+pyinstaller --workpath D:/_build --distpath D:/_dist tools/operator/gui/gjesus3_ingest.spec
+# -> D:/_dist/gjesus3_ingest/gjesus3_ingest.exe
 ```
 
 The spec bundles the per-instrument templates and the seed recipes into the
-`sys._MEIPASS`-aware locations the core looks in first. After freezing, verify
-the exe by previewing **and** dry-run-ingesting a real `.czi` batch (the dry-run
-exercises the bundled `czifile`/`numpy`/`tifffile`). Full detail and the
-endpoint map are in [`gui/README.md`](gui/README.md).
+`sys._MEIPASS`-aware locations the core looks in first, and (for the MRI page)
+bundles `paramiko` + `tools/ftp_mirror.py`. After freezing, verify the exe by
+previewing **and** dry-run-ingesting a real `.czi` batch (the dry-run exercises
+the bundled `czifile`/`numpy`/`tifffile`). Full detail, the OneDrive build
+warning, and the endpoint map are in [`gui/README.md`](gui/README.md).
 
 ---
 

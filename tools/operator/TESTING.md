@@ -1,9 +1,11 @@
 # Testing the operator front-ends before handing them to users
 
+*Last Updated: 2026-06-26*
+
 This is the data-office rehearsal guide: how to exercise the three operator
-front-ends (`ni-ingest`, `mri-ingest`, microscopy GUI) on *your own* machine
-before installing them on the real instrument machines. Every step here was run
-and verified on Ryan's Windows workstation (2026-06-08).
+front-ends (`ni-ingest`, `mri-ingest`, the `gjesus3_ingest.exe` GUI) on *your own*
+machine before installing them on the real instrument machines. Every step here
+was run and verified on Ryan's Windows workstation (2026-06-08).
 
 The golden rule: **commit-tests go into a throwaway "test NAS", never the live
 registry.** A dry-run is read-only and safe anywhere; a real `--go` commit
@@ -61,8 +63,8 @@ When you're done: `rm -rf C:\Users\<you>\temp\testnas` and rebuild any time.
 
 1. **Dry-run against the LIVE NAS** (`--nas-root J:\gjesus3-data --dry-run`).
    Read-only. Confirms the tool reads the real registry, scopes your folder, and
-   that already-ingested acquisitions show as *skipped* (idempotency). Because
-   the exhibition data is already on the live registry, this typically reports
+   that already-ingested acquisitions show as *skipped* (idempotency). If the
+   folder you point at is already in the production registry, this reports
    "0 new" — that's the point.
 2. **Dry-run against the TEST NAS** (`--nas-root <testnas> --dry-run`). Empty
    registry → every acquisition shows as new, so you see the full preview table
@@ -167,6 +169,7 @@ rm -rf C:\Users\<you>\temp\testnas
 ```
 
 Nothing here touches the live `J:\gjesus3-data` registry as long as every `--go`
-used a `--nas-root` pointing at the test NAS. If you ever do want a real commit
-into the live (currently non-production) NAS, just point `--nas-root` at
-`J:\gjesus3-data` — but do that deliberately, not as part of a test loop.
+used a `--nas-root` pointing at the test NAS. A real commit into the live NAS is a
+**production** write (gjesus3 has been true production since the 2026-06-10
+restart) — point `--nas-root` at `J:\gjesus3-data` only deliberately, never as
+part of a test loop.
