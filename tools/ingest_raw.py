@@ -200,8 +200,12 @@ def _resolve_archive_primary(cfg_single, ingest_block):
     )
 
 
-def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn):
+def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn, recon_idx=None):
     """Folder-as-primary copy for a Molecubes Nuclear Imaging acquisition.
+
+    `recon_idx` (NI live, per-recon model): when given, copy ONLY that one
+    reconstruction's DICOMs (one acquisition per reconstruction). Default
+    `None` copies ALL recons into one bundle (archive NI + back-compat).
 
     SLIM copy (round-8 v2, 2026-05-27): only the reconstructed DICOMs
     land on gjesus3, in a flat `<ACQ-ID>.data/` subfolder. All other
@@ -258,16 +262,21 @@ def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn):
     # Build the (src_file, dst_relpath) plan from the load_ni_acquisition
     # result. Each .dcm has its already-planned dst_basename; everything
     # else is dropped.
+    # Per-recon scoping (NI live): restrict to the one requested reconstruction.
+    recons = md.get("recons", {})
+    if recon_idx is not None:
+        recons = {recon_idx: recons[recon_idx]} if recon_idx in recons else {}
+
     plan = []
     recon_indices = []
     n_skipped_multi = 0
     n_unrecognized = 0
     for idx in sorted(
-        md.get("recons", {}).keys(),
+        recons.keys(),
         key=lambda x: int(x) if x.isdigit() else x,
     ):
         recon_indices.append(idx)
-        r = md["recons"][idx]
+        r = recons[idx]
         for d in r.get("dicoms") or []:
             src_file = src / d["src_relpath"]
             dst_rel = os.path.join(data_dirname, d["dst_basename"])
@@ -276,6 +285,10 @@ def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn):
         n_unrecognized += len(r.get("unrecognized_dicoms") or [])
 
     if not recon_indices:
+        if recon_idx is not None:
+            raise RuntimeError(
+                f"Requested recon_{recon_idx} not found under {source_path}."
+            )
         raise RuntimeError(
             f"No recon_<idx>/ subfolders found in {source_path} — "
             f"is this a Molecubes NI acquisition?"
@@ -955,8 +968,11 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         log(f"Folder-as-primary copy (strategy: {copy_strategy})")
         try:
             if copy_strategy == "ni_molecubes":
+                # recon_idx is set only on NI-live per-recon cases (the
+                # fan-out in config.expand_batch); None elsewhere -> bundle.
                 dest_checksums = copy_ni_acquisition(
                     source_path, dest_dir, acq_id_str, log,
+                    recon_idx=cfg_single.get("ni_recon_idx"),
                 )
             elif copy_strategy == "mri_paravision_v2":
                 reconstructions = ingest_block.get("reconstructions")
