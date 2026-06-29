@@ -1,8 +1,8 @@
 # 02 — Infrastructure
 
 **Parent:** [Documentation Index](00_INDEX.md)  
-**Status:** ⚠️ Some IT details still open (filesystem type, snapshot retention, offsite backup); access + permission model APPLIED.
-**Last Updated:** 2026-06-26
+**Status:** ⚠️ Some IT details still open (filesystem type, snapshot retention); **off-site backup options researched 2026-06-29 (§5.4) — recommendation pending one external confirmation**; access + permission model APPLIED.
+**Last Updated:** 2026-06-29
 
 ---
 
@@ -172,8 +172,38 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 | Mitigation | Options | Status |
 |------------|---------|--------|
 | **Offsite backup scope** | All raw? Publications only? Critical projects? | ⚠️ Awaiting decision |
-| **Backup method** | Cloud service? External drives? Institutional? | ⚠️ Awaiting decision |
+| **Backup method** | Cloud service? External drives? Institutional? | 🔶 Researched 2026-06-29 — see §5.4 (recommendation pending OCRE egress-cap confirmation) |
 | **Backup responsibility** | IT? Data Management Lead? Project leads? | ⚠️ Awaiting decision |
+
+---
+
+### 5.4 Off-site backup & disaster recovery — researched options (❓ EVALUATING, 2026-06-29)
+
+Off-site backup is the **single largest open mitigation** (§3.3): it is the only thing that covers multi-drive / array loss, controller / enclosure failure, ransomware that reaches the share, and site disaster — none of which the on-array snapshots address. Options were researched 2026-06-29 for the EU-public-research context. **This is a recommendation pending one external confirmation (the OCRE egress cap, below); the spend itself is a PI / management call (§5.3).**
+
+**Sizing the copy.** Live data is ~0.44 TB today but climbing with historical ingest: **~10 TB by ~Q3 2026, ceiling ~50 TB over a few years.** Figures below are at the 50 TB ceiling.
+
+**Governing principle — optimise for "cheap to *restore*," not "cheap to *store*."** Cloud *archival* tiers (AWS Glacier, Azure Archive) cost ~€1/TB-month to store but charge **per-GB egress + retrieval at the moment of a restore** — a full 50 TB recovery is **~€4,500 plus a 12–48 h wait** at AWS retail. A DR copy exists precisely to be restored, so the right targets are **no-egress / low-egress / egress-waived**, EU-jurisdiction, and immutable.
+
+| Option | Jurisdiction | Store / yr @50 TB | Full restore (one-time) | Notes |
+|---|---|---|---|---|
+| **Scaleway Glacier** (S3) | 🇪🇺 FR | ~€1,500 | ~€920 | low native egress; S3 Object Lock |
+| **OVHcloud Cold Archive** (S3) | 🇪🇺 FR | ~€1,100 | low + *unpublished retrieval fee* | confirm retrieval €/GB |
+| **AWS Glacier Deep Archive via OCRE** | 🇺🇸 US | ~€550 | ~€140 *if* the OCRE egress waiver covers a DR restore; else ~€4,500 | cheapest to store; egress-cap risk |
+| **Backblaze B2** (Amsterdam) | 🇺🇸 US | ~€3,840 | ~€0 (free egress ≤ 3× stored) | simplest; instant; US CLOUD Act |
+| **Offline rotating HDDs** (off-site) | 🏠 local | ~€900–1,400 one-time (refresh ~3 yr) | drive read speed | true air-gap; manual |
+
+*Also-rans:* Wasabi (like B2 but 90-day minimum); Hetzner Storage Box (~€2/TB-mo, zero egress, but SFTP / 20 TB-per-box); Azure / GCS Archive (≈ AWS profile); **LTO tape** — not worth the ~€7k drive below ~1 PB; **EUDAT / EOSC** — wrong tool (for curated, PID'd, published datasets, not a NAS mirror); **CRUE** — not an option (members are universities only, and it runs no storage product).
+
+**Recommended design (3-2-1):**
+
+1. **Primary off-site copy → an EU-sovereign S3 archive (Scaleway Glacier or OVHcloud Cold Archive), procured through RedIRIS / GÉANT OCRE 2024.** Gains the framework's **egress waiver + EU-public-procurement compliance + EU jurisdiction** (avoiding the US CLOUD Act exposure that AWS / Backblaze / Wasabi carry). Pushed off the NAS by **QNAP HBS 3** (free) with **client-side encryption + S3 Object Lock** (ransomware-immutable) on a **scheduled incremental** sync. ≈ **€1,100–1,500/yr at 50 TB.**
+2. **Second copy → rotating external HDDs stored off-site**, refreshed ~every 3 years (~€900–1,400 one-time). Completes 3-2-1 and gives a true **air-gap** (ransomware-immune) that is independent of any cloud account.
+3. **Eligibility is confirmed:** CIC biomaGUNE is a registered RedIRIS affiliate ("Centro I+D"); OCRE eligibility is "served by an NREN," **not** "is a university," so the framework is open to us.
+
+**The one blocker before committing → see INFRA-06.** The OCRE egress waiver is stated as "≤ 15% of monthly spend" (AWS) vs "no limit" (GÉANT/Sparkle); for a one-time large DR restore that is the difference between **~€140 and ~€4,500**. **Confirm in writing with Sparkle + RedIRIS** whether a one-time DR restore is fully covered (enquiry email drafted 2026-06-29). Note the EU-sovereign providers' **low native egress (~€920 worst-case at 50 TB) makes the recommendation robust even if the waiver is capped** — we are not betting the plan on that answer.
+
+**Local avenue still being checked:** whether a **Basque-regional** shared service (i2Basque / EJIE / the CIC network / a DIPC–UPV-EHU datacenter) offers research-institution backup storage — analogous to Catalonia's CSUC. Pending; to be folded in.
 
 ---
 
@@ -242,4 +272,4 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 | INFRA-03 | ~~Confirm snapshot capability~~ Snapshots confirmed active (daily). Still need: retention policy details, restore procedure | IT | 🔶 Partially resolved |
 | INFRA-04 | Clarify remote/VPN access options | IT | ⚠️ Open |
 | INFRA-05 | Decide backup scope (all raw / pubs only / critical) | PI | ⚠️ Open |
-| INFRA-06 | Decide backup method | PI + IT | ⚠️ Open |
+| INFRA-06 | Decide backup method | PI + IT | 🔶 Options researched (§5.4); recommendation drafted, pending OCRE egress-cap confirmation (enquiry email ready) |
