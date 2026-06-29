@@ -3,8 +3,14 @@
 **Branch:** `feat/ni-live-hardening` (off `main`, which already carries all NI live-sync code).
 **ALL of §1 + §2 + §3 land on THIS one branch** (user directive 2026-06-25 — not split).
 **Status:** §1 DONE. §2 + §3.5 (per-recon, **Tier B**) DONE + verified. §3.1 (no-YAML operator
-CLI) DONE + verified. Next: §3.2 (pre-run corrections CSV) + §3.3 (per-session tracer
-metadata), GUI (§3.6) last.
+CLI) DONE + verified. §3.2 + §3.3 (corrections CSV + per-session tracer metadata) DONE +
+verified end-to-end. **Only §3.6 (Mac GUI) left — explicitly last.**
+
+§3.2/§3.3 verified (synthetic tree → throwaway nas, WITH --nas-root): `--plan` wrote a 1-row
+worksheet; edited project `0324→0325` + `extra_metadata=tracer=FDG;dose=10 MBq`; `--corrections
+--go` → routed to `proj-ae-biomegune-0325` (corrected), `metadata.json.session_extra={tracer,
+dose}`, and `original_name` stayed the RAW `…/0324_m61/…/recon_0` (identity untouched → re-syncs
+still dedup). Unit tests `test_ni_corrections.py` (20) + full suite (10) green.
 
 **SCOPE NOTE (creep check, user 2026-06-25):** chose **Tier B** — per-recon acquisitions with
 NO registry mutation. Empty recons (reconstruction pending) are **skipped + logged**, picked up
@@ -172,40 +178,44 @@ against the synthetic tree → CT-001(/recon_0) + CT-002(/recon_1), per-recon ha
 researcher=irene, Failed 0; archive mode still parses. Operator command:
 `ni-ingest <my folder> --live --operator <name>`.
 
-### 3.2 Phase B — pre-run readout the operator can correct (CSV-intermediary, recommended)
-The sync identity is **`(acq_date, original_name)`** where `original_name` is the relpath from
-the source root = **the REMI path** (`config._build_dedupe_index`, `expand_batch`). This is the
-lever that makes the user's design work:
+### 3.2/3.3 Phases B+C — pre-run corrections CSV + per-session metadata (DECISIONS LOCKED)
+One feature: a plan→edit→ingest cycle. **Decisions (user 2026-06-29):**
+- **D5 — granularity: ONE ROW PER SESSION.** A session = the subject-folder source path
+  (`<series>/<date>/<subject>`) — where the REMI mistakes (project code, session id, mouse id)
+  and the per-session tracer actually live. One edited row applies to all of that session's
+  reconstructions + PET/CT.
+- **D6 — persistence: PER-RUN FILE** the operator passes via `--corrections <file>` (NOT a
+  NAS-side auto-applied store). Simpler; the natural plan→edit→ingest cycle each sync re-surfaces
+  what's new. **Known wrinkle to document:** a *new* reconstruction of a previously-corrected
+  session, ingested on a later run *without* re-passing that session's correction row, gets the
+  *uncorrected* values. Mitigation = always run the plan step each sync (it lists what's new →
+  the operator re-enters that session's fix). Documented as a limitation, not silent.
 
-- **Step 1 — preview/plan:** emit a CSV (extends today's `ni_live_discover --csv`) with one row
-  per acquisition: the REMI `original_name` (identity, **read-only** — operator must not edit
-  it), plus the *editable value* columns (`project`, `session_id`, animal/`subject` ids,
-  `timepoint`, …) prefilled with the parsed values, plus blank `add_meta_*` columns for
-  per-session extras.
-- **Step 2 — operator edits** the value columns to fix REMI mistakes and adds tracer field/value
-  pairs. They do **not** touch `original_name`.
-- **Step 3 — ingest consumes the corrections CSV:** corrected values populate the **registry +
-  metadata.json fields only**; `original_name` (the dedup key) stays the *uncorrected* REMI
-  path. Result: a later sync sees the same identity → not "new"; the corrected metadata is
-  reproduced from the persisted corrections, not re-derived from the bad folder name.
+**The cycle:**
+1. **Plan** — `ni-ingest <folder> --live --plan out.csv` (read-only): discover, group the NEW
+   acquisitions (not yet in the registry) by session, write **one row per new session**:
+   `session_path` (READ-ONLY key = the subject-folder relpath) + parsed-value columns
+   (`project`, `session_id`, `animal_codes`, `timepoint`) prefilled + an `extra_metadata` column
+   (free-form `key=value;key=value`, e.g. `tracer=FDG`).
+2. **Edit** — operator fixes wrong values and adds tracer pairs. They never touch `session_path`.
+3. **Ingest** — `ni-ingest <folder> --live --corrections out.csv`: load → `{session_path:
+   {corrected values + extra_metadata}}`. Application point: in `expand_batch`, **after
+   `subject_parse`**, look the case's session_path up in the map and OVERRIDE `discovered.project`
+   / `discovered.animal_codes` / etc. — so the derived `project_hint`, `session_id`, `sample_id`,
+   and the **DB subject lookup** all use the corrected values downstream. `original_name` (the
+   per-recon dedup key) stays the **uncorrected REMI path** → later syncs still dedup correctly.
+   The `extra_metadata` is stashed on the case → written to a new sidecar block.
 
-**Corrections persistence (the anti-drift core).** Store corrections durably in
-`registries/ni_corrections.csv` keyed on `(acq_date, original_name)`. Every sync loads it and
-re-applies matching corrections automatically, so the human fixes a given session **once**.
-This is the mechanism that prevents the "REMI stays wrong → re-correct every time / sync thinks
-it's new" failure the user called out.
+**Per-session metadata (tracer)** rides the same CSV `extra_metadata` column → a new
+free-form `metadata.json` block (e.g. `session_extra: {tracer: "FDG", ...}`). Aligns with the
+existing NI backlog "tracer compound NOT in the data — must come from researchers/study records."
+Document the block shape in `mfb-rdm-docs/08_METADATA.md`.
 
-*Why CSV-intermediary over one-at-a-time interactive:* scales to a 127-case first load, is
-reviewable/auditable, doubles as the persistence store, and matches the "pre-run report →
-correct → run" model the user described. The interactive one-Enter-at-a-time mode is a fine
-*future* convenience for the steady-state "a few new sessions" case (Open Decision).
-
-### 3.3 Phase C — per-session additional metadata (tracer)
-The `add_meta_*` (or a `key=value;key=value`) column(s) from the corrections CSV flow into a
-new free-form block in `metadata.json` (e.g. `session_extra: {tracer: "...", ...}`), captured
-at the same time as the corrections. Aligns with the existing NI backlog item "tracer compound
-NOT in the data — must come from researchers/study records" (BACKLOG §"NI (Molecubes) — tracer
-compound…"). Document the block shape in `mfb-rdm-docs/08_METADATA.md`.
+Plumbing: the CLI loads the CSV and passes the map to the pipeline via the cfg (e.g.
+`cfg["_ni_corrections"]`); `expand_batch` applies it only when present (NI-live only — nothing
+else sets it). New module `tools/ingest/ni_corrections.py` (read/write the CSV, build the map,
+apply to a case) + tests; a `--plan` writer in `ni_ingest.py`. *(Interactive one-at-a-time
+correction stays a future convenience; CSV is the chosen path.)*
 
 ### 3.5 Phase D — INCREMENTAL RECONSTRUCTION (the core; absorbs problem 0.2 + old new-recon)
 NI data arrives in stages: **scan → folder + `recon_<idx>/` dirs created → DICOMs appear after

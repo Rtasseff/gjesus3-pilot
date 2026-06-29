@@ -84,6 +84,10 @@ runner = _CORE.runner
 env = _CORE.env
 metadata_prompt = _CORE.metadata_prompt
 
+# The loader put tools/ on sys.path, so the ingest package resolves. ni_corrections
+# powers the --plan / --corrections cycle (live mode only).
+from ingest import ni_corrections  # noqa: E402
+
 
 INSTRUMENT_KEY = "NI"          # hardcoded -> molecubes_ni.yaml (templates map)
 
@@ -337,6 +341,38 @@ def _commit(cfg, nas_root, instrument_key=INSTRUMENT_KEY):
 LIVE_INSTRUMENT_KEY = "NI_LIVE"   # -> molecubes_ni_live.yaml
 
 
+def _write_plan(result, path):
+    """Write one corrections row per NEW session to `path`, then stop (read-only).
+
+    Groups the preview's new acquisitions by session (the raw <series>/<date>/
+    <subject> key) and prefills project + animal_codes from the parse so the
+    operator only has to change what's wrong (or add extra_metadata).
+    """
+    seen = {}
+    for c in result.cases:
+        disc = c.discovered or {}
+        key = ni_corrections.session_key(disc)
+        if not key or key in seen:
+            continue
+        seen[key] = {
+            "session_path": key,
+            "project": disc.get("project", ""),
+            "animal_codes": disc.get("animal_codes", ""),
+            "session_id": "",
+            "sample_id": "",
+            "extra_metadata": "",
+        }
+    rows = list(seen.values())
+    if not rows:
+        log("no new sessions to plan (nothing new in scope).", "INFO")
+        return 0
+    ni_corrections.write_plan(path, rows)
+    log(f"wrote {len(rows)} session row(s) to {path}. Edit the values / add "
+        f"extra_metadata (e.g. tracer=FDG), then re-run with "
+        f"--corrections {path}.", "INFO")
+    return 0
+
+
 def _run_live(args, nas_root):
     """LIVE-machine sync: recurse a researcher's box folder, one acq per recon.
 
@@ -388,12 +424,32 @@ def _run_live(args, nas_root):
     template = templates.load_template(LIVE_INSTRUMENT_KEY)
     cfg = config_builder.build_config(template, overrides)
 
+    # --corrections: per-session fixes + metadata (values only; the REMI-path
+    # identity is never changed). Validate the header up front so a typo'd
+    # column fails loudly instead of silently doing nothing.
+    if args.corrections:
+        try:
+            ni_corrections.assert_header(args.corrections)
+        except Exception as e:  # noqa: BLE001
+            log(str(e), "ERROR")
+            return 2
+        corr = ni_corrections.read_corrections(args.corrections)
+        cfg["_ni_corrections"] = corr
+        log(f"corrections: {len(corr)} session(s) loaded from {args.corrections}",
+            "INFO")
+
     log("building preview (read-only)...", "INFO")
     result = preview.preview_batch(cfg, nas_root)
     if result.blocking_errors:
         for err in result.blocking_errors:
             log(err, "ERROR")
         return 4
+
+    # --plan: write the per-session worksheet for the NEW acquisitions, then stop
+    # (read-only; no ingest).
+    if args.plan:
+        return _write_plan(result, args.plan)
+
     if not result.cases:
         log("no new NI reconstructions to sync (everything matched is already "
             "in the registry, or no reconstructions are ready yet).", "WARN")
@@ -451,6 +507,20 @@ def _parse_args(argv):
         "--operator", default=None,
         help="(live) Who ran the scanner (sidecar `operator`). Default: the "
              "researcher.",
+    )
+    parser.add_argument(
+        "--plan", default=None, metavar="OUT.csv",
+        help="(live) READ-ONLY: write a corrections worksheet — one row per NEW "
+             "session — to OUT.csv and stop (no ingest). Edit it to fix wrong "
+             "REMI values (project / mouse ids) or add per-session metadata "
+             "(extra_metadata, e.g. 'tracer=FDG'), then re-run with "
+             "--corrections OUT.csv.",
+    )
+    parser.add_argument(
+        "--corrections", default=None, metavar="IN.csv",
+        help="(live) Apply per-session corrections + metadata from IN.csv (the "
+             "edited --plan worksheet). Corrected values populate the metadata "
+             "fields only; the sync identity (the REMI path) is never changed.",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
