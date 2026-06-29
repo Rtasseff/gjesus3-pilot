@@ -94,6 +94,28 @@ python tools/operator/ni_ingest.py /path/to/folder --dry-run  # preview only, ne
   tells you). Pointing archive mode at a live/non-extracted folder prints a hint
   to use `--live`.
 
+**Fixing REMI mistakes + adding the tracer (live mode) — the plan → edit → sync cycle.**
+Sometimes a project code or mouse id was typed wrong in REMI and can only be fixed on
+the way out, and the **tracer/compound** isn't in the scan files at all. Handle both
+with a worksheet, **without breaking the sync**:
+
+```sh
+# 1) write a worksheet — one row per NEW session — and stop (nothing is synced):
+python tools/operator/ni_ingest.py "<my data folder>" --live --plan corrections.csv
+# 2) open corrections.csv, fix wrong values (project / animal_codes) and/or add
+#    per-session metadata in the extra_metadata cell, e.g.  tracer=FDG; dose=10 MBq
+#    (do NOT change the session_path column — it's the key)
+# 3) sync, applying your edits:
+python tools/operator/ni_ingest.py "<my data folder>" --live --corrections corrections.csv
+```
+
+The corrected values populate the **metadata + project routing** (and the animal-DB
+lookup); the **sync identity never changes** (it stays the original on-box path), so a
+later sync still recognises what's already there. The `extra_metadata` lands in each
+acquisition's `metadata.json` under `session_extra`. **Re-run the `--plan` step each
+sync** — it lists what's new, so you re-enter a fix for any *new* reconstruction of a
+session you corrected before (the worksheet is per-run, not remembered).
+
 ### MRI (Bruker ParaVision) — `mri-ingest`
 
 ```sh
