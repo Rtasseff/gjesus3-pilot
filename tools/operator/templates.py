@@ -44,6 +44,7 @@ from ingest import config  # noqa: E402  (after sys.path setup)
 # locked convention templates under tools/templates/instruments/.
 INSTRUMENT_TEMPLATES = {
     "NI":   "molecubes_ni.yaml",
+    "NI_LIVE": "molecubes_ni_live.yaml",
     "MRI":  "mri_bruker.yaml",
     "ZWSI": "axioscan7.yaml",
     "CELL": "cell_observer_cells.yaml",
