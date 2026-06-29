@@ -69,23 +69,30 @@ commands). Python 3 with `pyyaml`, `pydicom`, `tqdm`, and — for the MRI FTP pu
 ### Nuclear Imaging — `ni-ingest`
 
 ```sh
+# LIVE-machine sync (run ON the Molecubes box — the common case):
+python tools/operator/ni_ingest.py "<my data folder>" --live --operator <name>   # preview, then Proceed?
+python tools/operator/ni_ingest.py "<my data folder>" --live --dry-run           # preview only
+python tools/operator/ni_ingest.py "<my data folder>" --live --go                # skip the prompt
+
+# ARCHIVE mode (extracted .tgz folders):
 python tools/operator/ni_ingest.py /path/to/folder            # preview, then asks Proceed? [y/N]
 python tools/operator/ni_ingest.py /path/to/folder --dry-run  # preview only, never writes
-python tools/operator/ni_ingest.py /path/to/folder --go       # skip the prompt and commit
 ```
 
-- Point it at **one extracted acquisition folder**, or at a **parent folder of
-  many** — it auto-detects which and previews every acquisition it finds.
-- **Archive (`.tgz`) data must be extracted first.** If you point `ni-ingest` at
-  a `.tgz` (or a folder of `.tgz`), it tells you to run
-  [`tools/extract_ni_archives.py`](../extract_ni_archives.py) first rather than
-  guessing. Extract, then point `ni-ingest` at the extracted folder.
-- **Live-machine (non-archive) folders are not wired up yet.** The on-the-machine
-  folder layout still needs to be captured in a template
-  (`molecubes_ni_live.yaml`). If you point at a live folder, the tool says so and
-  asks you to use archive mode for now. *(Deployment itself is unblocked — the NI
-  server runs Linux and a script can be installed there, confirmed 2026-06-03;
-  only the live-layout template remains.)*
+- **Live mode (`--live`)** — point at **your researcher data folder on the box**
+  (e.g. `.../remiW11/data/irene`). The locked `molecubes_ni_live.yaml` convention
+  recurses `<series>/<date>/<subject>/<timestamp>_<MODALITY>/` and ingests **one
+  acquisition per reconstruction**: each `recon_<idx>/` with DICOMs is its own
+  acquisition, so a reconstruction you run *later* is automatically picked up on
+  the next sync; a reconstruction still running (no DICOMs yet) is skipped and
+  caught later — never an error. The box is **read-only** (never modified).
+  `--researcher` defaults to the folder name; `--operator` defaults to the
+  researcher. No YAML.
+- **Archive mode (default)** — point at **one extracted acquisition folder**, or a
+  **parent folder of many**; it auto-detects which. `.tgz` data must be extracted
+  first with [`tools/extract_ni_archives.py`](../extract_ni_archives.py) (the tool
+  tells you). Pointing archive mode at a live/non-extracted folder prints a hint
+  to use `--live`.
 
 ### MRI (Bruker ParaVision) — `mri-ingest`
 

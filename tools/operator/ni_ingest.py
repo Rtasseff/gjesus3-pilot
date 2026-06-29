@@ -28,14 +28,21 @@ each staged folder directly holds the acquisition's files (protocol.txt +
 recon_<idx>/). This script ingests those extracted folders. If you point it at a
 .tgz it explains the one extra step (and offers to run the extractor).
 
-LIVE MODE (ingesting straight off the acquisition machine, no .tgz round-trip)
-is NOT blocked on deployment -- the platform manager (Unai) confirmed the NI
-server runs Linux and a script can be installed there. The ONE remaining piece
-is the live folder layout, which will be captured in a future
-molecubes_ni_live.yaml template + one detector branch here; the script and the
-shared core are unchanged. Until that template exists, use archive mode (extract
-the .tgz first). This script detects a likely live/non-extracted folder and
-prints a clear "use archive mode for now" message instead of guessing a layout.
+LIVE MODE (2026-06-29) is implemented behind the explicit --live flag. Run it ON
+the Molecubes box, pointing at YOUR researcher data folder; the locked
+molecubes_ni_live.yaml convention recurses
+`<series>/<YYMMDD>/<subject>/<ts>_<MODALITY>/` and ingests ONE ACQUISITION PER
+RECONSTRUCTION (each recon_<idx>/ with DICOMs is its own acquisition; a recon
+added on a later sync is automatically new; a recon still reconstructing is
+skipped and picked up later). The source box is READ-ONLY (never modified). No
+YAML editing, no .tgz round-trip, no extraction:
+
+    ni-ingest <my data folder> --live --operator <name>
+    ni-ingest <my data folder> --live --dry-run
+
+Without --live the script stays in ARCHIVE mode (above); a non-extracted folder
+in archive mode still prints the "extract first / or use --live" guidance rather
+than guessing a layout.
 """
 
 import argparse
@@ -189,23 +196,27 @@ def _looks_like_live_acquisition(path):
 
 
 def _explain_live_mode(path):
-    """Print the clear, non-blaming live-mode message and return an exit code."""
+    """Print the clear, non-blaming message and return an exit code.
+
+    Reached when an archive-mode run is pointed at a folder that isn't an
+    extracted acquisition. Two real options now: live mode (--live) for the box,
+    or extract + archive mode for a .tgz.
+    """
     log(
         f"{path!r} doesn't look like an EXTRACTED NI archive (it has no "
         "protocol.txt + recon_<idx>/ acquisition folders).", "ERROR",
     )
     log(
-        "NI live mode (ingesting straight off the acquisition machine) is "
-        "pending the live folder layout -- a future molecubes_ni_live.yaml "
-        "template. Deployment itself is NOT blocked (the NI server runs Linux "
-        "and a script can be installed there); only the live-layout template "
-        "remains. Use ARCHIVE MODE for now:", "INFO",
+        "If this is the live Molecubes box, use LIVE MODE -- point at your "
+        "researcher data folder with --live:", "INFO",
     )
     log(
-        "  1. extract the .tgz archives with tools/extract_ni_archives.py", "INFO",
+        "    ni-ingest <your data folder> --live --operator <name>", "INFO",
     )
     log(
-        "  2. point ni-ingest at the extracted staging folder", "INFO",
+        "If this is a .tgz archive instead, use ARCHIVE MODE: (1) extract with "
+        "tools/extract_ni_archives.py, (2) point ni-ingest at the extracted "
+        "staging folder.", "INFO",
     )
     return 3
 
@@ -301,9 +312,9 @@ def _build_cfg(staging_dir, pattern, extra_overrides=None):
     return config_builder.build_config(template, overrides)
 
 
-def _commit(cfg, nas_root):
+def _commit(cfg, nas_root, instrument_key=INSTRUMENT_KEY):
     """Run the real ingest, routing the pipeline log to our stderr logger."""
-    recipe = runner.default_recipe_path(templates.template_path(INSTRUMENT_KEY))
+    recipe = runner.default_recipe_path(templates.template_path(instrument_key))
     results = runner.run(
         cfg, nas_root,
         dry_run=False, delete_source=False,
@@ -321,6 +332,91 @@ def _commit(cfg, nas_root):
     return 0
 
 
+# --------------------------------------------------------------------- live mode
+
+LIVE_INSTRUMENT_KEY = "NI_LIVE"   # -> molecubes_ni_live.yaml
+
+
+def _run_live(args, nas_root):
+    """LIVE-machine sync: recurse a researcher's box folder, one acq per recon.
+
+    No scope auto-detection and no .tgz/extraction: the operator points at their
+    researcher data folder and the molecubes_ni_live.yaml convention recurses it
+    (`<series>/<date>/<subject>/<ts>_<MODALITY>/`), ingesting ONE acquisition per
+    reconstruction (`per_recon_acquisitions`). The source box is READ-ONLY (the
+    template sets delete_source_after_ingest: false). Builds the config in memory
+    from the live template + per-run researcher/operator/metadata overrides,
+    previews, then commits through the same validated pipeline.
+    """
+    staging_dir = os.path.abspath(os.path.expanduser(args.folder))
+    if not os.path.isdir(staging_dir):
+        log(f"not a directory: {staging_dir}. Point --live at your researcher "
+            f"data folder on the box (e.g. .../remiW11/data/irene).", "ERROR")
+        return 2
+    log(f"live source (READ-ONLY): {staging_dir}", "INFO")
+
+    researcher = (args.researcher
+                  or os.path.basename(staging_dir.rstrip("/\\"))).strip()
+    if not researcher:
+        log("could not infer --researcher from the path; pass --researcher.",
+            "ERROR")
+        return 2
+    operator = (args.operator or researcher).strip()
+    log(f"researcher: {researcher}   operator: {operator}", "INFO")
+
+    # Condition/anatomy metadata (per-batch, optional, non-blocking).
+    interactive = (not args.no_prompt) and sys.stdin.isatty()
+    meta_overrides = metadata_prompt.collect_overrides(
+        {
+            "is_control": args.is_control,
+            "disease_model": args.disease_model,
+            "disease_state": args.disease_state,
+            "is_whole_body": args.is_whole_body,
+        },
+        is_batch=True, interactive=interactive,
+    )
+    summary = metadata_prompt.describe(meta_overrides)
+    if summary:
+        log(f"metadata: {summary}")
+
+    overrides = {
+        "auto_discover.staging_dir": staging_dir,
+        "registry.researcher": researcher,
+        "operator": operator,
+    }
+    overrides.update(meta_overrides)
+    template = templates.load_template(LIVE_INSTRUMENT_KEY)
+    cfg = config_builder.build_config(template, overrides)
+
+    log("building preview (read-only)...", "INFO")
+    result = preview.preview_batch(cfg, nas_root)
+    if result.blocking_errors:
+        for err in result.blocking_errors:
+            log(err, "ERROR")
+        return 4
+    if not result.cases:
+        log("no new NI reconstructions to sync (everything matched is already "
+            "in the registry, or no reconstructions are ready yet).", "WARN")
+        _print_preview_table(result)
+        return 0
+    _print_preview_table(result)
+
+    if args.dry_run:
+        log("--dry-run: nothing was written.", "INFO")
+        return 0
+    if not args.go:
+        try:
+            answer = input("Proceed? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer not in ("y", "yes"):
+            log("aborted; nothing was written.", "INFO")
+            return 0
+
+    log("committing live sync...", "INFO")
+    return _commit(cfg, nas_root, instrument_key=LIVE_INSTRUMENT_KEY)
+
+
 # ------------------------------------------------------------------------- main
 
 def _parse_args(argv):
@@ -335,7 +431,26 @@ def _parse_args(argv):
     )
     parser.add_argument(
         "folder",
-        help="Path to one extracted NI acquisition, or a batch root of them.",
+        help="Path to one extracted NI acquisition, or a batch root of them. "
+             "With --live, this is YOUR researcher data folder on the box "
+             "(e.g. .../remiW11/data/irene).",
+    )
+    parser.add_argument(
+        "--live", action="store_true",
+        help="LIVE-machine sync mode: point at your researcher data folder on "
+             "the Molecubes box; the molecubes_ni_live.yaml convention recurses "
+             "it (<series>/<date>/<subject>/<ts>_<MOD>/) and ingests ONE "
+             "acquisition per reconstruction. The source box is read-only.",
+    )
+    parser.add_argument(
+        "--researcher", default=None,
+        help="(live) Researcher / data owner for the registry `researcher` "
+             "column. Default: the folder name you pointed at.",
+    )
+    parser.add_argument(
+        "--operator", default=None,
+        help="(live) Who ran the scanner (sidecar `operator`). Default: the "
+             "researcher.",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -402,6 +517,12 @@ def main(argv=None):
     except env.NasRootError as e:
         log(str(e), "ERROR")
         return 2
+
+    # 1.5) LIVE-machine sync mode (explicit --live): recurse the researcher
+    #      folder via molecubes_ni_live.yaml, one acquisition per reconstruction.
+    #      Bypasses archive (.tgz) detection + scope auto-detection entirely.
+    if args.live:
+        return _run_live(args, nas_root)
 
     # 2) Archive (.tgz) inputs: explain + offer to extract, then stop.
     if _looks_like_tgz(path) or _dir_has_tgz_children(path):

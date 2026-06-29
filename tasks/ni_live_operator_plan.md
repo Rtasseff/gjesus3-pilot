@@ -2,8 +2,9 @@
 
 **Branch:** `feat/ni-live-hardening` (off `main`, which already carries all NI live-sync code).
 **ALL of §1 + §2 + §3 land on THIS one branch** (user directive 2026-06-25 — not split).
-**Status:** §1 DONE. §2 + §3.5 (per-recon, **Tier B**) DONE + verified end-to-end. Next:
-§3.1–3.3 (no-YAML operator CLI + corrections CSV + per-session tracer metadata), GUI last.
+**Status:** §1 DONE. §2 + §3.5 (per-recon, **Tier B**) DONE + verified. §3.1 (no-YAML operator
+CLI) DONE + verified. Next: §3.2 (pre-run corrections CSV) + §3.3 (per-session tracer
+metadata), GUI (§3.6) last.
 
 **SCOPE NOTE (creep check, user 2026-06-25):** chose **Tier B** — per-recon acquisitions with
 NO registry mutation. Empty recons (reconstruction pending) are **skipped + logged**, picked up
@@ -159,12 +160,17 @@ then the Mac GUI **last**.)
 > in REMI), (b) per-session extra metadata (tracer) captured to the JSON, (c) correct handling
 > of new reconstructions added to already-synced sessions — all **without confusing the sync**.
 
-### 3.1 Phase A — kill the YAML: an operator CLI `tools/operator/ni_ingest.py`
-Parallel to `tools/operator/mri_ingest.py`. Builds the config **in memory** from the locked
-`tools/templates/instruments/molecubes_ni_live.yaml` (operator never sees/edits YAML).
-Inputs: `--root <box>/<user>`, the researcher folder, `--operator "<name>"`, `--nas-root`.
-Internally runs the same validated `runner.run → ingest_raw.run_batch` path. This alone
-removes the per-batch YAML hand-edit and sets up the eventual Mac GUI.
+### 3.1 Phase A — kill the YAML: a `--live` mode on `tools/operator/ni_ingest.py` — DONE
+Implemented as a **`--live` mode added to the existing `ni_ingest.py`** (not a new tool — the
+file was already scaffolded for live mode: its docstring + `_explain_live_mode` pointed here).
+`--live` bypasses the archive `.tgz`/scope path and builds the config **in memory** from the
+locked `molecubes_ni_live.yaml` (new templates key `NI_LIVE`): the operator points at their
+researcher data folder, `--operator`/`--researcher` (defaults to the folder name) are the only
+inputs, and it runs the same validated `runner.run → ingest_raw.run_batch`. No YAML. Archive
+mode is byte-for-byte unchanged. **Verified:** `--live --dry-run` and a real `--live --go`
+against the synthetic tree → CT-001(/recon_0) + CT-002(/recon_1), per-recon hard links,
+researcher=irene, Failed 0; archive mode still parses. Operator command:
+`ni-ingest <my folder> --live --operator <name>`.
 
 ### 3.2 Phase B — pre-run readout the operator can correct (CSV-intermediary, recommended)
 The sync identity is **`(acq_date, original_name)`** where `original_name` is the relpath from
