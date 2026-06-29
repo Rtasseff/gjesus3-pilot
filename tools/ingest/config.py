@@ -11,6 +11,7 @@ from . import (
     dicom_utils,
     microscopy_utils,
     filename_parser,
+    ni_corrections,
     ni_metadata,
     paravision_metadata,
     registry,
@@ -655,6 +656,16 @@ def expand_batch(cfg, nas_root=None):
         if eco_section_name_override:
             case["ecosystem_section_name"] = eco_section_name_override
 
+        # NI per-session corrections (opt-in; cfg["_ni_corrections"] is set only
+        # by the --live --corrections path). apply_pre overrides
+        # discovered.{project,animal_codes} BEFORE resolution so project_hint, the
+        # subject DB lookup, and the packed subject_ids all use the fix; apply_post
+        # (below, after resolution) overrides the resolved session_id/sample_id and
+        # stashes session_extra. The correction binds to the RAW <series>/<date>/
+        # <subject> session key, so original_name (the dedup identity) is untouched.
+        _ni_corr = cfg.get("_ni_corrections") or {}
+        _corr_row = ni_corrections.apply_pre(case, _ni_corr) if _ni_corr else None
+
         try:
             apply_registry_block(case, registry_block)
         except resolver.ResolverError as e:
@@ -670,6 +681,8 @@ def expand_batch(cfg, nas_root=None):
             else:
                 print(f"[expand_batch] SKIP {match_basename}: {e}")
             continue
+        if _corr_row:
+            ni_corrections.apply_post(case, _corr_row)
         _apply_operator(case, cfg.get("operator"))
 
         # NI per-recon fan-out — OPT-IN via ingest.per_recon_acquisitions

@@ -90,6 +90,13 @@ def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None
         sidecar["condition"] = condition
     if anatomy is not None:
         sidecar["anatomy"] = anatomy
+    # Per-session operator-supplied metadata (e.g. tracer/compound) from the NI
+    # corrections CSV's extra_metadata column (ni_corrections.apply_post stashes
+    # it on the case). Only added when present, so every other sidecar is
+    # byte-for-byte unchanged. Free-form key:value (08_METADATA §4.3).
+    session_extra = cfg.get("session_extra")
+    if session_extra:
+        sidecar["session_extra"] = dict(session_extra)
     if ecosystem_section_name:
         sidecar[ecosystem_section_name] = ecosystem_section or {}
     return sidecar
