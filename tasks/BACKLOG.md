@@ -170,6 +170,28 @@ Supersedes the live-mode items previously tracked in `tasks.md` §0 / §4.7
 (`molecubes_ni_live.yaml`, the Unai naming-convention question). Archive-vs-live
 design context: `equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`.
 
+## NI live-sync — Mac-compiled GUI (deferred 2026-06-29, branch `feat/ni-live-hardening`)
+
+**The CLI live-sync is DONE** (branch `feat/ni-live-hardening`: `ni-ingest --live`,
+one-acquisition-per-reconstruction, the corrections/tracer plan→edit→sync cycle, the
+hard-link-fallback worklist — see [`tasks/ni_live_operator_plan.md`](ni_live_operator_plan.md)
+§§1–3.3). **§3.6 — a simple browser GUI for the live sync, for operators who won't use the
+terminal — is the one remaining piece and is explicitly LAST** (user 2026-06-29: "hold it").
+
+- **What:** the NI analogue of the microscopy/MRI operator GUI (`tools/operator/gui/`, a small
+  Flask app) — a deliberately-simple page over the **same** validated `--live` path (point at
+  the researcher folder → preview the per-recon table + the per-session corrections worksheet
+  inline → sync). NOT the microscopy recipe/builder UI.
+- **Why deferred + why it needs a Mac:** the NI box is a **Mac**, so this GUI must be frozen
+  with **PyInstaller on macOS** (the microscopy/MRI `.exe` was frozen on Windows — same
+  approach, different OS). It can't be built/smoke-tested from the Windows workstation, so it's
+  naturally done *after* the CLI is proven on the box. The Flask page itself can be written from
+  anywhere; only the freeze + smoke-test need the Mac.
+- **Reuse:** the MRI GUI page (`tools/operator/gui/templates/mri.html` + `static/mri.js`) is the
+  closest model (simple single-page ingest, no builder). The corrections worksheet maps to an
+  editable table in the page. Bundle `ni_corrections` + the live template; no paramiko (NI live
+  is local, not SFTP).
+
 ## Independent / second-stage tooling (moved from tasks.md 2026-06-10)
 
 Tooling that improves the system but is **not** required for the operator
