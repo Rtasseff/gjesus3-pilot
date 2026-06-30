@@ -479,10 +479,11 @@ def _parse_args(argv):
     parser = argparse.ArgumentParser(
         prog="ni-ingest",
         description=(
-            "Ingest Nuclear Imaging (NI) acquisitions. Point at one extracted "
-            "acquisition folder or a batch root of them. Archive mode (extract "
-            ".tgz first with tools/extract_ni_archives.py); live mode pending "
-            "the molecubes_ni_live.yaml layout."
+            "Ingest Nuclear Imaging (NI) acquisitions. LIVE mode (--live): point "
+            "at your researcher data folder on the Molecubes box (no YAML, one "
+            "acquisition per reconstruction, optional --plan/--corrections). "
+            "ARCHIVE mode (default): point at one extracted acquisition folder or "
+            "a batch root (extract .tgz first with tools/extract_ni_archives.py)."
         ),
     )
     parser.add_argument(
