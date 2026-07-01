@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Some IT details still open (filesystem type, snapshot retention); **off-site backup options researched 2026-06-29 (§5.4) — recommendation pending one external confirmation**; access + permission model APPLIED.
-**Last Updated:** 2026-06-29
+**Last Updated:** 2026-07-01
 
 ---
 
@@ -177,31 +177,39 @@ Access is restricted to specific hardwired on-site machines. This is annoying bu
 
 ---
 
-### 5.4 Off-site backup & disaster recovery — researched options (❓ EVALUATING, 2026-06-29)
+### 5.4 Off-site backup & disaster recovery — researched options (❓ EVALUATING, 2026-06-29; pricing table verified + corrected 2026-07-01)
 
 Off-site backup is the **single largest open mitigation** (§3.3): it is the only thing that covers multi-drive / array loss, controller / enclosure failure, ransomware that reaches the share, and site disaster — none of which the on-array snapshots address. Options were researched 2026-06-29 for the EU-public-research context. **This is a recommendation pending one external confirmation (the OCRE egress cap, below); the spend itself is a PI / management call (§5.3).**
 
 **Sizing the copy.** Live data is ~0.44 TB today but climbing with historical ingest: **~10 TB by ~Q3 2026, ceiling ~50 TB over a few years.** Figures below are at the 50 TB ceiling.
 
-**Governing principle — optimise for "cheap to *restore*," not "cheap to *store*."** Cloud *archival* tiers (AWS Glacier, Azure Archive) cost ~€1/TB-month to store but charge **per-GB egress + retrieval at the moment of a restore** — a full 50 TB recovery is **~€4,500 plus a 12–48 h wait** at AWS retail. A DR copy exists precisely to be restored, so the right targets are **no-egress / low-egress / egress-waived**, EU-jurisdiction, and immutable.
+**Governing principle — optimise for "cheap to *restore*," not "cheap to *store*."** Cloud *archival* tiers (AWS Glacier, Azure Archive) cost ~€1/TB-month to store but charge **per-GB egress + retrieval at the moment of a restore** — a full 50 TB recovery is **~€4,400 plus a 12–48 h wait** at AWS retail (almost all of it egress). A DR copy exists precisely to be restored, so the right targets are **no-egress / low-egress / egress-waived**, EU-jurisdiction, and immutable.
 
-| Option | Jurisdiction | Store / yr @50 TB | Full restore (one-time) | Notes |
-|---|---|---|---|---|
-| **Scaleway Glacier** (S3) | 🇪🇺 FR | ~€1,500 | ~€920 | low native egress; S3 Object Lock |
-| **OVHcloud Cold Archive** (S3) | 🇪🇺 FR | ~€1,100 | low + *unpublished retrieval fee* | confirm retrieval €/GB |
-| **AWS Glacier Deep Archive via OCRE** | 🇺🇸 US | ~€550 | ~€140 *if* the OCRE egress waiver covers a DR restore; else ~€4,500 | cheapest to store; egress-cap risk |
-| **Backblaze B2** (Amsterdam) | 🇺🇸 US | ~€3,840 | ~€0 (free egress ≤ 3× stored) | simplest; instant; US CLOUD Act |
-| **Offline rotating HDDs** (off-site) | 🏠 local | ~€900–1,400 one-time (refresh ~3 yr) | drive read speed | true air-gap; manual |
+**How to read this table.** Figures are at the **~50 TB ceiling**, decimal TB (50 TB = 50,000 GB). **Storage/yr** is the ongoing annual cost to *hold* the copy. **"Full restore"** is the *one-time* cost to pull the **entire** 50 TB back on-site in a disaster = the archive **retrieval ("thaw") + internet egress** — both apply when you download everything back, so the retrieval fee *alone* is **not** the restore cost. Per-GB rates + sources are listed under the table so the arithmetic is checkable. Currencies are native (Scaleway / OVHcloud in **EUR**; AWS / Backblaze in **USD**; ≈ parity).
+
+| Option | Jurisdiction | Storage / yr @50 TB | Full restore @50 TB (retrieval + egress) | Restore speed | Immutability |
+|---|---|---|---|---|---|
+| **Scaleway Glacier** (S3) | 🇪🇺 FR | €1,524 | €450 (thaw) + €499 (egress) = **~€950** | mins–24 h | Object Lock / WORM ✓ |
+| **OVHcloud Cold Archive** (S3) | 🇪🇺 FR | €1,200 | ⚠️ *not officially published* (2023 press ≈ €750 — unverified) | hours | Object Lock ✓ |
+| **AWS Glacier Deep Archive** (eu-west-1) | 🇺🇸 US | ~$594 ⚠️ | $150 + $4,292 = **~$4,440**; **egress-waived (OCRE) → ~$150** | 12–48 h | Object Lock ✓ |
+| **Backblaze B2** (Amsterdam) | 🇺🇸 US | $3,600 | **$0** (a 50 TB restore is within B2's free egress) | instant | Object Lock ✓ |
+| **Offline rotating HDDs** (off-site) | 🏠 local | ~€900–1,400 one-time (refresh ~3 yr) | drive read speed (no fee) | true air-gap |
+
+**Per-GB rates & sources** (S = storage / R = retrieval / E = egress; verified 2026-07-01 unless flagged ⚠️):
+- **Scaleway Glacier** (EUR): S €0.00254/GB-mo · R €0.009/GB · E 75 GB free, then €0.01/GB — [scaleway.com/en/pricing/storage](https://www.scaleway.com/en/pricing/storage/). → storage €0.00254 × 50,000 × 12 = **€1,524/yr**; restore €0.009 × 50,000 (**€450**) + €0.01 × 49,925 (**€499**) = **€949**. (Glacier class is in `fr-par` / `nl-ams` only.)
+- **OVHcloud Cold Archive** (EUR): S €0.002/GB-mo — [ovhcloud.com/en/public-cloud/cold-archive](https://www.ovhcloud.com/en/public-cloud/cold-archive/). → **€1,200/yr**. ⚠️ Retrieval + egress **not published** (pages state only "retrieval fee: yes" + a 180-day minimum); 2023 press cited €0.005/GB retrieval + €0.01/GB export (≈ €750 for 50 TB) — **get it in writing from OVHcloud**.
+- **AWS Glacier Deep Archive**, eu-west-1 (USD): S ~$0.00099/GB-mo ⚠️ *(that is the us-east-1 rate; the Ireland storage SKU is missing from AWS's price list — read it off the pricing page)* · R $0.003/GB (Bulk) · E 100 GB free, then $0.09/GB (first 10 TB) + $0.085/GB (next 40 TB) — [aws.amazon.com/s3/pricing](https://aws.amazon.com/s3/pricing/) · [aws.amazon.com/s3/glacier/pricing](https://aws.amazon.com/s3/glacier/pricing/). → ~**$594/yr** (indicative); restore $150 + $4,292 = **$4,442**, or **~$150 with the OCRE egress waiver**.
+- **Backblaze B2** (USD): S $6/TB-mo · R none (single hot tier) · E free up to 3× avg stored (= 150 TB), then $0.01/GB — [backblaze.com/cloud-storage/pricing](https://www.backblaze.com/cloud-storage/pricing). → **$3,600/yr**; a 50 TB restore sits within the free egress → **$0**. (B2 is a *hot* tier, not a true archive class — pricier storage, instant/free restore.)
 
 *Also-rans:* Wasabi (like B2 but 90-day minimum); Hetzner Storage Box (~€2/TB-mo, zero egress, but SFTP / 20 TB-per-box); Azure / GCS Archive (≈ AWS profile); **LTO tape** — not worth the ~€7k drive below ~1 PB; **EUDAT / EOSC** — wrong tool (for curated, PID'd, published datasets, not a NAS mirror); **CRUE** — not an option (members are universities only, and it runs no storage product).
 
 **Recommended design (3-2-1):**
 
-1. **Primary off-site copy → an EU-sovereign S3 archive (Scaleway Glacier or OVHcloud Cold Archive), procured through RedIRIS / GÉANT OCRE 2024.** Gains the framework's **egress waiver + EU-public-procurement compliance + EU jurisdiction** (avoiding the US CLOUD Act exposure that AWS / Backblaze / Wasabi carry). Pushed off the NAS by **QNAP HBS 3** (free) with **client-side encryption + S3 Object Lock** (ransomware-immutable) on a **scheduled incremental** sync. ≈ **€1,100–1,500/yr at 50 TB.**
+1. **Primary off-site copy → an EU-sovereign S3 archive (Scaleway Glacier or OVHcloud Cold Archive), procured through RedIRIS / GÉANT OCRE 2024.** Gains the framework's **egress waiver + EU-public-procurement compliance + EU jurisdiction** (avoiding the US CLOUD Act exposure that AWS / Backblaze / Wasabi carry). Pushed off the NAS by **QNAP HBS 3** (free) with **client-side encryption + S3 Object Lock** (ransomware-immutable) on a **scheduled incremental** sync. ≈ **€1,200–1,500/yr at 50 TB** (OVHcloud €1,200 / Scaleway €1,524).
 2. **Second copy → rotating external HDDs stored off-site**, refreshed ~every 3 years (~€900–1,400 one-time). Completes 3-2-1 and gives a true **air-gap** (ransomware-immune) that is independent of any cloud account.
 3. **Eligibility is confirmed:** CIC biomaGUNE is a registered RedIRIS affiliate ("Centro I+D"); OCRE eligibility is "served by an NREN," **not** "is a university," so the framework is open to us.
 
-**The one blocker before committing → see INFRA-06.** The OCRE egress waiver is stated as "≤ 15% of monthly spend" (AWS) vs "no limit" (GÉANT/Sparkle); for a one-time large DR restore that is the difference between **~€140 and ~€4,500**. **Confirm in writing with Sparkle + RedIRIS** whether a one-time DR restore is fully covered (enquiry email drafted 2026-06-29). Note the EU-sovereign providers' **low native egress (~€920 worst-case at 50 TB) makes the recommendation robust even if the waiver is capped** — we are not betting the plan on that answer.
+**The one blocker before committing → see INFRA-06.** The OCRE egress waiver is stated as "≤ 15% of monthly spend" (AWS) vs "no limit" (GÉANT/Sparkle); for a one-time large DR restore that is the difference between **~€140 and ~€4,500**. **Confirm in writing with Sparkle + RedIRIS** whether a one-time DR restore is fully covered (enquiry email drafted 2026-06-29). Note the EU-sovereign providers' **low native egress (Scaleway ~€950 worst-case at 50 TB = €450 thaw + €499 egress) makes the recommendation robust even if the waiver is capped** — we are not betting the plan on that answer.
 
 **Basque-regional avenue — checked 2026-06-29: no turnkey regional backup target.** Unlike Catalonia's CSUC, the Basque region pooled *HPC + network*, not backup. **i2Basque** (CIC is already affiliated, free) is network + HPC only; **EJIE** (Basque-Gov IT — it does run backup-as-a-service + S3 storage) and **IZFE** (Gipuzkoa) are *medios propios* of public spheres CIC doesn't belong to (CIC is a private-law PANAP in the CAE sphere) → not eligible; **DIPC / UPV-EHU** give CIC eligible *HPC*, but their storage is working-data, not archival DR. Two opportunistic leads worth **one phone call each (don't block on them):** (a) **DIPC**'s undocumented "data storage / housing-hosting" (`dipcinfo@ehu.eus`) — could it host external colocation for a neighbouring CIC?; (b) **ADI** (Atlantic Data Infrastructure) — a commercial, Basque-public-co-owned **TIER datacenter being built in Gipuzkoa (Arrasate, ~end-2026)** — a local, data-sovereign colocation option worth pricing. **Net: the recommendation above stands** (RedIRIS/OCRE + EU-sovereign commercial cloud + offline copy).
 

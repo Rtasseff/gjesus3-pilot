@@ -6,7 +6,7 @@
 
 **Status:** ✅ **TRUE PRODUCTION** (active since the 2026-06-10 restart). Live scale: ~13,555 acquisitions in `/raw/`, ~50 projects (each hard-linked to its raw data), ~715 subjects in `registry_subjects.csv`; `publications/` deferred (empty).
 
-**Last Updated:** 2026-06-29 — off-site backup / disaster-recovery options researched ([02_INFRASTRUCTURE §5.4](02_INFRASTRUCTURE.md)). Recent index-level milestones are tabled under [Version History](#version-history) below; the full dated history lives in [CHANGELOG.md](../CHANGELOG.md).
+**Last Updated:** 2026-07-01 — off-site backup / DR pricing table verified + corrected ([02_INFRASTRUCTURE §5.4](02_INFRASTRUCTURE.md)). Recent index-level milestones are tabled under [Version History](#version-history) below; the full dated history lives in [CHANGELOG.md](../CHANGELOG.md).
 
 **Newcomer pointers:** [README.md](../README.md) (3-role gateway) · [RESEARCHER_GUIDE.md](../RESEARCHER_GUIDE.md) (researchers) · [START_HERE.md](../START_HERE.md) (operators) · [GLOSSARY.md](../GLOSSARY.md) (terms) · [CHANGELOG.md](../CHANGELOG.md) (history).
 
@@ -234,6 +234,7 @@ The full dated history now lives in the single repo changelog — see [CHANGELOG
 
 | Date | Change |
 |------|--------|
+| 2026-07-01 | Off-site backup / DR **pricing table verified + corrected** ([02_INFRASTRUCTURE §5.4](02_INFRASTRUCTURE.md)) — full-restore = retrieval + egress made explicit, per-GB rates + linked sources added; Scaleway full 50 TB restore corrected to ~€950 (€450 thaw + €499 egress). |
 | 2026-06-29 | Off-site backup / disaster-recovery options researched ([02_INFRASTRUCTURE §5.4](02_INFRASTRUCTURE.md)) — 3-2-1 recommendation (EU-sovereign S3 archive via RedIRIS/OCRE + offline HDD); pending OCRE egress-cap confirmation (INFRA-06). |
 | 2026-06-26 | **Public-release documentation refactor.** Status promoted to TRUE PRODUCTION (active since 2026-06-10); System Lifecycle note added (purge complete, no future restart, permanent retention); now-settled items marked ✅ DECIDED (hard-link project links, role terminology, registry schema, operator GUI, metadata-location split — study-level `/projects/<proj>/metadata/` stays 🕗 PLANNED); added Documentation Integrity Mirrors + Contributor/agent-rules pointers; EM clarified as reserved/not-deployed; operator GUI corrected to `gjesus3_ingest.exe`. |
 | 2026-06-24 | Operator GUI rollout (`gjesus3_ingest.exe`, microscopy + MRI pages). |
