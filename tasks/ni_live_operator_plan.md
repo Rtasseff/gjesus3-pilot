@@ -1,5 +1,35 @@
 # NI live-sync — operator hardening plan (link fallback, sync corrections, per-session metadata)
 
+> ## ⏸ RESUME HERE — where we left off (checkpoint 2026-07-03)
+>
+> **State:** all coding DONE, tested, committed, and **pushed** to
+> `origin/feat/ni-live-hardening` (**HEAD `e70ef2b`**; local == origin). **NOT merged to
+> `main`** (main is under a separate code review; this branch waits for the on-box test).
+>
+> **The ONE thing blocking merge: the on-box test hasn't run yet.** The box (a Mac) can't be
+> SSH'd, so the test is self-service: everything is staged at
+> **`S:\gnuclear\2026\Jesus\Ryan\ni-live-test\`** — a rewritten `RUN_THE_TEST.md` (the operator
+> reviewed it, "looks fine") + a fresh copy of this branch's `tools/`. **Deferred to the week of
+> 2026-07-07** (couldn't run 2026-06-30). Ryan runs the 6 steps on the Mac and drops the outputs
+> back in that folder ("What to send me back" at the bottom of RUN_THE_TEST.md).
+>
+> **NEXT ACTIONS (in order):** (1) Ryan runs the on-box test next week → sends outputs. (2) We
+> review the outputs (esp. per-recon `…/recon_N` rows, a corrected session's `session_extra`,
+> and `pending_links.csv` from the sandbox run). (3) If green → merge `feat/ni-live-hardening`
+> to `main` (open the PR: `github.com/Rtasseff/gjesus3-pilot/pull/new/feat/ni-live-hardening`).
+> (4) Only-remaining feature = **§3.6 Mac GUI** (backlogged in `tasks/BACKLOG.md`, needs
+> PyInstaller ON the Mac; do after the CLI is proven on the box).
+>
+> **The 7 commits on the branch:** `d59a101` §1 link-fallback · `3e0896d`/`adec548` §3.5
+> design+scaffold · `825868d` §2+§3.5 per-recon (Tier B) · `d5b6e92` §3.1 `--live` CLI ·
+> `53b022b` §3.2/3.3 corrections+tracer · `e70ef2b` GUI-backlog + test-folder refresh.
+>
+> **Heads-up for whoever resumes:** the working tree carries **another team's uncommitted
+> `gnuclear` files** (`tasks/tasks.md`, `equipment/historical_data_archives.md`, +
+> `equipment/nuclear-imaging/gnuclear_active_workspace_layout.md`, `tasks/ni_gnuclear_active_
+> space_plan.md`) — their work is **paused**; **do NOT stage/commit them.** Everything below is
+> the full design/history.
+
 **Branch:** `feat/ni-live-hardening` (off `main`, which already carries all NI live-sync code).
 **ALL of §1 + §2 + §3 land on THIS one branch** (user directive 2026-06-25 — not split).
 **Status:** §1 DONE. §2 + §3.5 (per-recon, **Tier B**) DONE + verified. §3.1 (no-YAML operator
