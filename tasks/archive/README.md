@@ -1,7 +1,10 @@
 # tasks/archive/ — superseded handoffs & plans (historical)
 
-Point-in-time session artifacts — work-pass handoffs, phase plans, and the old
-~749-line `tasks.md` — kept for historical context only.
+Point-in-time session artifacts — work-pass handoffs, phase plans, dated
+review/audit reports, and the old ~749-line `tasks.md` — kept for historical
+context only. Dated reviews (e.g. `2026-07-08_architecture_code_review.md`) are
+immutable snapshots: they record the system at one commit and are not edited
+after; their follow-through lives in [`../BACKLOG.md`](../BACKLOG.md).
 
 **These are superseded.** For current state use [`../STATUS.md`](../STATUS.md); for
 later improvements use [`../BACKLOG.md`](../BACKLOG.md); for the dated narrative use

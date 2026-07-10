@@ -666,3 +666,74 @@ cells}` (non-blocking, 2026-06-09).
   (08_METADATA §4.1/§4.5 + 09_MODALITIES §1) to state the real applicability.
 
 Surfaced by the verification pass; parked here so it isn't lost.
+
+## Architecture & code review follow-through (2026-07-08)
+
+Source: **[`archive/2026-07-08_architecture_code_review.md`](archive/2026-07-08_architecture_code_review.md)**
+— a full, immutable review at commit `a6de67d` (branch `main`). That file holds
+the reasoning, file:line references, and the "what's right, don't touch" list;
+the items below are the actionable extract. **Nothing here is settled** — the
+first task is to triage it.
+
+- [ ] **Triage this review (do first).** Walk the review's findings and decide,
+  per item: real / severity / priority, and which ones **promote to
+  [`STATUS.md`](STATUS.md)** as safe-operation blockers vs. stay here as later
+  improvements. The review is one reviewer's snapshot, not a decision — this pass
+  is the human sign-off. (This is the "review the plan" task.)
+
+**Promote-to-STATUS candidates (pending triage) — safe-operation, not "later":**
+
+- [ ] **Commit the DR / off-site backup (§3.2.1).** The #1 risk: single NAS, RAID 5
+  on 20 TB drives, no off-array copy, true production. The 3-2-1 plan is already
+  written in [`02_INFRASTRUCTURE §5.4`](../mfb-rdm-docs/02_INFRASTRUCTURE.md).
+  Reframe from "PI decision" to purchase; robust even without the OCRE egress-cap
+  answer. **This is inaction, not a design gap.**
+- [ ] **Fix the three HIGH latent bugs (§3.1).** All cause silent registry-vs-NAS
+  divergence: (1) dedup is a pre-lock snapshot → concurrent/double-launched batch
+  double-ingests everything (`config.py:367`/`:610` vs lock at `ingest_raw.py:809`);
+  (2) `pending.py` rewrites the recovery queue non-atomically + unlocked → a crash
+  wipes the whole queue (`pending.py:70-76`); (3) post-copy early returns leave
+  orphan folders the rollback never touches (`ingest_raw.py:986/1069/1102/1139`).
+- [ ] **Cheap MED fix: move `committed=True` inside the lock block** (`ingest_raw.py:1325`)
+  — a Ctrl-C in the current gap rolls back an acquisition whose registry row was
+  already written (dangling pointer to deleted data). Verify against the code first.
+
+**Later improvements (this file's normal remit):**
+
+- [ ] **Fix the `10_TOOLS.md §2.1` `operator:` doc trap (§2.4).** Two examples
+  (≈ lines 502, 568) still put `operator:` inside the `registry:` block, which
+  `resolver.py` now rejects with a hard `ResolverError`. Small edit; actively
+  breaks anyone copying the docs. (Also: doc the multi-animal `subjects:[]` sidecar
+  key and the `auto_discover.subject_parse:` block; note `rebuild_baseline/registry_raw.csv`
+  is a stale 24-col header.)
+- [ ] **Spike a SQLite/Datasette (or dynamic-Finder) search index (§3.2.2).** The
+  embedded-HTML Finder is ~19 MB now, linear to ~140 MB at 100 k rows, regenerated
+  wholesale every ingest. Keep CSV as source of truth; derive a disposable index.
+  Already proposed in [`13 §4.1`](../mfb-rdm-docs/13_GJESUS3_ROLE.md); the
+  internal-web-serving capability makes a *dynamic* Finder reachable, not just a
+  container.
+- [ ] **Archive the ~9–10 spent one-off scripts + lift shared I/O helpers into
+  `ingest/` (§2.1).** Move spent `backfill_*`/`relink_*`/`migrate_*`/`gen_*` out of
+  `tools/` top-level; lift the 5 duplicated helpers (atomic sidecar write+verify,
+  registry-rewrite-under-lock, canonical→path, provenance-row builder,
+  idempotent-extract) into the library so the 3–4 verbatim copies of the
+  registry-rewrite block can't drift from `REGISTRY_FIELDS`.
+- [ ] **Decouple enrichment from the live animal-facility DB (§3.2.3).** Cache the
+  facility mapping as a periodically-synced reference table + enrich in a
+  post-ingest batch. Also deletes most of the ~1,700-LOC deferred-recovery
+  subsystem (`pending.py`, `pending-db` sentinel, `recover_subject_metadata.py`).
+- [ ] **Automate the existing validators (§3.2.5).** `validate_registries`,
+  `verify_checksums`, `metadata_completeness` all exist but nothing schedules them;
+  `subject_ids↔subjects` and `project_hint↔projects` are unenforced string joins.
+  Weekly scheduled task + an integrity check at project close-out.
+- [ ] **De-risk the bus factor (§3.2.4).** Containerize the ingest environment
+  (today it's one machine with `J:\` mapped + `~/.my.cnf` + Dicomifier on PATH);
+  write the operational runbook; put a second operator through a full real ingest
+  (`01 §6` handoff criterion is unproven).
+- [ ] **Right-size doc governance + park speculative specs (§2.2/§2.3).** Consider
+  generating the registry-schema doc table *from* `REGISTRY_FIELDS` instead of
+  hand-mirroring; demote `EM/` to "add when it arrives"; park curated-datasets and
+  lightweight-mode until a real case appears.
+- [ ] **Consolidate the scattered `test_*.py` into a collectable suite (§2.1).**
+  13 hand-rolled un-collectable tests across three dirs; date-stamped regression
+  files keep accreting.
