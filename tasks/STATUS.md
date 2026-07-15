@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-07-11
+**Last Updated:** 2026-07-15
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -29,10 +29,22 @@ production care.
 
 | | |
 |---|---|
-| Acquisitions in `/raw/` | **~13,555** (all checksummed + `metadata.json` sidecar'd) |
-| Projects | **~50** (each with hard-linked raw data) |
+| Acquisitions in `/raw/` | **13,557** (all checksummed + `metadata.json` sidecar'd) |
+| Projects | **51 registered** — 43 with folders + **8 `closed`** (rows retained, folders deleted 2026-07-14) |
 | Subjects (`registry_subjects.csv`) | **~715** (one row per subject) |
 | Publications | empty — deferred (PLANNED) |
+
+**Two registry facts changed on 2026-07-14** (see [`../CHANGELOG.md`](../CHANGELOG.md)):
+
+- **`researcher` is populated on 2,049 of 13,557 acquisitions** (backfilled from the
+  project name where it named a person; lowercase first name). The other **11,508 are
+  blank** — their project names name no person, so there is nothing to recover from.
+  Anything better needs a new source, not another pass over the same data.
+- **`registry_projects.csv` `start_date` / `last_activity` mean *acquisition* dates**,
+  not ingest dates (they were previously a uniform 2026-06-1x ingest stamp). Projects
+  are closed — folder deleted, row kept with `status=closed` — once the newest linked
+  acquisition is **older than 3 years**. Project links are hard links, so a close-out
+  never touches `/raw/`.
 
 **Instruments live (all in scope, operational):**
 
@@ -87,6 +99,23 @@ The genuinely in-flight items (kept tight — everything else is in
   run Dicomifier, so no-DICOM ParaVision exams queue to
   `registries/pending_dicom_regen.csv` for a later Linux re-pull + regenerate.
   Drain the worklist on a Dicomifier-capable (Linux/WSL) box as it accumulates.
+- ⚠️ **`age_at_acquisition` is derived against the *ingest* date on the 92 no-DICOM
+  MRI acquisitions** (found 2026-07-14, **not yet fixed — pending triage**). Those
+  rows are `file_count=0` with a genuinely blank `acquisition_datetime`, so
+  [`ingest_raw.py`](../tools/ingest_raw.py) Step 3 falls back to
+  `datetime.now()` for the ACQ-ID prefix (a documented placeholder — it WARNs
+  "backfill the registry acquisition_datetime when known"). That same `acq_date` is
+  then passed to `enrichment.build_enrichment`, whose `_acq_for_age` treats it as a
+  real acquisition date and derives the age from it. Example:
+  `ACQ-20260613-MRI-001`, dob 2021-06-09 → `P1830D`, landing exactly on its
+  2026-06-13 registration date. **Root cause:** `_acq_for_age`'s ACQ-ID-prefix
+  fallback is *correct* for the DICOM-StudyDate branch (a real discovered date) and
+  *wrong* for the `datetime.now()` branch — and the two are indistinguishable by the
+  time they reach it, both arriving as a bare `YYYYMMDD`. So the fix belongs at the
+  call site (don't hand a placeholder date to the age derivation), not in
+  `_acq_for_age`. Two parts: the **writer**, and the **92 already-written sidecars**.
+  Same rows as the regeneration worklist above — a re-ingest after Dicomifier regen
+  would give them a real date and a correct age.
 
 ### 2.1 Safe-operation follow-ups from the 2026-07-08 review (triaged 2026-07-11)
 
@@ -102,16 +131,17 @@ other findings are confirmed-real *later improvements* and stay in `BACKLOG.md`.
   loss. The 3-2-1 plan is already written
   ([`02_INFRASTRUCTURE §5.4`](../mfb-rdm-docs/02_INFRASTRUCTURE.md)); reframe from
   "PI decision" to a purchase and execute. Inaction, not a design gap.
-- ⚠️ **Concurrency / partial-failure integrity fixes** (registry-vs-disk
-  divergence). **Do first:** `tools/ingest/pending.py` rewrites the live 250-row
-  recovery queue with a truncate-in-place `open(…,"w")` — a single interrupted
-  ingest can zero it (fix = mirror `pending_dicom.py`'s temp+`os.replace`, under
-  the lock). Then: dedup index is built pre-lock so a double-launched batch
-  double-ingests (`config.py` vs the lock in `ingest_raw.py`); copy-phase verify
-  failures early-return *before* the rollback `try`, orphaning half-copied folders;
-  and move `committed=True` to immediately after `append_row` (1-line). #1/#3 are
-  currently mitigated by the single-operator manual workflow — land them before any
-  concurrent or automated ingest.
+- ✅ **Concurrency / partial-failure integrity fixes — LANDED 2026-07-12** (merged to
+  `main`, commit `911f69e`; unit-tested, no live-NAS operations). The `pending.py`
+  recovery-queue write is now atomic (temp+`os.replace`) and serialized under the
+  registry lock; copy-phase verify failures roll back their partial folder;
+  `committed=True` moved inside the lock right after `append_row`; and
+  `checksum_present` now reports "N" for the empty no-DICOM MRI placeholder instead
+  of a hardcoded "Y". **Still open from this cluster:** the **pre-lock dedup
+  snapshot** (`config.py` builds the dedup index before `ingest_raw.py` takes the
+  lock, so a double-launched batch can double-ingest) — needs design input, tracked
+  in [`BACKLOG.md`](BACKLOG.md). Currently mitigated by the single-operator manual
+  workflow; land it before any concurrent or automated ingest.
 - 🕗 **Schedule `verify_checksums` weekly.** The tool exists but nothing runs it.
   With no DR yet, scheduled checksum verification is the only current tripwire for
   silent corruption — the cheapest partial mitigation for the durability gap.
