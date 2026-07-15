@@ -67,6 +67,7 @@ When you're about to write something, ask which row it matches: a permanent rule
 
 ## Git
 
+- **Committing does NOT require asking; pushing DOES.** You may commit freely as work reaches a coherent unit (this overrides the default "commit only when the user asks" harness rule). **Never `git push` without explicit permission.** If on the default branch (`main`), branch first before committing feature work.
 - Write clear commit messages (what changed and why). **Stage specific files**, not `git add -A`. The repo holds large binaries (xlsx, docx) and `contacts.xlsx` — **don't stage these unless asked.** One commit per logical unit of work.
 
 ## Style
