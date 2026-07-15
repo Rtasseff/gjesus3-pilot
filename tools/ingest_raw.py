@@ -983,9 +983,11 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     f"Valid: 'paravision_exam', 'mri_paravision_v2', 'ni_molecubes'.",
                     "ERROR",
                 )
+                _rollback_uncommitted(dest_dir, log)
                 return acq_id_str, False
         except RuntimeError as e:
             log(str(e), "ERROR")
+            _rollback_uncommitted(dest_dir, log)
             return acq_id_str, False
         log(f"Copied + verified {len(dest_checksums)} files")
 
@@ -1024,6 +1026,10 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             os.path.join(dest_dir, "checksums.json"),
         )
         log(f"Wrote checksums.json ({len(dest_checksums)} files)")
+        # An empty checksums.json (the no-DICOM MRI placeholder) means nothing
+        # was actually checksummed — record that faithfully instead of the
+        # default "Y" (build_row reads cfg["checksum_present"]).
+        cfg_single["checksum_present"] = "Y" if dest_checksums else "N"
 
         # Recompute file_count and size from the DESTINATION (not the
         # source) — the registry should reflect what actually landed on
@@ -1066,6 +1072,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 f"({src_hash[:12]} vs {dst_hash[:12]})",
                 "ERROR",
             )
+            _rollback_uncommitted(dest_dir, log)
             return acq_id_str, False
         log("Verification PASSED")
         checksum.write_checksums(
@@ -1099,6 +1106,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 f"({src_hash[:12]} vs {dst_hash[:12]})",
                 "ERROR",
             )
+            _rollback_uncommitted(dest_dir, log)
             return acq_id_str, False
         log("Verification PASSED")
         checksum.write_checksums(
@@ -1136,6 +1144,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             log(f"Verification FAILED - {len(mismatches)} mismatches:", "ERROR")
             for m in mismatches[:10]:
                 log(f"  {m}", "ERROR")
+            _rollback_uncommitted(dest_dir, log)
             return acq_id_str, False
 
     # --- Steps 8.4-10: enrichment, sidecar, README, project, registry append ---
@@ -1304,6 +1313,13 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                                  anatomy=anatomy_block, subjects=subjects_list)
         with locking.registry_lock(registries_dir):
             registry.append_row(registry_path, row)
+            # The row is now written — THIS is the commit point (F item 5). Set
+            # `committed` here, inside the lock and BEFORE the non-blocking
+            # subjects upsert, so nothing after the append — a subjects-table
+            # error, or a Ctrl-C in the gap after the lock releases — can trip
+            # the `finally` into rolling back an acquisition whose row already
+            # exists (which would leave a registry row pointing at deleted data).
+            committed = True
             # Step 10b: upsert this acquisition's subject(s) into the one-row-
             # per-subject registry_subjects.csv (06_REGISTRIES §2.3.2 /
             # NI-LIVE-08), under the SAME lock — _hold_lock=False, since the lock
@@ -1322,7 +1338,6 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     )
             except Exception as e:
                 log(f"subjects table upsert failed (non-blocking): {e}", "WARN")
-        committed = True
         log(f"Appended to registry: {registry_path}")
     except Exception as e:
         # Any failure between the copy and the registry commit: report the case

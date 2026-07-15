@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-07-11
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -87,6 +87,34 @@ The genuinely in-flight items (kept tight — everything else is in
   run Dicomifier, so no-DICOM ParaVision exams queue to
   `registries/pending_dicom_regen.csv` for a later Linux re-pull + regenerate.
   Drain the worklist on a Dicomifier-capable (Linux/WSL) box as it accumulates.
+
+### 2.1 Safe-operation follow-ups from the 2026-07-08 review (triaged 2026-07-11)
+
+The [architecture + code review](archive/2026-07-08_architecture_code_review.md) was
+triaged and its findings re-verified against the code (see
+[`BACKLOG.md`](BACKLOG.md#architecture--code-review-follow-through-2026-07-08) for
+the full per-item outcome). Three items are safe-operation and promoted here; all
+other findings are confirmed-real *later improvements* and stay in `BACKLOG.md`.
+
+- ⚠️ **Off-site backup / disaster recovery — the #1 risk.** One NAS, RAID 5 on
+  20 TB drives, no off-array copy, in true production; for microscopy `.czi` this
+  is the *only* copy. It is the single item that can cause total, unrecoverable
+  loss. The 3-2-1 plan is already written
+  ([`02_INFRASTRUCTURE §5.4`](../mfb-rdm-docs/02_INFRASTRUCTURE.md)); reframe from
+  "PI decision" to a purchase and execute. Inaction, not a design gap.
+- ⚠️ **Concurrency / partial-failure integrity fixes** (registry-vs-disk
+  divergence). **Do first:** `tools/ingest/pending.py` rewrites the live 250-row
+  recovery queue with a truncate-in-place `open(…,"w")` — a single interrupted
+  ingest can zero it (fix = mirror `pending_dicom.py`'s temp+`os.replace`, under
+  the lock). Then: dedup index is built pre-lock so a double-launched batch
+  double-ingests (`config.py` vs the lock in `ingest_raw.py`); copy-phase verify
+  failures early-return *before* the rollback `try`, orphaning half-copied folders;
+  and move `committed=True` to immediately after `append_row` (1-line). #1/#3 are
+  currently mitigated by the single-operator manual workflow — land them before any
+  concurrent or automated ingest.
+- 🕗 **Schedule `verify_checksums` weekly.** The tool exists but nothing runs it.
+  With no DR yet, scheduled checksum verification is the only current tripwire for
+  silent corruption — the cheapest partial mitigation for the durability gap.
 
 **Not blocking** (tracked in [`BACKLOG.md`](BACKLOG.md)): external-drive microscopy
 ingest; researcher-feedback re-projection of the best-guess legacy microscopy;

@@ -675,11 +675,65 @@ the reasoning, file:line references, and the "what's right, don't touch" list;
 the items below are the actionable extract. **Nothing here is settled** — the
 first task is to triage it.
 
-- [ ] **Triage this review (do first).** Walk the review's findings and decide,
-  per item: real / severity / priority, and which ones **promote to
-  [`STATUS.md`](STATUS.md)** as safe-operation blockers vs. stay here as later
-  improvements. The review is one reviewer's snapshot, not a decision — this pass
-  is the human sign-off. (This is the "review the plan" task.)
+- [x] **Triage this review (done 2026-07-11).** Every load-bearing finding was
+  re-verified against the code at HEAD `b721817` (which only added the review doc;
+  no code changed since the reviewed `a6de67d`), so the "warrants a verification
+  pass" caveat on findings #2–#3, #5–#11 is now discharged — **all hold.** Triage
+  outcome below; the safe-operation subset was promoted to
+  [`STATUS.md`](STATUS.md) §2.1.
+
+**Triage outcome (2026-07-11, verified against code):**
+
+*Promoted to [`STATUS.md`](STATUS.md) §2.1 — act now:*
+- **DR / off-site backup (§3.2.1)** — the only item that can cause *total,
+  unrecoverable* loss; unmitigated; plan already written. #1 priority.
+- **Concurrency / partial-failure integrity fixes (§3.1 #1–#4).** Do **#2 first**:
+  `pending.py` truncate-in-place write is a *durability* bug that needs no
+  concurrency — a single interrupted ingest can zero the (live, 250-row) recovery
+  queue; the fix is a 3-line copy of the sibling `pending_dicom.py` temp+replace,
+  plus taking the lock. Then #1 (dedup snapshot) + #3 (orphan folders on verify
+  failure), currently mitigated only by the single-operator manual workflow — must
+  land before any concurrent/automated ingest. #4 is a 1-line freebie (move
+  `committed=True` to immediately after `append_row`, the true commit point).
+- **Schedule weekly `verify_checksums` (slice of §3.2.5).** With no DR, scheduled
+  checksum verification is the *only* current tripwire for silent corruption /
+  RAID bit-rot — cheapest partial mitigation for the durability gap.
+
+**Implemented so far** — branch `fix/integrity-cluster-2026-07` (2026-07-12, *pending
+review/merge*; unit-tested in isolation, no live-NAS ops): the atomic + locked
+`pending.py` queue write (§3.1 #2), the copy-phase orphan rollback (§3.1 #3), the
+`committed`-inside-lock move (§3.1 #4), the accurate `checksum_present` (§3.1 #9),
+and the §2.4 doc catch-ups (the `10_TOOLS.md operator:` trap, `subject_parse` +
+`subjects:[]` docs, `rebuild_baseline` stale-header note). **Still open** from the
+promoted set: the DR purchase, scheduling `verify_checksums`, and the pre-lock
+dedup snapshot (§3.1 #1 — deferred as a design pick; not firing under today's
+single-operator workflow). See [`CHANGELOG.md`](../CHANGELOG.md) 2026-07-12.
+
+*Kept here (verified real; later / lower-risk):*
+- **#5 hard-link failure swallowed / #6 case-only link collision** — real, but
+  *recoverable*: links are a derived convenience, `relink_projects.py
+  --create-missing` reconciles them, and the registry (system of record) is
+  intact. MED. Bundle as "linker robustness"; ideally emit a per-batch WARN
+  summary or a reconcile worklist so missing links are discoverable.
+- **#7 lock-timeout discards verified work / #8 O(N) locked sections** — do not
+  fire under today's low contention (ms-scale locked windows at 13.5k rows); they
+  are *scaling* risks. Cheap win when touched: allocation can trust the
+  `.acq_id_seq.json` reservation high-water and skip the full registry scan (O(N)→O(1)).
+- **#9 `checksum_present` hardcoded "Y" / #10 StudyDate-fallback idempotency /
+  #11 latin-1 mojibake** — all LOW, bounded, and #10 is already documented in-code
+  as an accepted edge for one-time deposits.
+- **Decouple enrichment from the live DB (§3.2.3)** — *high-value, near the top:*
+  the 250 live `pending-db` rows prove the coupling is already degrading ingests,
+  and decoupling deletes the ~1,700-LOC subsystem that *contains bug #2*. Fixing #2
+  is the urgent patch; this is the strategic fix that subsumes it.
+- Everything else below (SQLite Finder §3.2.2, bus factor §3.2.4, close-out
+  integrity check §3.2.5, spent-script cleanup §2.1, doc-governance right-sizing
+  §2.2, park speculative specs §2.3, the `10_TOOLS.md` doc trap §2.4, test
+  consolidation) — confirmed real, correctly scoped as later improvements. The
+  `10_TOOLS.md operator:` doc trap is trivial and actively misleads operators, so
+  it is the one "later" item worth doing on the next docs pass. *(Precision note:
+  the config is rejected by `validate_registry_block` as "not a known column," not
+  by a `ResolverError` as the review states — same net effect, config fails.)*
 
 **Promote-to-STATUS candidates (pending triage) — safe-operation, not "later":**
 

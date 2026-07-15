@@ -357,6 +357,16 @@ auto_discover:
 
 On a **DB miss / no-credentials** the acquisition still ingests: the `subject:` block is written with `source: "pending-db"` and a row is appended to `registries/pending_subject_metadata.csv` for later superuser recovery via `recover_subject_metadata.py` (§3.6; [08_METADATA §4.4.6](08_METADATA.md)). This is the non-blocking contract — an unreachable DB never aborts the batch.
 
+#### `auto_discover.subject_parse` (multi-animal live sync)
+
+A **multi-animal** acquisition — a Molecubes NI live scan whose subject folder names 1–4 animals — uses `subject_parse:` to split that folder into the fields the DB lookup and `project_hint` need, reusing the validated live-box grammar (`ni_live_discover.parse_subject`).
+
+| Key | Type | Default | Purpose |
+|-----|------|---------|---------|
+| `field` | string | `subject` | Which `discovered.<field>` holds the subject-folder string to split. |
+
+It populates `discovered.project` (the protocol code), `discovered.animal_codes` (`;`-joined 1–4 animal numbers, consumed by the multi-animal `subject_from_db` lookup), and — when present — `discovered.subject_flags` / `discovered.phantom`. Each parsed animal is looked up independently (a per-animal miss queues to the pending list, non-blocking); the resolved set becomes the packed `subject_ids` registry column and the sidecar `subjects:[]` array ([08_METADATA §4.4](08_METADATA.md)). The single-animal path (no `subject_parse:` block) is untouched. Worked example: [`tools/templates/instruments/molecubes_ni_live.yaml`](../tools/templates/instruments/molecubes_ni_live.yaml).
+
 #### Top-level `condition:` / `anatomy:` / `subject:` blocks
 
 Three new top-level blocks, peers of `registry:` / `auto_create_project:`. They are **resolver-evaluated** (literal | `discovered.<field>` | `${...}` interpolation, same engine as `registry:`) and **set once per batch** — the resolved values apply to **every acquisition the batch produces**. For a mixed-condition session, override per-acquisition at `/projects/<proj>/metadata/<acq_id>.json`.
@@ -499,7 +509,7 @@ registry:
   data_ecosystem:       DICOM
   instrument_model:     NA
   modalities_in_study:  NA
-  operator:             RT
+  researcher:           RT              # registry person column (renamed from operator 2026-06-09)
   data_source:          "collaborator:HPIC"
   sample_id:            discovered.folder_name
   sample_type:          NA
@@ -565,7 +575,7 @@ ingest:
 registry:
   instrument:           ZWSI
   data_ecosystem:       MICROSCOPY
-  operator:             MBC
+  researcher:           MBC             # registry person column (renamed from operator 2026-06-09)
   data_source:          internal
   sample_id:            MOUSE-2024-042
   sample_type:          "mouse lung section"

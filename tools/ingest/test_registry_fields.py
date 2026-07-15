@@ -59,6 +59,20 @@ def test_build_row():
     check(set(row.keys()) == set(registry.REGISTRY_FIELDS), "row has exactly REGISTRY_FIELDS keys")
 
 
+def test_checksum_present():
+    print("[checksum_present reflects reality, not a hardcoded Y]")
+    summary = {"file_count": 0, "total_size_mb": 0.0}
+    base = {"instrument": "MRI", "data_ecosystem": "DICOM"}
+    # Default (caller didn't set it): stays "Y" — the always-≥1-checksum branches.
+    row = registry.build_row("ACQ-20260101-MRI-001", dict(base), summary, "/raw/x/", "z")
+    check(row["checksum_present"] == "Y", "default checksum_present is Y (back-compat)")
+    # No-DICOM MRI placeholder: pipeline sets "N" because checksums.json is empty.
+    cfg_empty = dict(base, checksum_present="N")
+    row_n = registry.build_row("ACQ-20260101-MRI-002", cfg_empty, summary, "/raw/x/", "z")
+    check(row_n["checksum_present"] == "N",
+          "empty-placeholder acquisition records checksum_present=N (not a false Y)")
+
+
 def test_auto_classification():
     print("[auto-populated, not operator-set]")
     for col in ("subject_ids", "sample_organism", "anatomical_entity"):
@@ -76,6 +90,7 @@ def test_auto_classification():
 def main():
     test_position()
     test_build_row()
+    test_checksum_present()
     test_auto_classification()
     print()
     if FAILS:

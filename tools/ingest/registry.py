@@ -227,7 +227,11 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt,
         "file_size_mb": summary.get("total_size_mb", 0),
         "file_count": summary.get("file_count", 0),
         "canonical_path": dest_path,
-        "checksum_present": "Y",
+        # "Y" unless the pipeline set it otherwise (the no-DICOM MRI placeholder
+        # writes an empty checksums.json — nothing was actually checksummed, so a
+        # hardcoded "Y" would misreport it). Default stays "Y" for the branches
+        # that always write ≥1 checksum. See ingest_raw.py folder-copy branch.
+        "checksum_present": cfg.get("checksum_present", "Y"),
         "extended_metadata_present": cfg.get("extended_metadata_present", "N"),
         "project_hint": cfg.get("project_hint", ""),
         "ingest_config": cfg.get("ingest_config", ""),
