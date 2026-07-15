@@ -129,6 +129,41 @@ def test_subject_found():
     check(cond is not None and anat is not None, "organism gets condition + anatomy")
 
 
+def test_age_needs_a_real_date():
+    """age_at_acquisition must never be measured to a placeholder date.
+
+    Regression test for the 2026-07 finding: 92 no-DICOM MRI acquisitions carried
+    an age derived against their INGEST date. ingest_raw.py Step 3 falls back to
+    datetime.now() for the ACQ-ID prefix when there is no acquisition_datetime and
+    no DICOM StudyDate; it used to hand that placeholder to build_enrichment, which
+    cannot tell it from a real discovered date (both arrive as a bare YYYYMMDD).
+    The fix withholds it at the call site — so what is pinned here is the contract
+    that fix depends on: no date in => age stays blank, not fabricated.
+    """
+    print("[subject: age needs a real acquisition date]")
+    msgs, log = collecting_log()
+
+    # No date at all (what the caller now passes for the today()-placeholder case).
+    subj, _, _ = build_one(
+        base_case("organism"), acq_id="ACQ-NODATE", acq_date="", acq_dt_iso="",
+        log=log, lookup_fn=make_lookup("found"))
+    check(subj["age_at_acquisition"] == "",
+          "no acquisition date -> age_at_acquisition blank (not fabricated)")
+    check(subj["date_of_birth"] == "2025-07-31",
+          "date_of_birth still populated from the DB (only the age is withheld)")
+    check(subj["source"] == "animal-facility-db",
+          "subject still DB-sourced — withholding the age doesn't degrade the block")
+
+    # The StudyDate branch still passes a real YYYYMMDD with no ISO datetime, and
+    # must still derive — this is why the fix belongs at the call site and NOT in
+    # _acq_for_age, whose ACQ-ID-prefix fallback this path depends on.
+    subj2, _, _ = build_one(
+        base_case("organism"), acq_id="ACQ-STUDYDATE", acq_date="20251027",
+        acq_dt_iso="", log=log, lookup_fn=make_lookup("found"))
+    check(subj2["age_at_acquisition"] == animal_db.age_iso8601("2025-07-31", "2025-10-27"),
+          "a real discovered date (DICOM StudyDate branch) still derives the age")
+
+
 def test_subject_pending(reason):
     print(f"[subject: DB {reason} -> pending]")
     tmp = tempfile.mkdtemp()
@@ -265,6 +300,7 @@ def test_review_fixes():
 def main():
     test_resolvers()
     test_subject_found()
+    test_age_needs_a_real_date()
     test_subject_pending("db-miss")
     test_subject_pending("no-credentials")
     test_dry_run_no_pending()

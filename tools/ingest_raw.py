@@ -754,6 +754,13 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     # (literal, discovered.<x>, or NA). The resolver normalized it to ISO
     # ("YYYY-MM-DDT...") at expand-batch time.
     acq_dt_iso = cfg_single.get("acquisition_datetime", "")
+    # Does acq_date below carry a REAL acquisition date, or the today() placeholder?
+    # The ACQ-ID prefix tolerates the placeholder (it only has to be unique and
+    # roughly right), but enrichment uses acq_date to derive age_at_acquisition —
+    # and an age measured to the *ingest* date is not a missing value, it is a
+    # plausible wrong one that reads as DB-sourced truth. Track the distinction here
+    # because it is unrecoverable downstream: both branches produce a bare YYYYMMDD.
+    acq_date_is_real = True
     if acq_dt_iso and len(acq_dt_iso) >= 10:
         acq_date = acq_dt_iso[:10].replace("-", "")
     else:
@@ -782,10 +789,13 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             )
         else:
             acq_date = datetime.now(timezone.utc).strftime("%Y%m%d")
+            acq_date_is_real = False
             log(
                 f"acquisition_datetime not provided and no usable DICOM "
                 f"StudyDate; using today ({acq_date}) as ACQ-ID prefix. "
-                f"Backfill the registry acquisition_datetime when known.",
+                f"Backfill the registry acquisition_datetime when known. "
+                f"age_at_acquisition will be left blank (no real date to "
+                f"measure to).",
                 "WARN",
             )
 
@@ -1188,7 +1198,12 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         subjects_list, condition_block, anatomy_block = enrichment.build_enrichment(
             cfg_single,
             acq_id=acq_id_str,
-            acq_date=acq_date,
+            # enrichment uses acq_date ONLY to derive age_at_acquisition. Withhold
+            # the today() placeholder: no date -> age_iso8601 returns None ->
+            # age_at_acquisition stays blank, which is honest. The StudyDate branch
+            # still passes its (real) discovered date, which _acq_for_age needs
+            # since acq_dt_iso is not re-read after that branch backfills the cfg.
+            acq_date=acq_date if acq_date_is_real else "",
             acq_dt_iso=acq_dt_iso,
             canonical_path=canonical_path,
             registries_dir=os.path.join(nas_root, "registries"),
