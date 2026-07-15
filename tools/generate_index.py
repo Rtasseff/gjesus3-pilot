@@ -97,6 +97,9 @@ _HTML = r"""<!doctype html>
   .controls input,.controls select{font-size:14px;padding:6px 8px;border:1px solid #ccc;border-radius:4px}
   #q{flex:1;min-width:240px}
   #count{font-size:13px;color:#555;margin-left:auto}
+  #showall{font-size:13px;padding:5px 11px;cursor:pointer;border:1px solid #10403b;border-radius:4px;
+           background:#10403b;color:#fff}
+  #showall:hover{background:#1a5c55}
   table{border-collapse:collapse;background:#fff;font-size:13px;table-layout:fixed}
   th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   th{position:sticky;top:55px;background:#eaf0ef;cursor:pointer;user-select:none;z-index:1}
@@ -122,6 +125,7 @@ _HTML = r"""<!doctype html>
   <input id="from" type="date" title="acquired on/after">
   <input id="to" type="date" title="acquired on/before">
   <span id="count"></span>
+  <button id="showall" hidden></button>
 </div>
 <table><thead><tr id="head"></tr></thead><tbody id="rows"></tbody></table>
 <div id="empty" class="empty" hidden>No matches.</div>
@@ -131,8 +135,15 @@ const COLS = [["acq","Acq ID",185],["date","Date",92],["instr","Instr",64],["mod
   ["researcher","Researcher",105],["operator","Operator",100],["sample","Sample",150],["subject","Subject",170],
   ["organism","Organism",120],["sample_type","Sample type",100],["orig","Original name",210],
   ["proj_short","Project",150],["proj_owner","Owner",110]];
+// Rows rendered before we stop and offer "Show all". This is a *display* cap,
+// never a search cap: every match is always counted, and "Show all" renders the
+// lot. It matters because the default sort is newest-first, so a plain truncation
+// silently hides whole instruments — the older ecosystems (LSM9/ZWSI/PET/CT) fall
+// outside the newest CAP rows and the page then looks like it only holds MRI+CELL.
 const CAP = 800;
 let sortKey = "date", sortDir = -1;
+let showAll = false;   // reset on every filter change; set by the Show-all button
+let hits = [];         // current filtered+sorted matches (row index -> DATA record)
 const $ = id => document.getElementById(id);
 const esc = s => (s==null?"":(""+s)).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -163,7 +174,12 @@ TABLE.style.width = tableW + "px";
 [...new Set(DATA.map(d=>d.instr).filter(Boolean))].sort().forEach(v => {
   const o = document.createElement("option"); o.value = v; o.textContent = v; $("instr").appendChild(o);
 });
-["q","instr","from","to"].forEach(id => $(id).addEventListener("input", render));
+// A new filter starts a fresh (capped) result set; the Show-all opt-in shouldn't
+// silently persist into an unrelated 13k-row query.
+["q","instr","from","to"].forEach(id => $(id).addEventListener("input", () => {
+  showAll = false; render();
+}));
+$("showall").onclick = () => { showAll = true; render(); };
 
 function copyPath(p){
   if(navigator.clipboard && navigator.clipboard.writeText){
@@ -187,28 +203,46 @@ function detailRow(d){
     copyPath(b.dataset.p==="meta"?d.meta_path : b.dataset.p==="raw"?d.path : d.proj_path); }; });
   return tr;
 }
+// One delegated listener on the tbody instead of two per row — at 13k rows the
+// per-row handlers were the thing that made "render everything" untenable.
+// Detail rows carry their own Copy handlers (which stopPropagation), so only
+// the data-copy buttons and tr.acq rows are handled here.
+$("rows").addEventListener("click", e => {
+  const btn = e.target.closest("button.copy[data-copy]");
+  if(btn){ e.stopPropagation(); copyPath(hits[+btn.dataset.copy].path); return; }
+  const tr = e.target.closest("tr.acq");
+  if(!tr) return;
+  const nx = tr.nextSibling;
+  if(nx && nx.classList && nx.classList.contains("detail")){ nx.remove(); }
+  else { tr.after(detailRow(hits[+tr.dataset.i])); }
+});
+
 function render(){
   const term = $("q").value.trim().toLowerCase(), inst = $("instr").value,
         f = $("from").value, t = $("to").value;
-  let hits = DATA.filter(d =>
+  hits = DATA.filter(d =>
     (!term || d.s.includes(term)) && (!inst || d.instr===inst) &&
     (!f || (d.date && d.date>=f)) && (!t || (d.date && d.date<=t)));
   hits.sort((a,b)=>{ const x=a[sortKey]||"", y=b[sortKey]||""; return x<y?-sortDir : x>y?sortDir : 0; });
-  $("count").textContent = hits.length + " of " + DATA.length + (hits.length>CAP ? "  (showing first "+CAP+")" : "");
-  $("empty").hidden = hits.length>0;
-  const rows = $("rows"); rows.innerHTML = "";
-  hits.slice(0, CAP).forEach(d => {
-    const tr = document.createElement("tr"); tr.className = "acq";
-    tr.innerHTML = COLS.map(([k]) => "<td title=\""+esc(d[k])+"\">"+esc(d[k])+"</td>").join("") +
-      '<td><button class="copy">Copy path</button></td>';
-    tr.querySelector("button.copy").onclick = e => { e.stopPropagation(); copyPath(d.path); };
-    tr.onclick = () => {
-      const nx = tr.nextSibling;
-      if(nx && nx.classList && nx.classList.contains("detail")){ nx.remove(); }
-      else { tr.after(detailRow(d)); }
-    };
-    rows.appendChild(tr);
-  });
+
+  const shown = showAll ? hits.length : Math.min(hits.length, CAP);
+  $("count").textContent = hits.length + " of " + DATA.length + " match" +
+    (shown < hits.length ? "  ·  showing first " + shown : "");
+  const sa = $("showall");
+  sa.hidden = shown >= hits.length;
+  if(!sa.hidden) sa.textContent = "Show all " + hits.length;
+  $("empty").hidden = hits.length > 0;
+
+  // Build one HTML string and assign once: at "Show all" sizes this is orders of
+  // magnitude cheaper than appending elements row by row.
+  let html = "";
+  for(let i = 0; i < shown; i++){
+    const d = hits[i];
+    html += '<tr class="acq" data-i="'+i+'">' +
+      COLS.map(([k]) => "<td title=\""+esc(d[k])+"\">"+esc(d[k])+"</td>").join("") +
+      '<td><button class="copy" data-copy="'+i+'">Copy path</button></td></tr>';
+  }
+  $("rows").innerHTML = html;
 }
 render();
 </script></body></html>
@@ -268,6 +302,12 @@ def main(argv=None):
             folder = recs[0].get("_project_folder", "")
             if not folder:
                 print(f"  skip {pid}: no folder_location in registry_projects.csv")
+                continue
+            # Closed = retention close-out: the registry row survives (so the
+            # acquisitions stay findable in the global index) but the folder is
+            # gone. Writing here would resurrect the folder we deliberately deleted.
+            if recs[0].get("_project_status") == "closed":
+                print(f"  skip {pid}: status=closed (folder deleted)")
                 continue
             short = recs[0].get("_project_short", "")
             title = f"gjesus3 Finder — {pid}" + (f" ({short})" if short else "")

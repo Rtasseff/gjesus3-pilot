@@ -46,6 +46,10 @@ def _projects_index(nas):
                         "short": (r.get("short_name") or "").strip(),
                         "owner": (r.get("owner") or "").strip(),
                         "desc": (r.get("description") or "").strip(),
+                        # A "closed" project keeps its registry row but its folder
+                        # has been deleted (retention close-out) — generate_index
+                        # must not recreate it by writing a scoped index into it.
+                        "status": (r.get("status") or "").strip().lower(),
                     }
     return idx
 
@@ -72,6 +76,7 @@ def build_records(nas):
         rec["_project_short"] = p.get("short", "")
         rec["_project_owner"] = p.get("owner", "")
         rec["_project_desc"] = p.get("desc", "")
+        rec["_project_status"] = p.get("status", "")
         rec["_search"] = " ".join(str(r.get(f, "")) for f in SEARCH_FIELDS).lower()
         records.append(rec)
     return records, proj_idx
