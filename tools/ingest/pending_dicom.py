@@ -43,9 +43,27 @@ PENDING_DICOM_FIELDS = [
     "canonical_path",     # the empty <ACQ-ID>.data/ on the NAS (regen target)
     "paravision_version", # picks the PV root on kenia to re-pull from
     "ingest_config",      # which config produced the placeholder
+    "nonimage_marker",    # "" for a normal image exam; else the matched
+                          # paravision_regen._NONIMAGE_METHOD_MARKERS entry
+                          # (STEAM/PRESS/WOBBLE) — see the status note below
     "queued_datetime",
-    "status",             # "pending" | (data office sets "regenerated")
+    "status",             # "pending" | "not-applicable" | (data office: "regenerated")
 ]
+
+# `status` values:
+#   pending         — a normal image exam awaiting a Dicomifier pass. THE drain set.
+#   regenerated     — the data office filled its .data/. Set by hand; never reset.
+#   not-applicable  — a spectroscopy/calibration exam (`nonimage_marker` says which).
+#                     Image-DICOM regeneration does NOT apply: paravision_regen
+#                     REFUSES these (is_nonimage_exam -> RuntimeError -> empty
+#                     .data/ placeholder), so queuing them as "pending" would mean
+#                     the worklist could never reach zero. They are still listed
+#                     because they ARE DICOM-less acquisitions and must not become
+#                     invisible — they are the input set for the separate
+#                     spectroscopy ingest path (tasks/BACKLOG.md), and the marker
+#                     matters there: WOBBLE is tuning, STEAM/PRESS are real
+#                     spectroscopy data.
+# So: drain `status == "pending"`; the worklist is done when none remain.
 
 
 def _now_iso():
@@ -92,12 +110,19 @@ def _write_all(path, rows):
 
 def append_pending_dicom(registries_dir, acq_id, original_name, reconstructions,
                          canonical_path, paravision_version="", ingest_config="",
-                         queued_at=None):
+                         nonimage_marker="", queued_at=None):
     """Queue (or refresh) a no-DICOM MRI acquisition for later regeneration.
 
+    `nonimage_marker` non-empty (a STEAM/PRESS/WOBBLE match from
+    `paravision_regen.is_nonimage_exam`) means regeneration can never apply, so
+    the row is filed "not-applicable" rather than "pending" — see the status
+    notes above.
+
     Idempotent on `acq_id`: a re-ingest refreshes the source/target fields but
-    preserves `status` (so a row the data office already marked "regenerated"
-    is never reset to "pending"). New rows get status="pending".
+    preserves `status`, so a row the data office already marked "regenerated" is
+    never reset. The one exception is a correction: a row still sitting "pending"
+    that we now know is non-image is moved to "not-applicable" — leaving it
+    pending would keep an undrainable row in the drain set.
 
     Returns the absolute path written.
     """
@@ -114,8 +139,11 @@ def append_pending_dicom(registries_dir, acq_id, original_name, reconstructions,
         r["canonical_path"] = canonical_path
         r["paravision_version"] = paravision_version
         r["ingest_config"] = ingest_config
+        r["nonimage_marker"] = nonimage_marker
         r["queued_datetime"] = queued_at
-        # status intentionally preserved.
+        # status preserved — except the pending -> not-applicable correction.
+        if nonimage_marker and r.get("status") == "pending":
+            r["status"] = "not-applicable"
     else:
         rows.append({
             "acq_id": acq_id,
@@ -124,8 +152,9 @@ def append_pending_dicom(registries_dir, acq_id, original_name, reconstructions,
             "canonical_path": canonical_path,
             "paravision_version": paravision_version,
             "ingest_config": ingest_config,
+            "nonimage_marker": nonimage_marker,
             "queued_datetime": queued_at,
-            "status": "pending",
+            "status": "not-applicable" if nonimage_marker else "pending",
         })
 
     _write_all(path, rows)

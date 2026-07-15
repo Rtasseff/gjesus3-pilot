@@ -95,18 +95,28 @@ The genuinely in-flight items (kept tight — everything else is in
   (hard-link) behaviour on the live NI Mac's CIFS mount, then a vetted one-shot
   ingest per researcher. Archive-mode NI is already done and is the durable
   source-of-truth; live sync is the forward path for active project data.
-- **No-DICOM MRI regeneration worklist — 612 rows queued, waiting to be drained.**
-  Operator MRI ingests on Windows cannot run Dicomifier, so no-DICOM ParaVision
-  exams queue to `registries/pending_dicom_regen.csv` for a later Linux re-pull +
-  regenerate. **Drain it on a Dicomifier-capable (Linux/WSL) box** — this is now a
-  real backlog, not a trickle: every DICOM-less acquisition on the NAS (612, all
-  MRI, PV 6.0.1 × 277 + 7.0.0 × 335) is enrolled and `pending`. They are registered,
-  sidecar'd and findable; only their pixels are missing. A regen pass also fixes the
-  92 blank `age_at_acquisition` values below, since it gives those rows a real
-  acquisition date. The invariant to hold on to: **no DICOM-less acquisition should
-  exist without a worklist row** — verify with
-  [`tools/backfill_pending_dicom.py --dry-run`](../tools/backfill_pending_dicom.py),
-  which reports 0 to add when it holds.
+- ⚠️ **No-DICOM MRI regeneration — 247 exams to drain, and no working drain path yet.**
+  Every DICOM-less acquisition on the NAS (**612**, all MRI) is now enrolled in
+  `registries/pending_dicom_regen.csv`: **247 `pending`** (the real drain set) and
+  **365 `not-applicable`** — spectroscopy/calibration (STEAM 286 / PRESS 74 /
+  WOBBLE 5) which `paravision_regen` refuses by design and which need the separate
+  spectroscopy path, not regeneration. They stay listed because they *are*
+  DICOM-less and must not go invisible. Invariant — **no DICOM-less acquisition
+  without a worklist row** — verify with
+  [`tools/backfill_pending_dicom.py --dry-run`](../tools/backfill_pending_dicom.py)
+  (0 to add == holds).
+  **The blocker:** the [runbook](../equipment/mri-platform/mri_no_dicom_regeneration_runbook.md)
+  §6 and [`10_TOOLS`](../mfb-rdm-docs/10_TOOLS.md) both state a re-run "idempotently
+  re-ingests to fill the `.data/`". **It does not.** The dedup
+  (`ingest/config.py`, `existing_keys`) keys only on `(acq_date, original_name)`
+  being in the registry and never looks at whether `.data/` is empty — verified
+  against the live registry: **612 of 612 would dedupe-skip**. And bypassing the
+  dedup is not enough either: the ACQ-ID is allocated *inside* `ingest_single`, so a
+  re-run would mint a **new** ACQ-ID and duplicate the row. Filling a placeholder is
+  an **update** of an existing acquisition, and `registry.py` has only `append_row`
+  — the pipeline has no update path. Draining needs that gap closed first (design
+  pending), plus the kenia re-pull. Doing so also fixes the 92 blank
+  `age_at_acquisition` values below, by giving those rows a real acquisition date.
 - ✅ **`age_at_acquisition` derived against the ingest date — FIXED 2026-07-15**
   (commit `f567fae`). 92 no-DICOM MRI acquisitions carried an age measured to their
   *ingest* date (`ACQ-20260613-MRI-001`: dob 2021-06-09 → `P1830D`, exactly its

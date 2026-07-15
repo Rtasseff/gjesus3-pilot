@@ -68,6 +68,43 @@ with tempfile.TemporaryDirectory() as d:
     r1 = [x for x in rows_of(d) if x["acq_id"] == "ACQ-20220112-MRI-001"][0]
     check(r1["status"] == "regenerated", "re-append PRESERVES a 'regenerated' status (no reset)")
 
+    # 4b. a non-image exam is filed not-applicable, not pending. paravision_regen
+    # REFUSES STEAM/PRESS/WOBBLE by design, so queuing them "pending" would leave
+    # rows in the drain set that no pass can ever clear.
+    pd.append_pending_dicom(
+        d, acq_id="ACQ-20220112-MRI-003", original_name="…/20",
+        reconstructions="all", canonical_path="/raw/.../ACQ-20220112-MRI-003/",
+        nonimage_marker="STEAM")
+    r3 = [x for x in rows_of(d) if x["acq_id"] == "ACQ-20220112-MRI-003"][0]
+    check(r3["status"] == "not-applicable", "non-image exam -> status=not-applicable")
+    check(r3["nonimage_marker"] == "STEAM", "the marker is recorded (WOBBLE=tuning vs STEAM/PRESS=real data)")
+    check(r3["acq_id"] in {x["acq_id"] for x in rows_of(d)},
+          "a non-image acq is still LISTED (it is DICOM-less; must not go invisible)")
+
+    # 4c. an image exam still lands in the drain set
+    pd.append_pending_dicom(
+        d, acq_id="ACQ-20220112-MRI-004", original_name="…/4",
+        reconstructions="all", canonical_path="/raw/.../ACQ-20220112-MRI-004/")
+    r4 = [x for x in rows_of(d) if x["acq_id"] == "ACQ-20220112-MRI-004"][0]
+    check(r4["status"] == "pending" and r4["nonimage_marker"] == "",
+          "image exam -> status=pending, no marker (the drain set)")
+
+    # 4d. pending -> not-applicable is a CORRECTION (a stale pending row we now
+    # know is non-image), while "regenerated" stays sacred.
+    pd.append_pending_dicom(
+        d, acq_id="ACQ-20220112-MRI-004", original_name="…/4",
+        reconstructions="all", canonical_path="/raw/.../ACQ-20220112-MRI-004/",
+        nonimage_marker="PRESS")
+    r4 = [x for x in rows_of(d) if x["acq_id"] == "ACQ-20220112-MRI-004"][0]
+    check(r4["status"] == "not-applicable", "stale 'pending' corrected to not-applicable")
+    pd.append_pending_dicom(
+        d, acq_id="ACQ-20220112-MRI-001", original_name="AGAIN/2",
+        reconstructions="all", canonical_path="/raw/.../ACQ-20220112-MRI-001/",
+        nonimage_marker="STEAM")
+    r1 = [x for x in rows_of(d) if x["acq_id"] == "ACQ-20220112-MRI-001"][0]
+    check(r1["status"] == "regenerated",
+          "'regenerated' is NOT downgraded by a late non-image marker")
+
     # 5. read on a missing file -> []
     check(pd.read_pending_dicom(os.path.join(d, "nope.csv")) == [], "missing file -> []")
 

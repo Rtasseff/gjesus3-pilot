@@ -19,11 +19,18 @@ no-op on them.
 It writes the SAME rows the live path would have written, from the same sources:
 
   acq_id / original_name / canonical_path / ingest_config  <- registry_raw.csv
-  paravision_version                                       <- the acquisition's
+  paravision_version / nonimage_marker                     <- the acquisition's
                                                               metadata.json
-                                                              (discovered.mri_paravision_version)
+                                                              (discovered.*)
   reconstructions                                          <- ingest.reconstructions
                                                               in the producing config
+
+NOT every DICOM-less exam is regenerable. A spectroscopy/calibration acquisition
+(STEAM/PRESS/WOBBLE) is refused by `paravision_regen` by design, so it is filed
+`status=not-applicable` with the matched `nonimage_marker` rather than "pending" —
+otherwise the worklist could never drain to zero. Those rows stay listed because
+they ARE DICOM-less and must not go invisible; they are the input set for the
+separate spectroscopy path. **Drain `status == "pending"`.**
 
 `original_name` is the ParaVision `<study>/<exam>` identity (e.g.
 `20220119_081642_jrc220119_m10_1521_1_1/3`) — the handle the regen pass uses to
@@ -46,7 +53,7 @@ import sys
 import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ingest import pending_dicom, registry  # noqa: E402
+from ingest import paravision_regen, pending_dicom, registry  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -100,14 +107,30 @@ def _data_dir_is_empty(nas, row):
     return True
 
 
-def _paravision_version(nas, row):
+def _sidecar_discovered(nas, row):
     p = os.path.join(_nas_join(nas, row["canonical_path"]), "metadata.json")
     try:
         with open(p, encoding="utf-8") as f:
-            d = json.load(f)
+            return json.load(f).get("discovered") or {}
     except Exception:
-        return ""
-    return (d.get("discovered") or {}).get("mri_paravision_version", "") or ""
+        return {}
+
+
+def _nonimage_marker(discovered):
+    """The STEAM/PRESS/WOBBLE marker for this acquisition, or "".
+
+    The live ingest calls `paravision_regen.is_nonimage_exam(exam_path)`, which
+    reads the exam's JCAMP-DX `method`/`acqp`. Those source exams are long gone
+    (staging is auto-deleted), so match the same markers against the sidecar's
+    `mri_sequence_name` — which the extractor derived from that same JCAMP
+    `Method` at ingest (e.g. "Bruker:STEAM"). Same constant, different source, so
+    the two classifications cannot drift apart.
+    """
+    seq = (discovered.get("mri_sequence_name") or "")
+    for marker in paravision_regen._NONIMAGE_METHOD_MARKERS:
+        if marker.lower() in seq.lower():
+            return marker
+    return ""
 
 
 def collect(nas, limit=0):
@@ -130,13 +153,15 @@ def collect(nas, limit=0):
         if not empty:
             skipped.append((r["acq_id"], "data present on disk — not a placeholder"))
             continue
+        disc = _sidecar_discovered(nas, r)
         out.append({
             "acq_id": r["acq_id"],
             "original_name": r.get("original_name", ""),
             "reconstructions": _recons_for_config(r.get("ingest_config", "")),
             "canonical_path": r["canonical_path"],
-            "paravision_version": _paravision_version(nas, r),
+            "paravision_version": disc.get("mri_paravision_version", "") or "",
             "ingest_config": r.get("ingest_config", ""),
+            "nonimage_marker": _nonimage_marker(disc),
         })
     return out, skipped
 
@@ -157,30 +182,49 @@ def main(argv=None):
 
     path = pending_dicom.pending_dicom_path(registries_dir)
     existing = pending_dicom.read_pending_dicom(path)
-    pending_dicom._assert_header(path)
     print(f"worklist: {path}\n  existing rows: {len(existing)}")
+    try:
+        pending_dicom._assert_header(path)
+    except RuntimeError:
+        # A pre-`nonimage_marker` worklist. Every field is re-derived from source
+        # below and the file is rewritten whole, so migrating is just carrying the
+        # old `status` across — nothing is lost.
+        print("  NOTE: legacy header (pre-nonimage_marker) — migrating in place")
 
     # Same merge semantics as append_pending_dicom, but resolved once and written
     # once rather than re-reading + rewriting the whole file 600+ times over SMB:
     # idempotent on acq_id, and `status` is preserved so a row the data office
-    # already marked "regenerated" is never reset to "pending".
+    # already marked "regenerated" is never reset.
     by_id = {r.get("acq_id"): r for r in existing}
     queued_at = pending_dicom._now_iso()
-    added = refreshed = 0
+    added = refreshed = corrected = 0
     for n in new_rows:
+        status = "not-applicable" if n["nonimage_marker"] else "pending"
         cur = by_id.get(n["acq_id"])
         if cur:
             cur.update(n)
             cur["queued_datetime"] = queued_at
+            # Only "regenerated" is sacred; a "pending" row we now know is
+            # non-image is a correction, not a reset (see pending_dicom).
+            if cur.get("status") in ("", "pending", None):
+                if cur.get("status") == "pending" and status == "not-applicable":
+                    corrected += 1
+                cur["status"] = status
             refreshed += 1
         else:
-            by_id[n["acq_id"]] = dict(n, queued_datetime=queued_at, status="pending")
+            by_id[n["acq_id"]] = dict(n, queued_datetime=queued_at, status=status)
             added += 1
 
     merged = list(by_id.values())
     by_pv = collections.Counter(r.get("paravision_version", "") for r in merged)
-    print(f"  to add: {added}   to refresh: {refreshed}   total after: {len(merged)}")
-    print(f"  paravision_version split: {by_pv}")
+    by_status = collections.Counter(r.get("status", "") for r in merged)
+    by_marker = collections.Counter(r.get("nonimage_marker") or "(image)" for r in merged)
+    print(f"  to add: {added}   to refresh: {refreshed}   "
+          f"pending->not-applicable corrections: {corrected}   total after: {len(merged)}")
+    print(f"  paravision_version split: {dict(by_pv)}")
+    print(f"  status split:             {dict(by_status)}")
+    print(f"  nonimage_marker split:    {dict(by_marker)}")
+    print(f"  -> the DRAIN SET (status=pending) is {by_status.get('pending', 0)} exams")
     missing_pv = [r["acq_id"] for r in merged if not r.get("paravision_version")]
     if missing_pv:
         print(f"  WARN: {len(missing_pv)} row(s) without a paravision_version "

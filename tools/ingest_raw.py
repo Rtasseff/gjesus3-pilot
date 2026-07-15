@@ -1010,8 +1010,15 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         # DICOMs in. Non-blocking — a worklist failure never fails the ingest.
         if copy_strategy == "mri_paravision_v2" and not dest_checksums:
             try:
-                from ingest import pending_dicom
+                from ingest import pending_dicom, paravision_regen
                 _disc = cfg_single.get("discovered") or {}
+                # An empty .data/ has two very different causes: Dicomifier was
+                # unavailable/failed (regen WILL fix it), or this is a
+                # spectroscopy/calibration exam that paravision_regen REFUSES by
+                # design (regen can NEVER fix it). Filing both as "pending" made
+                # the worklist undrainable, so classify at the point where the
+                # source is still on disk to be read.
+                _nonimage, _marker = paravision_regen.is_nonimage_exam(source_path)
                 _wl = pending_dicom.append_pending_dicom(
                     registries_dir,
                     acq_id=acq_id_str,
@@ -1020,13 +1027,23 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     canonical_path=canonical_path,
                     paravision_version=_disc.get("mri_paravision_version", ""),
                     ingest_config=cfg_single.get("ingest_config", ""),
+                    nonimage_marker=_marker,
                 )
-                log(
-                    f"  No DICOMs + no regeneration -> queued for deferred DICOM "
-                    f"regeneration in {os.path.basename(_wl)} (a Dicomifier pass "
-                    f"will re-pull '{original_name}' from the platform host and "
-                    f"fill this .data/).", "WARN",
-                )
+                if _nonimage:
+                    log(
+                        f"  No DICOMs + non-image acquisition (method matches "
+                        f"'{_marker}') -> recorded in {os.path.basename(_wl)} as "
+                        f"status=not-applicable. DICOM regeneration does not apply; "
+                        f"this needs the separate spectroscopy path (tasks/BACKLOG).",
+                        "WARN",
+                    )
+                else:
+                    log(
+                        f"  No DICOMs + no regeneration -> queued for deferred DICOM "
+                        f"regeneration in {os.path.basename(_wl)} (a Dicomifier pass "
+                        f"will re-pull '{original_name}' from the platform host and "
+                        f"fill this .data/).", "WARN",
+                    )
             except Exception as e:  # noqa: BLE001 — must never fail the ingest
                 log(f"  Could not queue for DICOM regen ({e}); these stay findable "
                     f"via registry MRI rows with file_count=0.", "WARN")
