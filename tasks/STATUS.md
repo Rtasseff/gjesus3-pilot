@@ -95,27 +95,33 @@ The genuinely in-flight items (kept tight — everything else is in
   (hard-link) behaviour on the live NI Mac's CIFS mount, then a vetted one-shot
   ingest per researcher. Archive-mode NI is already done and is the durable
   source-of-truth; live sync is the forward path for active project data.
-- **No-DICOM MRI regeneration worklist.** Operator MRI ingests on Windows cannot
-  run Dicomifier, so no-DICOM ParaVision exams queue to
-  `registries/pending_dicom_regen.csv` for a later Linux re-pull + regenerate.
-  Drain the worklist on a Dicomifier-capable (Linux/WSL) box as it accumulates.
-- ⚠️ **`age_at_acquisition` is derived against the *ingest* date on the 92 no-DICOM
-  MRI acquisitions** (found 2026-07-14, **not yet fixed — pending triage**). Those
-  rows are `file_count=0` with a genuinely blank `acquisition_datetime`, so
-  [`ingest_raw.py`](../tools/ingest_raw.py) Step 3 falls back to
-  `datetime.now()` for the ACQ-ID prefix (a documented placeholder — it WARNs
-  "backfill the registry acquisition_datetime when known"). That same `acq_date` is
-  then passed to `enrichment.build_enrichment`, whose `_acq_for_age` treats it as a
-  real acquisition date and derives the age from it. Example:
-  `ACQ-20260613-MRI-001`, dob 2021-06-09 → `P1830D`, landing exactly on its
-  2026-06-13 registration date. **Root cause:** `_acq_for_age`'s ACQ-ID-prefix
-  fallback is *correct* for the DICOM-StudyDate branch (a real discovered date) and
-  *wrong* for the `datetime.now()` branch — and the two are indistinguishable by the
-  time they reach it, both arriving as a bare `YYYYMMDD`. So the fix belongs at the
-  call site (don't hand a placeholder date to the age derivation), not in
-  `_acq_for_age`. Two parts: the **writer**, and the **92 already-written sidecars**.
-  Same rows as the regeneration worklist above — a re-ingest after Dicomifier regen
-  would give them a real date and a correct age.
+- **No-DICOM MRI regeneration worklist — 612 rows queued, waiting to be drained.**
+  Operator MRI ingests on Windows cannot run Dicomifier, so no-DICOM ParaVision
+  exams queue to `registries/pending_dicom_regen.csv` for a later Linux re-pull +
+  regenerate. **Drain it on a Dicomifier-capable (Linux/WSL) box** — this is now a
+  real backlog, not a trickle: every DICOM-less acquisition on the NAS (612, all
+  MRI, PV 6.0.1 × 277 + 7.0.0 × 335) is enrolled and `pending`. They are registered,
+  sidecar'd and findable; only their pixels are missing. A regen pass also fixes the
+  92 blank `age_at_acquisition` values below, since it gives those rows a real
+  acquisition date. The invariant to hold on to: **no DICOM-less acquisition should
+  exist without a worklist row** — verify with
+  [`tools/backfill_pending_dicom.py --dry-run`](../tools/backfill_pending_dicom.py),
+  which reports 0 to add when it holds.
+- ✅ **`age_at_acquisition` derived against the ingest date — FIXED 2026-07-15**
+  (commit `f567fae`). 92 no-DICOM MRI acquisitions carried an age measured to their
+  *ingest* date (`ACQ-20260613-MRI-001`: dob 2021-06-09 → `P1830D`, exactly its
+  2026-06-13 registration date) — a plausible number in a DB-sourced field, not an
+  obvious null. **Writer:** `ingest_raw.py` Step 3 falls back to `datetime.now()`
+  for the ACQ-ID prefix and used to hand that placeholder to
+  `enrichment.build_enrichment`; it now withholds it, so the age stays blank when
+  there is no real date. Fixed at the call site deliberately — `_acq_for_age`'s
+  ACQ-ID-prefix fallback is *correct* for the DICOM-StudyDate branch and only the
+  caller can tell the two apart. Pinned by `test_age_needs_a_real_date`.
+  **Data:** all 13,557 sidecars were rescanned (each age recomputed from its own dob
+  against the registry date) — exactly 92 wrong, 0 disagreements among the 10,666
+  with real dates; those 92 are now blanked on the NAS (age only; backup at
+  `gjesus3_age_blank_backup_20260715`) and a rescan reports 0. A Dicomifier regen
+  pass will refill them from a real date.
 
 ### 2.1 Safe-operation follow-ups from the 2026-07-08 review (triaged 2026-07-11)
 
