@@ -76,6 +76,11 @@ env = core.env
 # Imported under the package alias so it shares the loader's import footing
 # (never `import collisions` bare — keep all operator imports package-qualified).
 collisions = importlib.import_module(f"{core.__name__}.collisions")
+# Single source of truth for the "values to record" fields, shared by the
+# builder (renders the editor rows) and the runner (renders the per-batch
+# gaps). See tools/operator/value_fields.py — adding/renaming a field there
+# updates BOTH front-ends, so they can never drift.
+value_fields = importlib.import_module(f"{core.__name__}.value_fields")
 
 # Flask is imported after the core so a missing-flask error is obvious and
 # does not mask a core-import problem.
@@ -158,21 +163,6 @@ SAMPLE_TYPES = [
     {"value": "material", "label": "material — non-biological (nanoparticles, contrast agents)"},
     {"value": "phantom",  "label": "phantom — imaging calibration object"},
 ]
-
-# Critical fields that MUST end up populated. A recipe may set them (stable per
-# convention) or leave them blank; whatever it leaves blank is "pushed to the
-# runner" — shown there as a required per-batch input (token-field, or the
-# sample_type dropdown). See /api/recipe_gaps. `kind`: "token" (metadata-label +
-# text) or "sampletype" (controlled vocabulary).
-CRITICAL_FIELDS = [
-    {"key": "registry.researcher",   "label": "Researcher",       "kind": "token",      "hint": "who ran the study",        "required": True},
-    {"key": "registry.sample_id",    "label": "Sample ID",        "kind": "token",      "hint": "",                         "required": True},
-    {"key": "registry.sample_type",  "label": "Sample type",      "kind": "sampletype", "hint": "controlled vocabulary",    "required": True},
-    {"key": "operator",              "label": "Operator",         "kind": "token",      "hint": "who ran the equipment",    "required": False},
-    {"key": "registry.project_hint", "label": "Project hint",     "kind": "token",      "hint": "link to a project",        "required": False},
-    {"key": "link_filename",         "label": "Project link name", "kind": "token",     "hint": "the file name if left blank", "required": False},
-]
-
 
 def _effective_value(cfg, key):
     """The effective config value for a critical-field key (template+overrides)."""
@@ -558,12 +548,27 @@ def api_listdir():
     return jsonify(out)
 
 
+@app.route("/api/value_fields")
+def api_value_fields():
+    """The "values to record" catalogue the builder renders its rows from.
+
+    Single source of truth (tools/operator/value_fields.py) shared with the
+    runner's gap logic below, so the two front-ends can never drift. The builder
+    fetches this once at startup instead of carrying its own hard-coded list.
+    """
+    return jsonify({"fields": value_fields.builder_fields()})
+
+
 @app.route("/api/recipe_gaps", methods=["POST"])
 def api_recipe_gaps():
-    """Which CRITICAL_FIELDS does this recipe leave blank? The runner renders a
-    required per-batch input for each one returned. Computed on the EFFECTIVE
+    """Which gap-capable value fields does this recipe leave blank? The runner
+    renders a per-batch input for each one returned. Computed on the EFFECTIVE
     config (template + recipe overrides), so a value the template supplies (even
     if the recipe doesn't override it) is not reported as a gap.
+
+    Draws from the SAME catalogue the builder renders (value_fields.gap_fields),
+    so every field that can be left blank in the builder is offered here — no
+    field is silently un-promptable.
     """
     data = request.get_json(silent=True) or {}
     instrument = (data.get("instrument") or "").upper()
@@ -575,8 +580,39 @@ def api_recipe_gaps():
         cfg = config_builder.build_config(template, overrides)
     except Exception as e:  # noqa: BLE001 — a bad recipe shouldn't 500 the runner
         return jsonify({"gaps": [], "error": str(e)})
-    gaps = [f for f in CRITICAL_FIELDS if _is_gap(_effective_value(cfg, f["key"]))]
+    gaps = [f for f in value_fields.gap_fields()
+            if _is_gap(_effective_value(cfg, f["key"]))]
     return jsonify({"gaps": gaps})
+
+
+@app.route("/api/effective_config", methods=["POST"])
+def api_effective_config():
+    """The EFFECTIVE auto_discover config — the template deep-merged with the
+    recipe/builder overrides, i.e. what will ACTUALLY drive discovery at ingest.
+
+    The runner and builder use this to show and enforce the REAL scope (e.g. a
+    group_code=MFB filter the recipe INHERITS from the template but doesn't set
+    itself). Showing only the recipe's explicit overrides hid inherited values —
+    the "recipe shows one thing, ingest does another" trap. Read-only; mirrors
+    the merge /api/recipe_gaps already relies on (config_builder.build_config).
+    """
+    data = request.get_json(silent=True) or {}
+    instrument = (data.get("instrument") or "").upper()
+    overrides = data.get("overrides") or {}
+    if instrument not in MICROSCOPY_KEYS:
+        return jsonify({"auto_discover": {}})
+    try:
+        template = templates.load_template(instrument)
+        cfg = config_builder.build_config(template, overrides)
+    except Exception as e:  # noqa: BLE001 — a bad recipe shouldn't 500 the panel
+        return jsonify({"auto_discover": {}, "error": str(e)})
+    ad = cfg.get("auto_discover") or {}
+    return jsonify({"auto_discover": {
+        "filter": ad.get("filter") or {},
+        "filename_parse": ad.get("filename_parse") or {},
+        "path_parse": ad.get("path_parse") or {},
+        "pattern": ad.get("pattern"),
+    }})
 
 
 @app.route("/api/sample_layout", methods=["POST"])
