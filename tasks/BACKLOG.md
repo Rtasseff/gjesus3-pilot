@@ -201,6 +201,36 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   NIfTI we want at `/raw/`) — single file, no archive, limited header metadata.
   `STATUS.md` §3.1 / §4.8.
 
+## Doc placement — the no-DICOM regen runbook is in the wrong layer (2026-07-16)
+
+- [ ] **Move `equipment/mri-platform/mri_no_dicom_regeneration_runbook.md` →
+  `tasks/archive/` once the no-DICOM regen work is finished.** **Do it when we're
+  done, not before** — it is still the only written procedure today.
+  **Why:** `equipment/` is for the *platform's* own reality — the hardware and the
+  processes the platforms follow, which are outside our control and persist
+  regardless of what we build. This runbook is the opposite: it documents *our*
+  RDM tooling (`auto_regenerate_dicom`, `paravision_regen.py`, our WSL/conda env,
+  our validate step). It only lives under `equipment/` by accident of being about
+  the MRI platform's data. Once the drain tool supersedes its step-by-step it is a
+  historical work trail, which is what `tasks/archive/` is for.
+  **Carries with it (don't move it blind):**
+  - **~10 inbound links** to fix across `equipment/INDEX.md`,
+    `internal_mri_data_handling_workflow_notes.md` (×4), `mri_data_access_strategy.md`
+    (×2), `mri_platform_description.md`, `tools/INGEST_CLI.md`, `tasks/STATUS.md`.
+  - **`CHANGELOG.md` (2026-06-12) references it** — the CHANGELOG is append-only, so
+    that link cannot be rewritten. Decide: accept the stale link (it points at the
+    archived path's history) or leave a stub.
+  - **`tools/INGEST_CLI.md` calls it "▶ Full operator procedure"** — archiving it
+    removes the live procedure's home. The replacement (drain tool usage) belongs in
+    `tools/` (tool docs) and/or `10_TOOLS.md` (spec), not in `equipment/` again.
+  - It is ✅ DECIDED and **contains a false claim** (§2/§6: a re-run "fills the
+    `.data/`" — it does not; see `STATUS.md` §2). Fix or excise that before it is
+    frozen into `archive/`, since archived material is never edited afterwards.
+  **Worth the same test while we're here:** `mri_data_access_strategy.md` ("how *we*
+  reach the platform") and the sync-rules half of
+  `nuclear-imaging/live_machine_data_layout_and_sync_rules.md` also look like our
+  process rather than platform reality. The layout/hardware halves clearly belong.
+
 ## Misc
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)
