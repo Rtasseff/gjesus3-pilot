@@ -185,7 +185,7 @@ Each template's **header comment block lists every `discovered.*` field** the op
 
 ## Dicomifier DICOM regeneration for no-DICOM MRI exams (default-on for MRI)
 
-> **▶ Full operator procedure:** [`equipment/mri-platform/mri_no_dicom_regeneration_runbook.md`](../equipment/mri-platform/mri_no_dicom_regeneration_runbook.md) — the canonical step-by-step for the historical pull. This section is the quick CLI reference.
+> **▶ Full procedures:** ingest-time regeneration is the `auto_regenerate_dicom` flag row in [`10_TOOLS.md §2.1`](../mfb-rdm-docs/10_TOOLS.md); the **deferred backfill** (filling placeholders queued to `pending_dicom_regen.csv`) is a data-office job — [`11_OPERATIONS.md §5.5`](../mfb-rdm-docs/11_OPERATIONS.md) (procedure) + [`10_TOOLS.md §3.8`](../mfb-rdm-docs/10_TOOLS.md) (tool). This section is the quick CLI reference. (The original operator runbook is archived at `tasks/archive/mri_no_dicom_regeneration_runbook.md`.)
 
 **When:** internal MRI ingests where some source exams have **no `pdata/<idx>/dicom/` subfolders** because the researcher didn't run Bruker's GUI DICOM exporter. Round-6 v2 (2026-05-27) had 3 of 7 source projects in this state (m13/m14/m29 protocol 0423). The `mri_bruker` template now sets `auto_regenerate_dicom: true` by **default**, so ingest auto-regenerates the missing DICOMs via Dicomifier 2.5.3 (applying two confirmed PV-7 workarounds — see [`tasks/archive/tasks.md §3.1`](../tasks/archive/tasks.md)) **wherever Dicomifier is on PATH**. Where it isn't, the exam ingests as the empty `<ACQ-ID>.data/` placeholder (below) — no extra steps, never blocks.
 
@@ -199,7 +199,7 @@ conda activate dicomifier-pilot
 dicomifier --version    # should print 2.5.3 or later
 ```
 
-**Default for MRI (no action needed):** the `mri_bruker` template ships `auto_regenerate_dicom: true`. To **disable** it (force the empty-placeholder path) set it false in the per-batch YAML, or pass `mri-ingest --no-regenerate-dicom` on the operator CLI. The operator front-ends (`mri-ingest` and the MRI GUI) **print whether Dicomifier was detected** before the preview, so you know up front whether no-DICOM exams will be regenerated now or placeholdered for a later re-ingest.
+**Default for MRI (no action needed):** the `mri_bruker` template ships `auto_regenerate_dicom: true`. To **disable** it (force the empty-placeholder path) set it false in the per-batch YAML, or pass `mri-ingest --no-regenerate-dicom` on the operator CLI. The operator front-ends (`mri-ingest` and the MRI GUI) **print whether Dicomifier was detected** before the preview, so you know up front whether no-DICOM exams will be regenerated now or placeholdered and queued to `registries/pending_dicom_regen.csv` for the data office's deferred backfill (`tools/backfill_dicom_regen.py` — an in-place fill that keeps the ACQ-ID; **not** a re-ingest, which would dedupe-skip. See [`11_OPERATIONS.md §5.5`](../mfb-rdm-docs/11_OPERATIONS.md)).
 
 ```yaml
 ingest:

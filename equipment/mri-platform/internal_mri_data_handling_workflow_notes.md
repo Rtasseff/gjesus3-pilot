@@ -5,9 +5,10 @@
 > fields the MRI ingest template can expose. Sibling docs in this folder serve different readers:
 > [`mri_platform_description.md`](mri_platform_description.md) (**platform description** — vendor/hardware
 > specs), [`mri_data_access_strategy.md`](mri_data_access_strategy.md) (**strategy** — how we negotiate
-> read access to a platform-controlled acquisition machine), and
-> [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) (**runbook** — the
-> step-by-step procedure for exams that arrive without DICOMs).
+> read access to a platform-controlled acquisition machine). For exams that arrive without DICOMs,
+> the official procedures are [`10_TOOLS.md`](../../mfb-rdm-docs/10_TOOLS.md) (ingest-time regeneration
+> flag §2.1; deferred backfill tool §3.8) and [`11_OPERATIONS.md §5.5`](../../mfb-rdm-docs/11_OPERATIONS.md)
+> (the data-office backfill run).
 
 ## Scope
 
@@ -70,9 +71,9 @@ network-mounted for users; data is retrieved by a **read-only SFTP pull** from a
 ingested. Nothing is written back to the acquisition machine. The access posture, credentials model, and
 the architectural options behind this are the subject of
 [`mri_data_access_strategy.md`](mri_data_access_strategy.md); the §5 walkthrough below documents the manual
-FileZilla flow in detail. When an exam arrives *without* DICOMs, follow the
-[`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) (the ingest regenerates them
-from `2dseq` + JCAMP-DX).
+FileZilla flow in detail. When an exam arrives *without* DICOMs, the ingest regenerates them
+from `2dseq` + JCAMP-DX where Dicomifier is present, and otherwise registers an empty placeholder
+queued for the data-office backfill — see [`11_OPERATIONS.md §5.5`](../../mfb-rdm-docs/11_OPERATIONS.md).
 
 ---
 
@@ -370,7 +371,7 @@ A real-world gap surfaced during the v2 source-data inventory: **3 of 7 round-6 
 
 **Round-6 v2 decision:** ingest these acquisitions anyway, with empty `<ACQ-ID>.data/` folders. The `metadata.json.mri:` block is fully populated from the parsed JCAMP-DX (subject, acquisition parameters, geometry, per-recon `visu_pars`/`reco`) — researchers can still query the acquisition metadata. The `mri.reconstruction.by_index.<idx>.dicoms[]` list is empty.
 
-**Recovery path:** the operator (Data Mgmt Lead) flags the no-DICOM acquisitions in the round-6 report and either (a) asks the originating researcher to re-run Bruker's exporter, then re-runs the ingest (idempotency dedup means only the freshly-available DICOMs get copied; placeholder gets converted in place), or (b) uses the FID→DICOM regeneration capability (now built — see the Dicomifier section below and the [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md)).
+**Recovery path** (⚠️ CORRECTED 2026-07-16 — this paragraph originally claimed a re-run of the ingest "converts the placeholder in place"; **it does not**: the dedup keys on registry presence and skips every registered placeholder, populated or not): each no-DICOM acquisition is queued to `registries/pending_dicom_regen.csv` at ingest, and the placeholder is later filled **in place, keeping its ACQ-ID**, by the data-office backfill `tools/backfill_dicom_regen.py` — see [`11_OPERATIONS.md §5.5`](../../mfb-rdm-docs/11_OPERATIONS.md) and [`10_TOOLS.md §3.8`](../../mfb-rdm-docs/10_TOOLS.md).
 
 **Why not skip the exam outright?** The acquisition is still real — the animal was scanned, the parameters were captured. Registering it preserves the audit trail and lets a later DICOM conversion fill in the image data without needing to re-acquire registry information. Empty `.data/` is honest about the gap.
 
@@ -378,11 +379,13 @@ A real-world gap surfaced during the v2 source-data inventory: **3 of 7 round-6 
 
 ### ParaVision → DICOM regeneration via Dicomifier (Phase 2 — module + wiring complete 2026-06-01)
 
-> **▶ Operators / historical-pull team: follow the step-by-step runbook —
-> [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md).** It is the canonical procedure
-> (setup → config flag → run from WSL → verify). This section is the in-context design summary.
+> **▶ The canonical procedures live in the official docs** (the runbook this note used to point
+> at is archived at `tasks/archive/mri_no_dicom_regeneration_runbook.md`): ingest-time
+> regeneration is the `auto_regenerate_dicom` flag row in [`10_TOOLS.md §2.1`](../../mfb-rdm-docs/10_TOOLS.md);
+> the deferred data-office backfill is [`11_OPERATIONS.md §5.5`](../../mfb-rdm-docs/11_OPERATIONS.md) +
+> [`10_TOOLS.md §3.8`](../../mfb-rdm-docs/10_TOOLS.md). This section is the in-context design summary.
 
-**Implementation:** [Dicomifier 2.5.3](https://github.com/lamyj/dicomifier) (open-source, IADI lab — Inserm/Université de Lorraine), invoked via subprocess from `tools/ingest/paravision_regen.py`. Two confirmed PV-7 bugs are worked around per-file:
+**Implementation:** [Dicomifier 2.5.3](https://github.com/lamyj/dicomifier) (open-source, IADI lab — Inserm/Université de Lorraine), invoked via subprocess from `tools/ingest/paravision_regen.py` (routed through `tools/ingest/dicomifier_driver.py` since 2026-07-16). Three confirmed Dicomifier bugs are worked around:
 
 1. **PixelSpacing axis-order** — Dicomifier emits `[col, row]` instead of DICOM Part 3's `[row, col]`. Workaround: swap. Verified across 16 m17 anisotropic series (cardiac CINE / Localizer / Planning / T1_FLASH / T2_TurboRARE).
 2. **Invalid Window tags** — Dicomifier emits `WindowWidth=0` (invalid; viewers produce a gray cast). Workaround: delete bogus `WindowCenter`/`WindowWidth`; add `SmallestImagePixelValue` + `LargestImagePixelValue` from the pixel array's min/max. Restores high-contrast B&W matching Bruker GUI behaviour.

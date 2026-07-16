@@ -293,6 +293,48 @@ For operators running ingest themselves on the acquisition machines there is now
 4. Queue improvements for batch updates
 5. Document changes in [`CHANGELOG.md`](../CHANGELOG.md) / [`00_INDEX.md`](00_INDEX.md) version history
 
+### 5.5 MRI no-DICOM backfill — deferred DICOM regeneration (data office)
+
+> **Status:** ✅ Official procedure (2026-07-16; supersedes the archived operator runbook
+> `tasks/archive/mri_no_dicom_regeneration_runbook.md`, whose inline-ingest flow remains valid
+> for *new* batches but whose "re-run fills the placeholders" claim was wrong — the deferred
+> fill is an in-place update, not a re-ingest).
+
+**When.** A ParaVision MRI exam ingested **without DICOMs** (researcher skipped Bruker's
+exporter; Dicomifier absent or failed at ingest time) is registered with an empty
+`<ACQ-ID>.data/` placeholder and queued to `registries/pending_dicom_regen.csv`. This
+procedure is how the **RDM team** later fills those placeholders. Tool reference:
+[10_TOOLS §3.8](10_TOOLS.md).
+
+**Who.** Data office only (superuser). Operators never run this.
+
+**How** (regeneration runs from **WSL** — Dicomifier is Linux/conda; everything else is
+cross-platform):
+
+1. **Stage the sources** (read-only against the platform host; resumable):
+   `PYTHONPATH=tools python tools/pull_pending_dicom_sources.py --dry-run` then `--apply`.
+2. **Preview the drain** (safe anywhere, writes nothing):
+   `PYTHONPATH=tools python tools/backfill_dicom_regen.py`
+3. **Activate the env and pilot one exam** (WSL):
+   ```bash
+   conda activate dicomifier-pilot     # env spec: tools/dicomifier-pilot.environment.yml
+   PYTHONPATH=tools python tools/backfill_dicom_regen.py --apply --limit 1 \
+       --nas-root /mnt/gjesus3/gjesus3-data --staging <staging-root>
+   ```
+   Inspect the filled `.data/`, the registry row, and the worklist flip before continuing.
+4. **Drain** (same command without `--limit`), then re-run step 2 — every former `pending`
+   row should now be terminal.
+5. **Rebuild project hard-links from Windows** (`os.link` is refused over the CIFS mount
+   from WSL): `python tools/relink_mri_regen.py --nas-root J:/gjesus3-data --dry-run`, then live.
+6. **Record un-regenerable rows** — a **human decision**, never automatic: rows whose staged
+   source has no `pdata/<idx>/2dseq` (header-only or fid-only) can never be regenerated;
+   after confirming the staged mirror is complete, flip them to the terminal `no-source`
+   status: `... backfill_dicom_regen.py --apply --mark-no-source`.
+
+**Invariant to verify afterwards:** *no DICOM-less acquisition without a worklist row* —
+`PYTHONPATH=tools python tools/backfill_pending_dicom.py --nas-root J:/gjesus3-data --dry-run`
+reporting 0 to add means it holds.
+
 ---
 
 ## 6. Compliance and Enforcement

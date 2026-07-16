@@ -4,10 +4,10 @@
 > network-reachable, the architectural **options** for getting data off it, and the platform-manager
 > conversation that gates them. For the concrete operator path, see the sibling docs in this folder:
 > [`internal_mri_data_handling_workflow_notes.md`](internal_mri_data_handling_workflow_notes.md)
-> (**workflow notes** — acquisition, naming, ingest integration),
-> [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) (**runbook** — no-DICOM
-> exams), and [`mri_platform_description.md`](mri_platform_description.md) (**platform description** —
-> hardware specs).
+> (**workflow notes** — acquisition, naming, ingest integration) and
+> [`mri_platform_description.md`](mri_platform_description.md) (**platform description** —
+> hardware specs). No-DICOM exam procedures live in the official docs:
+> [`11_OPERATIONS.md §5.5`](../../mfb-rdm-docs/11_OPERATIONS.md) + [`10_TOOLS.md §3.8`](../../mfb-rdm-docs/10_TOOLS.md).
 
 **Status:** 🔶 DRAFT — **Option A (read-only SFTP pull → ingest) executed and operational**; MRI data is
 in true production. The remaining content here (Phase 2 on-machine push, the forward-looking
@@ -21,7 +21,7 @@ The Internal MRI platform is the **only in-scope instrument that isn't directly 
 Companion files:
 - [`mri_platform_description.md`](mri_platform_description.md) — vendor specs (Bruker BioSpec 11.7T and 7T)
 - [`internal_mri_data_handling_workflow_notes.md`](internal_mri_data_handling_workflow_notes.md) — the operator workflow + how ingested MRI data integrates with gjesus3
-- [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) — the no-DICOM-exam regeneration procedure
+- [`11_OPERATIONS.md §5.5`](../../mfb-rdm-docs/11_OPERATIONS.md) + [`10_TOOLS.md §3.8`](../../mfb-rdm-docs/10_TOOLS.md) — the no-DICOM-exam regeneration + backfill procedures (the old runbook is archived at `tasks/archive/mri_no_dicom_regeneration_runbook.md`)
 - [`tasks/STATUS.md`](../../tasks/STATUS.md) — current MRI ingest state (pickup context)
 
 ## What we know about the acquisition environment

@@ -30,7 +30,7 @@ primary is the platform host (D:\\README.md rule 1).
 
 Credentials: ~/.ssh/gjesus3_mri.cred ([mri] host/user/password/port), or the
 GJESUS3_FTP_* env vars. See equipment/mri-platform/mri_data_access_strategy.md
-and .../mri_no_dicom_regeneration_runbook.md.
+and mfb-rdm-docs/11_OPERATIONS.md §5.5 (the backfill procedure this stages for).
 """
 import argparse
 import collections

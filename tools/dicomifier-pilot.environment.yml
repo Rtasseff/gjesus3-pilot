@@ -14,7 +14,10 @@
 #     dicomifier --version          # expect 2.5.3 or later
 #     python tools/ingest_raw.py --config tools/configs/mri_bruker_<batch>.yaml --nas-root /mnt/gjesus3
 #
-# Full procedure: equipment/mri-platform/mri_no_dicom_regeneration_runbook.md
+# Full procedures: mfb-rdm-docs/11_OPERATIONS.md §5.5 (data-office backfill) +
+# mfb-rdm-docs/10_TOOLS.md (flag §2.1 / backfill tool §3.8).
+# (The original runbook is archived at tasks/archive/mri_no_dicom_regeneration_runbook.md;
+#  its §4a WSL notes — pymysql/creds, CIFS hard-links — are mirrored in 11_OPERATIONS §5.5.)
 name: dicomifier-pilot
 channels:
   - conda-forge

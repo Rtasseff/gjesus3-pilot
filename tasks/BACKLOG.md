@@ -230,8 +230,16 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
 
 ## Doc placement — the no-DICOM regen runbook is in the wrong layer (2026-07-16)
 
-- [ ] **Move `equipment/mri-platform/mri_no_dicom_regeneration_runbook.md` →
-  `tasks/archive/` once the no-DICOM regen work is finished.** **Do it when we're
+- [x] **DONE 2026-07-16** — the backfill work finished the same day; the runbook's
+  durable content was integrated into `10_TOOLS.md` (§2.1 flag row + new §3.8) and
+  `11_OPERATIONS.md` (new §5.5), its false idempotency claims were corrected in
+  place (⚠️ CORRECTED markers), and it was moved to
+  `tasks/archive/mri_no_dicom_regeneration_runbook.md`. All inbound links repointed
+  at the new official homes; the append-only `CHANGELOG.md` (2026-06-12) reference
+  was left stale by decision (the 2026-07-16 entry records the move). Original
+  rationale kept below for the `equipment/` boundary audit above.
+- ~~Move `equipment/mri-platform/mri_no_dicom_regeneration_runbook.md` →
+  `tasks/archive/` once the no-DICOM regen work is finished.~~ **Do it when we're
   done, not before** — it is still the only written procedure today.
   **Why:** `equipment/` is for the *platform's* own reality — the hardware and the
   processes the platforms follow, which are outside our control and persist
@@ -557,7 +565,17 @@ they simply land as skipped placeholders.
   the primary/sidecar shape for spectroscopy (raw FID / processed spectra, not
   image DICOMs) and how/whether to store the STEAM/PRESS results + the Wobble
   tuning scans. The ~365 acquisitions are safely skipped until this is built;
-  there is no rush.
+  there is no rush. **Input set = the `not-applicable` rows of
+  `registries/pending_dicom_regen.csv`** (365: STEAM 286 / PRESS 74 / WOBBLE 5;
+  the `nonimage_marker` column says which is which).
+  **2026-07-16 backfill finding:** the marker set (STEAM/PRESS/WOBBLE) was
+  re-checked against every staged pending exam during the backfill and needs
+  **no widening** — all remaining DICOM-less exams are ordinary image sequences
+  (FLASH/FcFLASH/FISP/MSME/RARE/UTE3D/DTI/FLOWMAP); the `specpar`/
+  `AdjStatePerScan` files seen in some exam folders coexist with plain image
+  exams and are NOT non-image signals. Also note the 14 `fid`-only rows now
+  marked `no-source` — if a ParaVision-reconstruction path is ever built, those
+  are its candidate input (they have raw k-space but no `2dseq`).
 
 ## MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14)
 

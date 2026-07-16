@@ -1,5 +1,17 @@
 # Runbook — MRI sessions with NO DICOM files (ParaVision → DICOM regeneration)
 
+> **📦 ARCHIVED 2026-07-16 — superseded by the official docs.** This runbook documented the
+> **inline** (ingest-time) regeneration flow, which remains how new batches work; its durable
+> content now lives in the official homes: **[`mfb-rdm-docs/10_TOOLS.md`](../../mfb-rdm-docs/10_TOOLS.md)**
+> (the `auto_regenerate_dicom` flag row in §2.1; the backfill CLI + worklist status domain in §3.8)
+> and **[`mfb-rdm-docs/11_OPERATIONS.md §5.5`](../../mfb-rdm-docs/11_OPERATIONS.md)** (the data-office
+> backfill procedure). Two corrections were applied before archiving (marked ⚠️ CORRECTED below):
+> the original §2/§6 claim that *re-running the same config fills the still-empty placeholders*
+> was **wrong** — the ingest dedup keys on registry presence and skips every registered
+> placeholder; the deferred fill is an **in-place update** by `tools/backfill_dicom_regen.py`,
+> never a re-ingest. And Dicomifier carries a **third** workaround since 2026-07-16
+> (`tools/ingest/dicomifier_driver.py`: reverse-slice-order crash + silent no-op flip).
+
 > **Runbook** (this file): the step-by-step operator procedure for the specific case of a ParaVision MRI
 > exam that arrives **without DICOMs**. For the broader picture, see the sibling docs in this folder:
 > [`internal_mri_data_handling_workflow_notes.md`](internal_mri_data_handling_workflow_notes.md)
@@ -45,9 +57,13 @@ source exam with no DICOMs
        └─ checksums + registry row + project hard-link, same as any MRI acquisition
 ```
 
-Idempotent: re-running skips already-populated acquisitions and only fills in the ones still missing DICOMs. Temp scratch
-is auto-cleaned. If Dicomifier is unavailable or a regen fails, the ingest logs a WARN and falls through to the existing
-**empty `.data/` placeholder** (no batch abort) — you can re-run later once the env is in place.
+⚠️ CORRECTED 2026-07-16 — the original text here claimed a re-run "only fills in the ones still missing DICOMs."
+**It does not.** The ingest dedup keys on `(acq_date, original_name)` being present in the registry and never checks
+whether the `.data/` is empty, so a re-run skips *every* registered placeholder (verified: 612/612 dedupe-skip). Temp
+scratch is auto-cleaned. If Dicomifier is unavailable or a regen fails, the ingest logs a WARN, falls through to the
+**empty `.data/` placeholder** (no batch abort), and **queues the exam to `registries/pending_dicom_regen.csv`**; the
+placeholder is later filled **in place** (keeping its ACQ-ID) by the data-office backfill
+`tools/backfill_dicom_regen.py` — see `11_OPERATIONS.md §5.5`. Never try to fill placeholders by re-running the ingest.
 
 ---
 
@@ -191,9 +207,9 @@ These are the WSL-specific gotchas the historical pull surfaced:
 |---|---|
 | Exam already has DICOMs | Ingested normally — regen never fires (the flag is a no-op for it). |
 | Exam has no DICOMs, flag **on**, Dicomifier present | DICOMs regenerated + fixed + deposited. |
-| Exam has no DICOMs, flag **on**, Dicomifier **missing or regen fails** | WARN logged; **empty `.data/` placeholder** written; **no abort**. Re-run later once the env is fixed. |
-| Exam has no DICOMs, flag **off** | Empty `.data/` placeholder (the default round-6 behaviour). |
-| Re-running the same config | Idempotent — already-populated acquisitions dedupe-skip; only still-empty placeholders get filled. |
+| Exam has no DICOMs, flag **on**, Dicomifier **missing or regen fails** | WARN logged; **empty `.data/` placeholder** written + **queued to `pending_dicom_regen.csv`**; **no abort**. The placeholder is filled later by the data-office backfill (`tools/backfill_dicom_regen.py`) — ⚠️ CORRECTED 2026-07-16: *not* by re-running the ingest. |
+| Exam has no DICOMs, flag **off** | Empty `.data/` placeholder (the default round-6 behaviour) + queued, as above. |
+| Re-running the same config | ⚠️ CORRECTED 2026-07-16 — the original row claimed "only still-empty placeholders get filled." **Wrong:** every registered acquisition dedupe-skips, populated or not (the dedup never looks at the `.data/`). Registered placeholders are filled only by `tools/backfill_dicom_regen.py` (in place, ACQ-ID kept). |
 
 ---
 

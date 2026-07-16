@@ -5,9 +5,9 @@
 > [`internal_mri_data_handling_workflow_notes.md`](internal_mri_data_handling_workflow_notes.md) (the
 > operator **workflow notes** + parsable naming convention),
 > [`mri_data_access_strategy.md`](mri_data_access_strategy.md) (the access **strategy** —
-> how we reach a platform-controlled acquisition machine), and
-> [`mri_no_dicom_regeneration_runbook.md`](mri_no_dicom_regeneration_runbook.md) (the operator
-> **runbook** for exams that arrive without DICOMs).
+> how we reach a platform-controlled acquisition machine). Procedures for exams that arrive
+> without DICOMs live in [`11_OPERATIONS.md §5.5`](../../mfb-rdm-docs/11_OPERATIONS.md) and
+> [`10_TOOLS.md §3.8`](../../mfb-rdm-docs/10_TOOLS.md).
 >
 > A condensed hardware summary also lives in [`../INDEX.md`](../INDEX.md) (§"MRI Platform — Bruker
 > BioSpec 11.7T and 7T"); this file is the longer vendor-style writeup.
