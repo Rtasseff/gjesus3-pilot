@@ -66,10 +66,12 @@
       <button id="r-preview" type="button" class="primary">Preview</button>
     </div>
 
-    <!-- Critical fields the chosen recipe leaves blank are "pushed" here and are
-         REQUIRED per batch. The runner adapts: it asks /api/recipe_gaps which
-         CRITICAL_FIELDS are unset in the recipe, then renders a token-field
-         (metadata-label + text) — or the sample_type dropdown — for each. -->
+    <!-- Value fields the chosen recipe leaves blank are "pushed" here to fill per
+         batch (★ ones are required, the rest optional). The runner asks
+         /api/recipe_gaps which gap-capable value fields are unset in the recipe,
+         then renders a token-field (metadata-label + text) — or the sample_type
+         dropdown — for each. The catalogue is the single source of truth shared
+         with the builder (tools/operator/value_fields.py). -->
     <fieldset id="r-gaps" hidden>
       <legend>Fill in for this batch <span class="muted">— values the recipe leaves blank; <span class="star">★</span> required before ingest, others optional</span></legend>
       <div id="r-gaps-grid" class="reqgrid"></div>
@@ -83,10 +85,10 @@
       </details>
     </fieldset>
 
-    <!-- Filter. If the recipe sets one, it's shown read-only here (edit it in the
-         builder); otherwise the operator scopes this batch with label=value rows.
-         Exactly ONE filter applies — the recipe's, OR the runner rows when the
-         recipe sets none (see runnerFilter()). -->
+    <!-- Filter. The recipe's filter (if any) is shown read-only here AND forcibly
+         applied; the operator can ALWAYS add more label=value conditions on top,
+         which are ANDed in (the recipe wins on a key collision). Edit the recipe's
+         own filter in the builder. See runnerFilter() / updateFilterPanel(). -->
     <fieldset id="r-filter" hidden>
       <legend>Filter <span class="muted">— only ingest files that match (optional)</span></legend>
       <div id="r-filter-recipe" class="muted" hidden></div>

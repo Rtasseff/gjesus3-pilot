@@ -218,10 +218,11 @@ function currentRecipeOverrides() {
   return rec ? (rec.overrides || {}) : {};
 }
 
-// ---- recipe gaps: critical fields the recipe leaves blank, filled per batch --
-// The runner asks the backend which CRITICAL_FIELDS are unset in the chosen
-// recipe and renders a REQUIRED input for each — a token-field (metadata labels
-// + free text), or the sample_type dropdown — filled per batch.
+// ---- recipe gaps: value fields the recipe leaves blank, filled per batch --
+// The runner asks the backend (/api/recipe_gaps) which gap-capable value fields
+// are unset in the chosen recipe and renders an input for each — a token-field
+// (metadata labels + free text), or the sample_type dropdown — filled per batch.
+// ★ fields block ingest until filled; the rest are optional.
 let runnerDiscoveredRow = {};    // first parsed row, shared for live examples
 let runnerGapMeta = [];          // [{key,label,kind,hint}] from /api/recipe_gaps
 let runnerKeys = [];             // discovered keys (for the runner filter dropdown)
@@ -229,7 +230,8 @@ const runnerGapFields = {};      // key -> TokenField
 const runnerGapSelects = {};     // key -> <select> (sample_type)
 
 async function loadGaps() {
-  updateFilterPanel();   // show/hide the runner filter for this recipe
+  updateFilterPanel();        // repaint the recipe filter + add-conditions UI
+  runnerFilterUI.clear();     // a new recipe/instrument starts added filters fresh
   const grid = $("#r-gaps-grid");
   Object.keys(runnerGapFields).forEach((k) => delete runnerGapFields[k]);
   Object.keys(runnerGapSelects).forEach((k) => delete runnerGapSelects[k]);
@@ -327,29 +329,44 @@ async function loadGapFields() {
 }
 $("#r-gaps-load").addEventListener("click", loadGapFields);
 
-// runner filter — same UI as the builder, shown only when the recipe sets none.
+// runner filter — same UI as the builder. The recipe's filter (if any) is shown
+// read-only AND forcibly applied; the operator can always ADD more conditions on
+// top, which are ANDed in (see runnerFilter()).
 const runnerFilterUI = makeFilterBuilder("#r-filter-rows", () => runnerKeys, null);
 $("#r-filter-add").addEventListener("click", () => runnerFilterUI.addRow());
 function updateFilterPanel() {
   const rf = currentRecipeOverrides()["auto_discover.filter"];
   const hasRecipeFilter = rf && typeof rf === "object" && Object.keys(rf).length > 0;
   $("#r-filter").hidden = false;                 // the filter section is always visible
-  $("#r-filter-recipe").hidden = !hasRecipeFilter;
-  $("#r-filter-edit").hidden = hasRecipeFilter;
+  $("#r-filter-edit").hidden = false;            // add-conditions UI is ALWAYS available
+  // Always state the recipe's filter status, so a recipe that sets NO filter
+  // reads as an explicit "nothing is filtered" rather than a blank area that
+  // looks like a missing/broken note. When a filter IS set, list every enforced
+  // condition and drop `muted` so the enforced scope stands out.
+  const note = $("#r-filter-recipe");
+  note.hidden = false;
   if (hasRecipeFilter) {
-    runnerFilterUI.clear();                      // drop any stale runner rows — recipe wins
-    $("#r-filter-recipe").innerHTML = "This recipe filters to " +
+    note.classList.remove("muted");
+    note.innerHTML = "This recipe filters to " +
       Object.entries(rf).map(([k, v]) =>
         `<code>${esc(tfHumanizeRef(k))} = ${esc(v)}</code>`).join(" <b>AND</b> ") +
-      " — edit it in the builder.";
+      " — always applied; edit it in the builder. Add more conditions below to " +
+      "narrow this batch further.";
+  } else {
+    note.classList.add("muted");
+    note.innerHTML = "This recipe defines <b>no filter of its own</b>. Add " +
+      "conditions below to scope this batch.";
   }
 }
 function runnerFilter() {
-  // Only the runner's OWN rows count, and only when the recipe sets no filter
-  // (otherwise the recipe's filter applies and must not be overridden).
-  if ($("#r-filter-edit").hidden) return {};
-  const f = runnerFilterUI.collect();
-  return Object.keys(f).length ? { "auto_discover.filter": f } : {};
+  // The runner's OWN added conditions, ANDed on top of any recipe filter. The
+  // recipe's filter is forcibly applied, so it WINS on a key collision — the
+  // operator can narrow the batch further, never weaken the recipe's scope.
+  const own = runnerFilterUI.collect();
+  const rf = currentRecipeOverrides()["auto_discover.filter"];
+  const recipeFilter = (rf && typeof rf === "object") ? rf : {};
+  const merged = Object.assign({}, own, recipeFilter);   // recipe keys win
+  return Object.keys(merged).length ? { "auto_discover.filter": merged } : {};
 }
 
 loadRecipes();
@@ -413,6 +430,14 @@ async function loadMetaFields() {
       limit: 5,
     });
     runnerDiscoveredRow = (data.rows && data.rows[0]) ? data.rows[0].discovered : {};
+    // Both "Show metadata labels from the folder" buttons (this one and
+    // #r-gaps-load) fetch the SAME /api/discovered data. Feed the shared
+    // runnerKeys + refresh the filter here too, so the runner filter dropdown
+    // fills no matter which of the two identically-labelled buttons the operator
+    // clicks — otherwise clicking this one loads visible labels but leaves the
+    // filter's data source empty.
+    runnerKeys = data.keys || [];
+    runnerFilterUI.refresh();
     renderPalette($("#r-meta-chips"), paletteEntries(data.keys || []), dmField);
     updateMetaExamples();
   } catch (e) {
@@ -660,34 +685,34 @@ const builderSelects = {};      // field key -> <select> (controlled-vocab rows)
 // "3 · Set the values to record" — the values we have a priority to capture.
 // ★ high-priority = the registry person columns + sample id.
 //
+// The field CATALOGUE is no longer hard-coded here. It is fetched from the
+// backend (GET /api/value_fields -> tools/operator/value_fields.py), the SAME
+// list the runner's gap logic draws from, so the builder and runner can never
+// drift. (The old split between this list and the backend CRITICAL_FIELDS is
+// exactly what let `registry.session_id` be un-promptable.) Each field carries:
+//   key / label / hint / star, kind ("token" | "sampletype"), required, and
+//   gap — gap-capable: a blank is saved as an explicit "" the runner prompts
+//   for, instead of falling back to the template default.
+//
 // NOTE: study-design metadata (Animal role / is_control, disease_model,
-// disease_state) is deliberately NOT here. It varies per animal/group, so it
-// can't be baked into a reusable naming-convention recipe (a cohort is rarely
-// all-control or all-case). It's captured per-run in the Runner instead; the
-// per-acquisition "derive is_control from a metadata label" rule is a planned
-// next revision (tasks/BACKLOG.md).
-// `gap: true` marks the fields that are SELF-CONTAINED in the recipe: the builder
-// saves them explicitly (value OR an explicit blank), so leaving one blank is a
-// real blank that the Runner prompts for per batch — it does NOT silently fall
-// back to the template default. Must match the backend CRITICAL_FIELDS keys.
-// Non-gap fields (acq date / session / notes) still fall back to the template.
-const REQUIRED_FIELDS = [
-  { key: "registry.researcher",           label: "Researcher",       star: true, hint: "who ran the study", gap: true },
-  { key: "operator",                      label: "Operator",         star: true, hint: "who ran the equipment", gap: true },
-  { key: "registry.sample_id",            label: "Sample ID",        star: true, gap: true },
-  { key: "registry.sample_type",          label: "Sample type",      type: "select", gap: true },
-  { key: "registry.acquisition_datetime", label: "Acquisition date" },
-  { key: "registry.project_hint",         label: "Project hint",     gap: true },
-  { key: "registry.session_id",           label: "Session ID" },
-  { key: "registry.notes",                label: "Notes" },
-  { key: "link_filename",                 label: "Project link name", gap: true },
-];
+// disease_state) is deliberately NOT in this catalogue. It varies per
+// animal/group, so it can't be baked into a reusable naming-convention recipe
+// (a cohort is rarely all-control or all-case). It's captured per-run in the
+// Runner instead; the per-acquisition "derive is_control from a metadata label"
+// rule is a planned next revision (tasks/BACKLOG.md).
+let VALUE_FIELDS = [];   // populated by loadValueFields() before the grid is built
 
-// Build the "values to record" rows once (all token-fields).
+async function loadValueFields() {
+  const data = await getJSON("/api/value_fields");
+  VALUE_FIELDS = (data && data.fields) || [];
+}
+
+// Build the "values to record" rows from the fetched catalogue (token-fields,
+// plus the controlled sample_type dropdown).
 function buildRequiredGrid() {
   const grid = $("#b-required");
   grid.innerHTML = "";
-  REQUIRED_FIELDS.forEach((f) => {
+  VALUE_FIELDS.forEach((f) => {
     const row = document.createElement("div");
     row.className = "req-row";
     row.dataset.key = f.key;
@@ -698,7 +723,7 @@ function buildRequiredGrid() {
     lab.innerHTML = `${star}${esc(f.label)}${hint}`;
     const val = document.createElement("div");
     val.className = "req-val";
-    if (f.type === "select") {
+    if (f.kind === "sampletype") {
       // controlled vocabulary (sample_type) — skip or pick, never free text
       const sel = document.createElement("select");
       sel.innerHTML = '<option value="">— skip / leave blank —</option>' + sampleTypeOptions();
@@ -719,7 +744,8 @@ function buildRequiredGrid() {
   });
   // Project link name is critical and must never be left blank — default it to
   // the always-present original_name (operators can change it).
-  builderFields["link_filename"].setValue("${original_name}");
+  const lf = builderFields["link_filename"];
+  if (lf) lf.setValue("${original_name}");
 }
 
 // ---- folder levels (section 1) ----
@@ -756,8 +782,15 @@ function makeFilterBuilder(rowsSel, getKeys, onChange) {
   const fire = () => { if (onChange) onChange(); };
   function fieldOptions(selected) {
     const keys = getKeys() || [];
-    if (!keys.length) return '<option value="">(show metadata labels first)</option>';
-    return '<option value="">— pick a metadata label —</option>' + keys.map((k) =>
+    const opts = keys.slice();
+    // Keep a preset/kept field (e.g. a template filter loaded before the folder's
+    // metadata labels have been fetched) visible AND selected, so it renders
+    // correctly and survives collect() into the recipe. Without this a loaded
+    // filter shows its value but an EMPTY field, and is silently dropped on save
+    // — the reason a template's group_code=MFB filter never reached the runner.
+    if (selected && !opts.includes(selected)) opts.unshift(selected);
+    if (!opts.length) return '<option value="">(show metadata labels first)</option>';
+    return '<option value="">— pick a metadata label —</option>' + opts.map((k) =>
       `<option value="${esc(k)}"${k === selected ? " selected" : ""}>${esc(tfHumanizeRef(k))}</option>`).join("");
   }
   function addRow(field, value) {
@@ -906,9 +939,9 @@ function builderOverrides() {
   // blank (an explicit "" overrides the template default -> a real blank the
   // Runner prompts for). Non-gap fields are emitted only when filled (else they
   // fall back to the template default).
-  REQUIRED_FIELDS.forEach((f) => {
+  VALUE_FIELDS.forEach((f) => {
     let v;
-    if (f.type === "select") {
+    if (f.kind === "sampletype") {
       const sel = builderSelects[f.key];
       v = sel ? sel.value : "";
     } else {
@@ -1020,6 +1053,14 @@ function setSelect(key, val) {
   const sel = builderSelects[key];
   if (sel) sel.value = (val == null) ? "" : String(val);  // non-vocab -> stays skip
 }
+// Pull a catalogue field's value out of a /api/template payload by its dotted
+// key: "registry.<col>" -> t.registry.<col>; a bare key -> t[key]. Lets the
+// template-seed loop be data-driven over VALUE_FIELDS (no per-field code).
+function templateValueForKey(t, key) {
+  const i = key.indexOf(".");
+  if (i === -1) return t[key];
+  return (t[key.slice(0, i)] || {})[key.slice(i + 1)];
+}
 async function loadTemplateDefaults() {
   $("#b-errors").textContent = "";
   try {
@@ -1044,20 +1085,17 @@ async function loadTemplateDefaults() {
     // filter
     builderFilterUI.clear();
     Object.entries(ad.filter || {}).forEach(([k, v]) => builderFilterUI.addRow(k, v));
-    // values to record
-    const reg = t.registry || {};
-    setTF("registry.researcher", reg.researcher);
-    setTF("operator", t.operator);
-    setTF("registry.sample_id", reg.sample_id);
-    setSelect("registry.sample_type", reg.sample_type);
-    setTF("registry.acquisition_datetime", reg.acquisition_datetime);
-    setTF("registry.project_hint", reg.project_hint);
-    setTF("registry.session_id", reg.session_id);
-    setTF("registry.notes", reg.notes);
-    setTF("link_filename", t.link_filename);
-    if (!builderFields["link_filename"].serialize().trim()) {
-      builderFields["link_filename"].setValue("${original_name}");  // never blank
-    }
+    // values to record — seed each catalogue field from the template's matching
+    // key, so a blank field is a DELIBERATE operator choice (-> runner prompt),
+    // not the empty default of a fresh builder. Data-driven over VALUE_FIELDS,
+    // so a new field needs no edit here.
+    VALUE_FIELDS.forEach((f) => {
+      const v = templateValueForKey(t, f.key);
+      if (f.kind === "sampletype") setSelect(f.key, v);
+      else setTF(f.key, v);
+    });
+    const lf = builderFields["link_filename"];
+    if (lf && !lf.serialize().trim()) lf.setValue("${original_name}");  // never blank
     $("#b-auto-create").checked = !!(t.ingest || {}).auto_create_projects;
     renderOverrideJSON();
     updateBuilderExamples();
@@ -1066,9 +1104,12 @@ async function loadTemplateDefaults() {
   }
 }
 $("#b-load-template").addEventListener("click", loadTemplateDefaults);
-// Start from the instrument's convention so blanking a field is a DELIBERATE
-// choice (-> prompt in the Runner), not the default state of an empty builder.
-bInstrument.addEventListener("change", loadTemplateDefaults);
+// Template defaults load ON DEMAND via the "Load template defaults" button only
+// — NOT on instrument change and NOT on page load. A fresh builder stays blank
+// until the operator explicitly pulls in a convention, so no field is pre-filled
+// with a value they never chose. (Blanking a field then stays a DELIBERATE choice
+// -> prompt in the Runner.) "Start from a recipe" still loads its instrument's
+// defaults first, in loadRecipeIntoBuilder().
 
 // ---- start from an existing recipe (builder) ----
 // Apply a saved recipe's flat override dict onto the builder widgets, ON TOP of
@@ -1101,9 +1142,9 @@ function applyOverridesToBuilder(ov) {
     builderFilterUI.clear();
     Object.entries(ov["auto_discover.filter"] || {}).forEach(([k, v]) => builderFilterUI.addRow(k, v));
   }
-  REQUIRED_FIELDS.forEach((f) => {
+  VALUE_FIELDS.forEach((f) => {
     if (!(f.key in ov)) return;                 // omitted -> keep the template default
-    if (f.type === "select") setSelect(f.key, ov[f.key]);
+    if (f.kind === "sampletype") setSelect(f.key, ov[f.key]);
     else setTF(f.key, ov[f.key]);               // explicit "" -> a real blank (gap)
   });
   if ("ingest.auto_create_projects" in ov) {
@@ -1196,9 +1237,24 @@ $("#b-save").addEventListener("click", async () => {
 });
 
 // ---- initial builder paint ----
-buildRequiredGrid();
-renderLevels();
-renderOverrideJSON();
-updateBuilderExamples();
-loadTemplateDefaults();   // seed from the default instrument's convention
-loadBuilderRecipes();     // populate the "start from a saved recipe" picker
+// Fetch the field catalogue FIRST (the grid + every value-field handler below
+// is driven by it), then paint. Same-origin fetch from the serving app, so this
+// resolves promptly; on the rare failure we surface it rather than paint a
+// half-built grid.
+(async function initBuilder() {
+  try {
+    await loadValueFields();
+  } catch (e) {
+    $("#b-errors").textContent =
+      "Could not load the field list from the app — reload the page. (" + e.message + ")";
+  }
+  buildRequiredGrid();
+  renderLevels();
+  renderOverrideJSON();
+  updateBuilderExamples();
+  // Start BLANK — do NOT auto-seed template defaults here. The operator pulls a
+  // convention in explicitly via "Load template defaults" (or by loading a saved
+  // recipe). This stops a fresh builder from looking pre-filled with values (an
+  // Operator token, a Notes stain token, a group_code=MFB filter) nobody chose.
+  loadBuilderRecipes();     // populate the "start from a saved recipe" picker
+})();
