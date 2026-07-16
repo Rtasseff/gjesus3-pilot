@@ -533,6 +533,12 @@ def process_row(row, ctx):
         return done("marked-no-source", kind)
 
     # --- the regenerable case.
+    if ctx["mark_no_source"]:
+        # --mark-no-source is a dedicated pass: it ONLY records the
+        # un-regenerable rows. Regeneration is never attempted in this mode
+        # (it can safely run from a Windows box with no Dicomifier).
+        return done("skipped-regenerable", "has 2dseq; not attempted in "
+                                           "--mark-no-source mode")
     if not apply:
         return done("would-regenerate", f"source ready: {exam}")
 
@@ -621,10 +627,12 @@ def main(argv=None):
     p.add_argument("--acq-id", action="append", dest="acq_ids", default=[],
                    help="process only this ACQ-ID (repeatable)")
     p.add_argument("--mark-no-source", action="store_true",
-                   help="flip pending rows whose staged source has no "
-                        "pdata/<idx>/2dseq to the terminal status "
-                        "'no-source' (human-gated; without this they stay "
-                        "pending and are only reported)")
+                   help="DEDICATED pass: flip pending rows whose staged "
+                        "source has no pdata/<idx>/2dseq to the terminal "
+                        "status 'no-source' (human-gated; without this flag "
+                        "they stay pending and are only reported). "
+                        "Regenerable rows are NOT attempted in this mode — "
+                        "safe to run without Dicomifier")
     args = p.parse_args(argv)
 
     try:

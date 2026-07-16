@@ -299,6 +299,15 @@ def test_process_row_dry_run_decisions():
         check(bf.process_row(row, ctx)["outcome"]
               == "would-correct-not-applicable",
               "non-image staged source detected in dry-run")
+    # --mark-no-source is a DEDICATED pass: regenerable rows are not attempted
+    with tempfile.TemporaryDirectory() as tmp:
+        row, ctx, _ = make_fixture(tmp)  # has 2dseq
+        ctx.update(apply=True, mark_no_source=True)
+        r = bf.process_row(row, ctx)
+        check(r["outcome"] == "skipped-regenerable",
+              "--mark-no-source never attempts regeneration")
+        check(_wl_status(ctx, row["acq_id"]) == "pending",
+              "regenerable row untouched by the no-source pass")
 
 
 def test_process_row_apply_transitions():
