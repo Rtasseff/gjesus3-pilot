@@ -84,19 +84,26 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **Microscopy GUI filters & gaps fix — committed + pushed; DESIGN REVIEW open.**
-  Branch `fix/microscopy-gui-filters-and-gaps` (pushed to origin 2026-07-16).
-  Shares one value-field catalogue between the builder and runner (fixes
-  `registry.session_id` being un-promptable), makes the runner filter additive,
-  fixes the runner filter dropdown, and makes the builder start blank. Manual
-  testing then uncovered a **template/recipe override-semantics problem** — a
-  recipe can display one config in the GUI but ingest another (emptying a
-  structural field in the builder lets the template silently reassert at ingest).
-  **This needs a design decision before the microscopy ingest test, which may be
-  postponed.** Full writeup (issue, history, options, concerns):
-  [`../tools/operator/gui/microscopy_gui_override_semantics_handoff.md`](../tools/operator/gui/microscopy_gui_override_semantics_handoff.md);
-  original resume note:
-  [`../tools/operator/gui/microscopy_gui_filters_gaps_handoff.md`](../tools/operator/gui/microscopy_gui_filters_gaps_handoff.md).
+- **Operator-GUI fixes landed 2026-07-16 — browser smoke + ONE exe rebuild pending.**
+  Two branches merged to `main`:
+  - **Frozen-exe resource loads** (`fix/gui-frozen-exe-resources`): the packaged
+    `gjesus3_ingest.exe` crashed on every real committed ingest at README generation
+    (the `ingest/` layer wasn't `sys._MEIPASS`-aware and `README_raw.txt` was never
+    bundled). Fixed with a frozen-aware `ingest/resources.py` resolver + bundling the
+    data files in the spec; also closed two guarded sibling instances (`project.yaml`,
+    the microscopy organ map). **The exe has never completed a real ingest** until
+    this — surfaced by ifernandez's MRI test.
+  - **Recipe override semantics** (`fix/microscopy-gui-filters-and-gaps`): a recipe
+    could show one config in the GUI but ingest another (emptying a structural field
+    let the template silently reassert). Independently reviewed
+    ([`../tools/operator/gui/microscopy_gui_override_semantics_review.md`](../tools/operator/gui/microscopy_gui_override_semantics_review.md))
+    and fixed — the builder writes structural keys explicitly (erasing the
+    `group_code=MFB` filter and saving now CLEARS it, a collaboration recipe) and the
+    runner shows/enforces the EFFECTIVE (template+recipe) filter, narrow-only; the
+    builder keeps its blank start. Also unifies the builder/runner value-field
+    catalogue (fixes `registry.session_id` being un-promptable).
+  - **Pending before the operator microscopy ingest test:** a live-GUI browser smoke
+    test of both, then ONE combined `.exe` rebuild (**outside OneDrive**) + redistribute.
 - **Operator pilot test of `gjesus3_ingest.exe`.** Run the frozen exe on a clean
   (no-Python) machine, then a 1–2 friendly-operator pilot per page. The MRI page
   needs, per operator machine: the SFTP credential file `~/.ssh/gjesus3_mri.cred`
