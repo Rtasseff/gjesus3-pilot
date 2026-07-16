@@ -585,6 +585,36 @@ def api_recipe_gaps():
     return jsonify({"gaps": gaps})
 
 
+@app.route("/api/effective_config", methods=["POST"])
+def api_effective_config():
+    """The EFFECTIVE auto_discover config — the template deep-merged with the
+    recipe/builder overrides, i.e. what will ACTUALLY drive discovery at ingest.
+
+    The runner and builder use this to show and enforce the REAL scope (e.g. a
+    group_code=MFB filter the recipe INHERITS from the template but doesn't set
+    itself). Showing only the recipe's explicit overrides hid inherited values —
+    the "recipe shows one thing, ingest does another" trap. Read-only; mirrors
+    the merge /api/recipe_gaps already relies on (config_builder.build_config).
+    """
+    data = request.get_json(silent=True) or {}
+    instrument = (data.get("instrument") or "").upper()
+    overrides = data.get("overrides") or {}
+    if instrument not in MICROSCOPY_KEYS:
+        return jsonify({"auto_discover": {}})
+    try:
+        template = templates.load_template(instrument)
+        cfg = config_builder.build_config(template, overrides)
+    except Exception as e:  # noqa: BLE001 — a bad recipe shouldn't 500 the panel
+        return jsonify({"auto_discover": {}, "error": str(e)})
+    ad = cfg.get("auto_discover") or {}
+    return jsonify({"auto_discover": {
+        "filter": ad.get("filter") or {},
+        "filename_parse": ad.get("filename_parse") or {},
+        "path_parse": ad.get("path_parse") or {},
+        "pattern": ad.get("pattern"),
+    }})
+
+
 @app.route("/api/sample_layout", methods=["POST"])
 def api_sample_layout():
     """Sample the example source folder for the builder preview, anchored to the

@@ -226,12 +226,13 @@ function currentRecipeOverrides() {
 let runnerDiscoveredRow = {};    // first parsed row, shared for live examples
 let runnerGapMeta = [];          // [{key,label,kind,hint}] from /api/recipe_gaps
 let runnerKeys = [];             // discovered keys (for the runner filter dropdown)
+let runnerEffectiveFilter = {};  // EFFECTIVE (template+recipe) filter — the base the runner narrows
 const runnerGapFields = {};      // key -> TokenField
 const runnerGapSelects = {};     // key -> <select> (sample_type)
 
 async function loadGaps() {
-  updateFilterPanel();        // repaint the recipe filter + add-conditions UI
-  runnerFilterUI.clear();     // a new recipe/instrument starts added filters fresh
+  await updateFilterPanel();   // fetch + show the EFFECTIVE filter (caches runnerEffectiveFilter)
+  runnerFilterUI.clear();      // a new recipe/instrument starts added filters fresh
   const grid = $("#r-gaps-grid");
   Object.keys(runnerGapFields).forEach((k) => delete runnerGapFields[k]);
   Object.keys(runnerGapSelects).forEach((k) => delete runnerGapSelects[k]);
@@ -334,38 +335,48 @@ $("#r-gaps-load").addEventListener("click", loadGapFields);
 // top, which are ANDed in (see runnerFilter()).
 const runnerFilterUI = makeFilterBuilder("#r-filter-rows", () => runnerKeys, null);
 $("#r-filter-add").addEventListener("click", () => runnerFilterUI.addRow());
-function updateFilterPanel() {
-  const rf = currentRecipeOverrides()["auto_discover.filter"];
-  const hasRecipeFilter = rf && typeof rf === "object" && Object.keys(rf).length > 0;
+async function updateFilterPanel() {
+  // Show the EFFECTIVE filter (template deep-merged with the recipe) — what will
+  // ACTUALLY scope the batch — not just the recipe's explicit override. A recipe
+  // that INHERITS the template's group_code=MFB sets no filter of its own, yet
+  // ingest still filters to MFB; showing only the recipe override hid that (the
+  // "shows one thing, ingests another" trap). We fetch it from the backend, which
+  // runs the same merge as ingest.
+  let eff = {};
+  try {
+    const data = await postJSON("/api/effective_config", {
+      instrument: rInstrument.value, overrides: currentRecipeOverrides(),
+    });
+    eff = ((data.auto_discover || {}).filter) || {};
+  } catch (e) { eff = {}; }
+  runnerEffectiveFilter = eff;
+  const hasEff = Object.keys(eff).length > 0;
   $("#r-filter").hidden = false;                 // the filter section is always visible
   $("#r-filter-edit").hidden = false;            // add-conditions UI is ALWAYS available
-  // Always state the recipe's filter status, so a recipe that sets NO filter
-  // reads as an explicit "nothing is filtered" rather than a blank area that
-  // looks like a missing/broken note. When a filter IS set, list every enforced
-  // condition and drop `muted` so the enforced scope stands out.
   const note = $("#r-filter-recipe");
   note.hidden = false;
-  if (hasRecipeFilter) {
+  if (hasEff) {
     note.classList.remove("muted");
-    note.innerHTML = "This recipe filters to " +
-      Object.entries(rf).map(([k, v]) =>
+    note.innerHTML = "This batch will ingest <b>only</b> files matching " +
+      Object.entries(eff).map(([k, v]) =>
         `<code>${esc(tfHumanizeRef(k))} = ${esc(v)}</code>`).join(" <b>AND</b> ") +
-      " — always applied; edit it in the builder. Add more conditions below to " +
-      "narrow this batch further.";
+      ' <span class="muted">— always applied (from the recipe/template). Add conditions ' +
+      "below to narrow further; to remove or change it, edit the recipe in the builder.</span>";
   } else {
     note.classList.add("muted");
-    note.innerHTML = "This recipe defines <b>no filter of its own</b>. Add " +
-      "conditions below to scope this batch.";
+    note.innerHTML = "No filter is in effect — <b>every</b> file in the folder will be " +
+      "ingested. Add conditions below to scope this batch.";
   }
 }
 function runnerFilter() {
-  // The runner's OWN added conditions, ANDed on top of any recipe filter. The
-  // recipe's filter is forcibly applied, so it WINS on a key collision — the
-  // operator can narrow the batch further, never weaken the recipe's scope.
+  // The runner's OWN added conditions, ANDed on top of the EFFECTIVE filter
+  // (template + recipe). The effective keys WIN on collision, so the runner can
+  // only NARROW — it can never drop the recipe/template's scope (e.g. MFB). The
+  // merged result is sent as the whole auto_discover.filter override, which
+  // REPLACES the template filter at ingest — but since it already CONTAINS the
+  // effective filter, the template's scope is preserved. (Runner = narrow-only.)
   const own = runnerFilterUI.collect();
-  const rf = currentRecipeOverrides()["auto_discover.filter"];
-  const recipeFilter = (rf && typeof rf === "object") ? rf : {};
-  const merged = Object.assign({}, own, recipeFilter);   // recipe keys win
+  const merged = Object.assign({}, own, runnerEffectiveFilter);   // effective wins
   return Object.keys(merged).length ? { "auto_discover.filter": merged } : {};
 }
 
@@ -920,20 +931,35 @@ $("#b-fields").addEventListener("input", renderOverrideJSON);
 bInstrument.addEventListener("change", () => { if ($("#b-staging").value.trim()) loadLayout(); });
 
 // ---- assemble the override dict ----
+// STRUCTURAL keys (filter, filename_parse) are written EXPLICITLY — including an
+// explicit empty — so a recipe is self-complete and WYSIWYG: clearing the filter
+// or the labels CLEARS them at ingest instead of silently inheriting the
+// template. config_builder merges an explicit {} / [] as a real clear, and the
+// review's §7.1 confirms ingest tolerates filename_parse.fields:[] (no parsing).
+let builderParseIsRegex = false;   // current parse is a regex the builder can't edit
 function builderOverrides() {
   const ov = {};
   // file-name labels -> positional filename_parse (regex dropped from the GUI)
   const fields = $("#b-fields").value.split(",").map((s) => s.trim()).filter(Boolean);
   if (fields.length) {
     ov["auto_discover.filename_parse"] = { separator: $("#b-separator").value || "_", fields };
+  } else if (!builderParseIsRegex) {
+    // positional template, operator cleared the labels -> explicit empty CLEARS
+    // the template's fields (WYSIWYG) instead of silently inheriting them. A regex
+    // template is left to inherit (the builder can't express a regex, so it must
+    // not clobber it with an empty positional parse).
+    ov["auto_discover.filename_parse"] = { separator: $("#b-separator").value || "_", fields: [] };
   }
-  // folder levels -> path_parse; pin a recursive pattern so deep files are found
+  // folder levels -> path_parse; pin a recursive pattern so deep files are found.
+  // (path_parse keeps omit-when-empty semantics for now — see the review's §7.)
   if ($$("#b-levels .level-label").length > 0) {
     ov["auto_discover.path_parse"] = { levels: builderLevelLabels() };
     ov["auto_discover.pattern"] = "**/*.czi";
   }
-  const filter = builderFilterUI.collect();
-  if (Object.keys(filter).length) ov["auto_discover.filter"] = filter;
+  // Always explicit: an empty filter box saves as {} -> clears the template's
+  // filter (e.g. drop group_code=MFB for a collaboration recipe), and it stays
+  // visible in the JSON preview. Omission would silently reassert the template.
+  ov["auto_discover.filter"] = builderFilterUI.collect();
 
   // values to record. gap fields are SELF-CONTAINED: emitted explicitly even when
   // blank (an explicit "" overrides the template default -> a real blank the
@@ -1061,30 +1087,40 @@ function templateValueForKey(t, key) {
   if (i === -1) return t[key];
   return (t[key.slice(0, i)] || {})[key.slice(i + 1)];
 }
+// Seed the STRUCTURAL convention (separator + filename labels, folder levels,
+// filter) from a template payload into the builder widgets, and record whether
+// the parse is a regex the builder can't edit. Structural keys encode the
+// instrument's naming/scoping CONVENTION — a fresh builder should SHOW them so the
+// operator can see and edit/clear the real scope (e.g. group_code=MFB). Shared by
+// "Load template defaults" (which ALSO seeds value fields) and the on-load /
+// instrument-change structural seed. See the override-semantics review.
+function applyTemplateStructural(t) {
+  const ad = t.auto_discover || {};
+  const fp = ad.filename_parse || {};
+  builderParseIsRegex = !!fp.regex;
+  if (fp.regex) {
+    $("#b-fields").value = "";
+    $("#b-errors").textContent =
+      "Note: this template parses names with a regex, which the builder doesn't edit. " +
+      "Describe the name layout with the separator + labels above to change it.";
+  } else {
+    $("#b-separator").value = fp.separator || "_";
+    $("#b-fields").value = (fp.fields || []).join(", ");
+  }
+  const levels = (ad.path_parse || {}).levels || [];
+  $("#b-levels-count").value = levels.length;
+  renderLevels();
+  $$("#b-levels .level-label").forEach((inp, i) => { if (levels[i]) inp.value = levels[i]; });
+  builderFilterUI.clear();
+  Object.entries(ad.filter || {}).forEach(([k, v]) => builderFilterUI.addRow(k, v));
+}
+
 async function loadTemplateDefaults() {
   $("#b-errors").textContent = "";
   try {
     const t = await getJSON(`/api/template?instrument=${encodeURIComponent(bInstrument.value)}`);
     if (t.error) { $("#b-errors").textContent = t.error; return; }
-    const ad = t.auto_discover || {};
-    const fp = ad.filename_parse || {};
-    if (fp.regex) {
-      $("#b-fields").value = "";
-      $("#b-errors").textContent =
-        "Note: this template parses names with a regex, which the builder doesn't edit. " +
-        "The values below are still loaded; describe the name layout with the separator + labels above to change it.";
-    } else {
-      $("#b-separator").value = fp.separator || "_";
-      $("#b-fields").value = (fp.fields || []).join(", ");
-    }
-    // folder levels
-    const levels = (ad.path_parse || {}).levels || [];
-    $("#b-levels-count").value = levels.length;
-    renderLevels();
-    $$("#b-levels .level-label").forEach((inp, i) => { if (levels[i]) inp.value = levels[i]; });
-    // filter
-    builderFilterUI.clear();
-    Object.entries(ad.filter || {}).forEach(([k, v]) => builderFilterUI.addRow(k, v));
+    applyTemplateStructural(t);
     // values to record — seed each catalogue field from the template's matching
     // key, so a blank field is a DELIBERATE operator choice (-> runner prompt),
     // not the empty default of a fresh builder. Data-driven over VALUE_FIELDS,
@@ -1104,12 +1140,13 @@ async function loadTemplateDefaults() {
   }
 }
 $("#b-load-template").addEventListener("click", loadTemplateDefaults);
-// Template defaults load ON DEMAND via the "Load template defaults" button only
-// — NOT on instrument change and NOT on page load. A fresh builder stays blank
-// until the operator explicitly pulls in a convention, so no field is pre-filled
-// with a value they never chose. (Blanking a field then stays a DELIBERATE choice
-// -> prompt in the Runner.) "Start from a recipe" still loads its instrument's
-// defaults first, in loadRecipeIntoBuilder().
+// Template defaults load ON DEMAND via "Load template defaults" only — NOT on
+// instrument change and NOT on page load. A fresh builder stays BLANK; nothing is
+// pre-filled with a value nobody chose. The operator opts into the convention.
+// The WYSIWYG fix does NOT need auto-seeding: structural keys are written
+// EXPLICITLY on save (see builderOverrides), so loading the template, ERASING the
+// group_code=MFB filter, and saving yields a recipe with an explicit empty filter
+// that the runner loads with NO filter — instead of silently re-inheriting it.
 
 // ---- start from an existing recipe (builder) ----
 // Apply a saved recipe's flat override dict onto the builder widgets, ON TOP of
@@ -1122,6 +1159,7 @@ function applyOverridesToBuilder(ov) {
   ov = ov || {};
   if ("auto_discover.filename_parse" in ov) {
     const fp = ov["auto_discover.filename_parse"] || {};
+    builderParseIsRegex = !!fp.regex;   // recipe's parse mode wins over the template's
     if (fp.regex) {
       $("#b-fields").value = "";
       $("#b-errors").textContent =
@@ -1253,8 +1291,11 @@ $("#b-save").addEventListener("click", async () => {
   renderOverrideJSON();
   updateBuilderExamples();
   // Start BLANK — do NOT auto-seed template defaults here. The operator pulls a
-  // convention in explicitly via "Load template defaults" (or by loading a saved
-  // recipe). This stops a fresh builder from looking pre-filled with values (an
-  // Operator token, a Notes stain token, a group_code=MFB filter) nobody chose.
+  // convention in explicitly via "Load template defaults" (or by starting from a
+  // saved recipe); nothing is pre-filled with a value nobody chose. Whatever the
+  // operator leaves is what saves (WYSIWYG): an empty filter box saves as an
+  // explicit {} that CLEARS the template's filter (see builderOverrides), so
+  // erasing group_code=MFB and saving yields a recipe the runner loads with NO
+  // filter — which is the whole point.
   loadBuilderRecipes();     // populate the "start from a saved recipe" picker
 })();

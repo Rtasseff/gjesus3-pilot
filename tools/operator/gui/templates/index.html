@@ -85,15 +85,17 @@
       </details>
     </fieldset>
 
-    <!-- Filter. The recipe's filter (if any) is shown read-only here AND forcibly
-         applied; the operator can ALWAYS add more label=value conditions on top,
-         which are ANDed in (the recipe wins on a key collision). Edit the recipe's
-         own filter in the builder. See runnerFilter() / updateFilterPanel(). -->
+    <!-- Filter. The EFFECTIVE filter (template + recipe merged, fetched via
+         /api/effective_config) is shown here AND forcibly applied; the operator can
+         ALWAYS add more label=value conditions on top, which are ANDed in to NARROW
+         further (the effective filter wins on a key collision — the runner can never
+         widen). Remove/change the filter in the builder. See runnerFilter() /
+         updateFilterPanel(). -->
     <fieldset id="r-filter" hidden>
       <legend>Filter <span class="muted">— only ingest files that match (optional)</span></legend>
       <div id="r-filter-recipe" class="muted" hidden></div>
       <div id="r-filter-edit">
-        <p class="muted">Add label = value conditions to scope this batch (e.g. one group); leave empty to ingest everything. Click "Show metadata labels from the folder" above to fill the label list.</p>
+        <p class="muted">Add label = value conditions to NARROW this batch further (e.g. one group); any filter already in effect is shown above and always applies. Click "Show metadata labels from the folder" above to fill the label list.</p>
         <div id="r-filter-rows"></div>
         <button id="r-filter-add" type="button">+ Add condition</button>
       </div>
