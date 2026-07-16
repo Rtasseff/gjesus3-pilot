@@ -142,6 +142,88 @@ def append_row(registry_path, row_dict):
         writer.writerow(row)
 
 
+def update_row(registry_path, acq_id, updates, only_if_blank=None):
+    """Update fields on ONE existing registry_raw.csv row, matched by acq_id.
+
+    `append_row` only ever ADDS rows; there was no way to fill in fields on an
+    already-registered acquisition. The no-DICOM-regeneration backfill needs
+    exactly that: when a placeholder's DICOMs are regenerated in place (keeping
+    its ACQ-ID — the recovery pattern, NOT a re-ingest), its registry row must be
+    updated with the now-real file_count / file_size_mb / checksum_present and a
+    real acquisition_datetime. This is that update path.
+
+    Read-all / rewrite-all with an atomic temp+os.replace, so a crash mid-write
+    can't truncate the registry. Header-checked first (a mismatch means the CSV
+    was migrated out from under the code — refuse rather than corrupt columns).
+
+    CONCURRENCY: like `append_row`, this does NOT take the registry lock. The
+    caller MUST hold `locking.registry_lock(registries_dir)` across the call —
+    the read and the rewrite are one read-modify-write critical section. Keep it
+    short (never hold the lock across a Dicomifier regen).
+
+    Args:
+        registry_path: path to registry_raw.csv.
+        acq_id: the row to update (the unique key).
+        updates: {field: new_value}. Every key must be a REGISTRY_FIELDS name.
+        only_if_blank: optional iterable of field names to fill ONLY when the
+            row's current value is blank (""/whitespace). Controlled-write: a
+            field listed here whose existing value is real is LEFT UNTOUCHED and
+            reported in `skipped`, never overwritten (e.g. acquisition_datetime,
+            which 169 of the 247 pending rows already hold correctly). Fields not
+            listed are written unconditionally.
+
+    Returns (found, applied, skipped):
+        found:   True if a row with `acq_id` existed.
+        applied: {field: new_value} actually written.
+        skipped: {field: existing_value} left alone by an only_if_blank guard.
+
+    Raises RuntimeError if the header doesn't match REGISTRY_FIELDS or `updates`
+    names a field not in REGISTRY_FIELDS (a typo'd field would otherwise be a
+    silent no-op).
+    """
+    only_if_blank = set(only_if_blank or ())
+    unknown = [k for k in updates if k not in REGISTRY_FIELDS]
+    if unknown:
+        raise RuntimeError(
+            f"update_row: unknown field(s) {unknown} — not in REGISTRY_FIELDS. "
+            f"Refusing to write (a mistyped column name is a silent no-op)."
+        )
+    if not os.path.exists(registry_path):
+        return False, {}, {}
+    assert_header_compatible(registry_path)
+
+    rows = read_registry(registry_path)
+    applied, skipped = {}, {}
+    found = False
+    for row in rows:
+        if (row.get("acq_id") or "").strip() != acq_id:
+            continue
+        found = True
+        for field, new_val in updates.items():
+            if field in only_if_blank and (row.get(field) or "").strip():
+                skipped[field] = row.get(field)
+                continue
+            row[field] = new_val
+            applied[field] = new_val
+        break
+
+    if not found or not applied:
+        # Nothing to write — leave the file byte-for-byte untouched (an
+        # only_if_blank no-op, or acq_id absent). Report so the caller decides.
+        return found, applied, skipped
+
+    # Atomic rewrite: temp + os.replace. Write exactly REGISTRY_FIELDS columns
+    # in order, UTF-8 (what read_registry prefers), so accented values round-trip.
+    tmp = registry_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=REGISTRY_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: row.get(k, "") for k in REGISTRY_FIELDS})
+    os.replace(tmp, registry_path)
+    return found, applied, skipped
+
+
 def build_row(acq_id, cfg, summary, dest_path, registration_dt,
               subject=None, anatomy=None, subjects=None):
     """Build a registry row dict from config and analysis results.
