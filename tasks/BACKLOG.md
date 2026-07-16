@@ -201,6 +201,33 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   NIfTI we want at `/raw/`) — single file, no archive, limited header metadata.
   `STATUS.md` §3.1 / §4.8.
 
+## Doc placement — where is the line for `equipment/`? (2026-07-16)
+
+- [ ] **Write the `equipment/` boundary rule down, then audit against it.** The rule
+  as stated by the data office 2026-07-16: **`equipment/` is for the platform's own
+  reality — the equipment itself, and the processes the *platforms* follow. Things
+  outside our control, that persist regardless of what we build.** Our RDM's own
+  procedures do not belong there, however much they are *about* an instrument's data.
+  The rule currently exists nowhere: [`CONTRIBUTING-docs.md`](../CONTRIBUTING-docs.md)
+  is the doc-governance home (`CLAUDE.md` defers to it for
+  "documentation-architecture … boundary rules") and only says `equipment/` is
+  "per-instrument workflow notes + platform reality" — which is exactly the ambiguity
+  that let the runbook land there. **Write the test, then apply it.**
+  **Audit candidates** (the answer is not always "move" — several look like *one doc
+  doing two jobs*, and may need splitting rather than relocating):
+  - `mri-platform/mri_no_dicom_regeneration_runbook.md` — clearest case; already
+    tracked separately below (→ `tasks/archive/`).
+  - `mri-platform/mri_data_access_strategy.md` — "how **we** reach the platform" is
+    our strategy; the platform's access constraints (read-only, SFTP-only) are theirs.
+  - `nuclear-imaging/live_machine_data_layout_and_sync_rules.md` — the **layout** half
+    is platform reality and belongs; the **sync rules** half is ours.
+  - `mri-platform/internal_mri_data_handling_workflow_notes.md` — self-describes as
+    "the full MRI workflow **+ gjesus3 integration**", i.e. explicitly both.
+  - `historical_data_archives.md` — borderline: *where the platforms keep their data*
+    is arguably their reality; *our plan to ingest it* is not.
+  Deciding the rule first is what makes the rest mechanical. Note `equipment/INDEX.md`
+  is the map and will need to follow whatever moves.
+
 ## Doc placement — the no-DICOM regen runbook is in the wrong layer (2026-07-16)
 
 - [ ] **Move `equipment/mri-platform/mri_no_dicom_regeneration_runbook.md` →
@@ -230,6 +257,34 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   reach the platform") and the sync-rules half of
   `nuclear-imaging/live_machine_data_layout_and_sync_rules.md` also look like our
   process rather than platform reality. The layout/hardware halves clearly belong.
+
+## Repo / git hygiene (2026-07-16)
+
+- [ ] **Delete the spent branches.** All verified `git branch --merged main` /
+  `rev-list --count main..<b> == 0` on 2026-07-16 — stale labels pointing into main's
+  history, nothing unique in any of them. Precedent: `fix/integrity-cluster-2026-07`
+  deleted 2026-07-16 the same way (`git branch -d`, which refuses if not merged — use
+  `-d`, never `-D`).
+  - local: `docs-refactor` (`5625403`), `gjesus3-data-rebuild` (`1296c16`),
+    `phase3-metadata-enrichment` (`a2e2ec6`), `feat/finder-mvp` (`86ff89b`)
+  - remote: `origin/feat/finder-mvp`, `origin/feat/ni-live-sync` (both 0 not-in-main)
+  - Note `feat/finder-mvp` reads "ahead 2" only because its *remote* is 2 behind the
+    local; both are fully contained in main. Nothing is stranded by deleting either.
+- [ ] **⚠️ DO NOT delete `origin/feat/ni-live-hardening` — it is real unmerged work.**
+  **8 commits / ~1,631 insertions NOT in main** (per-recon incremental model,
+  `ni-ingest --live` no-YAML operator sync, per-session corrections + tracer metadata,
+  `pending_links.py` deferred hard links, `relink_pending.py`, 3 new test files). Its
+  tip `f2ee114` (2026-07-03) is literally a **"RESUME-HERE checkpoint — on-box test
+  deferred to wk of 2026-07-07"**, so it is parked mid-flight and now ~2 weeks stale.
+  It needs a decision — land it or consciously park it — not cleanup. Relates to the
+  NI live-sync go-live item in `STATUS.md` §2.
+- [ ] **Decide what to do about `contacts.xlsx`.** Tracked, not ignored, and
+  perpetually dirty in the working tree — it has shown up as modified in every session
+  and is deliberately never staged (`CLAUDE.md`: don't stage the binaries). There is a
+  commit on `feat/finder-mvp` literally titled *"chore: commit a stale manual edit to
+  contacts.xlsx"*, so this recurs. Options: `.gitignore` it (+ `git rm --cached`),
+  keep tracking and accept the noise, or move it out of the repo entirely. Right now
+  it is permanent noise in every `git status`, which is how real changes get missed.
 
 ## Misc
 
