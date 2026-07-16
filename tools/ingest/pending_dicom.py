@@ -47,12 +47,14 @@ PENDING_DICOM_FIELDS = [
                           # paravision_regen._NONIMAGE_METHOD_MARKERS entry
                           # (STEAM/PRESS/WOBBLE) — see the status note below
     "queued_datetime",
-    "status",             # "pending" | "not-applicable" | (data office: "regenerated")
+    "status",             # see the status-value block below
 ]
 
 # `status` values:
 #   pending         — a normal image exam awaiting a Dicomifier pass. THE drain set.
-#   regenerated     — the data office filled its .data/. Set by hand; never reset.
+#   regenerated     — the DICOMs were filled into the .data/ (registry row + sidecar
+#                     updated, verified). Set by the backfill pass
+#                     (tools/backfill_dicom_regen.py) or by hand; never reset.
 #   not-applicable  — a spectroscopy/calibration exam (`nonimage_marker` says which).
 #                     Image-DICOM regeneration does NOT apply: paravision_regen
 #                     REFUSES these (is_nonimage_exam -> RuntimeError -> empty
@@ -63,7 +65,26 @@ PENDING_DICOM_FIELDS = [
 #                     spectroscopy ingest path (tasks/BACKLOG.md), and the marker
 #                     matters there: WOBBLE is tuning, STEAM/PRESS are real
 #                     spectroscopy data.
-# So: drain `status == "pending"`; the worklist is done when none remain.
+#   no-source       — a normal IMAGE exam that can never be regenerated because the
+#                     platform host retains NO reconstructable source: no
+#                     pdata/<idx>/2dseq anywhere (Dicomifier's required input).
+#                     Two sub-kinds, both terminal: header-only (only acqp/method —
+#                     aborted / never reconstructed) and fid-only (raw k-space, no
+#                     2dseq — would need a ParaVision reconstruction first, which
+#                     gjesus3 does not drive). DISTINCT from not-applicable: these
+#                     ARE image acquisitions (FLASH/MSME/RARE/UTE3D/... — verified
+#                     2026-07-16), the pixels are simply lost, so this is a
+#                     data-loss RECORD, not a task and not spectroscopy input. Set
+#                     ONLY by an explicit, human-gated pass (backfill_dicom_regen.py
+#                     --mark-no-source) after the staged mirror is confirmed
+#                     complete — never auto-inferred from a single failed attempt.
+# So: drain `status == "pending"`; the worklist is done when none remain
+# (every row is regenerated / not-applicable / no-source).
+
+# The controlled status vocabulary. Anything else in the column is a hand-edit
+# error worth surfacing. `pending` is the only non-terminal state.
+STATUS_VALUES = ("pending", "regenerated", "not-applicable", "no-source")
+TERMINAL_STATUSES = ("regenerated", "not-applicable", "no-source")
 
 
 def _now_iso():
