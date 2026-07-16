@@ -18,6 +18,16 @@ verification 2026-06-01; see `tasks/tasks.md §3.1` findings 1 + 1b):
 After applying both, the output renders identically to Bruker GUI export
 in 3D Slicer / ITK-SNAP.
 
+A third workaround (2026-07-16, the no-DICOM backfill) is applied INSIDE
+Dicomifier rather than to its output: `dicomifier_driver.py` patches
+`get_pixel_data` before dispatching to the stock CLI, fixing (a) the
+IndexError that made every plain single-3D-volume exam stored
+`disk_reverse_slice_order` unconvertible (empty `volume_groups` ->
+`cumprod([])[-1]`), and (b) the slice-order flip that upstream silently
+never applies (`numpy.flip` result discarded). Pixel-level validated
+against the raw `2dseq` (frame i == disk slice N+1-i; geometry
+self-consistent). See `dicomifier_driver.py` for the full analysis.
+
 Public API:
 
   regenerate_exam_dicoms(exam_path, output_dir, log_fn) -> int
@@ -237,8 +247,15 @@ def regenerate_exam_dicoms(exam_path, output_dir, log_fn):
     log_fn(f"Running Dicomifier {ver} on {exam_path}")
 
     with tempfile.TemporaryDirectory(prefix="dicomifier_flat_") as flat_tmp:
+        # Route through dicomifier_driver.py (workaround #3: the reverse-
+        # slice-order fixes) instead of the bare binary. The driver imports
+        # dicomifier from THIS interpreter's environment — identical to the
+        # PATH binary when running inside the dicomifier-pilot conda env (the
+        # only supported way to run regeneration), and self-disabling on a
+        # future fixed Dicomifier release.
+        driver = Path(__file__).with_name("dicomifier_driver.py")
         r = subprocess.run(
-            [DICOMIFIER_BIN, "to-dicom", "--layout", "flat",
+            [sys.executable, str(driver), "to-dicom", "--layout", "flat",
              str(exam_path), flat_tmp],
             capture_output=True, text=True, timeout=600,
         )
