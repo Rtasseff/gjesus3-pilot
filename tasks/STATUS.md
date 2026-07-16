@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-07-15
+**Last Updated:** 2026-07-16
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -95,28 +95,30 @@ The genuinely in-flight items (kept tight — everything else is in
   (hard-link) behaviour on the live NI Mac's CIFS mount, then a vetted one-shot
   ingest per researcher. Archive-mode NI is already done and is the durable
   source-of-truth; live sync is the forward path for active project data.
-- ⚠️ **No-DICOM MRI regeneration — 247 exams to drain, and no working drain path yet.**
-  Every DICOM-less acquisition on the NAS (**612**, all MRI) is now enrolled in
-  `registries/pending_dicom_regen.csv`: **247 `pending`** (the real drain set) and
-  **365 `not-applicable`** — spectroscopy/calibration (STEAM 286 / PRESS 74 /
-  WOBBLE 5) which `paravision_regen` refuses by design and which need the separate
-  spectroscopy path, not regeneration. They stay listed because they *are*
-  DICOM-less and must not go invisible. Invariant — **no DICOM-less acquisition
-  without a worklist row** — verify with
-  [`tools/backfill_pending_dicom.py --dry-run`](../tools/backfill_pending_dicom.py)
-  (0 to add == holds).
-  **The blocker:** the [runbook](../equipment/mri-platform/mri_no_dicom_regeneration_runbook.md)
-  §6 and [`10_TOOLS`](../mfb-rdm-docs/10_TOOLS.md) both state a re-run "idempotently
-  re-ingests to fill the `.data/`". **It does not.** The dedup
-  (`ingest/config.py`, `existing_keys`) keys only on `(acq_date, original_name)`
-  being in the registry and never looks at whether `.data/` is empty — verified
-  against the live registry: **612 of 612 would dedupe-skip**. And bypassing the
-  dedup is not enough either: the ACQ-ID is allocated *inside* `ingest_single`, so a
-  re-run would mint a **new** ACQ-ID and duplicate the row. Filling a placeholder is
-  an **update** of an existing acquisition, and `registry.py` has only `append_row`
-  — the pipeline has no update path. Draining needs that gap closed first (design
-  pending), plus the kenia re-pull. Doing so also fixes the 92 blank
-  `age_at_acquisition` values below, by giving those rows a real acquisition date.
+- ✅ **No-DICOM MRI regeneration — DRAINED 2026-07-16** (branch
+  `feat/dicom-regen-backfill`; full narrative in [`../CHANGELOG.md`](../CHANGELOG.md)).
+  The worklist (`registries/pending_dicom_regen.csv`, 612 rows) is at **0 `pending`**:
+  **153 `regenerated`** (17,122 DICOMs / 1.64 GB filled into the existing
+  `<ACQ-ID>.data/` placeholders — ACQ-IDs kept, registry rows updated in place via the
+  new `registry.update_row`, the 78 blank `acquisition_datetime` all real now, ages
+  refilled wherever a `date_of_birth` exists), **365 `not-applicable`**
+  (spectroscopy/calibration — the input set for the deferred spectroscopy path,
+  `BACKLOG.md`), and **94 `no-source`** (image exams with no reconstructable source on
+  the platform host — 80 header-only + 14 fid-only; a data-loss record, not a task).
+  The blocker was closed as designed: a standalone backfill on the recovery pattern
+  ([`tools/backfill_dicom_regen.py`](../tools/backfill_dicom_regen.py); spec
+  [`10_TOOLS §3.8`](../mfb-rdm-docs/10_TOOLS.md), procedure
+  [`11_OPERATIONS §5.5`](../mfb-rdm-docs/11_OPERATIONS.md)) — plus a **third Dicomifier
+  workaround** ([`tools/ingest/dicomifier_driver.py`](../tools/ingest/dicomifier_driver.py)):
+  stock Dicomifier crashes on all 153 (single 3D volumes stored reverse-slice-order)
+  and its slice flip is a silent no-op; both fixed + pixel-level validated (upstream
+  issue draft pending filing). Project hard-links rebuilt from Windows (663 created —
+  incl. 510 pre-existing empty shells left by the 2026-06-14 relink; the 2 remaining
+  candidates are the known link-name-collision pairs, `BACKLOG.md`). Invariant — **no
+  DICOM-less acquisition without a worklist row** — holds
+  ([`tools/backfill_pending_dicom.py --dry-run`](../tools/backfill_pending_dicom.py)
+  → 0 to add). The operator runbook was corrected (false idempotency claim) and
+  archived to `tasks/archive/`.
 - ✅ **`age_at_acquisition` derived against the ingest date — FIXED 2026-07-15**
   (commit `f567fae`). 92 no-DICOM MRI acquisitions carried an age measured to their
   *ingest* date (`ACQ-20260613-MRI-001`: dob 2021-06-09 → `P1830D`, exactly its
@@ -130,8 +132,10 @@ The genuinely in-flight items (kept tight — everything else is in
   **Data:** all 13,557 sidecars were rescanned (each age recomputed from its own dob
   against the registry date) — exactly 92 wrong, 0 disagreements among the 10,666
   with real dates; those 92 are now blanked on the NAS (age only; backup at
-  `gjesus3_age_blank_backup_20260715`) and a rescan reports 0. A Dicomifier regen
-  pass will refill them from a real date.
+  `gjesus3_age_blank_backup_20260715`) and a rescan reports 0. **Closed 2026-07-16:**
+  the backfill drain (item above) refilled ages from real regenerated-DICOM dates
+  wherever a `date_of_birth` exists; rows without a dob stay blank (that gap is the
+  `pending-db` subject-metadata lane, not this bug).
 
 ### 2.1 Safe-operation follow-ups from the 2026-07-08 review (triaged 2026-07-11)
 

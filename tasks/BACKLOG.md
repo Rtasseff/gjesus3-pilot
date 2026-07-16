@@ -588,6 +588,15 @@ sessions on the same calendar day** (timepoint series `_t0h_`/`_t6h_`, repeat
 sessions `_2_1_1`, or date-typo'd folder names e.g. `jrc240122` vs `jrc220124`).
 Such acqs resolve to the same link name and collide.
 
+**2026-07-16 addition (from the backfill relink):** two concrete pairs among the
+backfilled exams' studies remain link-less because of exactly this collision —
+`MRI_m23_0219_20220124_1_1` (ACQ-20220124-MRI-001 vs -006) and
+`MRI_m23_0219_20220124_3_1` (ACQ-20220124-MRI-003 vs -008); in each pair the
+second acquisition has no project link of its own (the relink correctly skipped
+rather than merged — frame counts matched, so no data was mixed). Fix these two
+when the link-name template fix lands. Same run also found and repaired **510
+pre-existing empty link shells** the 2026-06-14 relink had left behind.
+
 Measured on the 3,297-acq imaging regen batch: **3,097 distinct names → 144
 colliding names → ~200 acqs** left without a distinct project link (the relink
 creates the first of each group and skips the rest — it does **not** merge). This
