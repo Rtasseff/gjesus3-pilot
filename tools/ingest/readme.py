@@ -3,14 +3,18 @@
 import os
 from pathlib import Path
 
+from . import resources
+
 
 def get_template_path():
-    """Return path to the README template."""
-    return os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "templates",
-        "README_raw.txt",
-    )
+    """Return the path to the README template.
+
+    Resolves from a source checkout AND a frozen PyInstaller bundle
+    (sys._MEIPASS-aware) via ingest/resources.py. The old naive
+    dirname(dirname(__file__)) path broke inside the frozen exe — it looked for
+    README_raw.txt under <_MEIPASS>/templates, where it was never bundled.
+    """
+    return resources.resource_path("templates", "README_raw.txt")
 
 
 def generate_readme(acq_id, cfg, summary, dest_dir):
@@ -23,6 +27,15 @@ def generate_readme(acq_id, cfg, summary, dest_dir):
         dest_dir: Acquisition folder path.
     """
     template_path = get_template_path()
+    if not os.path.exists(template_path):
+        # Fail legibly: this was the frozen-exe crash, and a bare Errno 2 on a
+        # temp _MEIxxxx path took a production incident to diagnose. Name the
+        # real cause so a future bundling regression is self-explaining.
+        raise FileNotFoundError(
+            f"README template not found at {template_path!r}. In a frozen build "
+            f"this means tools/templates/README_raw.txt was not bundled into the "
+            f"exe — add it to `datas` in tools/operator/gui/gjesus3_ingest.spec."
+        )
     with open(template_path, "r") as f:
         template = f.read()
 

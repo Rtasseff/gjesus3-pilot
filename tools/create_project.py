@@ -22,6 +22,7 @@ from pathlib import Path
 # tool) shares one source of truth.
 from ingest import provenance as provenance_mod
 from ingest import csv_safe
+from ingest import resources
 
 
 # --- Constants ---
@@ -160,8 +161,12 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
     log("Created directory structure")
 
     # --- Write _project.yaml ---
-    template_dir = os.path.join(os.path.dirname(__file__), "templates")
-    template_path = os.path.join(template_dir, "project.yaml")
+    # Resolve the template so it works from a source checkout AND the frozen exe
+    # (sys._MEIPASS-aware; see ingest/resources.py). The old naive
+    # dirname(__file__) path silently missed the bundled copy in the exe and
+    # fell through to the inline fallback below, writing a non-templated
+    # _project.yaml. The os.path.exists guard stays as a belt-and-braces net.
+    template_path = resources.resource_path("templates", "project.yaml")
 
     if os.path.exists(template_path):
         content = load_template(template_path)

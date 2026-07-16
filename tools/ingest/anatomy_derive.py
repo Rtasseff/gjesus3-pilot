@@ -38,6 +38,7 @@ operator-keyed reference map — see `derive_microscopy_anatomy` /
 import os
 import re
 
+from . import resources
 from . import subject_id
 
 
@@ -158,9 +159,12 @@ def collect_mri_signals(discovered, mri_section):
 # OPERATOR-SPECIFIC and editable, so the mapping lives in a reference YAML
 # (tools/reference/microscopy_organ_map.yaml) loaded at runtime — data, not code.
 
-_DEFAULT_ORGAN_MAP_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),  # tools/
-    "reference", "microscopy_organ_map.yaml",
+# Resolved via ingest/resources.py so it loads from a source checkout AND the
+# frozen exe (sys._MEIPASS-aware). Under the naive dirname()-relative path this
+# map was NEVER found in the frozen build — load_organ_map's guard swallowed the
+# miss and every frozen microscopy ingest silently derived no organ anatomy.
+_DEFAULT_ORGAN_MAP_PATH = resources.resource_path(
+    "reference", "microscopy_organ_map.yaml"
 )
 _ORGAN_MAP_CACHE = {}
 

@@ -51,6 +51,20 @@ datas = [
     # Universal starter template (fallback) — harmless to include.
     (os.path.join(TOOLS, "templates", "ingest_template.yaml"),
      os.path.join("tools", "templates")),
+    # README + _project.yaml templates read at ingest time by the ingest/ layer,
+    # resolved via ingest/resources.py -> <_MEIPASS>/tools/templates. Missing
+    # README_raw.txt hard-crashed the frozen exe at Step 9 (readme.py); missing
+    # project.yaml silently degraded _project.yaml to the inline fallback.
+    (os.path.join(TOOLS, "templates", "README_raw.txt"),
+     os.path.join("tools", "templates")),
+    (os.path.join(TOOLS, "templates", "project.yaml"),
+     os.path.join("tools", "templates")),
+    # Reference maps read at ingest time -> <_MEIPASS>/tools/reference. The
+    # microscopy organ map (anatomy_derive.py) is guarded, so a missing copy
+    # silently derived NO microscopy anatomy in the frozen build. Bundle the
+    # whole (tiny) dir so the set is closed.
+    (os.path.join(TOOLS, "reference"),
+     os.path.join("tools", "reference")),
     # Seed recipes -> <_MEIPASS>/tools/operator/recipes
     (os.path.join(TOOLS, "operator", "recipes"),
      os.path.join("tools", "operator", "recipes")),
