@@ -132,6 +132,47 @@ Landed on branch `operator-ingest-tooling`. Deferred from it:
     rule is the only path. Stays non-blocking: unmatched values -> `null` + WARN,
     backfilled later. New META open question when picked up.
 
+## Dedup identity — content-anchored, cross-ecosystem key (2026-07-17)
+
+**Priority: MEDIUM (modest).** Surfaced during the AxioScan 7 operator test pass
+(2026-07-17). The current dedup is **correct for the normal workflow** and blocks
+nothing — this is a robustness improvement, deferred by the data office.
+
+**How dedup works today.** `tools/ingest/config.py::_build_dedupe_index` builds a
+set of `(acq_date, original_name)` keys from the **live** `registry_raw.csv`, and
+`expand_batch` skips any case whose key is already present (idempotency check at
+`config.py:367` / `:605`). `original_name` is the acquisition's path **relative to
+the batch staging dir** (`expand_batch` sets `case["original_name"] = rel_match`,
+~`config.py:422-435`). The mechanism is shared by all ecosystems (microscopy / MRI / NI).
+
+**The gap.** Because the key is `(date, staging-relative-path)`, the *same physical
+scan* re-ingested under a **different staging scope** gets a different
+`original_name` → a different key → it is **not** recognised as a duplicate and is
+ingested again. Reproduce: ingest a subset from a sub-folder, then ingest a larger
+set from the parent folder that includes those same scans — the overlap is *not*
+skipped. (Re-ingesting the same scans from the *same* folder selection **is**
+correctly deduped — this was the original misread; the folder-relative key is fine
+for the everyday operator workflow, which is why this is deferred rather than fixed now.)
+
+**The improvement.** Anchor dedup identity to something **stable per acquisition**
+rather than to the staging layout — e.g. for microscopy the `.czi` embedded scan id
+or a content checksum; for MRI/NI an instrument-native exam/acquisition id — so
+identity survives folder reshuffling. Do it **cross-ecosystem** (one key model, not
+per-instrument) and **document the key** in the spec so users and developers know
+what "already ingested" means as new instruments are added.
+
+- [ ] Design a stable, content/instrument-anchored dedup key (cross-ecosystem).
+- [ ] Report skips clearly to the operator ("N skipped — already ingested"). The
+  preview already computes `n_already_ingested` (`/api/discovered`); surface the
+  count in the GUI ingest result too — the completion-popup work on
+  `feat/gui-operator-polish` is the natural place to show it.
+- [ ] Document the dedup-key contract in `06_REGISTRIES` (or `10_TOOLS`) so identity
+  is explicit for future instruments.
+- *Related but distinct:* the concurrency dedup-**snapshot** risk (see "Architecture
+  & code review follow-through", §3.1 #1) is a different concern — a pre-lock
+  snapshot under concurrent ingest. This item is about the *key's* content-stability,
+  not locking.
+
 ## Person/role rename — residual cleanup (core done 2026-06-09)
 
 The global researcher/operator/tech/user rename ([06_REGISTRIES §2.3a-bis](../mfb-rdm-docs/06_REGISTRIES.md)) landed in the code, schema, templates, configs, CLIs, GUI, and the authoritative docs. Residual, non-blocking:
