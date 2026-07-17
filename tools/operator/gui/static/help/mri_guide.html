@@ -49,7 +49,7 @@ go to <code>http://127.0.0.1:5000/mri</code> yourself.</p>
 
 <div class="step"><div class="num">1</div><div>
   <h3>Check the destination (top of the page)</h3>
-  The <strong>Destination NAS</strong> box should already say
+  The <strong>Destination</strong> box (the RDM System) should already say
   <code>\\gjesus3\gjesus3\gjesus3-data</code> with a green <span class="ok">OK</span> next to it.
   If it's not green, fix it before going on (see Troubleshooting).
 </div></div>
@@ -106,7 +106,7 @@ go to <code>http://127.0.0.1:5000/mri</code> yourself.</p>
   <tr><td>The connection line says <em>“No scanner credentials on this machine”</em></td>
       <td>The one-time password file isn't set up here. <strong>Ask the data office</strong> to add
       <code>gjesus3_mri.cred</code> to this machine. You can't pull without it.</td></tr>
-  <tr><td>The NAS box is not green / <em>“not a NAS root”</em></td>
+  <tr><td>The Destination box is not green / <em>“not found”</em></td>
       <td>The destination isn't reachable. Make sure it reads
       <code>\\gjesus3\gjesus3\gjesus3-data</code> and that you're on the network. The tool won't
       let you pull until this is fixed (so you never wait on a pull for nothing).</td></tr>

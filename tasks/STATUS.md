@@ -84,6 +84,24 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **Operator-GUI polish — CODE COMPLETE on `feat/gui-operator-polish`, verified from
+  source (2026-07-17); exe rebuild + deploy + merge pending (Ryan).** Three independent
+  GUI fixes from the 2026-07-17 microscopy operator test:
+  (1) the metadata-token palette now offers the **full resolver token set**
+  (`original_name`, `instrument`, …) in the builder + both runner palettes + the MRI
+  page, sourced from one list in `resolver.py` (new `/api/link_tokens`) so it can't drift;
+  (2) operator-visible **"NAS" → "RDM System"** across templates / JS / help / two `app.py`
+  error strings, with a `GLOSSARY.md` definition (internal `nas_root*` identifiers untouched;
+  one residual in the shared-core `env.NasRootError` message deliberately left — a
+  Data-Office call);
+  (3) a **completion modal** on real (non-dry-run) ingest, both pages, dismissible +
+  accessible (new `static/completion_modal.js`).
+  Verified from a source run (Flask test client, both pages render clean, all GUI JS
+  `node --check`, modal exercised via a DOM stub, resolver + value-field tests green).
+  **Remaining = the production step:** rebuild `gjesus3_ingest.exe`, backup-first redeploy,
+  frozen smoke-test, then merge to `main` + CHANGELOG. Sequenced *before* branch
+  `refactor/project-naming` (P), which rebases onto `main` after this lands. Full detail +
+  implementation notes in [`gui_operator_polish_handoff.md`](gui_operator_polish_handoff.md).
 - **Operator-GUI fixes landed + VERIFIED IN PRODUCTION, exe redeployed (2026-07-17).**
   Both branches merged to `main`, the fixed `gjesus3_ingest.exe` rebuilt and
   **deployed to the NAS** (`\\gjesus3\…\tools\`; old exe + registries backed up

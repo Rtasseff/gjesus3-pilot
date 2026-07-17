@@ -3,7 +3,12 @@
 **Branch:** `feat/gui-operator-polish` · **Worktree:** `…/projects/gjesus3-dev/gui-operator-polish`
 **Base:** `main` @ `7f0eba2` (includes both 2026-07-17 GUI fixes: frozen-exe resources + recipe-override WYSIWYG).
 **Author of handoff:** prior session (GJ3 triage of the 2026-07-17 microscopy operator test).
-**Status:** not started. This doc is self-contained — you need no prior context.
+**Status:** **code complete + verified from source (2026-07-17).** All three fixes
+implemented and exercised from a source run (Flask test client + node DOM stub); see
+the **Implementation notes** at the bottom. **Remaining = the production step only:**
+exe rebuild → backup-first redeploy → frozen smoke-test → merge to `main` +
+CHANGELOG. That is Ryan's call (it writes to the live system and needs the P-branch
+rebuild-coordination decision in §5). This doc is self-contained.
 
 This branch is one of two spun off from the same operator test. The other is
 `refactor/project-naming` (renames "project hint" → "project name" and normalises
@@ -280,11 +285,64 @@ office's call — flag it, don't decide unilaterally.
 | Modal pattern to mirror | `static/app.js` (folder browser) + `static/style.css` | search `listdir` |
 
 ## 8 · Definition of done
-- [ ] Runner + builder palettes offer the full resolver token set (incl. `original_name`,
+- [x] Runner + builder palettes offer the full resolver token set (incl. `original_name`,
       `instrument`); MRI page too. Sourced from one list, not two hand-kept ones.
-- [ ] No operator-visible "NAS" remains; "RDM System" used; `GLOSSARY.md` defines it;
-      internal identifiers untouched.
-- [ ] Real-ingest completion shows a clear modal (both pages), dismissible + accessible.
+- [x] No operator-visible "NAS" remains; "RDM System" used; `GLOSSARY.md` defines it;
+      internal identifiers untouched. *(See note (b): one residual is in the shared-core
+      `env.NasRootError` message, deliberately left — flagged for a Data-Office call.)*
+- [x] Real-ingest completion shows a clear modal (both pages), dismissible + accessible.
 - [ ] Exe rebuilt, smoke-tested through the frozen build, deployed per the 2026-07-17
-      backup-first pattern; smoke-test acqs removed; registry back to baseline.
+      backup-first pattern; smoke-test acqs removed; registry back to baseline. *(Ryan — production step.)*
 - [ ] Merged to `main` cleanly; CHANGELOG entry added; `tasks/STATUS.md` noted.
+      *(STATUS noted; CHANGELOG deferred to the merge/deploy landing per the append-only convention.)*
+
+---
+
+## 9 · Implementation notes (2026-07-17 session)
+
+**What landed on this branch** (commit on `feat/gui-operator-polish`; not yet merged):
+
+- **Issue 2 — full token palette, sourced from one list.** `resolver.py` now exports the
+  fixed link-filename field list as `LINK_FILENAME_REGISTRY_FIELDS` /
+  `LINK_FILENAME_GENERATED_FIELDS` + `link_filename_token_fields()` (the resolver iterates
+  the same constant, so it can't drift). `app.py` builds `LINK_TOKEN_EXTRAS` from it and
+  serves `GET /api/link_tokens`; the MRI page's `palette_extras` now comes from the same
+  list. `app.js` fetches it once (`loadLinkTokens()`) and feeds it to **all three** palettes
+  (builder + both runner palettes); `mri.js` picks it up via `MRI.paletteExtras`. The
+  builder's 3 hard-coded extras are gone.
+- **(a) Resolution-scope subtlety worth knowing (verified in `config.py`):** the flat tokens
+  (`${instrument}`, `${original_name}`, …) only actually *resolve* in the **`link_filename`**
+  field (via `resolve_link_filename`). Every other value field — the `registry.*` columns,
+  `operator`, and the `condition.*` disease fields — is resolved by `resolve_value`, which
+  substitutes **only** `${discovered.*}`. Dragging a flat token into e.g. `notes` yields a
+  literal `${instrument}` at ingest (no error). This matches the pre-existing behaviour of
+  the 3 builder extras and is what the handoff asked for (expose the whole set), but if a
+  future pass wants strictness, the clean fix is per-field palettes (the palette is shared /
+  inserts into the last-focused field today). To keep the new chips from *looking* broken,
+  the client example-resolvers now render a recognised-but-uncomputable token as a
+  `<placeholder>` instead of flagging it red.
+- **Issue 3 — "NAS" → "RDM System".** All operator-visible strings in the two templates,
+  `app.js`/`mri.js`, both help pages, and the two `app.py` `jsonify` error strings; plus a
+  `GLOSSARY.md` **RDM System** entry. Internal identifiers (`nas_root`, `/api/nas_root`,
+  `nasInput`, code comments, …) untouched, per the rule.
+- **(b) One residual "NAS" deliberately left:** `tools/operator/env.py`'s `NasRootError`
+  message ("NAS root does not look valid…") is shared-core and also serves the CLI ingest
+  tools (data-office facing). It can surface to a GUI operator via Preview/Ingest on an
+  invalid root. The handoff scoped issue 3 to the GUI surface and did not include it;
+  changing shared core would also alter CLI messaging. **Left as-is; Data-Office call**
+  whether to soften it (or have the GUI endpoints re-wrap it).
+- **Issue 4 — completion modal.** New shared `static/completion_modal.js` (loaded before
+  `app.js`/`mri.js`; self-disables if the markup is absent) exposing
+  `window.showCompletionModal({ok,total,unit,failedAcqIds,rows})`; modal markup added to both
+  templates; styles in `style.css`. Shown only on a **real** (non-dry-run) completion with
+  ≥1 acq; success → green ✓ "Ingest complete", any failures → red "!" "…with issues" + the
+  failed ACQ-IDs. Dismissible (Done button, `Esc`, backdrop click), moves focus in and
+  restores it on close. The bottom-line summary is kept for both dry-run and live.
+
+**Verification done from source (no frozen build, no live NAS):** `resolver` refactor proven
+behaviour-identical (14 tokens; `resolve_link_filename` still resolves correctly); `app.py`
+imports and `GET /api/link_tokens` returns the 14 tokens; both pages render 200 with **zero**
+operator-visible "NAS" and the modal wired in; all GUI JS passes `node --check`;
+`completion_modal.js` exercised via a DOM stub (both success + failure branches);
+`test_value_fields.py` + the resolver tests in `test_phase3_enrichment.py` green.
+**Still needs the frozen smoke-test** (§5) — a source run can't exercise the packaged build.

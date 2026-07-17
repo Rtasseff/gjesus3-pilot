@@ -12,7 +12,7 @@
       <a href="/static/help/microscopy_guide.html" target="_blank" class="muted" style="font-size:.55em;font-weight:normal">? Help</a>
       <a href="/mri" class="muted" style="font-size:.55em;font-weight:normal">→ switch to MRI ingest</a></h1>
     <div class="nasbar">
-      <label>Destination NAS <span class="muted">— where files are ingested to</span>
+      <label>Destination <span class="muted">— the RDM System (gjesus3 storage) files are ingested to</span>
         <input id="nas-root" type="text" value="{{ nas_root }}" size="28"
                placeholder="\\gjesus3\gjesus3\gjesus3-data">
       </label>
@@ -20,8 +20,8 @@
       <button id="nas-save" type="button">Set</button>
       <span id="nas-status" class="pill"></span>
 
-      <label>Recipes folder <span class="muted">— where saved recipes live (default: on the NAS)</span>
-        <input id="recipes-dir" type="text" size="22" placeholder="<NAS>\recipes">
+      <label>Recipes folder <span class="muted">— where saved recipes live (default: on the RDM System)</span>
+        <input id="recipes-dir" type="text" size="22" placeholder="<RDM System>\recipes">
       </label>
       <button id="recipes-browse" type="button" class="browse">Browse…</button>
       <button id="recipes-save" type="button">Set</button>
@@ -41,7 +41,7 @@
          ON. High-contrast so an operator can never mistake a test for a real
          run (operators sometimes don't realise a run was a dry run). -->
     <div id="r-dry-banner" class="dry-banner" hidden>
-      DRY RUN — preview only. <strong>Nothing will be written to the NAS.</strong>
+      DRY RUN — preview only. <strong>Nothing will be written to the RDM System.</strong>
       Uncheck “Dry-run” at the bottom to ingest for real.
     </div>
     <div class="row">
@@ -77,7 +77,7 @@
       <div id="r-gaps-grid" class="reqgrid"></div>
       <details>
         <summary>Use a metadata label value from the CZI name / folders</summary>
-        <p class="muted">Click or drag a metadata label into a box above; it resolves per file at ingest. Set the folder + NAS root, then show them.</p>
+        <p class="muted">Click or drag a metadata label into a box above; it resolves per file at ingest. Set the folder + RDM System root, then show them.</p>
         <div class="row">
           <button id="r-gaps-load" type="button">Show metadata labels from the folder</button>
         </div>
@@ -127,7 +127,7 @@
       <details>
         <summary>Use a metadata label value from the CZI name / folders</summary>
         <p class="muted">Click or drag a metadata label into a box above; it
-          resolves per file at ingest. Set the folder + NAS root, then show them.</p>
+          resolves per file at ingest. Set the folder + RDM System root, then show them.</p>
         <div class="row">
           <button id="r-meta-load-fields" type="button">Show metadata labels from the folder</button>
         </div>
@@ -305,8 +305,23 @@
     </div>
   </div>
 
+  <!-- Completion modal — shown on a real (non-dry-run) ingest completion so the
+       operator can't miss it (the bottom-line summary was easy to overlook).
+       Controller in completion_modal.js; owns focus + Esc + dismissal. -->
+  <div id="done-overlay" class="done-overlay" hidden>
+    <div class="done-modal" role="dialog" aria-modal="true" aria-labelledby="done-title">
+      <div class="done-check" aria-hidden="true">✓</div>
+      <h2 id="done-title" class="done-title">Ingest complete</h2>
+      <div id="done-body" class="done-body"></div>
+      <div class="done-actions">
+        <button id="done-close" type="button" class="go">Done</button>
+      </div>
+    </div>
+  </div>
+
   <script>window.SAMPLE_TYPES = {{ sample_types|tojson }};</script>
   <script src="{{ url_for('static', filename='tokenfield.js') }}"></script>
+  <script src="{{ url_for('static', filename='completion_modal.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

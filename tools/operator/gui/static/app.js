@@ -35,6 +35,25 @@ function sampleTypeOptions() {
     `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join("");
 }
 
+// ------------------------------------------------- resolver token extras
+// The fixed ${...} tokens every value / link-name field may reference
+// (original_name, instrument, operator, …). Fetched once from /api/link_tokens
+// (sourced from tools/ingest/resolver.py) so the palette matches what resolves
+// at ingest and the two can't drift. Unioned with each folder's discovered.*
+// keys in every paletteEntries() call. LINK_TOKEN_NAMES is the bare-name set,
+// used by resolveExample() so a valid token isn't flagged "unresolved" just
+// because the client-side preview can't compute its value.
+let LINK_TOKEN_EXTRAS = [];
+let LINK_TOKEN_NAMES = new Set();
+async function loadLinkTokens() {
+  try {
+    const d = await getJSON("/api/link_tokens");
+    LINK_TOKEN_EXTRAS = d.tokens || [];
+    LINK_TOKEN_NAMES = new Set(LINK_TOKEN_EXTRAS.map((t) => t.replace(/^\$\{|\}$/g, "")));
+  } catch (e) { /* non-fatal: the palette just omits the fixed extras */ }
+}
+loadLinkTokens();   // kick off early; palettes render on later button clicks
+
 // ---------------------------------------------------------------- tabs
 $$(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -78,7 +97,7 @@ async function loadRecipesDir() {
   try {
     const d = await getJSON("/api/recipes_dir");
     recipesDirInput.value = d.recipes_dir || "";
-    recipesDirInput.placeholder = d.default || "<NAS>\\recipes";
+    recipesDirInput.placeholder = d.default || "<RDM System>\\recipes";
     setRecipesStatus(d);
   } catch (e) { /* non-fatal */ }
 }
@@ -185,7 +204,7 @@ $("#fb-cancel").addEventListener("click", fbClose);
 fb.overlay.addEventListener("click", (e) => { if (e.target === fb.overlay) fbClose(); });
 
 $("#nas-browse").addEventListener("click", () =>
-  browseInto(nasInput, "Select the destination NAS root (gjesus3-data)", () => saveNas()));
+  browseInto(nasInput, "Select the destination — the RDM System root (gjesus3-data)", () => saveNas()));
 $("#r-browse").addEventListener("click", () =>
   browseInto($("#r-staging"), "Select the source folder to ingest"));
 $("#b-browse").addEventListener("click", () =>
@@ -320,7 +339,7 @@ async function loadGapFields() {
     });
     runnerDiscoveredRow = (data.rows && data.rows[0]) ? data.rows[0].discovered : {};
     runnerKeys = data.keys || [];
-    renderPalette($("#r-gaps-palette"), paletteEntries(runnerKeys),
+    renderPalette($("#r-gaps-palette"), paletteEntries(runnerKeys, LINK_TOKEN_EXTRAS),
                   Object.values(runnerGapFields)[0]);
     runnerFilterUI.refresh();   // populate the filter field dropdowns too
     updateGapExamples();
@@ -449,7 +468,7 @@ async function loadMetaFields() {
     // filter's data source empty.
     runnerKeys = data.keys || [];
     runnerFilterUI.refresh();
-    renderPalette($("#r-meta-chips"), paletteEntries(data.keys || []), dmField);
+    renderPalette($("#r-meta-chips"), paletteEntries(data.keys || [], LINK_TOKEN_EXTRAS), dmField);
     updateMetaExamples();
   } catch (e) {
     $("#r-meta-chips").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
@@ -650,14 +669,28 @@ async function runnerIngest() {
         if (r.dry_run) {
           resEl.className = "summary dry-done";
           resEl.innerHTML =
-            `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the NAS.</strong> ` +
+            `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the RDM System.</strong> ` +
             `${r.ok}/${r.total} acquisitions WOULD be ingested. ` +
             `To actually ingest, uncheck “Dry-run” and run again.`;
         } else {
           resEl.className = "summary live-done";
           resEl.innerHTML =
             `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} acquisitions written</strong> ` +
-            `to ${nasRoot() || "the NAS"}.`;
+            `to ${esc(nasRoot()) || "the RDM System"}.`;
+          // A real ingest also raises an unmissable completion modal — the
+          // bottom-line above was easy to overlook. Skip it for a 0-acq run.
+          if (r.total > 0 && window.showCompletionModal) {
+            const rec = recipesCache.find((x) => x.file === rRecipe.value);
+            showCompletionModal({
+              ok: r.ok, total: r.total, unit: "acquisitions",
+              failedAcqIds: (r.results || []).filter((x) => !x.ok).map((x) => x.acq_id),
+              rows: [
+                { label: "Destination", value: nasRoot() || "the RDM System" },
+                { label: "Recipe", value: rec ? rec.name : "" },
+                { label: "Instrument", value: rInstrument.value },
+              ],
+            });
+          }
         }
       }
     }
@@ -680,7 +713,7 @@ function updateDryState() {
   rCommit.classList.toggle("live", !dry);
   rDryState.textContent = dry
     ? "Safe — nothing will be written."
-    : "LIVE — Ingest will write to the NAS.";
+    : "LIVE — Ingest will write to the RDM System.";
   if (rDryBanner) rDryBanner.hidden = !dry;  // persistent top-of-panel banner
 }
 rDry.addEventListener("change", updateDryState);
@@ -1019,6 +1052,10 @@ function resolveExample(template, ctx, synth) {
     }
     if (ref in synth) return synth[ref];
     if (ref in ctx) return ctx[ref];
+    // A fixed resolver token (instrument, operator, …) the client can't compute
+    // here but which DOES resolve at ingest — show a <placeholder>, don't flag
+    // it as an unresolved error.
+    if (LINK_TOKEN_NAMES.has(ref)) return "<" + ref + ">";
     unresolved = true; return m;
   });
   return { text: out, unresolved };
@@ -1053,9 +1090,11 @@ async function refreshGrid() {
         "</tr>").join("");
       $("#b-grid-wrap").innerHTML = `<table>${head}${rows}</table>`;
     }
-    // palette of friendly field chips + resolver extras; refresh dependent UIs
+    // palette of friendly field chips + the full resolver token set; refresh
+    // dependent UIs. (Extras were 3 hard-coded tokens; now the whole documented
+    // resolver context, sourced from /api/link_tokens so it can't drift.)
     renderPalette($("#b-palette"),
-      paletteEntries(builderKeys, ["${acq_id}", "${acq_date}", "${original_name}"]),
+      paletteEntries(builderKeys, LINK_TOKEN_EXTRAS),
       builderFields["registry.sample_id"]);
     $("#b-palette-hint").hidden = !builderKeys.length;
     builderFilterUI.refresh();
@@ -1281,7 +1320,7 @@ $("#b-save").addEventListener("click", async () => {
 // half-built grid.
 (async function initBuilder() {
   try {
-    await loadValueFields();
+    await Promise.all([loadValueFields(), loadLinkTokens()]);
   } catch (e) {
     $("#b-errors").textContent =
       "Could not load the field list from the app — reload the page. (" + e.message + ")";

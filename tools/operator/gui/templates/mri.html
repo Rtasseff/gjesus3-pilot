@@ -12,7 +12,7 @@
       <a href="/static/help/mri_guide.html" target="_blank" class="muted" style="font-size:.55em;font-weight:normal">? Help</a>
       <a href="/" class="muted" style="font-size:.55em;font-weight:normal">→ switch to microscopy ingest</a></h1>
     <div class="nasbar">
-      <label>Destination NAS <span class="muted">— where files are ingested to</span>
+      <label>Destination <span class="muted">— the RDM System (gjesus3 storage) files are ingested to</span>
         <input id="nas-root" type="text" value="{{ nas_root }}" size="28"
                placeholder="\\gjesus3\gjesus3\gjesus3-data">
       </label>
@@ -25,7 +25,7 @@
   <main class="wrap">
     <!-- Dry-run banner (shown by mri.js whenever dry-run is ON). -->
     <div id="dry-banner" class="dry-banner" hidden>
-      DRY RUN — preview only. <strong>Nothing will be written to the NAS.</strong>
+      DRY RUN — preview only. <strong>Nothing will be written to the RDM System.</strong>
       Uncheck “Dry-run” at the bottom to ingest for real.
     </div>
 
@@ -60,7 +60,7 @@
         <summary class="muted">Advanced — where files are staged</summary>
         <p class="muted">Pulled studies land here temporarily, then are
           <strong>deleted automatically</strong> after a successful ingest. The
-          default is the NAS <code>staging/</code> folder — change it only if you
+          default is the RDM System's <code>staging/</code> folder — change it only if you
           have a reason to.</p>
         <div class="row">
           <label class="grow">Staging folder
@@ -177,6 +177,19 @@
     </div>
   </div>
 
+  <!-- Completion modal — shown on a real (non-dry-run) ingest completion.
+       Controller in completion_modal.js; owns focus + Esc + dismissal. -->
+  <div id="done-overlay" class="done-overlay" hidden>
+    <div class="done-modal" role="dialog" aria-modal="true" aria-labelledby="done-title">
+      <div class="done-check" aria-hidden="true">✓</div>
+      <h2 id="done-title" class="done-title">Ingest complete</h2>
+      <div id="done-body" class="done-body"></div>
+      <div class="done-actions">
+        <button id="done-close" type="button" class="go">Done</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     window.MRI = {
       linkDefault: {{ link_default|tojson }},
@@ -186,6 +199,7 @@
     };
   </script>
   <script src="{{ url_for('static', filename='tokenfield.js') }}"></script>
+  <script src="{{ url_for('static', filename='completion_modal.js') }}"></script>
   <script src="{{ url_for('static', filename='mri.js') }}"></script>
 </body>
 </html>

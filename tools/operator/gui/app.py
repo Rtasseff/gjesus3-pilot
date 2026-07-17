@@ -82,6 +82,22 @@ collisions = importlib.import_module(f"{core.__name__}.collisions")
 # updates BOTH front-ends, so they can never drift.
 value_fields = importlib.import_module(f"{core.__name__}.value_fields")
 
+# The resolver defines the fixed (non-discovered.*) fields a link_filename
+# template may reference. Loading the core above put tools/ on sys.path (via
+# templates.py), so `from ingest import ...` resolves in both source and frozen
+# runs (same footing as scope/preview/runner). We expose these as palette chips
+# so operators can drag original_name / instrument / … — previously the palette
+# offered only discovered.* keys (+ 3 hard-coded builder extras), so those fields
+# were undraggable even though they resolve fine at ingest.
+from ingest import resolver as _resolver  # noqa: E402
+
+# Fixed ${...} tokens offered as palette chips in BOTH the builder and runner
+# (unioned with each folder's discovered.* keys). Sourced from the resolver so
+# the palette can never drift from what resolve_link_filename actually
+# substitutes. Order: as the resolver lists them (registry fields, then the
+# pipeline-generated acq_id / acq_date).
+LINK_TOKEN_EXTRAS = [f"${{{name}}}" for name in _resolver.link_filename_token_fields()]
+
 # Flask is imported after the core so a missing-flask error is obvious and
 # does not mask a core-import problem.
 from flask import Flask, jsonify, render_template, request, Response  # noqa: E402
@@ -129,8 +145,10 @@ MRI_LINK_PALETTE_KEYS = [
     "mri_exam_number", "mri_recon_indices", "mri_sequence_name",
     "animal_num", "project_code", "mri_study_name",
 ]
-MRI_LINK_PALETTE_EXTRAS = ["${sample_id}", "${acq_date}", "${acq_id}",
-                           "${original_name}"]
+# The full fixed resolver-context token set (same as the microscopy palette),
+# so the MRI "Project link name" offers original_name / instrument / … too — not
+# just the four it used to hard-code. Sourced from the resolver (LINK_TOKEN_EXTRAS).
+MRI_LINK_PALETTE_EXTRAS = LINK_TOKEN_EXTRAS
 
 # --- MRI remote-pull (SFTP) source ------------------------------------------
 # Pull ParaVision study folders off the acquisition console over SFTP, then
@@ -559,6 +577,18 @@ def api_value_fields():
     return jsonify({"fields": value_fields.builder_fields()})
 
 
+@app.route("/api/link_tokens")
+def api_link_tokens():
+    """The fixed ${...} tokens a value / link-name field may reference, offered
+    as palette chips alongside each folder's discovered.* keys.
+
+    Single source of truth: resolver.link_filename_token_fields() (via
+    LINK_TOKEN_EXTRAS), so the palette matches what resolve_link_filename
+    actually substitutes at ingest and the two can never drift.
+    """
+    return jsonify({"tokens": LINK_TOKEN_EXTRAS})
+
+
 @app.route("/api/recipe_gaps", methods=["POST"])
 def api_recipe_gaps():
     """Which gap-capable value fields does this recipe leave blank? The runner
@@ -741,7 +771,7 @@ def api_discovered():
     if not env.is_valid_nas_root(nas_root):
         # Discovered-grid doesn't truly need the registry, but expand_batch
         # dedups against it; an invalid root would explode. Surface it plainly.
-        return jsonify({"error": "Set a valid NAS root first (registries/ subfolder)."}), 400
+        return jsonify({"error": "Set a valid destination first — the RDM System root (a folder with a registries/ subfolder)."}), 400
 
     try:
         cfg, _tpl, staging_dir, pattern = _build_cfg(
@@ -1322,8 +1352,8 @@ def api_sftp_pull():
     try:
         env.validate_nas_root(nas_root)
     except env.NasRootError as e:
-        return jsonify({"error": "Set a valid destination NAS first (top of the "
-                                 "page), then pull.\n\n" + str(e)}), 400
+        return jsonify({"error": "Set a valid destination (the RDM System) first "
+                                 "(top of the page), then pull.\n\n" + str(e)}), 400
     if len(remotes) > MRI_PULL_MAX_STUDIES:
         return jsonify({"error": f"Too many studies selected "
                                  f"({len(remotes)} > {MRI_PULL_MAX_STUDIES})."}), 400
