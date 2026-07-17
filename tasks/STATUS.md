@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-07-16
+**Last Updated:** 2026-07-17
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -84,26 +84,29 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **Operator-GUI fixes landed 2026-07-16 — browser smoke + ONE exe rebuild pending.**
-  Two branches merged to `main`:
-  - **Frozen-exe resource loads** (`fix/gui-frozen-exe-resources`): the packaged
-    `gjesus3_ingest.exe` crashed on every real committed ingest at README generation
-    (the `ingest/` layer wasn't `sys._MEIPASS`-aware and `README_raw.txt` was never
-    bundled). Fixed with a frozen-aware `ingest/resources.py` resolver + bundling the
-    data files in the spec; also closed two guarded sibling instances (`project.yaml`,
-    the microscopy organ map). **The exe has never completed a real ingest** until
-    this — surfaced by ifernandez's MRI test.
+- **Operator-GUI fixes landed + VERIFIED IN PRODUCTION, exe redeployed (2026-07-17).**
+  Both branches merged to `main`, the fixed `gjesus3_ingest.exe` rebuilt and
+  **deployed to the NAS** (`\\gjesus3\…\tools\`; old exe + registries backed up
+  off-NAS first), and validated end-to-end by a real 9-acquisition AxioScan ingest
+  **through the deployed exe** — all 9 wrote `README.txt` (the former crash point) and
+  auto-derived anatomy from the organ map, confirming both fixes work in-frozen. The
+  smoke-test acqs were then removed (registry back to 13,557).
+  - **Frozen-exe resource loads** (`fix/gui-frozen-exe-resources`): the exe had
+    **never completed a real ingest** — README generation crashed because the
+    `ingest/` layer wasn't `sys._MEIPASS`-aware and `README_raw.txt` (+ `project.yaml`,
+    `tools/reference/`) was never bundled. Fixed via a frozen-aware
+    `ingest/resources.py` resolver + bundling; two guarded siblings
+    (`create_project.py`, `anatomy_derive.py` — silent microscopy-anatomy loss) closed too.
   - **Recipe override semantics** (`fix/microscopy-gui-filters-and-gaps`): a recipe
-    could show one config in the GUI but ingest another (emptying a structural field
-    let the template silently reassert). Independently reviewed
+    could show one config in the GUI but ingest another. Independently reviewed
     ([`../tools/operator/gui/microscopy_gui_override_semantics_review.md`](../tools/operator/gui/microscopy_gui_override_semantics_review.md))
     and fixed — the builder writes structural keys explicitly (erasing the
-    `group_code=MFB` filter and saving now CLEARS it, a collaboration recipe) and the
-    runner shows/enforces the EFFECTIVE (template+recipe) filter, narrow-only; the
-    builder keeps its blank start. Also unifies the builder/runner value-field
-    catalogue (fixes `registry.session_id` being un-promptable).
-  - **Pending before the operator microscopy ingest test:** a live-GUI browser smoke
-    test of both, then ONE combined `.exe` rebuild (**outside OneDrive**) + redistribute.
+    `group_code=MFB` filter now CLEARS it) and the runner shows/enforces the EFFECTIVE
+    filter (narrow-only); blank-start builder kept; value-field catalogue unified.
+  - **Remaining:** a quick live-GUI eyeball of the erase-filter WYSIWYG interaction
+    (the ingest path is proven); the operator microscopy pilot can now run on the
+    deployed exe. (Minor: the Finder `index.html` wasn't auto-refreshed by this
+    ingest — carried for a look.)
 - **Operator pilot test of `gjesus3_ingest.exe`.** Run the frozen exe on a clean
   (no-Python) machine, then a 1–2 friendly-operator pilot per page. The MRI page
   needs, per operator machine: the SFTP credential file `~/.ssh/gjesus3_mri.cred`
