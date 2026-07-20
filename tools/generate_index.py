@@ -10,6 +10,10 @@ straight to their data — zero install, no server, no Python on their side.
   # + one scoped index in each project folder
   python tools/generate_index.py --nas-root J:/gjesus3-data --per-project
 
+  # regenerate ONLY one project's scoped index (skips the global rebuild) — the
+  # cheap path the GUI uses after an ingest to refresh just the touched project
+  python tools/generate_index.py --nas-root J:/gjesus3-data --project PROJ-0011
+
   # preview locally first (writes nothing to the share)
   python tools/generate_index.py --nas-root J:/gjesus3-data --per-project --out ./_finder_preview
 
@@ -269,12 +273,88 @@ def _write(path, html):
     print(f"  wrote {path}  ({len(html)//1024} KB)")
 
 
+def _project_match_keys(rec0, pid):
+    """Lower-cased identifiers that should match a project group: its PROJ-id
+    (the stored project_hint value), its short_name, and its folder basename
+    (with and without the 'proj-' prefix). Lets a caller pass whichever it has —
+    the resolved PROJ-id, the operator's short_name, or the folder name."""
+    keys = {pid.strip().lower()}
+    short = (rec0.get("_project_short") or "").strip().lower()
+    if short:
+        keys.add(short)
+    folder = (rec0.get("_project_folder") or "").replace("\\", "/").strip().strip("/")
+    if folder:
+        base = folder.split("/")[-1].lower()
+        keys.add(base)
+        if base.startswith("proj-"):
+            keys.add(base[len("proj-"):])
+    return keys
+
+
+def _write_per_project(records, link_base, nas, out, only=None):
+    """Write each project's scoped index.html.
+
+    only=None      -> every project (the --per-project sweep).
+    only={ids...}  -> ONLY the projects matching those identifiers (targeted
+                      mode); the caller does NOT write the global index.
+
+    Groups by the stored project_hint (a PROJ-id). Projects with no
+    folder_location, and closed projects (folder deleted at close-out), are
+    skipped. Returns the list of project ids actually written.
+    """
+    by_proj = defaultdict(list)
+    for r in records:
+        pid = (r.get("project_hint") or "").strip()
+        if pid:
+            by_proj[pid].append(r)
+
+    want = {v.strip().lower() for v in only if v and v.strip()} if only is not None else None
+    if want is not None:
+        print(f"per-project (targeted): {sorted(want)}")
+    else:
+        print(f"per-project: {len(by_proj)} project(s)")
+
+    matched, written = set(), []
+    for pid, recs in sorted(by_proj.items()):
+        if want is not None:
+            hit = _project_match_keys(recs[0], pid) & want
+            if not hit:
+                continue
+            matched |= hit
+        folder = recs[0].get("_project_folder", "")
+        if not folder:
+            print(f"  skip {pid}: no folder_location in registry_projects.csv")
+            continue
+        # Closed = retention close-out: the registry row survives (so the
+        # acquisitions stay findable in the global index) but the folder is
+        # gone. Writing here would resurrect the folder we deliberately deleted.
+        if recs[0].get("_project_status") == "closed":
+            print(f"  skip {pid}: status=closed (folder deleted)")
+            continue
+        short = recs[0].get("_project_short", "")
+        title = f"gjesus3 Finder — {pid}" + (f" ({short})" if short else "")
+        out_path = (os.path.join(out, pid, "index.html") if out
+                    else os.path.join(nas, folder.lstrip("/"), "index.html"))
+        _write(out_path, render_html(recs, link_base, title))
+        written.append(pid)
+
+    if want is not None:
+        for u in sorted(want - matched):
+            print(f"  WARN: no acquisitions for project '{u}' -- nothing written")
+    return written
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--nas-root", default=os.environ.get("GJESUS3_ROOT", "J:/gjesus3-data"))
     ap.add_argument("--per-project", action="store_true",
                     help="also write a scoped index.html into each project folder")
+    ap.add_argument("--project", action="append", metavar="ID",
+                    help="regenerate ONLY the scoped index.html for this project "
+                         "(PROJ-id / short_name / folder name); repeatable. Skips "
+                         "the global index — the cheap path the GUI uses after an "
+                         "ingest to refresh just the project it touched.")
     ap.add_argument("--out", default=None,
                     help="write under this local dir instead of the share (preview)")
     ap.add_argument("--link-base", default=DEFAULT_LINK_BASE,
@@ -285,35 +365,25 @@ def main(argv=None):
     records, _ = find_acq.build_records(nas)
     print(f"Finder: {len(records)} acquisitions (nas={nas}, link_base={args.link_base})")
 
+    # Targeted mode: regenerate ONLY the named project(s); skip the global index.
+    # This is the cheap path the GUI uses right after an ingest so a researcher
+    # sees the new acquisition in the project index within seconds, without paying
+    # for (or racing on) the full ~18 MB global rebuild. The scheduled job keeps
+    # the global index fresh.
+    if args.project:
+        written = _write_per_project(records, args.link_base, nas, args.out,
+                                     only=set(args.project))
+        print(f"targeted refresh: wrote {len(written)} project index(es)")
+        return 0
+
     # Global index.
     global_path = (os.path.join(args.out, "index.html") if args.out
                    else os.path.join(nas, "registries", "index.html"))
     _write(global_path, render_html(records, args.link_base, "gjesus3 Finder — all acquisitions"))
 
-    # Per-project scoped indexes.
+    # Per-project scoped indexes (all projects).
     if args.per_project:
-        by_proj = defaultdict(list)
-        for r in records:
-            pid = (r.get("project_hint") or "").strip()
-            if pid:
-                by_proj[pid].append(r)
-        print(f"per-project: {len(by_proj)} project(s)")
-        for pid, recs in sorted(by_proj.items()):
-            folder = recs[0].get("_project_folder", "")
-            if not folder:
-                print(f"  skip {pid}: no folder_location in registry_projects.csv")
-                continue
-            # Closed = retention close-out: the registry row survives (so the
-            # acquisitions stay findable in the global index) but the folder is
-            # gone. Writing here would resurrect the folder we deliberately deleted.
-            if recs[0].get("_project_status") == "closed":
-                print(f"  skip {pid}: status=closed (folder deleted)")
-                continue
-            short = recs[0].get("_project_short", "")
-            title = f"gjesus3 Finder — {pid}" + (f" ({short})" if short else "")
-            out_path = (os.path.join(args.out, pid, "index.html") if args.out
-                        else os.path.join(nas, folder.lstrip("/"), "index.html"))
-            _write(out_path, render_html(recs, args.link_base, title))
+        _write_per_project(records, args.link_base, nas, args.out, only=None)
     return 0
 
 

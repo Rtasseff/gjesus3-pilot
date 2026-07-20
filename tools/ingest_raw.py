@@ -1647,6 +1647,25 @@ def run_interactive(nas_root, dry_run=False, nas_unc=None, delete_source=False,
         sys.exit(1)
 
 
+def _touched_project_hints(acq_ids, nas_root):
+    """Distinct project_hint values (PROJ-ids) for the given acq_ids, read back
+    from the registry. Used by `--refresh-index projects` to regenerate only the
+    project index(es) this run actually wrote into. Empty list if none resolve."""
+    want = {a for a in acq_ids if a}
+    if not want:
+        return []
+    from ingest import registry as _registry
+    hints, seen = [], set()
+    reg_path = os.path.join(nas_root, "registries", "registry_raw.csv")
+    for row in _registry.read_registry(reg_path):
+        if row.get("acq_id") in want:
+            h = (row.get("project_hint") or "").strip()
+            if h and h not in seen:
+                seen.add(h)
+                hints.append(h)
+    return hints
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Ingest raw data from staging to structured raw area.",
@@ -1691,6 +1710,19 @@ def main():
             "Delete the source file/folder after a successful copy + "
             "verify. Default OFF. The parent of source_path is never "
             "touched. Cross-instrument: applies to DICOM and microscopy."
+        ),
+    )
+    parser.add_argument(
+        "--refresh-index",
+        choices=["none", "projects", "full"],
+        default="none",
+        help=(
+            "Regenerate the researcher Finder after a successful (non-dry-run) "
+            "ingest. Default 'none': the global index is kept fresh by a "
+            "scheduled job (see tools/FINDER.md), so a CLI ingest need not pay "
+            "for it. 'projects' regenerates only the scoped index.html of the "
+            "project(s) this run touched (cheap). 'full' regenerates the global "
+            "index + every per-project index (the old always-on behaviour)."
         ),
     )
 
@@ -1739,6 +1771,7 @@ def main():
     if ingest_config_rel:
         log(f"Ingest config: {ingest_config_rel}")
 
+    touched_acq_ids = []
     if args.interactive:
         run_interactive(
             nas_root,
@@ -1755,10 +1788,11 @@ def main():
             # Stamp ingest_config so each case's registry row records it.
             cfg.setdefault("registry", {})  # may already exist
             cfg["_ingest_config_path"] = ingest_config_rel
-            run_batch(
+            results = run_batch(
                 cfg, nas_root,
                 dry_run=args.dry_run, nas_unc=nas_unc, delete_source=args.delete_source,
             )
+            touched_acq_ids = [aid for aid, ok in results if ok and aid]
         else:
             # Single-case config — validate + resolve registry: block.
             cfg["ingest_config"] = ingest_config_rel
@@ -1772,23 +1806,36 @@ def main():
                 for e in errors:
                     log(e, "ERROR")
                 sys.exit(1)
-            _, ok = ingest_single(
+            acq_id_str, ok = ingest_single(
                 cfg, nas_root,
                 dry_run=args.dry_run, nas_unc=nas_unc, delete_source=args.delete_source,
             )
             if not ok:
                 sys.exit(1)
+            if acq_id_str:
+                touched_acq_ids = [acq_id_str]
 
-    # Auto-refresh the researcher Finder index so it always reflects the latest
-    # ingest. Non-fatal: a refresh failure must never fail an otherwise-successful
-    # ingest. (Skipped on --dry-run. The single-case path sys.exit()s on failure
-    # before reaching here, so this only runs once a successful invocation finishes;
-    # for a batch it regenerates once, reflecting whatever is now in the registry.)
-    if not args.dry_run:
+    # Refresh the researcher Finder — OPT-IN (default 'none'; see --refresh-index).
+    # The global index is kept fresh by a scheduled job (tools/FINDER.md) and the
+    # operator GUI refreshes the touched project's index on its own, so a CLI ingest
+    # need not rebuild anything by default. Always non-fatal: a refresh failure must
+    # never fail an otherwise-successful ingest. Skipped on --dry-run.
+    if not args.dry_run and args.refresh_index != "none":
         try:
-            import generate_index  # tools/ dir; writes the global + per-project index.html files
-            log("Refreshing Finder indexes (global + per-project index.html)...")
-            generate_index.main(["--nas-root", nas_root, "--per-project"])
+            import generate_index  # tools/ dir
+            if args.refresh_index == "full":
+                log("Refreshing Finder indexes (global + all per-project)...")
+                generate_index.main(["--nas-root", nas_root, "--per-project"])
+            else:  # "projects" — only the project(s) this run wrote into
+                hints = _touched_project_hints(touched_acq_ids, nas_root)
+                if hints:
+                    log(f"Refreshing {len(hints)} project index(es): {', '.join(hints)}")
+                    argv = ["--nas-root", nas_root]
+                    for h in hints:
+                        argv += ["--project", h]
+                    generate_index.main(argv)
+                else:
+                    log("No project index to refresh (no linked project in this run).")
         except Exception as e:
             log(f"Finder index refresh failed (non-fatal): {e}", "WARN")
 

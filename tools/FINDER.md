@@ -1,6 +1,6 @@
 # The gjesus3 Finder — searchable index of the registry (MVP)
 
-*Last Updated: 2026-06-26*
+*Last Updated: 2026-07-20*
 
 > **Researcher entry points:** for the plain-language "how do I find my data"
 > view, start at [`RESEARCHER_GUIDE.md` §1](../RESEARCHER_GUIDE.md) and the
@@ -14,8 +14,10 @@ XNAT/OMERO, no server, no Python on their side. A generated, self-contained
 acquisitions with a one-click **Copy path** straight to their data.
 
 It is **live in production** since 2026-06-23: a global
-`registries/index.html` plus a per-project `index.html` in each project folder,
-auto-refreshed at the end of every successful ingest.
+`registries/index.html` plus a per-project `index.html` in each project folder.
+How it's kept current — a scheduled global rebuild plus a targeted per-project
+refresh when an ingest writes into a project — is described in
+[Keeping it fresh](#keeping-it-fresh) below.
 
 Two pieces, one join (registry_raw + registry_projects):
 - **`tools/find_acq.py`** — the join engine + a CLI (you / power users).
@@ -72,11 +74,15 @@ PYTHONPATH=tools python tools/generate_index.py --nas-root J:/gjesus3-data --per
 It only writes `index.html` files — it never touches `/raw/`, the registry CSVs,
 or anything else. The page shows a "generated <timestamp>" line.
 
-**You rarely need to run it by hand:** a successful (non-dry-run) `ingest_raw.py`
-batch **auto-refreshes the global `registries/index.html` AND every per-project
-`index.html`** at the end of the run (non-fatally — a refresh failure logs a WARN
-but never fails the ingest). Run the generator manually only for a local preview,
-or to rebuild after a refresh WARN.
+**You rarely need to run the global build by hand** — a scheduled job does it (see
+[Keeping it fresh](#keeping-it-fresh)). Run the generator manually for a local
+preview, a one-off rebuild, or to refresh a **single** project with `--project`:
+```
+PYTHONPATH=tools python tools/generate_index.py --nas-root J:/gjesus3-data --project PROJ-0011
+```
+`--project` (repeatable) regenerates **only** that project's scoped `index.html` and
+skips the ~18 MB global rebuild — the cheap path the operator GUI uses right after an
+ingest so the touched project is searchable within seconds.
 
 `--link-base` sets the share root prepended to the copyable paths. The default is
 the portable container UNC `\\GJESUS3\gjesus3\gjesus3-data` — it works on any
@@ -84,6 +90,43 @@ machine regardless of drive-letter mapping, so every researcher's copy-path
 resolves. (Use a drive-letter base like `J:\gjesus3-data` only if you know every
 researcher maps the NAS to that same letter.) Note the `gjesus3-data` container
 component: an earlier default omitted it and produced unresolvable paths.
+
+## Keeping it fresh
+
+The Finder is a **static snapshot**, so something has to regenerate it. As of
+**2026-07-20** that is split by cost — a full rebuild reads the whole registry and
+writes the ~18 MB global page (plus every per-project page), which is too heavy to do
+inline on every ingest:
+
+- **Global index — a scheduled job (RDM-run).** A daily task rebuilds
+  `registries/index.html` and every per-project `index.html` from the current
+  registry. It runs [`scheduled_finder_refresh.bat`](scheduled_finder_refresh.bat),
+  which calls the generator against the **UNC** share root (not a mapped drive, so it
+  works from a scheduled context where `J:` may be absent) and logs to
+  `%LOCALAPPDATA%\gjesus3\finder_refresh.log`. Register it on the data-office
+  workstation (daily, early morning) with:
+  ```
+  schtasks /Create /TN "gjesus3 Finder refresh" /SC DAILY /ST 05:00 /F /TR "\"C:\Users\rtasseff\OneDrive - CIC biomaGUNE\projects\RDM\highCap\gjesus3-pilot\tools\scheduled_finder_refresh.bat\""
+  ```
+  Run it under your own account. If the box is left logged-in/locked overnight, "run
+  only when user is logged on" is simplest; if it is fully logged out, choose "run
+  whether logged on or not" — the UNC path means neither needs a mapped drive.
+  (`python` must be on PATH in that context; edit the `.bat` to a full python path if
+  not.)
+- **Per-project index — on ingest (the immediacy path).** The operator GUI
+  regenerates just the **touched project's** `index.html` right after an ingest, so a
+  researcher who uploaded a scan sees it in that project's index within seconds,
+  without waiting for the daily global rebuild. This is the cheap `--project` targeted
+  mode; it never rewrites the global page.
+- **CLI — opt-in.** A CLI `ingest_raw.py` run refreshes nothing by default; pass
+  `--refresh-index projects` (only the project(s) the run touched) or
+  `--refresh-index full` (global + all per-project) when you want it. The scheduled job
+  is the safety net, so `none` is the sane default.
+
+> Earlier, every ingest rebuilt the whole index inline. That was removed 2026-07-20:
+> it was costly, race-prone under concurrent ingests, and — because the GUI never calls
+> the CLI's `main()` — it never actually ran for operator (GUI) ingests, which is how a
+> stale project index first surfaced.
 
 ## The CLI (power users / scripting)
 ```
@@ -97,10 +140,10 @@ Filters: free-text positional + `--instrument --researcher --subject --anatomy
 ---
 
 ## Scope & limitations (MVP — by design)
-- **Static snapshot.** The page embeds the registry data at generation time. The
-  registry changes only on ingest, and each successful ingest auto-refreshes the
-  global `index.html` *and* the per-project indexes; only a post-WARN rebuild needs
-  a manual generator run.
+- **Static snapshot.** The page embeds the registry data at generation time, so it
+  is only as fresh as the last regeneration. The global index is rebuilt on a schedule
+  and each project's index is refreshed when an ingest writes into it (see
+  [Keeping it fresh](#keeping-it-fresh)); a manual generator run forces an update.
 - **Size.** Self-contained means all rows are embedded — ~19 MB at 13.5k acqs.
   It opens fine, but for a much larger archive the next step is client-side
   virtualization / a fetched data file. The table shows the first 800 matches of

@@ -369,7 +369,7 @@ searchable, project-linked acquisition is:
    from the group's project-naming consensus.) A hard link opens like the real file
    but takes no extra space.
 5. **Finder.** The Finder (`registries/index.html` global + the project's own
-   `index.html`) auto-refreshes, so the acquisition is immediately searchable.
+   `index.html`): the project's index is refreshed on ingest (the global index on a schedule — see [`tools/FINDER.md`](../../tools/FINDER.md)), so the acquisition is searchable there right away.
 
 This system path is exactly the **standardized staging → ingestion** that the
 "Documented standard vs. observed practice" and "Risks / weaknesses" sections

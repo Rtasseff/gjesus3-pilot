@@ -398,7 +398,7 @@ assembles a project on the NAS.)
 ## Finder — provenance-driven project index (a possibly-better project-level index) (2026-06-23)
 
 Context: we now publish a **registry-driven per-project `index.html`** (the global Finder,
-filtered by `project_hint`, auto-refreshed on ingest — see [`tools/FINDER.md`](../tools/FINDER.md)).
+filtered by `project_hint`, refreshed when an ingest writes into the project — see [`tools/FINDER.md`](../tools/FINDER.md)).
 This item explores a **different, possibly better** way to build the project-level index: drive
 it from the **project's own provenance file** instead of the registry. Raised by the data office
 2026-06-23 — **shape still open, discuss before building.**
@@ -914,8 +914,10 @@ single-operator workflow). See [`CHANGELOG.md`](../CHANGELOG.md) 2026-07-12.
   key and the `auto_discover.subject_parse:` block; note `rebuild_baseline/registry_raw.csv`
   is a stale 24-col header.)
 - [ ] **Spike a SQLite/Datasette (or dynamic-Finder) search index (§3.2.2).** The
-  embedded-HTML Finder is ~19 MB now, linear to ~140 MB at 100 k rows, regenerated
-  wholesale every ingest. Keep CSV as source of truth; derive a disposable index.
+  embedded-HTML Finder is ~19 MB now, linear to ~140 MB at 100 k rows, and still
+  rebuilt **wholesale** by the scheduled global refresh (2026-07-20 moved it off
+  every-ingest to a schedule + targeted per-project, which caps the per-ingest cost
+  but not the full-rebuild size). Keep CSV as source of truth; derive a disposable index.
   Already proposed in [`13 §4.1`](../mfb-rdm-docs/13_GJESUS3_ROLE.md); the
   internal-web-serving capability makes a *dynamic* Finder reachable, not just a
   container.

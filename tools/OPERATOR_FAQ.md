@@ -233,16 +233,18 @@ generated and never reused — so the underlying data never overwrites anything.
 
 No. The **Finder** is the searchable `registries/index.html` page researchers
 double-click over SMB (plus a per-project `index.html` in each project folder).
-**Every successful (non-dry-run) ingest auto-refreshes it** — the global index
-*and* every per-project index — at the end of the run. You don't run anything.
+Keeping it current is handled for you:
 
-This refresh is **non-fatal**: if it fails for any reason it logs a **WARN** but
-does **not** fail your ingest (your data is already safely in `/raw/` and the
-registry). If you see that WARN, the data office can rebuild the page by hand with
-`tools/generate_index.py` — no re-ingest needed. More in
+- The data office runs a **scheduled rebuild** (daily) of the global index and every
+  per-project index, so the Finder stays up to date on its own.
+- When you ingest through the **operator GUI**, it also refreshes **your project's**
+  `index.html` on the spot, so the scan you just uploaded appears in that project's
+  Finder without waiting for the daily rebuild.
+
+You never run anything yourself. If the global page ever needs rebuilding sooner, the
+data office can do it by hand with `tools/generate_index.py` — no re-ingest needed. A
+dry-run refreshes nothing (it writes no data) — that's expected. More in
 [`FINDER.md`](FINDER.md).
-
-A dry-run does **not** refresh the Finder (it writes nothing) — that's expected.
 
 ---
 

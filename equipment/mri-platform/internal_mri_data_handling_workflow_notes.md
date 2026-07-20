@@ -51,8 +51,8 @@ acquisition: each ParaVision examination becomes one acquisition under `/raw/DIC
 with a parsed `metadata.json` sidecar (the `mri:` block, built by `tools/ingest/paravision_metadata.py`)
 and a `checksums.json`. Projects reference that raw data by **hard link** (DECIDED + APPLIED 2026-06-02;
 the older `.lnk` Windows-shortcut method is retired) — a project's copy of an exam points straight at the
-`<ACQ-ID>.data/` DICOM bundle and costs no extra disk. After a successful ingest the searchable
-[Finder](../../tools/FINDER.md) (`registries/index.html` on the NAS) is refreshed automatically, so the
+`<ACQ-ID>.data/` DICOM bundle and costs no extra disk. The searchable
+[Finder](../../tools/FINDER.md) (`registries/index.html` on the NAS) is rebuilt on a schedule, but a project's own `index.html` refreshes on ingest, so the
 new acquisition is immediately findable. See [`equipment/INDEX.md`](../INDEX.md) for where MRI sits among the
 in-scope instruments, and [13_GJESUS3_ROLE](../../mfb-rdm-docs/13_GJESUS3_ROLE.md) for the two-tier model
 (gjesus3 = research-facing working layer; the MRI platform = deep-time raw archive).

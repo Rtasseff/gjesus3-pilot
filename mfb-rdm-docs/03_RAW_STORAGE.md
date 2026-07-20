@@ -56,8 +56,8 @@ Organizing by data ecosystem rather than by instrument solves several problems:
 ├── registries/
 │   ├── registry_raw.csv                # Master raw registry, 28 cols (see 06_REGISTRIES)
 │   └── index.html                      # GENERATED researcher "Finder" (global, ~19 MB) —
-│                                       # self-contained searchable index, auto-refreshed at
-│                                       # the end of each successful ingest; not a source of
+│                                       # self-contained searchable index, rebuilt daily by a
+│                                       # scheduled job (per-project on ingest); not a source of
 │                                       # truth, not in git (see 06_REGISTRIES §1.2, tools/FINDER.md).
 │                                       # Each /projects/<proj>/ also gets its own index.html.
 │
