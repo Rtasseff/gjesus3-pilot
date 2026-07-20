@@ -191,6 +191,31 @@ def validate_auto_create_project_block(block):
 # as future dotted paths.
 _LINK_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_.]*)\}")
 
+# The fixed (non-`discovered.*`) context keys a `link_filename:` template may
+# reference, in the order the operator GUI should offer them as palette chips.
+# resolve_link_filename() iterates LINK_FILENAME_REGISTRY_FIELDS directly to
+# build its context, so this list and what actually resolves can never drift —
+# the GUI reads link_filename_token_fields() to build its token palette instead
+# of maintaining a second hand-kept copy. NOTE these flat tokens only resolve in
+# the `link_filename:` field; the registry/condition value fields go through
+# resolve_value(), which substitutes ONLY `discovered.*` references.
+LINK_FILENAME_REGISTRY_FIELDS = (
+    "instrument", "instrument_model", "operator", "data_source",
+    "sample_id", "sample_type", "session_id", "acquisition_datetime",
+    "project_hint", "original_name", "data_ecosystem", "notes",
+)
+# Pipeline-generated context keys also legal in a link_filename template
+# (computed in ingest_raw.py Step 3, not present in cfg_single yet).
+LINK_FILENAME_GENERATED_FIELDS = ("acq_id", "acq_date")
+
+
+def link_filename_token_fields():
+    """Ordered list of the fixed (non-`discovered.*`) field names a
+    `link_filename:` template may reference. The operator GUI turns each into a
+    ``${name}`` palette chip; sourcing the list here guarantees the palette
+    matches what resolve_link_filename() actually substitutes."""
+    return list(LINK_FILENAME_REGISTRY_FIELDS) + list(LINK_FILENAME_GENERATED_FIELDS)
+
 
 def resolve_link_filename(template, cfg_single, acq_id_str, acq_date):
     """Resolve the top-level `link_filename:` YAML field for this case.
@@ -229,11 +254,7 @@ def resolve_link_filename(template, cfg_single, acq_id_str, acq_date):
     discovered = cfg_single.get("discovered") or {}
     for k, v in discovered.items():
         context[f"discovered.{k}"] = "" if v is None else str(v)
-    for k in (
-        "instrument", "instrument_model", "operator", "data_source",
-        "sample_id", "sample_type", "session_id", "acquisition_datetime",
-        "project_hint", "original_name", "data_ecosystem", "notes",
-    ):
+    for k in LINK_FILENAME_REGISTRY_FIELDS:
         if k in cfg_single:
             v = cfg_single[k]
             if k == "original_name" and v:

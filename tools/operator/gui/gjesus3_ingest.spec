@@ -82,6 +82,13 @@ datas += [
     (os.path.join(TOOLS, "operator"), os.path.join("tools", "operator")),
     (os.path.join(TOOLS, "ingest"), os.path.join("tools", "ingest")),
     (os.path.join(TOOLS, "ingest_raw.py"), "tools"),
+    # Finder index generator + its record builder — the GUI worker imports these
+    # to refresh the touched project's index.html after a real ingest (added
+    # 2026-07-20). Not reached by static analysis (imported inside the worker),
+    # so bundle by path like ingest_raw.py; without this the frozen refresh
+    # silently no-ops (the import is caught).
+    (os.path.join(TOOLS, "generate_index.py"), "tools"),
+    (os.path.join(TOOLS, "find_acq.py"), "tools"),
     # MRI remote-pull engine — app.py::_load_ftp_mirror loads it by path from
     # <_MEIPASS>/tools/ftp_mirror.py, so it must be a bundled data file.
     (os.path.join(TOOLS, "ftp_mirror.py"), "tools"),
@@ -94,6 +101,8 @@ hiddenimports = [
     "czifile", "tifffile", "numpy",
     # pipeline modules that may be reached only dynamically.
     "ingest", "ingest_raw",
+    # Finder refresh (imported inside the GUI ingest worker, 2026-07-20).
+    "generate_index", "find_acq",
     # MRI SFTP pull: paramiko is imported LAZILY inside app.py's SFTP endpoints,
     # so static analysis won't see it. Pull it (and its native deps) in by name.
     "paramiko", "cryptography", "bcrypt", "nacl", "cffi",

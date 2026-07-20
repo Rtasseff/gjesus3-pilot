@@ -2,13 +2,14 @@
 
 Plain-language definitions of terms a newcomer (or a chatbot answering on this repo's behalf) hits undefined across the project. Linked from [README.md](README.md) and [mfb-rdm-docs/00_INDEX.md](mfb-rdm-docs/00_INDEX.md). Where a term has a deeper specification, the relevant `mfb-rdm-docs/NN_*.md` module is linked.
 
-_Last Updated: 2026-06-26_
+_Last Updated: 2026-07-17_
 
 ---
 
 ## gjesus3 concepts
 
 - **gjesus3** — The dedicated QNAP NAS (and the research-data-management system built on it) for the MFB group at CIC biomaGUNE. Positioned as the **research-facing working layer** for imaging data in a project's ~5-year active window, *complementing* (not replacing) the instrument platforms' own deep-time raw archives — see [13_GJESUS3_ROLE](mfb-rdm-docs/13_GJESUS3_ROLE.md).
+- **RDM System** — The **operator-facing name for the gjesus3 storage** used throughout the operator ingest GUI. "NAS" is IT jargon most instrument operators don't know, so the UI says "RDM System" (or, on first mention, "the RDM System (gjesus3 storage)") instead. Concretely it is the same QNAP NAS "gjesus3" (`\\GJESUS3\gjesus3\gjesus3-data`, mapped `J:\gjesus3-data` on the data-office workstation) described under **gjesus3** above and in [02_INFRASTRUCTURE](mfb-rdm-docs/02_INFRASTRUCTURE.md). Internal identifiers (`nas_root`, `/api/nas_root`, …) keep the "NAS" name — only operator-visible text changed.
 - **ingest** — The act of bringing one acquisition onto gjesus3: the tooling copies the data into `/raw/`, allocates an [ACQ-ID](#id-schemes), appends a registry row, writes the **sidecar**, **hard-links** it into the relevant project(s) (all defined below). The searchable **Finder** that indexes it is refreshed separately — on a schedule, and per-project on ingest — not as a step of the ingest itself. One ingest = one new acquisition.
 - **acquisition** — One scan / assay = one [ACQ-ID](#id-schemes) = one row in `registry_raw.csv`. The atomic unit gjesus3 tracks. There are ~13,555 acquisitions in `/raw/`.
 - **sidecar** — The per-acquisition `metadata.json` file written next to each acquisition in `/raw/<ACQ-ID>/`. It is the searchable face of an acquisition, holding `user_supplied` fields, the `discovered.*` namespace (below), optional `subject:`/`condition:`/`anatomy:` blocks, and an ecosystem-specific embedded-metadata block. **Immutable after ingest.** Specified in [08_METADATA §4.3](mfb-rdm-docs/08_METADATA.md).

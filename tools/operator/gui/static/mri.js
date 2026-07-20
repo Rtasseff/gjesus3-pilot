@@ -41,7 +41,7 @@ const nasStatus = $("#nas-status");
 let nasValid = false;   // gates the pull — no point pulling to an unusable NAS
 function setNasStatus(valid) {
   nasValid = !!valid;
-  nasStatus.textContent = valid ? "OK" : "not a NAS root";
+  nasStatus.textContent = valid ? "OK" : "not found";
   nasStatus.className = "pill " + (valid ? "ok" : "no");
 }
 async function refreshNas() {
@@ -138,10 +138,15 @@ $("#fb-close").addEventListener("click", fbClose);
 $("#fb-cancel").addEventListener("click", fbClose);
 fb.overlay.addEventListener("click", (e) => { if (e.target === fb.overlay) fbClose(); });
 $("#nas-browse").addEventListener("click", () =>
-  browseInto(nasInput, "Select the destination NAS root (gjesus3-data)", () => saveNas()));
+  browseInto(nasInput, "Select the destination — the RDM System root (gjesus3-data)", () => saveNas()));
 
 // ---------------------------------------------------------------- link field
 const MRI = window.MRI || {};
+// Bare names of the fixed resolver tokens offered as palette chips (instrument,
+// operator, …). Used by resolveLinkExample() so a valid token isn't flagged
+// "unresolved" just because this preview can't compute its value.
+const LINK_TOKEN_NAMES = new Set(
+  (MRI.paletteExtras || []).map((t) => t.replace(/^\$\{|\}$/g, "")));
 const linkField = new TokenField($("#link-field"), { onChange: () => updateLinkExample() });
 linkField.setValue(MRI.linkDefault || "");
 renderPalette($("#link-palette"),
@@ -165,6 +170,9 @@ function resolveLinkExample(template, sample) {
       unresolved = true; return mm;
     }
     if (ref in sample.synth) return sample.synth[ref];
+    // A fixed resolver token that resolves at ingest but which this preview
+    // can't compute — show a <placeholder>, don't flag it as unresolved.
+    if (LINK_TOKEN_NAMES.has(ref)) return "<" + ref + ">";
     unresolved = true; return mm;
   });
   return { text, unresolved };
@@ -207,6 +215,14 @@ function updateProjectMode() {
 projectMode.addEventListener("change", updateProjectMode);
 updateProjectMode();
 
+// Short human label for the chosen destination project (for the completion modal).
+function projectDestLabel() {
+  const mode = projectMode.value;
+  if (mode === "fixed") return projectHint.value.trim() || "(a specific project)";
+  if (mode === "none") return "No project (no links created)";
+  return "Per animal-protocol code (auto)";
+}
+
 // ---------------------------------------------------------------- payload
 function buildPayload() {
   const mode = projectMode.value;
@@ -235,7 +251,7 @@ function renderCollisions(cols, existing) {
     ).join("") + "</ul>");
   }
   if (existing && existing.length) {
-    parts.push(`<strong>⚠ ${existing.length} link target(s) already exist on the NAS</strong> for a different acquisition — ingesting would collide with a previously-linked scan: ${existing.slice(0, 6).map((e) => `<code>${esc(e.link_filename)}</code>`).join(", ")}${existing.length > 6 ? " …" : ""}`);
+    parts.push(`<strong>⚠ ${existing.length} link target(s) already exist on the RDM System</strong> for a different acquisition — ingesting would collide with a previously-linked scan: ${existing.slice(0, 6).map((e) => `<code>${esc(e.link_filename)}</code>`).join(", ")}${existing.length > 6 ? " …" : ""}`);
   }
   box.innerHTML = parts.join("<br>");
   box.style.display = parts.length ? "" : "none";
@@ -424,11 +440,22 @@ async function ingest() {
       const resEl = $("#result");
       if (r.dry_run) {
         resEl.className = "summary dry-done";
-        resEl.innerHTML = `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the NAS.</strong> ` +
+        resEl.innerHTML = `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the RDM System.</strong> ` +
           `${r.ok}/${r.total} scans WOULD be ingested. Uncheck “Dry-run” and run again to ingest for real.`;
       } else {
         resEl.className = "summary live-done";
-        resEl.innerHTML = `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} scans written</strong> to ${esc(nasInput.value || "the NAS")}.`;
+        resEl.innerHTML = `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} scans written</strong> to ${esc(nasInput.value) || "the RDM System"}.`;
+        // A real ingest also raises an unmissable completion modal. Skip a 0-scan run.
+        if (r.total > 0 && window.showCompletionModal) {
+          showCompletionModal({
+            ok: r.ok, total: r.total, unit: "scans",
+            failedAcqIds: (r.results || []).filter((x) => !x.ok).map((x) => x.acq_id),
+            rows: [
+              { label: "Destination", value: nasInput.value || "the RDM System" },
+              { label: "Project", value: projectDestLabel() },
+            ],
+          });
+        }
       }
     },
   });
@@ -446,7 +473,7 @@ function updateDryState() {
   const on = dry.checked;
   commit.classList.toggle("safe", on);
   commit.classList.toggle("live", !on);
-  dryState.textContent = on ? "Safe — nothing will be written." : "LIVE — Ingest will write to the NAS.";
+  dryState.textContent = on ? "Safe — nothing will be written." : "LIVE — Ingest will write to the RDM System.";
   if (dryBanner) dryBanner.hidden = !on;
 }
 dry.addEventListener("change", updateDryState);
@@ -535,7 +562,7 @@ async function sftpPull() {
     sftp.logWrap.hidden = false;
     sftp.result.className = "summary";
     sftp.result.innerHTML = '<span style="color:var(--bad)">⚠ Set a valid ' +
-      'destination NAS at the top of the page first — it must be a folder that ' +
+      'destination (the RDM System) at the top of the page first — it must be a folder that ' +
       'contains a <code>registries/</code> subfolder. Fix it, then pull.</span>';
     nasInput.focus();
     return;
