@@ -56,7 +56,7 @@ Researchers who do most of their analysis on local machines or other drives can 
     └── proj-ipf-biomarkers/
         ├── _project.yaml
         ├── provenance.csv
-        ├── index.html                  # per-project searchable finder (auto-refreshed each ingest — see tools/FINDER.md)
+        ├── index.html                  # per-project searchable finder (refreshed on ingest into this project — see tools/FINDER.md)
         ├── raw_linked/                 # hard links to raw acquisitions (NOT shortcuts)
         │   └── ...                     # (created by ingest_raw.py when project_hint set — see 10_TOOLS §2.1.1;
         │                               #  link filename comes from the per-instrument `link_filename:`

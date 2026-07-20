@@ -62,12 +62,12 @@ This document specifies the scripts and tools needed to support the data managem
                       │   (one hard link for a file primary; a real folder of         │
                       │    per-file hard links for a <ACQ-ID>.data folder primary)    │
                       │                      ▼                                        │
-                      │              FINDER REFRESH   (end of successful batch)       │
+                      │              FINDER REFRESH   (opt-in or scheduled job)       │
                       │   registries/index.html + per-project index.html             │
                       └─────────────────────────────────────────────────────────────┘
 ```
 
-The **registry append is the commit point** — everything before it rolls back cleanly on failure; the hard-link and Finder-refresh steps are post-commit and non-fatal (a failure WARNs, never aborts). See the per-step contract in "Two Ingest Modes" and the locking guarantees in the Registry-integrity note.
+The **registry append is the commit point** — everything before it rolls back cleanly on failure; the hard-link and (opt-in) Finder-refresh steps are post-commit and non-fatal (a failure WARNs, never aborts). See the per-step contract in "Two Ingest Modes" and the locking guarantees in the Registry-integrity note.
 
 **Architecture:**
 ```
@@ -417,7 +417,7 @@ anatomy:                         # organism only
 11. Append row to `registry_raw.csv` (all fields populated, including `original_name`)
 12. Append entry to `registries/ingest_manifest.csv` (always); if `--project` is set (or `project_hint` resolves), also create a hard link in `<project>/raw_linked/` to the raw primary — a single hard link for a file primary, or a real folder of per-file hard links for a `<ACQ-ID>.data` folder primary (see §2.1.1)
 13. Report summary
-14. **Auto-refresh the researcher Finder** — at the end of a successful (non-dry-run) batch, regenerate `registries/index.html` (the self-contained searchable view of `registry_raw` ⋈ `registry_projects` — see [`tools/FINDER.md`](../tools/FINDER.md)). **Non-fatal:** a refresh failure logs a WARN but does **not** fail the ingest; the index can always be rebuilt manually with [`tools/generate_index.py`](../tools/generate_index.py).
+14. **Refresh the researcher Finder (opt-in)** — a CLI batch refreshes nothing by default; the global `registries/index.html` is kept fresh by a scheduled job and each project's index is refreshed when an ingest writes into it (see [`tools/FINDER.md`](../tools/FINDER.md) → *Keeping it fresh*). Pass `--refresh-index projects` (touched project(s) only) or `--refresh-index full` (global + all per-project, the self-contained searchable view of `registry_raw` ⋈ `registry_projects`) to regenerate at the end of a successful (non-dry-run) batch. **Non-fatal:** a refresh failure logs a WARN but does **not** fail the ingest; the index can always be rebuilt manually with [`tools/generate_index.py`](../tools/generate_index.py).
 
 > **Registry integrity (2026-06-11).** Step 5 (ACQ-ID allocation) and step 11 (registry append) are each serialized by an atomic lockfile mutex (`tools/ingest/locking.py`; `registries/.registry.lock` + the `.acq_id_seq.json` high-water reservation) so concurrent ingests can't mint a duplicate ACQ-ID or tear a CSV line — the lock is held briefly, **never across the copy**. The **registry append is the commit point**: any failure between the copy and the append rolls back the partially-written acquisition folder so a re-run starts clean, and `--delete-source` runs only *after* the append succeeds. Every CSV append (registry, manifest, provenance, pending) routes through the BOM-tolerant, trailing-newline-safe `tools/ingest/csv_safe.py`. See [06_REGISTRIES §2.7](06_REGISTRIES.md).
 

@@ -35,7 +35,7 @@ python tools/ingest_raw.py -i
 
 The script is idempotent: re-running the same config skips acquisitions already in the registry (matched by `acquisition_date` + `original_name`). Safe to re-run after a partial failure.
 
-After a successful (non-dry-run) batch the script **auto-refreshes the researcher Finder** — it regenerates `registries/index.html` (the searchable HTML view researchers double-click over SMB; see [`tools/FINDER.md`](FINDER.md)). This is **non-fatal**: a refresh failure logs a WARN but does not fail the ingest, and you can always rebuild the index by hand with `tools/generate_index.py`.
+By default a CLI ingest does **not** touch the researcher Finder. The global `registries/index.html` is kept fresh by a **scheduled job**, and each project's `index.html` is refreshed when an ingest writes into it (see [`tools/FINDER.md`](FINDER.md) → *Keeping it fresh*). Pass **`--refresh-index projects`** to regenerate only the project(s) this run touched, or **`--refresh-index full`** to rebuild the global index + every per-project index at the end of a successful (non-dry-run) batch. The refresh is **non-fatal** (a failure logs a WARN but never fails the ingest), and you can always rebuild by hand with `tools/generate_index.py`.
 
 ---
 

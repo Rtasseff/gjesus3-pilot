@@ -146,7 +146,7 @@ operator's batch folder to a searchable, project-linked acquisition is:
    researcher-name stopgap — PROJ-05). A hard link opens like the real file but
    takes no extra space.
 5. **Finder.** The Finder (`registries/index.html` global + the project's own
-   `index.html`) auto-refreshes, so the acquisition is immediately searchable.
+   `index.html`): the project's index is refreshed on ingest (the global index on a schedule — see [`tools/FINDER.md`](../../tools/FINDER.md)), so the acquisition is searchable there right away.
 
 For the full operator workflow see [`START_HERE.md`](../../START_HERE.md) and
 [`tools/INGEST_CLI.md`](../../tools/INGEST_CLI.md); the system map is

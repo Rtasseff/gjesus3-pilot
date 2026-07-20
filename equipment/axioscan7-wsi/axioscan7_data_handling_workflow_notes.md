@@ -371,7 +371,7 @@ project-linked acquisition is:
    `AE-biomeGUNE-<project>` animal-project code). A hard link opens like the real
    file but takes no extra space.
 5. **Finder.** The Finder (`registries/index.html` global + the project's own
-   `index.html`) auto-refreshes, so the slide is immediately searchable by sample,
+   `index.html`): the project's index is refreshed on ingest (the global index on a schedule — see [`tools/FINDER.md`](../../tools/FINDER.md)), so the slide is immediately searchable by sample,
    source animal, stain, project, etc.
 
 This is the system path that addresses the **risks/weaknesses** flagged above

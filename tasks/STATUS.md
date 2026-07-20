@@ -67,8 +67,10 @@ MRI ~10,314, Cell Observer ~1,739, LSM 900 ~805, AxioScan 7 ~565, Nuclear Imagin
   and [`../tools/OPERATOR_FAQ.md`](../tools/OPERATOR_FAQ.md).
 - **Researcher Finder — `registries/index.html`** (self-contained searchable index
   of the registry, ~19 MB) is **live since 2026-06-23** — a global index plus a
-  per-project `index.html` in each project folder, auto-refreshed at the end of
-  every successful ingest. Researchers double-click it over SMB; no server. See
+  per-project `index.html` in each project folder. Researchers double-click it over
+  SMB; no server. **Refresh reworked 2026-07-20:** a scheduled global rebuild + a
+  targeted per-project refresh when an ingest writes into a project (CLI opt-in via
+  `--refresh-index`), replacing the old wholesale-rebuild-on-every-ingest. See
   [`../tools/FINDER.md`](../tools/FINDER.md).
 - **Command-line ingest** (`tools/ingest_raw.py` + per-instrument configs) is the
   data-office path for bulk / historical ingest. See
@@ -105,8 +107,11 @@ The genuinely in-flight items (kept tight — everything else is in
     filter (narrow-only); blank-start builder kept; value-field catalogue unified.
   - **Remaining:** a quick live-GUI eyeball of the erase-filter WYSIWYG interaction
     (the ingest path is proven); the operator microscopy pilot can now run on the
-    deployed exe. (Minor: the Finder `index.html` wasn't auto-refreshed by this
-    ingest — carried for a look.)
+    deployed exe. (The Finder `index.html` wasn't auto-refreshed by that GUI
+    ingest — root-caused 2026-07-20: the GUI never called the CLI's refresh path.
+    Fix in progress — a scheduled global rebuild + a targeted per-project refresh;
+    the per-project GUI wiring ships with the next exe build. See
+    [`../tools/FINDER.md`](../tools/FINDER.md).)
 - **Operator pilot test of `gjesus3_ingest.exe`.** Run the frozen exe on a clean
   (no-Python) machine, then a 1–2 friendly-operator pilot per page. The MRI page
   needs, per operator machine: the SFTP credential file `~/.ssh/gjesus3_mri.cred`

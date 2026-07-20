@@ -25,8 +25,8 @@ acquisition under `/raw/DICOM/<year>/<year-month>/ACQ-<date>-<modality>-NNN/`, w
 `metadata.json` sidecar (the `ni:` block, built by `tools/ingest/ni_metadata.py`) and a `checksums.json`.
 Projects reference that raw data by **hard link** (DECIDED + APPLIED 2026-06-02; the older `.lnk`
 Windows-shortcut method is retired) — a project's copy of an acquisition points straight at the
-`<ACQ-ID>.data/` DICOM bundle and costs no extra disk. After a successful ingest the searchable
-[Finder](../../tools/FINDER.md) (`registries/index.html` on the NAS) is refreshed automatically. gjesus3 keeps
+`<ACQ-ID>.data/` DICOM bundle and costs no extra disk. The searchable
+[Finder](../../tools/FINDER.md) (`registries/index.html` on the NAS) is rebuilt on a schedule, and a project's own `index.html` refreshes on ingest. gjesus3 keeps
 only the slim DICOM surface; the Molecubes platform archive on `\\cicmgsp02\gnuclear2$` remains the
 deep-time store for the dropped raw bytes (see [13_GJESUS3_ROLE](../../mfb-rdm-docs/13_GJESUS3_ROLE.md)
 for the two-tier model and [`equipment/INDEX.md`](../INDEX.md) for where NI sits among the instruments).
