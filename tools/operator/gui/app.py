@@ -948,6 +948,28 @@ def _ingest_sse_response(cfg, nas_root, dry_run, stamp, cleanup_dir=None):
                         cb(f"Removed local staging copy: {cleanup_dir}")
                     except OSError as e:
                         cb(f"Could not remove staging {cleanup_dir}: {e}", "WARN")
+                # Refresh the researcher Finder for JUST the project(s) this run
+                # wrote into. The GUI calls the ingest functions directly, so it
+                # bypasses ingest_raw.main's auto-refresh — a GUI ingest otherwise
+                # never updated any index (why an operator's upload was missing
+                # from the project's Finder). Targeted (--project) only: NEVER the
+                # ~18 MB global index (that's the scheduled job's job). Reuses
+                # ingest_raw._touched_project_hints so "which project(s)?" — incl.
+                # a batch spanning several, and an auto-created new project — stays
+                # in one place. Best-effort: an index-refresh failure must never
+                # fail an ingest that already wrote to /raw/.
+                if not dry_run and ok > 0:
+                    try:
+                        import ingest_raw
+                        import generate_index
+                        aids = [aid for aid, good in results if good and aid]
+                        hints = ingest_raw._touched_project_hints(aids, nas_root)
+                        for h in hints:
+                            generate_index.main(["--nas-root", nas_root, "--project", h])
+                        if hints:
+                            cb(f"Refreshed Finder index for project(s): {', '.join(hints)}")
+                    except Exception as e:  # noqa: BLE001 — never fail over a refresh
+                        cb(f"Project index refresh failed (non-fatal): {e}", "WARN")
                 q.put(("done", "INFO", json.dumps({
                     "results": [
                         {"acq_id": aid, "ok": bool(good)}

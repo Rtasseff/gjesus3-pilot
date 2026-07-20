@@ -109,9 +109,34 @@ it), and that the **global** `registries/index.html` is left alone by the GUI.
   rebases after this branch merges.
 
 ## Done when
-- [ ] `main` merged in; `generate_index.py --project` available on the branch.
-- [ ] GUI worker refreshes the touched project(s)' index after a real ingest (both `/` and
-      `/mri`), non-fatally, never rebuilding the global index.
-- [ ] Spec bundles `generate_index.py` + `find_acq.py`; hiddenimports updated.
+- [x] `main` merged in; `generate_index.py --project` available on the branch.
+      *(Merged `main` @ `12d7aa0`; one conflict in `GLOSSARY.md` resolved — kept the new
+      RDM-System bullet + main's reworded `ingest`/Finder bullet.)*
+- [x] GUI worker refreshes the touched project(s)' index after a real ingest (both `/` and
+      `/mri`), non-fatally, never rebuilding the global index. *(One edit in
+      `_ingest_sse_response`'s `worker()` — both pages funnel through it. `if not dry_run and
+      ok > 0`, reuses `ingest_raw._touched_project_hints`, targeted `--project` only, wrapped
+      so a refresh failure only WARNs.)*
+- [x] Spec bundles `generate_index.py` + `find_acq.py`; hiddenimports updated.
 - [ ] One rebuild ships issues 2/3/4 + this; frozen smoke-test confirms the project index
-      updates on a GUI ingest.
+      updates on a GUI ingest. *(Ryan — the single production rebuild/redeploy per §3.)*
+
+---
+
+## Implementation note (2026-07-20 session)
+
+Folded into `feat/gui-operator-polish` on top of the issue-2/3/4 work; **not yet merged/deployed**.
+Verified from source (no frozen build, no live NAS):
+- `app.py` imports cleanly post-merge; `ingest_raw._touched_project_hints`,
+  `generate_index.main`, and `find_acq.build_records` all resolve in the app's runtime
+  `sys.path` context.
+- **End-to-end against a throwaway NAS** (minimal `registry_raw.csv` + `registry_projects.csv`
+  + a project folder): `_touched_project_hints(['ACQ-TEST-001','ACQ-NOPE'], nas)` →
+  `['PROJ-9001']`; `generate_index.main(['--nas-root', nas, '--project', 'PROJ-9001'])` wrote
+  **only** the project's `index.html` (acq present), left the **global**
+  `registries/index.html` untouched, rc 0.
+- Issues 2/3/4 unregressed after the merge (14 link tokens; both pages render with zero
+  operator-visible "NAS" + the completion modal wired).
+- **Still needs the frozen smoke-test** (§3): confirm the packaged build's import path finds
+  the two newly-bundled modules, and that a real GUI ingest updates the touched project's
+  `index.html` on the NAS while leaving the global index to the scheduled job.
