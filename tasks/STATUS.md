@@ -98,8 +98,7 @@ The genuinely in-flight items (kept tight — everything else is in
   `.bat` sits under a OneDrive path, so pin `tools\` to "Always keep on this device" or
   Files-On-Demand can dehydrate it out from under the scheduler. Verify the first run in
   `%LOCALAPPDATA%\gjesus3\finder_refresh.log` (`python` must be on PATH in that context).
-- **Operator-GUI polish — ✅ LANDED; exe rebuilt + REDEPLOYED (2026-07-20).** Branch
-  `feat/gui-operator-polish` merged to `main`; worktree + branch retired. Four GUI items
+- **Operator-GUI polish — ✅ LANDED; merged to `main` (`97500cb`), exe rebuilt + REDEPLOYED + validated in production (2026-07-20).** Four GUI items
   from the 2026-07-17 microscopy operator test (issues 2/3/4 + the index-refresh addendum):
   (1) the metadata-token palette now offers the **full resolver token set**
   (`original_name`, `instrument`, …) in the builder + both runner palettes + the MRI
@@ -116,16 +115,21 @@ The genuinely in-flight items (kept tight — everything else is in
   (targeted `--project`, never the global index — that's the scheduled job), on both pages,
   best-effort. Merged `main` (finder-refresh foundation) into the branch; spec bundles
   `generate_index.py` + `find_acq.py`.
-  Verified from source (Flask test client, both pages render clean, all GUI JS
-  `node --check`, modal exercised via a DOM stub, resolver + value-field tests green, and the
-  per-project refresh exercised end-to-end against a throwaway NAS — writes the project index,
-  leaves the global index alone).
-  **Deployed:** `gjesus3_ingest.exe` rebuilt from the merged branch and copied to
-  `\\gjesus3\…\tools\`, previous binary preserved as `gjesus3_ingest.exe.old_20260720`;
-  the shipped binary was confirmed to carry the bundled `generate_index` + `find_acq`.
-  Branch `refactor/project-naming` (P) now picks up `main`. Narrative in
-  [`CHANGELOG.md`](../CHANGELOG.md); the temporary handoff + addendum notes were dropped
-  on landing (per the 2026-07-17 precedent).
+  **Rebuilt + deployed:** `gjesus3_ingest.exe` rebuilt (off-OneDrive temp dir) and
+  redeployed to `\\GJESUS3\…\tools\` backup-first (old exe + all registry CSVs backed up
+  off-NAS; staged-copy + rename because a transient SMB lock blocked the in-place overwrite),
+  checksum-verified byte-identical, temp build erased. **Validated in production** through the
+  deployed exe by a real AxioScan ingest of one animal `.czi` into the existing PROJ-0014 —
+  all four fixes confirmed live (tokens, no "NAS", completion modal, and the project
+  `index.html` hash/mtime changed with the new acq present = the refresh fired in-frozen) —
+  then **fully removed** backup-first, every count back to baseline. The removal surfaced the
+  hidden `.acq_id_seq.json` ACQ-ID reservation (ids are never auto-reused), now documented.
+  **Docs:** [`../mfb-rdm-docs/10_TOOLS.md`](../mfb-rdm-docs/10_TOOLS.md) §2.1 gained a
+  **Side-effect inventory** — every file/row an ingest writes + how to reverse each
+  (cross-linked from `INGEST_CLI.md`).
+  Branch + worktree retired; `refactor/project-naming` (P) now builds on `main`. Narrative in
+  [`../CHANGELOG.md`](../CHANGELOG.md); the temporary handoff + addendum notes were dropped on
+  landing (per the 2026-07-17 precedent).
 - **Operator-GUI fixes landed + VERIFIED IN PRODUCTION, exe redeployed (2026-07-17).**
   Both branches merged to `main`, the fixed `gjesus3_ingest.exe` rebuilt and
   **deployed to the NAS** (`\\gjesus3\…\tools\`; old exe + registries backed up
