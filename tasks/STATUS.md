@@ -71,8 +71,8 @@ MRI ~10,314, Cell Observer ~1,739, LSM 900 ~805, AxioScan 7 ~565, Nuclear Imagin
   SMB; no server. **Refresh reworked 2026-07-20:** a scheduled global rebuild + a
   targeted per-project refresh when an ingest writes into a project (CLI opt-in via
   `--refresh-index`), replacing the old wholesale-rebuild-on-every-ingest. Both
-  paths are live; the daily **global** rebuild is being migrated to the `WorkstationOps`
-  `finder-refresh` op (03:00) from an interim standalone 05:00 task — see §2.
+  paths are live; the daily **global** rebuild now runs via the `WorkstationOps`
+  `finder-refresh` op (03:00) — see §2.
   See [`../tools/FINDER.md`](../tools/FINDER.md).
 - **Command-line ingest** (`tools/ingest_raw.py` + per-instrument configs) is the
   data-office path for bulk / historical ingest. See
@@ -88,19 +88,15 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **Scheduled global Finder rebuild — moving to WorkstationOps; cutover pending (2026-07-24).**
-  The daily global rebuild is being handed to the general workstation-ops app
-  **`WorkstationOps`** (`C:\Users\rtasseff\OneDrive - CIC biomaGUNE\WorkstationOps`) as its
-  `finder-refresh` operation — it owns the schedule, run log, health/overdue signal, and
-  failure notification; this repo keeps only the generator (`tools/generate_index.py`). The
-  op is **built, verified, and committed** in WorkstationOps (validated by a real end-to-end
-  run; that repo's commit `8759673`). An interim standalone task `gjesus3 Finder refresh`
-  (05:00) is still doing the rebuild in the meantime. **Remaining cutover** (data office,
-  from the WorkstationOps dir): (1) unregister the interim `gjesus3 Finder refresh` task;
-  (2) `.\ops schedule finder-refresh` (registers the 03:00 task); (3) delete the now-superseded
-  `tools/scheduled_finder_refresh.bat`. **Order matters — keep the `.bat` until step 1 removes
-  the task that calls it**, or the interim 05:00 run fails on a missing file. Operational
-  detail + the repo-move interdependency: [`../mfb-rdm-docs/11_OPERATIONS.md`](../mfb-rdm-docs/11_OPERATIONS.md) §5.6.
+- **Scheduled global Finder rebuild — ✅ MIGRATED to WorkstationOps + LIVE (2026-07-24).**
+  The daily global rebuild is now owned by the separate **`WorkstationOps`** app
+  (`C:\Users\rtasseff\OneDrive - CIC biomaGUNE\WorkstationOps`, its `finder-refresh` op,
+  daily 03:00; that repo's commit `8759673`) — schedule, run log, health/overdue signal, and
+  failure notification. This repo keeps only the generator (`tools/generate_index.py`).
+  Cutover done: the interim `gjesus3 Finder refresh` 05:00 task was unregistered,
+  `WorkstationOps-finder-refresh` scheduled at 03:00 (verified Ready, next run confirmed), and
+  `tools/scheduled_finder_refresh.bat` deleted. Operational detail + the repo-move
+  interdependency: [`../mfb-rdm-docs/11_OPERATIONS.md`](../mfb-rdm-docs/11_OPERATIONS.md) §5.6.
 - **Operator-GUI polish — ✅ LANDED; merged to `main` (`97500cb`), exe rebuilt + REDEPLOYED + validated in production (2026-07-20).** Four GUI items
   from the 2026-07-17 microscopy operator test (issues 2/3/4 + the index-refresh addendum):
   (1) the metadata-token palette now offers the **full resolver token set**
