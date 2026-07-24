@@ -98,21 +98,19 @@ The Finder is a **static snapshot**, so something has to regenerate it. As of
 writes the ~18 MB global page (plus every per-project page), which is too heavy to do
 inline on every ingest:
 
-- **Global index — a scheduled job (RDM-run).** A daily task rebuilds
+- **Global index — a scheduled job (data office).** A daily task rebuilds
   `registries/index.html` and every per-project `index.html` from the current
-  registry. It runs [`scheduled_finder_refresh.bat`](scheduled_finder_refresh.bat),
-  which calls the generator against the **UNC** share root (not a mapped drive, so it
-  works from a scheduled context where `J:` may be absent) and logs to
-  `%LOCALAPPDATA%\gjesus3\finder_refresh.log`. Register it on the data-office
-  workstation (daily, early morning) with:
-  ```
-  schtasks /Create /TN "gjesus3 Finder refresh" /SC DAILY /ST 05:00 /F /TR "\"C:\Users\rtasseff\OneDrive - CIC biomaGUNE\projects\RDM\highCap\gjesus3-pilot\tools\scheduled_finder_refresh.bat\""
-  ```
-  Run it under your own account. If the box is left logged-in/locked overnight, "run
-  only when user is logged on" is simplest; if it is fully logged out, choose "run
-  whether logged on or not" — the UNC path means neither needs a mapped drive.
-  (`python` must be on PATH in that context; edit the `.bat` to a full python path if
-  not.)
+  registry, reading and writing the NAS over the **UNC** share root (not a mapped
+  drive, so it runs whether or not `J:` is mapped). **Scheduling, logging, and
+  health-checking are owned by the separate `WorkstationOps` app** (its
+  `finder-refresh` operation), on the Data Office workstation daily at **03:00** —
+  this repo owns only the generator (`generate_index.py`). Manage / check it from the
+  WorkstationOps directory: `.\ops schedule finder-refresh` to register,
+  `.\ops status finder-refresh` for freshness. Full operational detail, the health
+  check, and the **repo-move interdependency** live in
+  [`../mfb-rdm-docs/11_OPERATIONS.md`](../mfb-rdm-docs/11_OPERATIONS.md) §5.6.
+  *(An earlier interim `scheduled_finder_refresh.bat` + `schtasks` task is being
+  retired in the cutover — see [`tasks/STATUS.md`](../tasks/STATUS.md) §2.)*
 - **Per-project index — on ingest (the immediacy path).** The operator GUI
   regenerates just the **touched project's** `index.html` right after an ingest, so a
   researcher who uploaded a scan sees it in that project's index within seconds,

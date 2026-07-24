@@ -70,8 +70,9 @@ MRI ~10,314, Cell Observer ~1,739, LSM 900 ~805, AxioScan 7 ~565, Nuclear Imagin
   per-project `index.html` in each project folder. Researchers double-click it over
   SMB; no server. **Refresh reworked 2026-07-20:** a scheduled global rebuild + a
   targeted per-project refresh when an ingest writes into a project (CLI opt-in via
-  `--refresh-index`), replacing the old wholesale-rebuild-on-every-ingest. The
-  per-project path is live; **the daily global task is not yet registered** — see §2.
+  `--refresh-index`), replacing the old wholesale-rebuild-on-every-ingest. Both
+  paths are live; the daily **global** rebuild is being migrated to the `WorkstationOps`
+  `finder-refresh` op (03:00) from an interim standalone 05:00 task — see §2.
   See [`../tools/FINDER.md`](../tools/FINDER.md).
 - **Command-line ingest** (`tools/ingest_raw.py` + per-instrument configs) is the
   data-office path for bulk / historical ingest. See
@@ -87,17 +88,19 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **Scheduled global Finder rebuild — the daily task is NOT yet registered (2026-07-20).**
-  `tools/scheduled_finder_refresh.bat` is committed and smoke-tested and the docs describe
-  the schedule, but no Task Scheduler entry exists on the data-office workstation yet — so
-  the **global** `registries/index.html` currently refreshes only on a manual generator run.
-  (Per-project indexes *are* refreshed automatically on GUI ingest, so a researcher still
-  sees their own upload.) Register it daily 05:00 under Ryan's own account with the
-  `schtasks` one-liner in [`../tools/FINDER.md`](../tools/FINDER.md) *Keeping it fresh* —
-  from **PowerShell** insert `--%` after `schtasks` so the embedded quoting survives. The
-  `.bat` sits under a OneDrive path, so pin `tools\` to "Always keep on this device" or
-  Files-On-Demand can dehydrate it out from under the scheduler. Verify the first run in
-  `%LOCALAPPDATA%\gjesus3\finder_refresh.log` (`python` must be on PATH in that context).
+- **Scheduled global Finder rebuild — moving to WorkstationOps; cutover pending (2026-07-24).**
+  The daily global rebuild is being handed to the general workstation-ops app
+  **`WorkstationOps`** (`C:\Users\rtasseff\OneDrive - CIC biomaGUNE\WorkstationOps`) as its
+  `finder-refresh` operation — it owns the schedule, run log, health/overdue signal, and
+  failure notification; this repo keeps only the generator (`tools/generate_index.py`). The
+  op is **built, verified, and committed** in WorkstationOps (validated by a real end-to-end
+  run; that repo's commit `8759673`). An interim standalone task `gjesus3 Finder refresh`
+  (05:00) is still doing the rebuild in the meantime. **Remaining cutover** (data office,
+  from the WorkstationOps dir): (1) unregister the interim `gjesus3 Finder refresh` task;
+  (2) `.\ops schedule finder-refresh` (registers the 03:00 task); (3) delete the now-superseded
+  `tools/scheduled_finder_refresh.bat`. **Order matters — keep the `.bat` until step 1 removes
+  the task that calls it**, or the interim 05:00 run fails on a missing file. Operational
+  detail + the repo-move interdependency: [`../mfb-rdm-docs/11_OPERATIONS.md`](../mfb-rdm-docs/11_OPERATIONS.md) §5.6.
 - **Operator-GUI polish — ✅ LANDED; merged to `main` (`97500cb`), exe rebuilt + REDEPLOYED + validated in production (2026-07-20).** Four GUI items
   from the 2026-07-17 microscopy operator test (issues 2/3/4 + the index-refresh addendum):
   (1) the metadata-token palette now offers the **full resolver token set**
