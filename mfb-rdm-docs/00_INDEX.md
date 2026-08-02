@@ -6,7 +6,7 @@
 
 **Status:** ✅ **TRUE PRODUCTION** (active since the 2026-06-10 restart). Live scale: ~13,555 acquisitions in `/raw/`, ~50 projects (each hard-linked to its raw data), ~715 subjects in `registry_subjects.csv`; `publications/` deferred (empty).
 
-**Last Updated:** 2026-07-20 — Finder refresh reworked: the wholesale rebuild-on-every-ingest is replaced by a scheduled global rebuild + a targeted per-project refresh on ingest ([tools/FINDER.md](../tools/FINDER.md)), CLI opt-in via `--refresh-index`. Recent index-level milestones are tabled under [Version History](#version-history) below; the full dated history lives in [CHANGELOG.md](../CHANGELOG.md).
+**Last Updated:** 2026-07-24 — scheduled global Finder rebuild handed to the separate **WorkstationOps** app (`finder-refresh` op); this repo keeps only the generator. Boundary, health check, and the repo-move interdependency are in [11_OPERATIONS §5.6](11_OPERATIONS.md). Recent index-level milestones are tabled under [Version History](#version-history) below; the full dated history lives in [CHANGELOG.md](../CHANGELOG.md).
 
 **Newcomer pointers:** [README.md](../README.md) (3-role gateway) · [RESEARCHER_GUIDE.md](../RESEARCHER_GUIDE.md) (researchers) · [START_HERE.md](../START_HERE.md) (operators) · [GLOSSARY.md](../GLOSSARY.md) (terms) · [CHANGELOG.md](../CHANGELOG.md) (history).
 

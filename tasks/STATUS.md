@@ -70,8 +70,9 @@ MRI ~10,314, Cell Observer ~1,739, LSM 900 ~805, AxioScan 7 ~565, Nuclear Imagin
   per-project `index.html` in each project folder. Researchers double-click it over
   SMB; no server. **Refresh reworked 2026-07-20:** a scheduled global rebuild + a
   targeted per-project refresh when an ingest writes into a project (CLI opt-in via
-  `--refresh-index`), replacing the old wholesale-rebuild-on-every-ingest. The
-  per-project path is live; **the daily global task is not yet registered** — see §2.
+  `--refresh-index`), replacing the old wholesale-rebuild-on-every-ingest. Both
+  paths are live; the daily **global** rebuild now runs via the `WorkstationOps`
+  `finder-refresh` op (03:00) — see §2.
   See [`../tools/FINDER.md`](../tools/FINDER.md).
 - **Command-line ingest** (`tools/ingest_raw.py` + per-instrument configs) is the
   data-office path for bulk / historical ingest. See
@@ -87,19 +88,16 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **Scheduled global Finder rebuild — the daily task is NOT yet registered (2026-07-20).**
-  `tools/scheduled_finder_refresh.bat` is committed and smoke-tested and the docs describe
-  the schedule, but no Task Scheduler entry exists on the data-office workstation yet — so
-  the **global** `registries/index.html` currently refreshes only on a manual generator run.
-  (Per-project indexes *are* refreshed automatically on GUI ingest, so a researcher still
-  sees their own upload.) Register it daily 05:00 under Ryan's own account with the
-  `schtasks` one-liner in [`../tools/FINDER.md`](../tools/FINDER.md) *Keeping it fresh* —
-  from **PowerShell** insert `--%` after `schtasks` so the embedded quoting survives. The
-  `.bat` sits under a OneDrive path, so pin `tools\` to "Always keep on this device" or
-  Files-On-Demand can dehydrate it out from under the scheduler. Verify the first run in
-  `%LOCALAPPDATA%\gjesus3\finder_refresh.log` (`python` must be on PATH in that context).
-- **Operator-GUI polish — ✅ LANDED; exe rebuilt + REDEPLOYED (2026-07-20).** Branch
-  `feat/gui-operator-polish` merged to `main`; worktree + branch retired. Four GUI items
+- **Scheduled global Finder rebuild — ✅ MIGRATED to WorkstationOps + LIVE (2026-07-24).**
+  The daily global rebuild is now owned by the separate **`WorkstationOps`** app
+  (`C:\Users\rtasseff\OneDrive - CIC biomaGUNE\WorkstationOps`, its `finder-refresh` op,
+  daily 03:00; that repo's commit `8759673`) — schedule, run log, health/overdue signal, and
+  failure notification. This repo keeps only the generator (`tools/generate_index.py`).
+  Cutover done: the interim `gjesus3 Finder refresh` 05:00 task was unregistered,
+  `WorkstationOps-finder-refresh` scheduled at 03:00 (verified Ready, next run confirmed), and
+  `tools/scheduled_finder_refresh.bat` deleted. Operational detail + the repo-move
+  interdependency: [`../mfb-rdm-docs/11_OPERATIONS.md`](../mfb-rdm-docs/11_OPERATIONS.md) §5.6.
+- **Operator-GUI polish — ✅ LANDED; merged to `main` (`97500cb`), exe rebuilt + REDEPLOYED + validated in production (2026-07-20).** Four GUI items
   from the 2026-07-17 microscopy operator test (issues 2/3/4 + the index-refresh addendum):
   (1) the metadata-token palette now offers the **full resolver token set**
   (`original_name`, `instrument`, …) in the builder + both runner palettes + the MRI
@@ -116,16 +114,21 @@ The genuinely in-flight items (kept tight — everything else is in
   (targeted `--project`, never the global index — that's the scheduled job), on both pages,
   best-effort. Merged `main` (finder-refresh foundation) into the branch; spec bundles
   `generate_index.py` + `find_acq.py`.
-  Verified from source (Flask test client, both pages render clean, all GUI JS
-  `node --check`, modal exercised via a DOM stub, resolver + value-field tests green, and the
-  per-project refresh exercised end-to-end against a throwaway NAS — writes the project index,
-  leaves the global index alone).
-  **Deployed:** `gjesus3_ingest.exe` rebuilt from the merged branch and copied to
-  `\\gjesus3\…\tools\`, previous binary preserved as `gjesus3_ingest.exe.old_20260720`;
-  the shipped binary was confirmed to carry the bundled `generate_index` + `find_acq`.
-  Branch `refactor/project-naming` (P) now picks up `main`. Narrative in
-  [`CHANGELOG.md`](../CHANGELOG.md); the temporary handoff + addendum notes were dropped
-  on landing (per the 2026-07-17 precedent).
+  **Rebuilt + deployed:** `gjesus3_ingest.exe` rebuilt (off-OneDrive temp dir) and
+  redeployed to `\\GJESUS3\…\tools\` backup-first (old exe + all registry CSVs backed up
+  off-NAS; staged-copy + rename because a transient SMB lock blocked the in-place overwrite),
+  checksum-verified byte-identical, temp build erased. **Validated in production** through the
+  deployed exe by a real AxioScan ingest of one animal `.czi` into the existing PROJ-0014 —
+  all four fixes confirmed live (tokens, no "NAS", completion modal, and the project
+  `index.html` hash/mtime changed with the new acq present = the refresh fired in-frozen) —
+  then **fully removed** backup-first, every count back to baseline. The removal surfaced the
+  hidden `.acq_id_seq.json` ACQ-ID reservation (ids are never auto-reused), now documented.
+  **Docs:** [`../mfb-rdm-docs/10_TOOLS.md`](../mfb-rdm-docs/10_TOOLS.md) §2.1 gained a
+  **Side-effect inventory** — every file/row an ingest writes + how to reverse each
+  (cross-linked from `INGEST_CLI.md`).
+  Branch + worktree retired; `refactor/project-naming` (P) now builds on `main`. Narrative in
+  [`../CHANGELOG.md`](../CHANGELOG.md); the temporary handoff + addendum notes were dropped on
+  landing (per the 2026-07-17 precedent).
 - **Operator-GUI fixes landed + VERIFIED IN PRODUCTION, exe redeployed (2026-07-17).**
   Both branches merged to `main`, the fixed `gjesus3_ingest.exe` rebuilt and
   **deployed to the NAS** (`\\gjesus3\…\tools\`; old exe + registries backed up

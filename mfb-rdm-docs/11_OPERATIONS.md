@@ -335,6 +335,25 @@ cross-platform):
 `PYTHONPATH=tools python tools/backfill_pending_dicom.py --nas-root J:/gjesus3-data --dry-run`
 reporting 0 to add means it holds.
 
+### 5.6 Scheduled Finder refresh — global index rebuild (WorkstationOps)
+
+> **Status:** 🕗 Cutover in progress (2026-07-24). The replacement scheduled job is built and committed in **WorkstationOps**; an interim standalone task keeps running until the cutover step in [`tasks/STATUS.md`](../tasks/STATUS.md) §2 completes.
+
+**What.** The researcher Finder (`registries/index.html` global page + every per-project `index.html`) is a **static snapshot**, so a scheduled job rebuilds it daily from the live registry. See [`tools/FINDER.md`](../tools/FINDER.md) *Keeping it fresh* for the two-tier design (scheduled global rebuild + per-project refresh on GUI ingest).
+
+**Where it runs.** On the **Data Office Windows workstation (rtasseff)**, under Ryan's own account, **daily at 03:00**. The workstation must be logged in (the task runs in the interactive-logon context); it reads and writes the NAS over the UNC `\\GJESUS3\gjesus3\gjesus3-data`, so no drive mapping is required. (03:00 is safe here — unlike some other workstation jobs the QNAP is always mounted with no maintenance window.)
+
+**Who owns what (cross-repo boundary).** Scheduling, run-logging, health/overdue signalling, and failure notification live in a **separate general workstation-operations app, `WorkstationOps`** (`C:\Users\rtasseff\OneDrive - CIC biomaGUNE\WorkstationOps`), as its `finder-refresh` operation. **This repo owns only the generator** — `tools/generate_index.py` (how a Finder is built from the registry). WorkstationOps invokes it directly; there is no `.bat` shim in between.
+
+> **⚠️ Interdependency — read before moving this repo.** WorkstationOps hard-codes the path to *this* repository in `config\finder-refresh.conf.ps1` (the `$GJESUS3_REPO` variable). **If you move or rename the gjesus3-pilot working tree on this workstation, update that one line**, or the 03:00 rebuild silently stops. `.\ops verify finder-refresh` (from the WorkstationOps dir) checks the path and fails loudly if it is stale — run it after any repo move. This is the only external dependency on this repo's on-disk location.
+
+**Health check (data office)** — from the WorkstationOps directory:
+- `.\ops status finder-refresh` — reports the published index's build time; **STALE** if older than 30h (a missed daily run), and a failed scheduled run raises a pending flag + tray notification.
+- Researchers see the same freshness directly: the Finder page footer stamps `generated <YYYY-MM-DD HH:MM> UTC`.
+- Run log: `WorkstationOps\logs\finder-refresh-<date>.log`.
+
+**Not this job.** The **per-project** index is refreshed immediately by the operator GUI on each ingest (targeted `--project`), independent of this schedule — so a just-uploaded scan appears in its project index within seconds without waiting for 03:00. Only the ~19 MB global page depends on this scheduled job.
+
 ---
 
 ## 6. Compliance and Enforcement

@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-07-20
 
 ---
 
@@ -67,7 +67,7 @@ This document specifies the scripts and tools needed to support the data managem
                       └─────────────────────────────────────────────────────────────┘
 ```
 
-The **registry append is the commit point** — everything before it rolls back cleanly on failure; the hard-link and (opt-in) Finder-refresh steps are post-commit and non-fatal (a failure WARNs, never aborts). See the per-step contract in "Two Ingest Modes" and the locking guarantees in the Registry-integrity note.
+The **registry append is the commit point** — everything before it rolls back cleanly on failure; the hard-link and (opt-in) Finder-refresh steps are post-commit and non-fatal (a failure WARNs, never aborts). See the per-step contract in "Two Ingest Modes", the locking guarantees in the Registry-integrity note, and — for the **complete list of every file and row an ingest writes plus how to reverse each** — the [*Side-effect inventory*](#side-effect-inventory-everything-an-ingest-writes-audit-and-reversal-reference) below.
 
 **Architecture:**
 ```
@@ -420,6 +420,27 @@ anatomy:                         # organism only
 14. **Refresh the researcher Finder (opt-in)** — a CLI batch refreshes nothing by default; the global `registries/index.html` is kept fresh by a scheduled job and each project's index is refreshed when an ingest writes into it (see [`tools/FINDER.md`](../tools/FINDER.md) → *Keeping it fresh*). Pass `--refresh-index projects` (touched project(s) only) or `--refresh-index full` (global + all per-project, the self-contained searchable view of `registry_raw` ⋈ `registry_projects`) to regenerate at the end of a successful (non-dry-run) batch. **Non-fatal:** a refresh failure logs a WARN but does **not** fail the ingest; the index can always be rebuilt manually with [`tools/generate_index.py`](../tools/generate_index.py).
 
 > **Registry integrity (2026-06-11).** Step 5 (ACQ-ID allocation) and step 11 (registry append) are each serialized by an atomic lockfile mutex (`tools/ingest/locking.py`; `registries/.registry.lock` + the `.acq_id_seq.json` high-water reservation) so concurrent ingests can't mint a duplicate ACQ-ID or tear a CSV line — the lock is held briefly, **never across the copy**. The **registry append is the commit point**: any failure between the copy and the append rolls back the partially-written acquisition folder so a re-run starts clean, and `--delete-source` runs only *after* the append succeeds. Every CSV append (registry, manifest, provenance, pending) routes through the BOM-tolerant, trailing-newline-safe `tools/ingest/csv_safe.py`. See [06_REGISTRIES §2.7](06_REGISTRIES.md).
+
+#### Side-effect inventory: everything an ingest writes (audit and reversal reference)
+
+One acquisition touches all of the following. Everything up to the registry append (the **commit point**, #3) auto-rolls-back on failure; the rest is post-commit and non-fatal (a failure WARNs, never aborts). Use this list when auditing an ingest or reversing one.
+
+| # | Location (under `<nas_root>/`) | When | Condition | Reverse by |
+|---|---|---|---|---|
+| 1 | `raw/<ECO>/<YYYY>/<YYYY-MM>/<ACQ-ID>/` — the primary (a file, or an `<ACQ-ID>.data/` folder) **+ `metadata.json` + `checksums.json` + `README.txt`** | Steps 6–10 | always | delete the folder |
+| 2 | `registries/.acq_id_seq.json` — high-water bumped for the `ACQ-<YYYYMMDD>-<INST>-` prefix (hidden dotfile; skipped by `*.csv` globs) | Step 5 | always | **not auto-freed.** The seq stays reserved even after the row is deleted — **ids are never reused by design** (a removed acq leaves a gap). To fully reset a removed *test* so the id can be reused, delete that prefix key by hand (safe only once the acq is fully purged) |
+| 3 | `registries/registry_raw.csv` — **one row** (this is the **commit point**) | Step 11 | always | remove the `acq_id` row |
+| 4 | `registries/ingest_manifest.csv` — one row (`acq_id, original_name, canonical_path`) | Step 12 | always | remove the `acq_id` row |
+| 5 | `registries/registry_subjects.csv` — one subject row **upserted** (created new, or gap-merged into an existing subject; one row per subject, `last_updated` bumped) | Step 10b | `sample_type ∈ {organism, tissue}` **and** a subject resolves (DB lookup or an operator `subject:` block) | remove the row **only if it was newly created** — a subject shared with other acqs must stay |
+| 6 | `registries/pending_subject_metadata.csv` — one recovery row (subject `source: pending-db`) | Step 8.4 | **only** on a DB miss / no-credentials | remove the `acq_id` row |
+| 7 | `projects/<proj>/raw_linked/<link_filename>` — hard link (a file, or a real folder of per-file hard links for a `.data` primary) | Step 12 | `--project` / `project_hint` resolves to an **existing** project | delete the link |
+| 8 | `projects/<proj>/provenance.csv` — one `FILE-NNNN` row for the link (`input_refs=<acq_id>`) | Step 12 | as #7 | remove that row |
+| 9 | `projects/<proj>/index.html` — targeted per-project regenerate | Step 14 | opt-in on the CLI (`--refresh-index projects`); **automatic in the operator GUI** | regenerate after removal: `generate_index.py --nas-root … --project <PROJ-ID>` |
+| 10 | **NEW** `projects/<proj>/` folder + `_project.yaml` + a `registry_projects.csv` row | Step 9.5 | first ingest only, **and** `project_hint` names a **non-existent** project **and** `ingest.auto_create_projects` is on | remove the folder + the `registry_projects` row (a much larger side effect — avoid it by targeting an existing project) |
+
+The **global** `registries/index.html` is **not** written per-ingest — a scheduled job owns it ([`tools/FINDER.md`](../tools/FINDER.md)). `--delete-source` (opt-in, post-commit) removes the *staging source*, not a NAS write.
+
+> **Reversing a committed acquisition** (e.g. a temporary test) is a **Data-Office manual, backup-first** operation — there is deliberately **no `delete-acquisition` tool** (see the "Don't hand-edit registries" rule in [`INGEST_CLI.md`](../tools/INGEST_CLI.md)). Snapshot the touched files off-NAS first, then reverse the rows above that apply, matched by `acq_id` (and the link name), using byte-exact line removal so the other rows are untouched; verify every count returns to baseline. Row #2 (the reservation prefix) is the one step that is optional and a deliberate deviation from the never-reuse rule — reset it only for a full *test* reversion, never for a real acquisition.
 
 **Lightweight Mode (`--lightweight`) — per acquisition:**
 1. Load + validate config (fewer required fields)
