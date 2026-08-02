@@ -454,10 +454,12 @@ def verify(nas_root):
     # The raw->projects join must still resolve for every row.
     ids = {(r.get("project_id") or "").strip() for r in rows}
     unresolved, total = set(), 0
+    raw_by_acq = {}
     with open(os.path.join(regs, "registry_raw.csv"), "r",
               encoding="utf-8-sig", newline="") as f:
         for row in csv.DictReader(f):
             total += 1
+            raw_by_acq[(row.get("acq_id") or "").strip()] = row
             v = (row.get(NEW_RAW_COL) or "").strip()
             if v and v not in ids:
                 unresolved.add(v)
@@ -482,23 +484,53 @@ def verify(nas_root):
             if os.path.isdir(rec) else [])
     ck(not left, f"NAS recipes cleared ({len(left)} left)")
 
-    # Hard links: a spot-check that the project copy is still the same inode as
-    # /raw. A folder rename cannot break this, so a failure means something else
-    # moved the data.
+    # Hard links: prove the project copy is still the SAME FILE as the one in
+    # /raw. A parent-directory rename cannot break a hard link, so this is a
+    # safety net rather than a likely failure — but it has to be checked with a
+    # method that works here. `st_nlink` and `fsutil hardlink list` BOTH fail
+    # over this SMB share (fsutil returns "Error 50: not supported", st_nlink
+    # always reads 1), so a link-count test reports false failures. Instead
+    # compare file IDENTITY (samefile + file index), pairing each link with its
+    # acquisition through the project's provenance.csv — pairing by directory
+    # order silently compares one acq's raw file against another acq's link.
     checked = same = 0
-    for r in rows[:60]:
-        rl = os.path.join(projects_dir, r[NEW_PROJ_COL], "raw_linked")
-        if not os.path.isdir(rl):
+    mismatched = []
+    for r in rows:
+        pdir = os.path.join(projects_dir, r[NEW_PROJ_COL])
+        prov = os.path.join(pdir, "provenance.csv")
+        if not os.path.isfile(prov):
             continue
-        for entry in sorted(os.listdir(rl))[:1]:
-            path = os.path.join(rl, entry)
-            if os.path.isfile(path):
-                checked += 1
-                if os.stat(path).st_nlink > 1:
-                    same += 1
-    ck(checked == 0 or same == checked,
-       f"hard links intact — {same}/{checked} spot-checked link(s) still "
-       f"share their inode with /raw")
+        with open(prov, "r", encoding="utf-8-sig", newline="") as f:
+            prov_rows = list(csv.DictReader(f))
+        for prow in prov_rows[:3]:              # sample a few per project
+            acq = (prow.get("input_refs") or "").strip()
+            link = os.path.join(pdir, (prow.get("output_path") or "").replace("/", os.sep))
+            raw_row = raw_by_acq.get(acq)
+            if not raw_row or not os.path.exists(link):
+                continue
+            prim = os.path.join(nas_root,
+                                raw_row["canonical_path"].strip("/").replace("/", os.sep),
+                                raw_row.get("primary_file_name", ""))
+            if not os.path.exists(prim):
+                continue
+            if os.path.isdir(prim) and os.path.isdir(link):
+                inner = [x for x in sorted(os.listdir(prim))
+                         if os.path.isfile(os.path.join(prim, x))]
+                if not inner or not os.path.isfile(os.path.join(link, inner[0])):
+                    continue
+                a, b = os.path.join(prim, inner[0]), os.path.join(link, inner[0])
+            elif os.path.isfile(prim) and os.path.isfile(link):
+                a, b = prim, link
+            else:
+                continue
+            checked += 1
+            if os.path.samefile(a, b) and os.stat(a).st_ino == os.stat(b).st_ino:
+                same += 1
+            else:
+                mismatched.append(acq)
+    ck(checked > 0 and not mismatched,
+       f"hard links intact — {same}/{checked} acquisition/link pair(s) are the "
+       f"same file{'' if not mismatched else '; broken: ' + str(mismatched[:3])}")
 
     print("-" * 60)
     print(f"{'ALL CHECKS PASSED' if not fails else str(len(fails)) + ' CHECK(S) FAILED'}\n")
