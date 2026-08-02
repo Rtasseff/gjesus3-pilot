@@ -42,7 +42,7 @@ registry:
   sample_id:            "${discovered.project}_mPCLS_${discovered.slice}"
   sample_type:          tissue
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  project_name:         "AE-biomaGUNE-${discovered.project}"
   notes:                "MFB AxioScan 7 mPCLS (precision-cut lung slices), ${discovered.stain} at ${discovered.czi_objective_mag}x — historical true-prod ingest"
 
 operator: "${discovered.operator}"

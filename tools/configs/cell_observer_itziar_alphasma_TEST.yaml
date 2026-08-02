@@ -39,10 +39,10 @@ registry:
   sample_id:            "${discovered.cell_line}_${discovered.condition}"
   sample_type:          cells
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "${discovered.researcher}-${discovered.experiment}"
+  project_name:         "${discovered.researcher}-${discovered.experiment}"
   notes:                "TEST INGEST 2026-05-14 - purge after review (Cell Observer cells mode: ${discovered.cell_line} / ${discovered.experiment} / ${discovered.condition} #${discovered.image_num})"
 
 auto_create_project:
   owner:       "${discovered.researcher}"
-  description: "TEST auto-created from Cell Observer cells-mode round-5 (Phase A) — experiment '${discovered.experiment}', cell line ${discovered.cell_line}. Purge after review. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
+  description: "TEST auto-created from Cell Observer cells-mode round-5 (Phase A) — experiment '${discovered.experiment}', cell line ${discovered.cell_line}. Purge after review. PROVISIONAL project_name convention (05_PROJECTS §9 PROJ-05)."
   notes:       "Auto-created on Phase A test ingest 2026-05-14. Will be purged with the rest of the test artifacts."

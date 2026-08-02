@@ -161,7 +161,7 @@ The workflow is **the same four beats for every instrument** — only the share 
 5. **Verify.** Four checks, the same regardless of instrument:
    - **Registry:** open `registry_raw.csv`; confirm **one new row per acquisition**.
    - **Destination:** the folder under `/raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/` contains `metadata.json`, `checksums.json`, and `README.txt`.
-   - **Project link:** if a project was linked, a **hard link** appeared under `/projects/<proj-short-name>/raw_linked/`, named per the config's `link_filename:` (Section B, "link name example"). Since 2026-06-02 this is a real NTFS/SMB **hard link**, not a `.lnk` shortcut — it shows up as an ordinary file (or, for folder-primary acquisitions like MRI/NI, a real folder of per-file hard links) carrying the resolved name, with no extension added.
+   - **Project link:** if a project was linked, a **hard link** appeared under `/projects/<project-name>/raw_linked/`, named per the config's `link_filename:` (Section B, "link name example"). Since 2026-06-02 this is a real NTFS/SMB **hard link**, not a `.lnk` shortcut — it shows up as an ordinary file (or, for folder-primary acquisitions like MRI/NI, a real folder of per-file hard links) carrying the resolved name, with no extension added.
    - **No surprises:** scan the log for any `WARN`/`ERROR` lines and confirm the parsed values look right.
 
 **What NOT to do:**

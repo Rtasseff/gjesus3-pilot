@@ -172,7 +172,7 @@ def backfill(nas_root, *, project=None, acq_id=None, apply=False, force=False,
         aid = row.get("acq_id", "")
         if acq_id and aid != acq_id:
             continue
-        if project and (row.get("project_hint") or "") != project:
+        if project and (row.get("project_id") or "") != project:
             continue
         if (row.get("data_ecosystem") or "").upper() != "MICROSCOPY":
             counts["not-microscopy"] += 1
@@ -232,7 +232,7 @@ def main(argv=None):
     ap.add_argument("--nas-root", required=True,
                     help="NAS root (e.g. J:/gjesus3-data) holding registries/ + raw/.")
     ap.add_argument("--project", default=None,
-                    help="Only process rows with this project_hint.")
+                    help="Only process rows with this project_id (PROJ-XXXX).")
     ap.add_argument("--acq-id", default=None, help="Only process this single ACQ-ID.")
     ap.add_argument("--apply", action="store_true",
                     help="Write changes. Default is a dry-run (touches nothing).")

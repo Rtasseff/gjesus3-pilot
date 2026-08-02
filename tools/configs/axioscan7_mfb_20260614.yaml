@@ -68,7 +68,7 @@ registry:
   sample_id:            "${discovered.project}_${discovered.sample_short}"
   sample_type:          tissue
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  project_name:         "AE-biomaGUNE-${discovered.project}"
   notes:                "MFB AxioScan 7 WSI, historical true-prod ingest (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
 
 # Scope operator (sidecar-only) from the required filename chunk.

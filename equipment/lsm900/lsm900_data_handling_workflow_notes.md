@@ -107,7 +107,7 @@ The LSM 900 and Cell Observer share:
 - Same operator (Ainhize Urkola Arsuaga; Marta also operates Cell Observer).
 - Same `.czi` format → same extractor (`tools/ingest/czi_metadata.py`).
 - Same researcher-as-data-owner registry convention (`researcher: discovered.researcher`; the sidecar `operator:` is the ZEN account `discovered.czi_user` — the person column rename of 2026-06-09).
-- Same project_hint stopgap (researcher-name only — see PROJ-05).
+- Same project-name stopgap (researcher-name only — see PROJ-05).
 
 They differ in:
 - LSM 900 has **simpler path depth**: one batch folder per researcher's experiment (vs Cell Observer's three-level `<researcher>/<cell_line>/<experiment>/` hierarchy).

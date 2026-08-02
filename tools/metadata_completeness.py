@@ -21,14 +21,14 @@ lists rows whose status == "pending" — the recovery backlog.
 
 The report is a per-gap table (acq_id, gap-type, detail) grouped by gap-type,
 followed by counts. An optional --project filter matches the registry
-project_hint (read from registry_raw.csv via ingest.registry).
+project_id (read from registry_raw.csv via ingest.registry).
 
 Read-only: opens the registry, the pending list, and the sidecars for reading
 only. Never writes to the NAS.
 
 Usage:
     python tools/metadata_completeness.py --nas-root J:\\
-    python tools/metadata_completeness.py --nas-root J:\\ --project ae-biomegune-0525
+    python tools/metadata_completeness.py --nas-root J:\\ --project AE-biomaGUNE-0525
     # or rely on the GJESUS3_ROOT env var:
     python tools/metadata_completeness.py
 """
@@ -126,25 +126,24 @@ def sample_type_of(md):
     return (us.get("sample_type") or "").strip().lower()
 
 
-def load_project_hints(nas_root):
-    """Map acq_id -> project_hint from registry_raw.csv (empty dict if absent)."""
+def load_project_ids(nas_root):
+    """Map acq_id -> project_id from registry_raw.csv (empty dict if absent)."""
     reg_path = os.path.join(nas_root, "registries", "registry_raw.csv")
-    hints = {}
+    ids = {}
     for row in registry.read_registry(reg_path):
         acq = (row.get("acq_id") or "").strip()
         if acq:
-            hints[acq] = (row.get("project_hint") or "").strip()
-    return hints
+            ids[acq] = (row.get("project_id") or "").strip()
+    return ids
 
 
 def resolve_project_filter(nas_root, project_filter):
-    """Return the set of acceptable project_hint values (lowercased) for a
-    --project arg that may be a PROJ-XXXX id OR a human short_name.
+    """Return the set of acceptable project_id values (lowercased) for a
+    --project arg that may be a PROJ-XXXX id OR the project's name.
 
-    Mirrors gather_metadata so the two tools agree: a short_name is resolved
-    to its canonical PROJ id via registry_projects.csv, and rows whose hint was
-    left as a raw short_name (canonicalization-failed ingest) still match.
-    Returns None when no filter is given.
+    Mirrors gather_metadata so the two tools agree: a name is resolved to its
+    canonical PROJ id via registry_projects.csv. Returns None when no filter
+    is given.
     """
     if not project_filter:
         return None
@@ -153,13 +152,10 @@ def resolve_project_filter(nas_root, project_filter):
         os.path.join(nas_root, "registries", "registry_projects.csv"))
     ids = {(p.get("project_id") or "").lower(): (p.get("project_id") or "")
            for p in proj_rows}
-    shorts = {(p.get("short_name") or "").lower(): (p.get("project_id") or "")
-              for p in proj_rows}
-    proj_id = ids.get(key) or shorts.get(key) or project_filter
-    accept = {proj_id.lower(), key}
-    accept |= {s for s, pid in shorts.items()
-               if pid and pid.lower() == proj_id.lower()}
-    return accept
+    names = {(p.get("name") or "").lower(): (p.get("project_id") or "")
+             for p in proj_rows}
+    proj_id = ids.get(key) or names.get(key) or project_filter
+    return {proj_id.lower()}
 
 
 def find_sidecar_gaps(acq_id, md):
@@ -291,8 +287,8 @@ def main(argv=None):
              "Must contain a 'registries/' subfolder.")
     p.add_argument(
         "--project", default="",
-        help="Only report acquisitions whose registry project_hint matches "
-             "this value (case-insensitive exact match).")
+        help="Only report acquisitions whose project matches this value — "
+             "a PROJ-XXXX id or the project's name (case-insensitive).")
     args = p.parse_args(argv)
 
     # Keep accented DB values / paths legible on the Windows console; the
@@ -317,7 +313,7 @@ def main(argv=None):
     if project_filter:
         log(f"Project filter: {project_filter}")
 
-    hints = load_project_hints(nas_root)
+    proj_of = load_project_ids(nas_root)
     accept = resolve_project_filter(nas_root, project_filter)  # None if no filter
 
     rows = []
@@ -326,16 +322,16 @@ def main(argv=None):
     scanned_ids = set()
     for acq, _md_path, md in walk_raw(nas_root):
         total += 1
-        if accept is not None and hints.get(acq, "").lower() not in accept:
+        if accept is not None and proj_of.get(acq, "").lower() not in accept:
             continue
         scanned += 1
         scanned_ids.add(acq)
         for gap_type, detail in find_sidecar_gaps(acq, md):
             rows.append((acq, gap_type, detail))
 
-    # Pending list. Apply the same project filter (by acq_id -> project_hint).
+    # Pending list. Apply the same project filter (by acq_id -> project_id).
     for acq, gap_type, detail in collect_pending_gaps(nas_root):
-        if accept is not None and hints.get(acq, "").lower() not in accept:
+        if accept is not None and proj_of.get(acq, "").lower() not in accept:
             continue
         rows.append((acq, gap_type, detail))
 

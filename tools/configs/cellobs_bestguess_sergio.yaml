@@ -23,7 +23,7 @@ registry:
   sample_id:            "${discovered.filename}"
   sample_type:          "NA"
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "sergio"
+  project_name:         "sergio"
   notes:                "BEST-GUESS / LOW-CONFIDENCE — legacy CELL, no naming standard; project = source folder 'Sergio', sample_id = filename; sample_type/anatomy guessed post-ingest. Verify before scientific reuse."
 
 operator: "${discovered.czi_user}"

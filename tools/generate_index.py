@@ -63,11 +63,11 @@ def _payload(records, link_base):
             "subject": r.get("subject_ids", ""),
             "organism": r.get("sample_organism", ""),
             "region": r.get("anatomical_entity", ""),
-            "project": r.get("project_hint", ""),
+            "project": r.get("project_id", ""),
             "researcher": r.get("researcher", ""),
             "size": r.get("file_size_mb", ""),
             "sample_type": r.get("sample_type", ""),
-            "proj_short": r.get("_project_short", ""),
+            "proj_short": r.get("_project_name", ""),
             "proj_owner": r.get("_project_owner", ""),
             "proj_desc": r.get("_project_desc", ""),
             "path": _winpath(link_base, raw),
@@ -275,13 +275,15 @@ def _write(path, html):
 
 def _project_match_keys(rec0, pid):
     """Lower-cased identifiers that should match a project group: its PROJ-id
-    (the stored project_hint value), its short_name, and its folder basename
-    (with and without the 'proj-' prefix). Lets a caller pass whichever it has —
-    the resolved PROJ-id, the operator's short_name, or the folder name."""
+    (the stored project_id value), its name, and its folder basename. Lets a
+    caller pass whichever it has — the resolved PROJ-id, the project's name, or
+    the folder name. Under the folder-==-name rule the last two converge, but
+    both are kept so a pre-migration folder name still matches.
+    """
     keys = {pid.strip().lower()}
-    short = (rec0.get("_project_short") or "").strip().lower()
-    if short:
-        keys.add(short)
+    name = (rec0.get("_project_name") or "").strip().lower()
+    if name:
+        keys.add(name)
     folder = (rec0.get("_project_folder") or "").replace("\\", "/").strip().strip("/")
     if folder:
         base = folder.split("/")[-1].lower()
@@ -298,13 +300,13 @@ def _write_per_project(records, link_base, nas, out, only=None):
     only={ids...}  -> ONLY the projects matching those identifiers (targeted
                       mode); the caller does NOT write the global index.
 
-    Groups by the stored project_hint (a PROJ-id). Projects with no
+    Groups by the stored project_id (a PROJ-XXXX). Projects with no
     folder_location, and closed projects (folder deleted at close-out), are
     skipped. Returns the list of project ids actually written.
     """
     by_proj = defaultdict(list)
     for r in records:
-        pid = (r.get("project_hint") or "").strip()
+        pid = (r.get("project_id") or "").strip()
         if pid:
             by_proj[pid].append(r)
 
@@ -331,8 +333,8 @@ def _write_per_project(records, link_base, nas, out, only=None):
         if recs[0].get("_project_status") == "closed":
             print(f"  skip {pid}: status=closed (folder deleted)")
             continue
-        short = recs[0].get("_project_short", "")
-        title = f"gjesus3 Finder — {pid}" + (f" ({short})" if short else "")
+        name = recs[0].get("_project_name", "")
+        title = f"gjesus3 Finder — {pid}" + (f" ({name})" if name else "")
         out_path = (os.path.join(out, pid, "index.html") if out
                     else os.path.join(nas, folder.lstrip("/"), "index.html"))
         _write(out_path, render_html(recs, link_base, title))
@@ -352,7 +354,7 @@ def main(argv=None):
                     help="also write a scoped index.html into each project folder")
     ap.add_argument("--project", action="append", metavar="ID",
                     help="regenerate ONLY the scoped index.html for this project "
-                         "(PROJ-id / short_name / folder name); repeatable. Skips "
+                         "(PROJ-id / project name / folder name); repeatable. Skips "
                          "the global index — the cheap path the GUI uses after an "
                          "ingest to refresh just the project it touched.")
     ap.add_argument("--out", default=None,

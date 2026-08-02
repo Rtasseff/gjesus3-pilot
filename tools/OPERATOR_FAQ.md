@@ -192,7 +192,7 @@ python tools/validate_registries.py
 ```
 
 It exits non-zero only on an **ERROR** (a real structural problem — bad header,
-duplicate `acq_id`, a `canonical_path` that doesn't exist on disk, a `project_hint`
+duplicate `acq_id`, a `canonical_path` that doesn't exist on disk, a `project_id`
 that isn't a known project, …). **WARN** lines are expected and do **not** mean
 failure: they flag open enrichment gaps under the **non-blocking** metadata model
 — e.g. a `subject:` block still queued for the animal-facility DB

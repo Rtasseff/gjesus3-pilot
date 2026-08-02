@@ -80,7 +80,11 @@ USER_CONTROLLABLE_COLUMNS = {
     "sample_id",
     "sample_type",
     "session_id",    # DRAFT 2026-05-20 — ISA "study" grouping; see 06_REGISTRIES §2.3a
-    "project_hint",
+    "project_name",  # RENAMED from "project_hint" 2026-08-02 — the project's name
+                     # (== its folder). Resolved to a PROJ-id at ingest Step 9.5 and
+                     # STORED in the registry's `project_id` column; see 05_PROJECTS
+                     # "Project reference model". The old key is deliberately NOT
+                     # accepted — a stale config fails loudly below.
     "notes",
 }
 
@@ -202,7 +206,12 @@ _LINK_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_.]*)\}")
 LINK_FILENAME_REGISTRY_FIELDS = (
     "instrument", "instrument_model", "operator", "data_source",
     "sample_id", "sample_type", "session_id", "acquisition_datetime",
-    "project_hint", "original_name", "data_ecosystem", "notes",
+    # 2026-08-02: `${project_hint}` split into the two honest names. It used to
+    # yield the resolved PROJ-id (the link template runs at Step 12, after Step
+    # 9.5), so `${project_id}` is the behaviour-compatible successor;
+    # `${project_name}` is the new human-readable one.
+    "project_name", "project_id",
+    "original_name", "data_ecosystem", "notes",
 )
 # Pipeline-generated context keys also legal in a link_filename template
 # (computed in ingest_raw.py Step 3, not present in cfg_single yet).
@@ -232,7 +241,9 @@ def resolve_link_filename(template, cfg_single, acq_id_str, acq_date):
       - Resolved registry fields directly by name: `sample_id`,
         `session_id`, `instrument`, `instrument_model`, `operator`,
         `data_source`, `sample_type`, `acquisition_datetime`,
-        `project_hint`, `original_name`, `data_ecosystem`, `notes`
+        `project_name`, `project_id`, `original_name`, `data_ecosystem`,
+        `notes` — `project_name`/`project_id` are both post-Step-9.5
+        values (the canonical name and the resolved PROJ-XXXX)
       - `acq_id` — the generated ACQ-ID string for this case
       - `acq_date` — YYYYMMDD form of the acquisition date (already
         computed in ingest_raw.py Step 3)

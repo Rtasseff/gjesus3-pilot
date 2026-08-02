@@ -57,7 +57,7 @@ registry:
   sample_id:            "${discovered.folder_name}"
   sample_type:          "cardiac MRI study"
   acquisition_datetime: NA
-  project_hint:         PROJ-0001
+  project_name:         PROJ-0001
   notes:                "TEST INGEST 2026-06-01 rebuild - collaborator LIONS cardiac MRI, re-ingested from config (originally interactive round 1-2). Purge after team exhibition."
 
 auto_create_project:

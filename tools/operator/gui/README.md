@@ -48,7 +48,7 @@ Phase 4 of [`tasks/archive/operator_ingest_tooling_plan.md`](../../../tasks/arch
 - **Build a recipe** (define a new convention): edit the parse rules
   (positional `separator` + ordered fields, or `regex` + source; plus
   `path_parse.levels` + `filter`) and watch a live `discovered.*` grid over the
-  first real files; map `registry.*` / `link_filename` / `project_hint` /
+  first real files; map `registry.*` / `link_filename` / `project_name` /
   `auto_create_project` via clickable `discovered.*` token chips, each field
   showing a live resolved example (unresolved `${…}` flag red); **Save recipe**
   to `tools/operator/recipes/`.

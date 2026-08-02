@@ -17,7 +17,7 @@ Two paths (per the build plan, Phase 4):
     /api/preview live: (a) positional separator+fields OR regex+source, plus
     path_parse levels + filter, with a live discovered.* grid over the first N
     real files (/api/discovered); (b) map registry.* + link_filename +
-    project_hint + auto_create_project via clickable discovered.* token chips,
+    project_name + auto_create_project via clickable discovered.* token chips,
     each field showing a live resolved example. Save as a recipe (/api/save_recipe)
     to tools/operator/recipes/.
 
@@ -954,7 +954,7 @@ def _ingest_sse_response(cfg, nas_root, dry_run, stamp, cleanup_dir=None):
                 # never updated any index (why an operator's upload was missing
                 # from the project's Finder). Targeted (--project) only: NEVER the
                 # ~18 MB global index (that's the scheduled job's job). Reuses
-                # ingest_raw._touched_project_hints so "which project(s)?" — incl.
+                # ingest_raw._touched_project_ids so "which project(s)?" — incl.
                 # a batch spanning several, and an auto-created new project — stays
                 # in one place. Best-effort: an index-refresh failure must never
                 # fail an ingest that already wrote to /raw/.
@@ -963,11 +963,11 @@ def _ingest_sse_response(cfg, nas_root, dry_run, stamp, cleanup_dir=None):
                         import ingest_raw
                         import generate_index
                         aids = [aid for aid, good in results if good and aid]
-                        hints = ingest_raw._touched_project_hints(aids, nas_root)
-                        for h in hints:
-                            generate_index.main(["--nas-root", nas_root, "--project", h])
-                        if hints:
-                            cb(f"Refreshed Finder index for project(s): {', '.join(hints)}")
+                        pids = ingest_raw._touched_project_ids(aids, nas_root)
+                        for pid in pids:
+                            generate_index.main(["--nas-root", nas_root, "--project", pid])
+                        if pids:
+                            cb(f"Refreshed Finder index for project(s): {', '.join(pids)}")
                     except Exception as e:  # noqa: BLE001 — never fail over a refresh
                         cb(f"Project index refresh failed (non-fatal): {e}", "WARN")
                 q.put(("done", "INFO", json.dumps({
@@ -1064,7 +1064,7 @@ def _mri_overrides(data):
       model         -> registry.instrument_model ("7T" / "11.7T")
       project_mode  -> "auto" (template default, per animal-protocol code) |
                        "fixed" (one specific project) | "none" (no project/links)
-      project_hint  -> the fixed hint, when project_mode == "fixed"
+      project_name  -> the one project's name, when project_mode == "fixed"
       link_filename -> the project-link-name template, when project_mode != "none"
       regenerate    -> bool; False sets ingest.auto_regenerate_dicom: false
     """
@@ -1078,10 +1078,10 @@ def _mri_overrides(data):
         ov["registry.instrument_model"] = _MRI_MODEL_MAP[model]
     mode = (data.get("project_mode") or "auto").strip().lower()
     if mode == "none":
-        ov["registry.project_hint"] = ""              # -> no project, no links
+        ov["registry.project_name"] = ""              # -> no project, no links
     elif mode == "fixed":
-        ov["registry.project_hint"] = (data.get("project_hint") or "").strip()
-    # mode == "auto": leave the template's ae-biomegune-${discovered.project_code}
+        ov["registry.project_name"] = (data.get("project_name") or "").strip()
+    # mode == "auto": leave the template's AE-biomaGUNE-${discovered.project_code}
     if mode != "none":
         link = (data.get("link_filename") or "").strip()
         if link:
@@ -1099,7 +1099,7 @@ def mri_index():
         "mri.html",
         nas_root=load_saved_nas_root(),
         link_default=tpl.get("link_filename") or "",
-        project_default=(tpl.get("registry") or {}).get("project_hint") or "",
+        project_default=(tpl.get("registry") or {}).get("project_name") or "",
         models=sorted(_MRI_MODEL_MAP),
         palette_keys=MRI_LINK_PALETTE_KEYS,
         palette_extras=MRI_LINK_PALETTE_EXTRAS,

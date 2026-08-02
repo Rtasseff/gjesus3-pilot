@@ -43,7 +43,7 @@ python tools/operator/make_test_nas.py --dest C:\Users\<you>\temp\testnas
 This creates a NAS root with the standard folders, an **empty** `registry_raw.csv`
 (header only, so every acquisition you point at is "new" and a full commit is
 exercised), and a **copy of the live `registry_projects.csv`** (so a
-`project_hint` like `ae-biomegune-0424` resolves to the real `PROJ-XXXX`, just
+`project_name` like `AE-biomaGUNE-0424` resolves to the real `PROJ-XXXX`, just
 like production). Add `--force` to reset an existing test NAS.
 
 Tell the tools where it is (or pass `--nas-root` each time):

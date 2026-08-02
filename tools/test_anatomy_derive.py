@@ -151,7 +151,7 @@ def _seed_nas(d):
         json.dump(sidecar, f, indent=2)
     row = {k: "" for k in reg.REGISTRY_FIELDS}
     row.update({"acq_id": acq, "data_ecosystem": "DICOM", "instrument": "MRI",
-                "canonical_path": canonical, "project_hint": "PROJ-0003"})
+                "canonical_path": canonical, "project_id": "PROJ-0003"})
     with open(reg_path, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=reg.REGISTRY_FIELDS)
         w.writeheader()

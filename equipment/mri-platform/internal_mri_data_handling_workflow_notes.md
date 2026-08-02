@@ -336,7 +336,7 @@ The word "project" is overloaded across the institute:
 
 These are different numbers, and users sometimes conflate them in conversation. The animal-protocol id often *relates to* a funded project (work under a grant is usually approved as one animal protocol per project), but the numbers don't align.
 
-For gjesus3 round 6 we use the **animal-protocol short id** as the project `short_name` (`ae-biomegune-NNNN`). For the future NI round, the funded-project id will play a similar role. The terminology distinction is captured in [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../nuclear-imaging/internal_ni_data_handling_workflow_notes.md).
+For gjesus3 round 6 we use the **animal-protocol short id** as the project `name` (`AE-biomaGUNE-NNNN`). For the future NI round, the funded-project id will play a similar role. The terminology distinction is captured in [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../nuclear-imaging/internal_ni_data_handling_workflow_notes.md).
 
 ### What's parsed today
 

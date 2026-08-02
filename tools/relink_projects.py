@@ -24,7 +24,7 @@ Usage (PowerShell, from the repo root):
 
     python tools/relink_projects.py --nas-root "J:/gjesus3-data" --dry-run
     python tools/relink_projects.py --nas-root "J:/gjesus3-data"
-    python tools/relink_projects.py --nas-root "J:/gjesus3-data" --project proj-lions-cardiac-mri
+    python tools/relink_projects.py --nas-root "J:/gjesus3-data" --project lions-cardiac-mri
 
 `--dry-run` reports every intended action without creating or deleting
 anything. `--keep-lnk` creates the hard links but leaves the `.lnk` files in
@@ -213,7 +213,7 @@ def create_missing_project(project_abs, project_id, registry, dry_run=False):
     linked = already_linked_acqs(prov_path)
 
     rows = [r for r in registry.values()
-            if (r.get("project_hint") or "").strip() == project_id
+            if (r.get("project_id") or "").strip() == project_id
             and r["acq_id"] not in linked]
     for row in rows:
         acq_id = row["acq_id"]

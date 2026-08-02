@@ -19,7 +19,7 @@ WHAT IT CHECKS
       {tissue, organism, cells, material, phantom}.
     - canonical_path starts with /raw/ and the acquisition folder exists on
       disk (canonical_path joined to nas_root).
-    - project_hint, when set and matching PROJ-XXXX, exists in
+    - project_id, when set and matching PROJ-XXXX, exists in
       registries/registry_projects.csv.
 
   Phase 3 enrichment (WARN-level, non-blocking model — 08_METADATA §4.3-4.7)
@@ -139,7 +139,7 @@ def _acq_folder_on_disk(nas_root, canonical_path):
 def _load_project_ids(registries_dir, issues):
     """Return the set of project_id values in registry_projects.csv.
 
-    A missing projects registry is a WARN (project_hint cross-checks are then
+    A missing projects registry is a WARN (project_id cross-checks are then
     skipped), not a hard ERROR — the file may legitimately not exist yet on a
     fresh NAS.
     """
@@ -147,7 +147,7 @@ def _load_project_ids(registries_dir, issues):
     header, rows = _read_csv_rows(path)
     if header is None:
         issues.warn(
-            "registry_projects.csv not found; project_hint existence checks "
+            "registry_projects.csv not found; project_id existence checks "
             "skipped."
         )
         return None
@@ -286,12 +286,12 @@ def validate(nas_root, check_enrich=True):
                         f"(from canonical_path '{canonical}')", label)
                     folder = None  # don't chase a sidecar we can't reach
 
-        # 7. project_hint existence (only PROJ-XXXX form, only if we have a set)
-        hint = (row.get("project_hint") or "").strip()
-        if hint and PROJ_ID_RE.match(hint) and project_ids is not None:
-            if hint not in project_ids:
+        # 7. project_id existence (only PROJ-XXXX form, only if we have a set)
+        proj = (row.get("project_id") or "").strip()
+        if proj and PROJ_ID_RE.match(proj) and project_ids is not None:
+            if proj not in project_ids:
                 issues.error(
-                    f"project_hint '{hint}' not found in "
+                    f"project_id '{proj}' not found in "
                     f"registry_projects.csv", label)
 
         # 8. Phase 3 enrichment (WARN) — needs a resolvable folder

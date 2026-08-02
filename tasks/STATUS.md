@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-07-17
+**Last Updated:** 2026-08-02
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -30,7 +30,7 @@ production care.
 | | |
 |---|---|
 | Acquisitions in `/raw/` | **13,557** (all checksummed + `metadata.json` sidecar'd) |
-| Projects | **51 registered** — 43 with folders + **8 `closed`** (rows retained, folders deleted 2026-07-14) |
+| Projects | **51 registered** — 43 with folders + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
 | Subjects (`registry_subjects.csv`) | **~715** (one row per subject) |
 | Publications | empty — deferred (PLANNED) |
 
@@ -88,6 +88,30 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **Project reference model — ✅ LANDED + MIGRATED IN PRODUCTION, exe redeployed (2026-08-02).**
+  The last two items from the 2026-07-17 operator test. **"Project hint" is retired**: a
+  project now has just `project_id` (`PROJ-XXXX`, machine key) and a **`name`** — what the
+  operator types, and **its folder name verbatim** (no `proj-` prefix, casing preserved).
+  The GUI field is **"Project name"**, the config key is `registry.project_name`, and
+  `registry_raw`'s column is now honestly called `project_id` (it always held ids).
+  **Operators must know two things:** (1) the **6 saved recipes on the NAS were deleted**,
+  not migrated — recreate them in the builder (a recipe carrying the old key would now
+  error on load, which is worse); (2) **project folders were renamed** — `proj-ae-biomegune-0525`
+  is now `AE-biomaGUNE-0525`, `proj-claudia` is now `claudia`. Any saved shortcut into a
+  project folder needs re-pointing; `/raw/` was not touched and no data moved.
+  Live migration done in a no-ingest window via `tools/migrate_project_naming.py`
+  (dry-run-first, resumable, `--reverse`-able; kept as the paper trail): 51 registry rows,
+  **48 folders renamed**, 43 `_project.yaml` rewritten, header-only change to `registry_raw`
+  (values untouched — all 13,582 verified still joining). Hard links intact (134/134 pairs
+  confirmed same-file), Finder regenerated, exe rebuilt + redeployed (checksum-verified,
+  previous kept as `.old_20260802`) and smoke-tested against the migrated schema. Backup
+  off-NAS at `C:\Users\rtasseff\temp\gjesus3_projectnaming_backup_20260802` — keep until
+  the first operator ingest confirms good. Model + consumer table:
+  [`../mfb-rdm-docs/05_PROJECTS.md`](../mfb-rdm-docs/05_PROJECTS.md) §2a; full record in
+  [`../CHANGELOG.md`](../CHANGELOG.md). **Still open (deliberately):** the *semantic*
+  re-projecting of person/topic projects (PROJ-05 / [`BACKLOG.md`](BACKLOG.md)) — this was
+  mechanical normalization only; and the 5 closed-but-present folders, whose deletion
+  remains a separate Data-Office action.
 - **Scheduled global Finder rebuild — ✅ MIGRATED to WorkstationOps + LIVE (2026-07-24).**
   The daily global rebuild is now owned by the separate **`WorkstationOps`** app
   (`C:\Users\rtasseff\OneDrive - CIC biomaGUNE\WorkstationOps`, its `finder-refresh` op,

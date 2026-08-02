@@ -1,5 +1,5 @@
 project_id: {project_id}
-short_name: {short_name}
+name: {name}
 description: "{description}"
 status: active  # active | paused | closed
 owner: {owner}

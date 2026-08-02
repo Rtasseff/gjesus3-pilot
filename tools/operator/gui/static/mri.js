@@ -195,9 +195,21 @@ function updateLinkExample() {
 // ---------------------------------------------------------------- project mode
 const projectMode = $("#project-mode");
 const projectFixedWrap = $("#project-fixed-wrap");
-const projectHint = $("#project-hint");
+const projectNameInput = $("#project-name");
 const linkFieldset = $("#link-fieldset");
 const projectNote = $("#project-note");
+
+// A project's name IS its folder name, so it must stay OS-safe: convert typed
+// spaces to hyphens live, in front of the operator, rather than silently
+// rewriting the name later (05_PROJECTS "Project reference model").
+projectNameInput.addEventListener("input", () => {
+  const converted = projectNameInput.value.replace(/\s+/g, "-");
+  if (converted !== projectNameInput.value) {
+    const at = projectNameInput.selectionStart;
+    projectNameInput.value = converted;
+    projectNameInput.setSelectionRange(at, at);
+  }
+});
 
 function updateProjectMode() {
   const mode = projectMode.value;
@@ -205,9 +217,9 @@ function updateProjectMode() {
   linkFieldset.hidden = mode === "none";
   if (mode === "auto") {
     projectNote.textContent =
-      "Each scan goes to its own animal-protocol project (ae-biomegune-<NNNN>, from the folder name), auto-created if it doesn’t exist.";
+      "Each scan goes to its own animal-protocol project (AE-biomaGUNE-<NNNN>, from the folder name), auto-created if it doesn’t exist.";
   } else if (mode === "fixed") {
-    projectNote.textContent = "All scans in this run link into the one project you name.";
+    projectNote.textContent = "All scans in this run link into the one project you name. The name is also the folder researchers open.";
   } else {
     projectNote.textContent = "Scans are ingested and registered, but NOT linked into any project (no hard links created).";
   }
@@ -218,7 +230,7 @@ updateProjectMode();
 // Short human label for the chosen destination project (for the completion modal).
 function projectDestLabel() {
   const mode = projectMode.value;
-  if (mode === "fixed") return projectHint.value.trim() || "(a specific project)";
+  if (mode === "fixed") return projectNameInput.value.trim() || "(a specific project)";
   if (mode === "none") return "No project (no links created)";
   return "Per animal-protocol code (auto)";
 }
@@ -233,7 +245,7 @@ function buildPayload() {
     project_mode: mode,
     regenerate: $("#regenerate").checked,
   };
-  if (mode === "fixed") p.project_hint = projectHint.value.trim();
+  if (mode === "fixed") p.project_name = projectNameInput.value.trim();
   if (mode !== "none") p.link_filename = linkField.serialize();
   return p;
 }
@@ -247,7 +259,7 @@ function renderCollisions(cols, existing) {
   if (cols && cols.length) {
     parts.push(`<strong>⚠ ${cols.length} link-name collision(s)</strong> — two or more scans would write the SAME link name into the SAME project (one would overwrite the other). Make the link name unique (keep exam/recon/sample), or split the run:`);
     parts.push("<ul>" + cols.map((c) =>
-      `<li><code>${esc(c.link_filename)}</code> in <code>${esc(c.project_hint)}</code> ← ${c.acq_ids.length} scans: ${esc(c.acq_ids.join(", "))}</li>`
+      `<li><code>${esc(c.link_filename)}</code> in <code>${esc(c.project_name)}</code> ← ${c.acq_ids.length} scans: ${esc(c.acq_ids.join(", "))}</li>`
     ).join("") + "</ul>");
   }
   if (existing && existing.length) {

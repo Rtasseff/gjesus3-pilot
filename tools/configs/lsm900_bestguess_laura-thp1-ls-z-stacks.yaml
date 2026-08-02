@@ -23,7 +23,7 @@ registry:
   sample_id:            "${discovered.filename}"
   sample_type:          "NA"
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "laura-thp1-ls-z-stacks"
+  project_name:         "laura-thp1-ls-z-stacks"
   notes:                "BEST-GUESS / LOW-CONFIDENCE — legacy LSM9, no naming standard; project = source folder 'LAURA_THP1_LS_Z-stacks', sample_id = filename; sample_type/anatomy guessed post-ingest. Verify before scientific reuse."
 
 operator: "${discovered.czi_user}"

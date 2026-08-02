@@ -5,7 +5,7 @@ The microscopy GUI's builder rows and the runner's per-batch "Fill in for this
 batch" gaps are BOTH driven by the single catalogue in value_fields.py. This
 test guards that catalogue so adding/renaming a field can't silently break the
 blank-in-builder -> fillable-in-runner behaviour (the bug that left
-`registry.session_id` un-promptable while `registry.project_hint` worked).
+`registry.session_id` un-promptable while `registry.project_name` worked).
 
 It deliberately imports value_fields.py and config_builder.py DIRECTLY by path
 (both are pure modules, no Flask / czifile), so it runs anywhere Python does.

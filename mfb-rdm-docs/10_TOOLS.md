@@ -112,7 +112,7 @@ tools/
 
 > **✅ DECIDED + APPLIED 2026-06-02 — NTFS/SMB hard links are the project-linking method.** Project links are **hard links** to the raw primary, created by `linker.create_hardlink` via `os.link`. The project copy is a **real file identical to the raw primary** — same inode, **zero extra storage**, and it shares raw's single security descriptor, so a read-only raw file stays read-only through the project link even inside a read/write `projects` folder. This **retired** the original Windows `.lnk` shortcut mechanism (the 283 then-existing `.lnk` links were migrated in place — see "Migration of existing links" — and `linker.create_lnk` is kept only as a non-default porting seam; see "History"). The driver is adoption: change-averse researchers trust a project copy that looks and behaves like a normal file far more than a shortcut.
 
-When `ingest_raw.py` is run with `--project <PROJ-ID>` (or `project_hint` set in the YAML config), Step 12 of full-mode ingest creates the link at:
+When `ingest_raw.py` is run with `--project <name-or-id>` (or `registry.project_name` set in the YAML config), Step 12 of full-mode ingest creates the link at:
 
 ```
 /projects/<project_folder>/raw_linked/<link_name>
@@ -281,11 +281,11 @@ auto_create_project:
 
 **Recognized fields:** `owner`, `description`, `notes`. Any field omitted is left empty in `_project.yaml` and `registry_projects.csv`; the project can be edited manually afterward.
 
-**First-write-wins.** The block is read **only** when the project does not already exist. On subsequent ingests that resolve `project_hint` to the same existing project, the block is ignored and an INFO line is logged (`"Project proj-<name> already exists; auto_create_project block ignored."`). This is deliberate — auto-create sets initial defaults, and the source of truth after that is `_project.yaml` (manually editable). No silent updates from later ingests.
+**First-write-wins.** The block is read **only** when the project does not already exist. On subsequent ingests that resolve `project_name` to the same existing project, the block is ignored and an INFO line is logged (`"Project PROJ-XXXX already exists; auto_create_project block ignored."`). This is deliberate — auto-create sets initial defaults, and the source of truth after that is `_project.yaml` (manually editable). No silent updates from later ingests.
 
 **Empty resolved values.** If `${discovered.<x>}` resolves to empty (the discovered field is missing on a given file), the resulting metadata field is empty and the ingest logs a WARN. Project creation proceeds; the field can be filled in by hand later via `_project.yaml`.
 
-**Project naming caveat.** The `short_name` of the auto-created project comes from `registry.project_hint`, not from this block. Any expression in `project_hint` (literal, `discovered.X`, interpolation) is allowed. **Provisional name patterns** like `${researcher}-${experiment}` should be documented as such in the YAML comments — see the Cell Observer example below. [05_PROJECTS §9](05_PROJECTS.md) elaborates on the requirement that the group converge on a durable, meaning-bearing naming convention; auto-create is not a substitute for that conversation.
+**Project naming caveat.** The `name` of the auto-created project comes from `registry.project_name`, not from this block — and that name becomes the folder verbatim ([05_PROJECTS §2a](05_PROJECTS.md)). Any expression in `project_name` (literal, `discovered.X`, interpolation) is allowed. **Provisional name patterns** like `${researcher}-${experiment}` should be documented as such in the YAML comments — see the Cell Observer example below. [05_PROJECTS §9](05_PROJECTS.md) elaborates on the requirement that the group converge on a durable, meaning-bearing naming convention; auto-create is not a substitute for that conversation.
 
 When `auto_create_projects: false` (the default) or when the project already exists, the `auto_create_project:` block is ignored entirely.
 
@@ -293,7 +293,7 @@ When `auto_create_projects: false` (the default) or when the project already exi
 
 > **✅ DECIDED:** The project link name placed under `/projects/<proj>/raw_linked/` is operator-controlled via a top-level YAML field `link_filename:`. Each per-instrument template ships a meaningful default; per-batch configs may override. Resolver-evaluated at link-creation time. (Since 2026-06-02 the link is a **hard link** with no extension — §2.1.1; the resolved value is used verbatim as the link name, where the legacy `.lnk` form appended `.lnk`.)
 
-Why this exists: round 6 (internal MRI) exposed a real failure mode of the previous default (link named after `original_name`). For one-file-per-acquisition formats (`.czi`, collaborator zips) the original filename is already long and unique enough to avoid collisions inside a project. For systematic-naming environments (internal MRI, future internal NI) the *source* identifier is a folder path + numeric position — and naming the link after the position alone collides when multiple sessions land in the same project (e.g. four animals under `proj-ae-biomegune-0424` all having an exam `27`). The first-ingest of round 6 silently lost 35 of 97 links to such collisions. `link_filename:` lets the per-instrument template specify a name pattern that's both human-meaningful AND globally unique.
+Why this exists: round 6 (internal MRI) exposed a real failure mode of the previous default (link named after `original_name`). For one-file-per-acquisition formats (`.czi`, collaborator zips) the original filename is already long and unique enough to avoid collisions inside a project. For systematic-naming environments (internal MRI, future internal NI) the *source* identifier is a folder path + numeric position — and naming the link after the position alone collides when multiple sessions land in the same project (e.g. four animals under `AE-biomaGUNE-0424` all having an exam `27`). The first-ingest of round 6 silently lost 35 of 97 links to such collisions. `link_filename:` lets the per-instrument template specify a name pattern that's both human-meaningful AND globally unique.
 
 **Syntax:** top-level field, sibling of `ingest:` / `auto_discover:` / `registry:` / `auto_create_project:`. Value is a string template with `${X}` references.
 
@@ -310,7 +310,7 @@ link_filename: "${instrument}_${original_name}"
 | `${X}` | Source | Example |
 |---|---|---|
 | `${discovered.<key>}` | The auto-discovered namespace — every entry from `auto_discover` (filename chunks, path levels, parent-folder date, embedded-extractor output like `discovered.czi_*` / `discovered.mri_*`). The full set per instrument is documented in each per-instrument template's header comments. | `${discovered.mri_exam_number}` → `"29"` |
-| `${sample_id}`, `${session_id}`, `${instrument}`, `${instrument_model}`, `${operator}`, `${data_source}`, `${sample_type}`, `${acquisition_datetime}`, `${project_hint}`, `${original_name}`, `${data_ecosystem}`, `${notes}` | Resolved registry-block fields | `${sample_id}` → `"jrc_251016_m17_0424"` |
+| `${sample_id}`, `${session_id}`, `${instrument}`, `${instrument_model}`, `${operator}`, `${data_source}`, `${sample_type}`, `${acquisition_datetime}`, `${project_name}`, `${project_id}`, `${original_name}`, `${data_ecosystem}`, `${notes}` | Resolved registry-block fields. `${project_name}` is the project's canonical name, `${project_id}` its `PROJ-XXXX` — both post-resolve ([05_PROJECTS §2a](05_PROJECTS.md)) | `${sample_id}` → `"jrc_251016_m17_0424"` |
 | `${acq_id}` | The generated ACQ-ID for this case | `"ACQ-20251016-MRI-029"` |
 | `${acq_date}` | YYYYMMDD form of the acquisition date | `"20251016"` |
 
@@ -359,7 +359,7 @@ On a **DB miss / no-credentials** the acquisition still ingests: the `subject:` 
 
 #### `auto_discover.subject_parse` (multi-animal live sync)
 
-A **multi-animal** acquisition — a Molecubes NI live scan whose subject folder names 1–4 animals — uses `subject_parse:` to split that folder into the fields the DB lookup and `project_hint` need, reusing the validated live-box grammar (`ni_live_discover.parse_subject`).
+A **multi-animal** acquisition — a Molecubes NI live scan whose subject folder names 1–4 animals — uses `subject_parse:` to split that folder into the fields the DB lookup and `project_name` need, reusing the validated live-box grammar (`ni_live_discover.parse_subject`).
 
 | Key | Type | Default | Purpose |
 |-----|------|---------|---------|
@@ -415,7 +415,7 @@ anatomy:                         # organism only
 9. Verify copy — recompute checksums on destination, compare
 10. Generate `README.txt`
 11. Append row to `registry_raw.csv` (all fields populated, including `original_name`)
-12. Append entry to `registries/ingest_manifest.csv` (always); if `--project` is set (or `project_hint` resolves), also create a hard link in `<project>/raw_linked/` to the raw primary — a single hard link for a file primary, or a real folder of per-file hard links for a `<ACQ-ID>.data` folder primary (see §2.1.1)
+12. Append entry to `registries/ingest_manifest.csv` (always); if `--project` is set (or `registry.project_name` resolves), also create a hard link in `<project>/raw_linked/` to the raw primary — a single hard link for a file primary, or a real folder of per-file hard links for a `<ACQ-ID>.data` folder primary (see §2.1.1)
 13. Report summary
 14. **Refresh the researcher Finder (opt-in)** — a CLI batch refreshes nothing by default; the global `registries/index.html` is kept fresh by a scheduled job and each project's index is refreshed when an ingest writes into it (see [`tools/FINDER.md`](../tools/FINDER.md) → *Keeping it fresh*). Pass `--refresh-index projects` (touched project(s) only) or `--refresh-index full` (global + all per-project, the self-contained searchable view of `registry_raw` ⋈ `registry_projects`) to regenerate at the end of a successful (non-dry-run) batch. **Non-fatal:** a refresh failure logs a WARN but does **not** fail the ingest; the index can always be rebuilt manually with [`tools/generate_index.py`](../tools/generate_index.py).
 
@@ -433,10 +433,10 @@ One acquisition touches all of the following. Everything up to the registry appe
 | 4 | `registries/ingest_manifest.csv` — one row (`acq_id, original_name, canonical_path`) | Step 12 | always | remove the `acq_id` row |
 | 5 | `registries/registry_subjects.csv` — one subject row **upserted** (created new, or gap-merged into an existing subject; one row per subject, `last_updated` bumped) | Step 10b | `sample_type ∈ {organism, tissue}` **and** a subject resolves (DB lookup or an operator `subject:` block) | remove the row **only if it was newly created** — a subject shared with other acqs must stay |
 | 6 | `registries/pending_subject_metadata.csv` — one recovery row (subject `source: pending-db`) | Step 8.4 | **only** on a DB miss / no-credentials | remove the `acq_id` row |
-| 7 | `projects/<proj>/raw_linked/<link_filename>` — hard link (a file, or a real folder of per-file hard links for a `.data` primary) | Step 12 | `--project` / `project_hint` resolves to an **existing** project | delete the link |
+| 7 | `projects/<name>/raw_linked/<link_filename>` — hard link (a file, or a real folder of per-file hard links for a `.data` primary) | Step 12 | `--project` / `registry.project_name` resolves to an **existing** project | delete the link |
 | 8 | `projects/<proj>/provenance.csv` — one `FILE-NNNN` row for the link (`input_refs=<acq_id>`) | Step 12 | as #7 | remove that row |
 | 9 | `projects/<proj>/index.html` — targeted per-project regenerate | Step 14 | opt-in on the CLI (`--refresh-index projects`); **automatic in the operator GUI** | regenerate after removal: `generate_index.py --nas-root … --project <PROJ-ID>` |
-| 10 | **NEW** `projects/<proj>/` folder + `_project.yaml` + a `registry_projects.csv` row | Step 9.5 | first ingest only, **and** `project_hint` names a **non-existent** project **and** `ingest.auto_create_projects` is on | remove the folder + the `registry_projects` row (a much larger side effect — avoid it by targeting an existing project) |
+| 10 | **NEW** `projects/<name>/` folder + `_project.yaml` + a `registry_projects.csv` row | Step 9.5 | first ingest only, **and** `registry.project_name` names a **non-existent** project **and** `ingest.auto_create_projects` is on | remove the folder + the `registry_projects` row (a much larger side effect — avoid it by targeting an existing project) |
 
 The **global** `registries/index.html` is **not** written per-ingest — a scheduled job owns it ([`tools/FINDER.md`](../tools/FINDER.md)). `--delete-source` (opt-in, post-commit) removes the *staging source*, not a NAS write.
 
@@ -471,14 +471,14 @@ Three required top-level blocks plus one optional. `defaults:` is gone — non-r
 | Flag | Default | Effect |
 |------|---------|--------|
 | `delete_source_after_ingest` | `false` | Remove the source file/folder after a successful copy + verify. CLI `--delete-source` overrides. |
-| `auto_create_projects` | `false` | When `registry.project_hint` resolves to a value that isn't an existing `project_id` or `short_name`, auto-create a project with that value as the `short_name`. First ingest creates; subsequent ingests with the same hint reuse via `short_name` lookup. Useful when the project key comes from a parsed filename chunk (e.g. `project_hint: discovered.project`). Default `false` to prevent typos from silently creating rogue projects. When enabled, the optional `auto_create_project:` block (§2.1.4) supplies the new project's `owner` / `description` / `notes`. |
+| `auto_create_projects` | `false` | When `registry.project_name` matches no existing `project_id` or project `name`, auto-create a project with that name (and a folder of the same name). First ingest creates; subsequent ingests naming the same project reuse it (matched case-insensitively). Useful when the project name comes from a parsed filename chunk (e.g. `project_name: discovered.project`). Default `false` to prevent typos from silently creating rogue projects. When enabled, the optional `auto_create_project:` block (§2.1.4) supplies the new project's `owner` / `description` / `notes`. |
 | `acquisition_layout` | `file` | New 2026-05-20. One of `file` (single primary file: microscopy `.czi`), `archive` (archive-as-primary: collaborator/external DICOM — store the original source archive renamed to `<ACQ-ID><ext>`, one fast SMB transfer; **implemented 2026-06-01**, requires `archive_primary_from` below), or `folder` (folder-as-primary: internal MRI ParaVision bundle — no zip). Drives the file-copy step and the `primary_kind` registry column. Per-instrument templates set this; per-batch configs rarely override. See [03_RAW_STORAGE §4.2](03_RAW_STORAGE.md). |
 | `archive_primary_from` | (none) | New 2026-06-01. Required with `acquisition_layout: archive`. Directory holding the original source archives; the ingest stores `<archive_primary_from>/<case>.<ext>` (matched by `discovered.folder_name`, any of `.zip/.rar/.7z/.tgz/.tar/.gz`) as the acquisition's primary. Metadata (date / modality / instance count) is still read from the extracted `staging_dir` case dir; only the compact archive is copied to the NAS. Avoids the small-file SMB latency of copying an extracted DICOM tree (~20k loose files/case). |
 | `reconstructions` | (none) | New 2026-05-20 (MRI-specific). Selects which reconstruction indices to retain from a ParaVision exam. Values: `all` \| an integer (e.g. `3`) \| a list of integers (e.g. `[3]` or `[1, 3]`). The platform convention is `/3` user-trusted, but the user explicitly decides per-batch; there is no implicit default. Indices not listed stay only on the platform's deep-archive. The registry's `discovered.mri_recon_indices` column records what was kept. |
 | `copy_strategy` | `paravision_exam` | New 2026-05-27 (round-6 v2). Per-instrument selector for the folder-as-primary copy function when `acquisition_layout: folder`. Values: `mri_paravision_v2` (slim DICOM-only layout for internal MRI; v2 fix to v1's piggyback bug), `ni_molecubes` (Molecubes NI archive-mode), `paravision_exam` (legacy v1 path; preserved for back-compat — should not be selected for new batches). See per-instrument templates under `tools/templates/instruments/`. |
 | `auto_regenerate_dicom` | `false` (field) / **`true` in the `mri_bruker` template since 2026-06-22** | MRI-specific (ParaVision → DICOM regeneration). When `true` AND `copy_strategy: mri_paravision_v2` AND the source has no DICOMs in any selected `pdata/<idx>/` recon, invoke `tools/ingest/paravision_regen.py` to call Dicomifier 2.5.3 + apply the three confirmed Dicomifier workarounds (PixelSpacing axis-swap; Window-tag fix; the reverse-slice-order fixes applied inside the converter via `tools/ingest/dicomifier_driver.py` since 2026-07-16) per generated DICOM. Output lands in `<ACQ-ID>.data/` with the standard `recon<idx>_frame<NN>.dcm` naming. **Requires `dicomifier` on PATH** at ingest time (`conda activate dicomifier-pilot` before running). If unavailable or regeneration fails, the ingest falls through to the existing empty-`.data/` placeholder behaviour with a clear WARN — does NOT abort the batch. The config-builder field default stays `false` (keeps the Dicomifier dependency optional for non-MRI), but the `mri_bruker` per-instrument template now ships it `true` so no-DICOM MRI exams are regenerated by default where Dicomifier is present; `mri-ingest --no-regenerate-dicom` forces the placeholder. See [equipment/mri-platform/internal_mri_data_handling_workflow_notes.md](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md) "ParaVision → DICOM regeneration" section for operator setup. |
 
-The user-controllable `registry:` columns are: `instrument`, `data_ecosystem`, `instrument_model`, `modalities_in_study`, `operator`, `data_source`, `sample_id`, `sample_type`, `session_id` (DRAFT — see [06_REGISTRIES §2.2 + §2.3a](06_REGISTRIES.md)), `acquisition_datetime`, `project_hint`, `notes`. Of these, **`instrument`, `data_ecosystem`, `operator`, `data_source` must be present** (NA allowed where intentional); the rest are optional. Auto-populated columns (`acq_id`, `registration_datetime`, `primary_kind` (DRAFT), `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) must NOT appear in `registry:`.
+The user-controllable `registry:` columns are: `instrument`, `data_ecosystem`, `instrument_model`, `modalities_in_study`, `operator`, `data_source`, `sample_id`, `sample_type`, `session_id` (DRAFT — see [06_REGISTRIES §2.2 + §2.3a](06_REGISTRIES.md)), `acquisition_datetime`, `project_name`, `notes`. Of these, **`instrument`, `data_ecosystem`, `operator`, `data_source` must be present** (NA allowed where intentional); the rest are optional. Auto-populated columns (`acq_id`, `registration_datetime`, `primary_kind` (DRAFT), `primary_file_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `original_name`, `ingest_config`) must NOT appear in `registry:`.
 
 **`acquisition_datetime` resolution** (updated 2026-06-01). A literal (ISO `YYYY-MM-DD…` or `YYYYMMDD`) or `discovered.<field>` value sets both the ACQ-ID date prefix and the registry column. When `acquisition_datetime` resolves empty / `NA`, the ingest first falls back to the **DICOM `StudyDate`** the summarizer reads from the headers — collaborator / external DICOM carries the real acquisition date in the data, not the filename, so its configs can legitimately set `acquisition_datetime: NA` — and backfills the registry column from it. Only if no usable StudyDate is found does it default to today's date with a WARN. Caveat: a batch relying on this fallback is not strictly idempotent on re-run (the stored row keys off the discovered date while `expand_batch` keys off the empty config value); supply an explicit `acquisition_datetime` when strict idempotency matters. Microscopy and other ecosystems with no DICOM headers are unaffected (no StudyDate → today, as before).
 
@@ -510,7 +510,7 @@ registry:
   sample_id:            discovered.sample_id
   sample_type:          NA
   acquisition_datetime: discovered.acquisition_date
-  project_hint:         NA
+  project_name:         NA
   notes:                "Routine WSI; ${discovered.stain} @ ${discovered.magnification}"
 ```
 
@@ -535,7 +535,7 @@ registry:
   sample_id:            discovered.folder_name
   sample_type:          NA
   acquisition_datetime: NA             # external DICOM: NA -> derived from DICOM StudyDate (see resolution note above)
-  project_hint:         NA
+  project_name:         NA
   notes:                "HPIC batch ingest"
 ```
 
@@ -568,7 +568,7 @@ registry:
   sample_id:            "${discovered.cell_line}_${discovered.condition}"
   sample_type:          cells
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "${discovered.researcher}-${discovered.experiment}"
+  project_name:         "${discovered.researcher}-${discovered.experiment}"
   notes:                "${discovered.experiment} cells at ${discovered.magnification}, condition ${discovered.condition}, image ${discovered.image_num}"
 
 # operator = the tech who ran the scope. A TOP-LEVEL key (NOT in the registry:
@@ -716,7 +716,7 @@ log_activity \
 **Actions:**
 1. Validate short name is unique (scan `registry_projects.csv`)
 2. Generate PROJ-ID (`PROJ-NNNN`, next available)
-3. Create folder: `/projects/proj-<short_name>/`
+3. Create folder: `/projects/<name>/` (the name, verbatim — [05_PROJECTS §2a](05_PROJECTS.md))
 4. Write `_project.yaml` from template
 5. Create empty `provenance.csv` with headers
 6. Create `raw_linked/` directory
@@ -744,7 +744,7 @@ python tools/create_project.py --name test --description "test" --owner RT --dry
 - Required columns non-empty per row (`acq_id`, `registration_datetime`, `data_ecosystem`, `instrument`, `canonical_path`).
 - `sample_type`, when set, is in the controlled vocab `{tissue, organism, cells, material, phantom}`.
 - `canonical_path` starts with `/raw/` and the acquisition folder exists on disk.
-- `project_hint`, when set and matching `PROJ-XXXX`, exists in `registries/registry_projects.csv`.
+- `project_id`, when set and matching `PROJ-XXXX`, exists in `registries/registry_projects.csv`.
 
 **Phase 3 enrichment checks (WARN-level — never affect exit code):** for `sample_type ∈ {organism, tissue}`, the sidecar must carry a `subject:` + `condition:` block (and `anatomy:` for organism); the explicit "unknown" sentinels (`subject.source == "pending-db"`, `condition.is_control == null`, `anatomy.is_whole_body == null`) are WARNs, legitimate under the non-blocking model ([08_METADATA §4.7](08_METADATA.md)). `--no-enrichment` skips these.
 
@@ -792,16 +792,16 @@ python tools/backfill_metadata.py --dry-run --scope /raw/DICOM/     # preview
 
 ```bash
 python tools/gather_metadata.py --acq ACQ-20251016-MRI-029 --nas-root J:\gjesus3-data
-python tools/gather_metadata.py --project ae-biomegune-0424
+python tools/gather_metadata.py --project AE-biomaGUNE-0424
 ```
 
 ### 3.6 `metadata_completeness`
 
-**Purpose:** Read-only enrichment-gap report — the gap-focused companion to `validate_registries`. **Location:** `tools/metadata_completeness.py`. **Read-only**. Walks `/raw/` sidecars and surfaces the *non-blocking* enrichment gaps (the explicit "unknown" sentinels of [08_METADATA §4.7](08_METADATA.md)) so a superuser can bulk-fill them. Counts as a gap (organism/tissue only): `condition.is_control == null`, `anatomy.is_whole_body == null` (organism), `subject.source == "pending-db"`, or an expected block missing entirely. Also lists the `registries/pending_subject_metadata.csv` recovery backlog. Optional `--project` filter matches the registry `project_hint`.
+**Purpose:** Read-only enrichment-gap report — the gap-focused companion to `validate_registries`. **Location:** `tools/metadata_completeness.py`. **Read-only**. Walks `/raw/` sidecars and surfaces the *non-blocking* enrichment gaps (the explicit "unknown" sentinels of [08_METADATA §4.7](08_METADATA.md)) so a superuser can bulk-fill them. Counts as a gap (organism/tissue only): `condition.is_control == null`, `anatomy.is_whole_body == null` (organism), `subject.source == "pending-db"`, or an expected block missing entirely. Also lists the `registries/pending_subject_metadata.csv` recovery backlog. Optional `--project` filter accepts a `PROJ-XXXX` id or a project name.
 
 ```bash
 python tools/metadata_completeness.py --nas-root J:\gjesus3-data
-python tools/metadata_completeness.py --project ae-biomegune-0525
+python tools/metadata_completeness.py --project AE-biomaGUNE-0525
 ```
 
 ### 3.7 `recover_subject_metadata`

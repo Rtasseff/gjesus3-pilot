@@ -25,8 +25,8 @@
 #                                  acquisition datetime, objective mag/NA, …),
 #                                  same extractor as every .czi instrument
 #
-# Project: project_hint AE-biomeGUNE-1022 auto-creates proj-ae-biomegune-1022
-# on the first file (short_name reused after), same animal-protocol convention
+# Project: project_name AE-biomaGUNE-1022 auto-creates AE-biomaGUNE-1022
+# on the first file (name reused after), same animal-protocol convention
 # as round 4 (0423/0424/0525).
 
 ingest:
@@ -61,8 +61,8 @@ registry:
   # fallback via acquisition_date_from above.
   acquisition_datetime: discovered.czi_acquisition_datetime
   # Full animal-project code; first file for a given <project> chunk
-  # auto-creates short_name = "ae-biomegune-<project>" (lowercased at create).
-  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  # auto-creates the project named "AE-biomaGUNE-<project>" (verbatim).
+  project_name:         "AE-biomaGUNE-${discovered.project}"
   notes:                "MFB AxioScan 7 WSI batch 2026-05-22 (${discovered.stain} stain, section ${discovered.section}, ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
 
 # Project link name (hard link, no extension — 10_TOOLS §2.1.1). Instrument

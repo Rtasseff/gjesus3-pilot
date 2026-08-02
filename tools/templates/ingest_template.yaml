@@ -29,31 +29,33 @@
 # --------------------------------------------------------------------------
 # ⚠️ PROJECT NAMING — OPEN GROUP-CONSENSUS QUESTION
 # --------------------------------------------------------------------------
-# `registry.project_hint` determines the short_name of any auto-created
-# project. The project short_name is the daily handle the group will use
-# to find raw data and intermediates — it needs to MEAN something to them.
+# `registry.project_name` names any auto-created project — and the name IS
+# the folder researchers open (no prefix, casing preserved). It is the daily
+# handle the group will use to find raw data and intermediates, so it needs to
+# MEAN something to them. Spaces become hyphens; see 05_PROJECTS "Project
+# reference model".
 #
 # A project is NOT an experiment, an assay, or a study. A real project
 # typically contains many of those over its lifetime. Good candidates:
 #   - funded project name (e.g. ERC grant ID)
-#   - animal-project approval ID (e.g. AE-biomeGUNE-NNNN)
+#   - animal-project approval ID (e.g. AE-biomaGUNE-NNNN)
 #   - an explicit internal name the group has agreed on
 #
 # Provisional patterns currently in use during the pilot (stopgaps):
-#   - AxioScan: AE-biomeGUNE-NNNN — reasonable interim (animal-project codes)
+#   - AxioScan: AE-biomaGUNE-NNNN — reasonable interim (animal-project codes)
 #   - Cell Observer cells-mode: ${researcher}-${experiment} — stopgap only
 #
 # See 05_PROJECTS.md §9 for the full warning and open question (PROJ-05).
-# When you set project_hint below, prefer a real, durable naming convention.
+# When you set project_name below, prefer a real, durable naming convention.
 # --------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 ingest:
   delete_source_after_ingest: false   # remove source file/folder after verify
-  # When `registry.project_hint` resolves to a value that isn't an
-  # existing PROJ-XXXX or short_name in registry_projects.csv, auto-create
-  # a project with that value as the short_name. First ingest creates;
-  # subsequent ingests with the same hint reuse via short_name lookup.
+  # When `registry.project_name` matches no existing PROJ-XXXX or project
+  # name in registry_projects.csv, auto-create a project with that name (and
+  # a folder of the same name). First ingest creates; subsequent ingests with
+  # the same name reuse it (matched case-insensitively).
   # Default false to prevent typos creating rogue projects silently.
   # When you enable it, fill in the `auto_create_project:` block below.
   auto_create_projects: false
@@ -145,7 +147,7 @@ registry:
 
   # Optional.
   modalities_in_study:  NA                            # populated for hybrid DICOM (e.g. "PT;CT")
-  project_hint:         NA                            # PROJ-XXXX, triggers .lnk creation. See WARNING at top of file.
+  project_name:         NA                            # PROJ-XXXX, triggers .lnk creation. See WARNING at top of file.
   notes:                "Routine WSI batch; ${discovered.stain} stain at ${discovered.magnification}"
 
 # operator = the person who RAN the equipment for THIS acquisition. SIDECAR-ONLY
@@ -156,7 +158,7 @@ operator:               discovered.operator
 
 # -----------------------------------------------------------------------------
 # OPTIONAL — only consulted when ingest.auto_create_projects: true AND
-# the project named by registry.project_hint does not yet exist.
+# the project named by registry.project_name does not yet exist.
 # Resolver-evaluated like the registry: block. First-write-wins: this
 # block is NEVER read for an already-existing project. The source of
 # truth after creation is /projects/<proj>/_project.yaml (manually

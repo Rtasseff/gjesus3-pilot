@@ -100,6 +100,7 @@ Read-only checks, recovery, and one-off helpers. Run `python tools/<name>.py …
 | **`metadata_completeness.py`** | Read-only enrichment-gap report (which acquisitions still carry unknown-sentinel subject/condition/anatomy values). |
 | **`recover_subject_metadata.py`** | Superuser deferred-recovery: re-resolve subject metadata for acquisitions ingested while the animal-facility DB was unreachable. |
 | **`migrate_registry_columns.py`** | Schema-evolution helper (back up → migrate → register the `.bak`). The pattern for any future registry column change. |
+| **`migrate_project_naming.py`** | One-shot, already-executed (2026-08-02) migration to the [project reference model](../mfb-rdm-docs/05_PROJECTS.md) §2a: `registry_raw` header → `project_id`, `registry_projects` `short_name` → `name`, project folders renamed to their name, saved NAS recipes deleted. Kept as the paper trail — and as the worked example of a live-data migration (dry-run default, resumable, `--verify`, `--reverse --from-backup`). |
 | **`backfill_microscopy_anatomy.py`**, **`backfill_mri_anatomy.py`**, **`backfill_microscopy_bestguess.py`** | One-time anatomy back-fills for historical acquisitions. See [`ANATOMY_BACKFILL.md`](ANATOMY_BACKFILL.md). |
 | **`extract_ni_archives.py`**, **`extract_xmri_archives.py`** | Unpack archived source data into staging ahead of an ingest. |
 

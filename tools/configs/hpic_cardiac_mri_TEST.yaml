@@ -10,7 +10,7 @@
 # tools/extract_xmri_archives.py) into per-case directories on fast local
 # staging (off-NAS, like every other batch). The ingest copies into NAS /raw/.
 #
-# Differences from the LIONS config: data_source, project_hint (PROJ-0002),
+# Differences from the LIONS config: data_source, project_name (PROJ-0002),
 # and the staging dir. instrument_model is still omitted (blank) — the
 # original HPIC rows carried per-case Philips model strings (Ingenia Elition X
 # / Ingenuity / IntelliSpace Portal); those live in rebuild_baseline + the old
@@ -47,7 +47,7 @@ registry:
   sample_id:            "${discovered.folder_name}"
   sample_type:          "cardiac MRI study"
   acquisition_datetime: NA
-  project_hint:         PROJ-0002
+  project_name:         PROJ-0002
   notes:                "TEST INGEST 2026-06-01 rebuild - collaborator HPIC cardiac MRI, re-ingested from config (originally interactive round 1-2). Purge after team exhibition."
 
 auto_create_project:

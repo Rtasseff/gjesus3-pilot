@@ -1,7 +1,7 @@
 """Load per-instrument ingest templates to in-memory dicts.
 
 The per-instrument templates at `tools/templates/instruments/*.yaml` encode
-every locked convention (filename parse, registry mapping, project_hint,
+every locked convention (filename parse, registry mapping, project_name,
 link_filename, copy_strategy, acquisition_layout). The operator front-ends
 load these as the source of truth and apply only a small whitelisted override
 set (see `config_builder.build_config`) — they never duplicate the conventions.

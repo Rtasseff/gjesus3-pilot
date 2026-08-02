@@ -379,7 +379,7 @@ assembles a project on the NAS.)
   selected acqs AND write the corresponding provenance entries** — i.e. the *same* hard-link +
   provenance machinery that [`tools/ingest_raw.py`](../tools/ingest_raw.py) and the linker
   ([`tools/ingest/linker.py`](../tools/ingest/linker.py), `create_hardlink`) already perform
-  in the ingest project-linking step when an ingest's `project_hint` resolves. This makes the
+  in the ingest project-linking step when an ingest's project resolves. This makes the
   Finder a "build a working set / assemble a project" tool, not just a locator.
   - *Why it's not a page-only change (the hard constraint):* the current Finder is a
     **static, sandboxed HTML page running over `file://`** — by browser security it **cannot
@@ -398,25 +398,25 @@ assembles a project on the NAS.)
 ## Finder — provenance-driven project index (a possibly-better project-level index) (2026-06-23)
 
 Context: we now publish a **registry-driven per-project `index.html`** (the global Finder,
-filtered by `project_hint`, refreshed when an ingest writes into the project — see [`tools/FINDER.md`](../tools/FINDER.md)).
+filtered by `project_id`, refreshed when an ingest writes into the project — see [`tools/FINDER.md`](../tools/FINDER.md)).
 This item explores a **different, possibly better** way to build the project-level index: drive
 it from the **project's own provenance file** instead of the registry. Raised by the data office
 2026-06-23 — **shape still open, discuss before building.**
 
-- [ ] **Build the project `index.html` from the project's provenance file, not from `project_hint`.**
+- [ ] **Build the project `index.html` from the project's provenance file, not from `project_id`.**
   At ingest, every raw acquisition hard-linked into a project is recorded in that project's
   **provenance** (see [`07_PROVENANCE`](../mfb-rdm-docs/07_PROVENANCE.md) + the ingest
   provenance-writing step). A provenance-driven index would list **the files actually present in
   the project's linked `raw/` folder** and use the provenance to link each hard-linked file back
   to its **source acquisition** → its `metadata.json` sidecar and its registry row (so the
   researcher still gets full acquisition + registry info, reached *through* the provenance rather
-  than via a `project_hint` match).
+  than via a `project_id` match).
   - *Why it may beat the registry-driven version:*
-    - **Reflects what's actually in the project, now.** `project_hint` is stamped once at ingest;
+    - **Reflects what's actually in the project, now.** `project_id` is stamped once at ingest;
       provenance reflects the project's real current contents. Not every ingest even puts raw
       files into a project, and the **initial project is often vague** — researchers later
       **reorganize / re-home** acqs into projects meaningful to them. A provenance-driven index
-      tracks that reality; a `project_hint` filter goes stale.
+      tracks that reality; a `project_id` filter goes stale.
     - **Shows non-acquisition files too.** Project folders accumulate files that aren't raw
       acquisitions (analyses, notes, derived outputs) with **no registry row** — the
       registry-driven index can't show them, but a provenance/folder-driven index can list them
@@ -581,7 +581,7 @@ records. The gap **recurs for any future ingest** touching null-alias projects.
 
 - [ ] **Harden the ingest:** when the DB returns a project found but with a null
   alias, fall back to the operator/parse project (`discovered.project_code` via
-  `project_hint`) when composing `facility_animal_id`, instead of emitting `-None`.
+  the project name) when composing `facility_animal_id`, instead of emitting `-None`.
   One-line guard in `animal_db.compose_subject_id` callers / `enrichment.py`.
 - [ ] **Fix the source:** ask the data office to populate the project alias for
   `1521` / `0619` / `0618` (and audit for other null-alias projects) in the facility DB.
@@ -666,7 +666,7 @@ Same model planned for the **future external-drive microscopy** (also no standar
 **Best-guess system (built + smoke-tested 2026-06-15, all LOW CONFIDENCE, `source: "auto-guess"`):**
 - Reliable fields come from the `.czi` itself (timestamp, objective, channels, ZEN operator `czi_user`).
 - **Project** = the source top-folder, slugged → one provisional project per folder (literal
-  `project_hint` in a **per-folder config** — also keeps the K: copy to one folder at a time, since
+  `project_name` in a **per-folder config** — also keeps the K: copy to one folder at a time, since
   K: is in daily use; single-threaded, never the whole tree at once).
 - **sample_type / anatomy / is_control** are GUESSED off-NAS afterward by
   `tools/backfill_microscopy_bestguess.py` (reads each acq's `original_name`, zero source-drive
@@ -680,7 +680,7 @@ Same model planned for the **future external-drive microscopy** (also no standar
   best-guess pass over all. **Plan: load it, then gather researcher feedback before the external drives.**
 - [ ] Minor: strip the `.czi` extension from the best-guess `sample_id`.
 - [ ] Optional refinement: some folders embed a project code (`0721 HUGO`, `1022 RGD`) — could map
-  those to the `ae-biomegune-NNNN` projects (shared with MRI/NI/AxioScan) instead of a folder slug.
+  those to the `AE-biomaGUNE-NNNN` projects (shared with MRI/NI/AxioScan) instead of a folder slug.
 - [ ] **Project re-organization via researcher feedback (the real fix — post-hoc).** Per-folder
   projects — and especially Cell Observer's per-PERSON projects (`Claudia`, `Laura`, …) — are a
   DELIBERATE STOPGAP, not the long-term shape (data-office does NOT want per-user/researcher project
@@ -933,7 +933,7 @@ single-operator workflow). See [`CHANGELOG.md`](../CHANGELOG.md) 2026-07-12.
   subsystem (`pending.py`, `pending-db` sentinel, `recover_subject_metadata.py`).
 - [ ] **Automate the existing validators (§3.2.5).** `validate_registries`,
   `verify_checksums`, `metadata_completeness` all exist but nothing schedules them;
-  `subject_ids↔subjects` and `project_hint↔projects` are unenforced string joins.
+  `subject_ids↔subjects` and `project_id↔projects` are unenforced string joins.
   Weekly scheduled task + an integrity check at project close-out.
 - [ ] **De-risk the bus factor (§3.2.4).** Containerize the ingest environment
   (today it's one machine with `J:\` mapped + `~/.my.cnf` + Dicomifier on PATH);

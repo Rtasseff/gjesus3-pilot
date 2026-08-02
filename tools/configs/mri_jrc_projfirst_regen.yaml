@@ -104,8 +104,8 @@
 #     with NI ("m13_0525"); `session_id` = the fuller JRC study id (groups
 #     all exams of one session). Canonical cross-instrument subject id is
 #     subject.facility_animal_id from the DB (06_REGISTRIES §2.3).
-#   - `project_hint: ae-biomegune-${discovered.project_code}` — the
-#     animal-protocol code becomes the project short_name. Same pattern
+#   - `project_name: AE-biomaGUNE-${discovered.project_code}` — the
+#     animal-protocol code becomes the project name. Same pattern
 #     AxioScan round 4 uses; cross-modality projects share workspaces.
 #   - `auto_create_project:` — owner = `NMR-platform` since there's no
 #     dedicated technician. Edit _project.yaml after creation.
@@ -316,8 +316,8 @@ registry:
   session_id:           "${discovered.jrc_id}"
   acquisition_datetime: discovered.mri_acquisition_datetime
   # PROVISIONAL — see warning in 05_PROJECTS §9 (PROJ-05). The
-  # animal-protocol code becomes the project short_name.
-  project_hint:         "ae-biomegune-${discovered.project_code}"
+  # animal-protocol code becomes the project name.
+  project_name:         "AE-biomaGUNE-${discovered.project_code}"
   # EDIT: short batch description.
   notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol ${discovered.project_code}); recons kept: ${discovered.mri_recon_indices}"
 
@@ -335,7 +335,7 @@ operator: "<REQUIRED - set via mri-ingest --operator, or replace here>"
 # creation).
 auto_create_project:
   owner:       "NMR-platform"
-  description: "Auto-created from internal MRI ingest; animal-protocol code ${discovered.project_code}. PROVISIONAL project_hint — see 05_PROJECTS §9."
+  description: "Auto-created from internal MRI ingest; animal-protocol code ${discovered.project_code}. PROVISIONAL project_name — see 05_PROJECTS §9."
   notes:       "Auto-created on first ingest. Edit owner via _project.yaml to record the researcher behind the animal protocol."
 
 # Name of the project hard link placed under /projects/<proj>/raw_linked/.
@@ -348,7 +348,7 @@ auto_create_project:
 #
 # Default pattern uniquely identifies each acquisition within the project
 # even when multiple animals from the same protocol land in the same
-# project (e.g. m17/m18/m19/m20 all under proj-ae-biomegune-0424). The
+# project (e.g. m17/m18/m19/m20 all under AE-biomaGUNE-0424). The
 # round-6 first ingest exposed a collision bug when link names were just
 # the exam number — the four animals each had exam 27, so `27` clashed
 # and only one survived. The new pattern includes sample_id, date, exam,

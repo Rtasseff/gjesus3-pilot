@@ -19,7 +19,7 @@ Replication faithfully mirrors `ingest_single`:
                 counter keyed on (acq_date, instrument) — without it, two
                 same-date/instrument cases would both preview as -001.
   - project   : linker.resolve_project (Step 9.5) -> "PROJ-XXXX" or, when absent
-                and ingest.auto_create_projects is on, "will auto-create: <hint>".
+                and ingest.auto_create_projects is on, "will auto-create: <name>".
   - link name : resolver.resolve_link_filename (Step 12), rstrip("/\\"),
                 fallback to the FULL original_name (exactly as ingest_single).
 
@@ -36,7 +36,7 @@ from typing import Optional
 
 # tools/ on sys.path (see templates.py) so `from ingest import ...` works.
 from . import templates as _templates  # noqa: F401  (ensures sys.path setup)
-from ingest import config, acq_id as acq_id_mod, linker, resolver
+from ingest import config, acq_id as acq_id_mod, linker, project_naming, resolver
 
 
 @dataclass
@@ -48,8 +48,8 @@ class CasePreview:
     registry_resolved: dict
     acq_date: str
     acq_id_preview: str
-    project_preview: str          # "PROJ-XXXX" | "will auto-create: <hint>"
-                                  # | "hint not found: <hint>" | "(no project)"
+    project_preview: str          # "PROJ-XXXX" | "will auto-create: <name>"
+                                  # | "not found: <name>" | "(no project)"
     link_filename_preview: str
     warnings: list = field(default_factory=list)
 
@@ -272,19 +272,31 @@ def _preview_acq_id(acq_date, instrument, registry_path, seq_seen, warnings):
 def _preview_project(case, projects_registry, auto_create):
     """Replicate Step 9.5 project resolution, read-only.
 
-    Returns "PROJ-XXXX" on a resolved hint, "will auto-create: <hint>" when the
-    hint is absent and auto_create is on, "hint not found: <hint>" otherwise, or
-    "(no project)" when no hint was set.
+    Returns "PROJ-XXXX" on a resolved name, "will auto-create: <name>" when the
+    project doesn't exist and auto_create is on, "not found: <name>" otherwise,
+    or "(no project)" when no project was set.
+
+    Side effect (deliberate, mirrors Step 9.5): writes the normalized/canonical
+    `project_name` and the resolved `project_id` back onto `case`, so the
+    link-name preview that runs next resolves `${project_name}` / `${project_id}`
+    to exactly what an ingest would produce. Without this the preview showed the
+    operator's raw input where the real run would substitute the canonical value.
     """
-    project_hint = (case.get("project_hint") or "").strip()
-    if not project_hint:
+    project_name = project_naming.normalize_project_name(case.get("project_name"))
+    if not project_name:
         return "(no project)"
-    proj_id, _folder = linker.resolve_project(projects_registry, project_hint)
+    case["project_name"] = project_name
+    proj_id, canon_name, _folder = linker.resolve_project(
+        projects_registry, project_name
+    )
     if proj_id:
+        case["project_id"] = proj_id
+        if canon_name:
+            case["project_name"] = canon_name
         return proj_id
     if auto_create:
-        return f"will auto-create: {project_hint}"
-    return f"hint not found: {project_hint}"
+        return f"will auto-create: {project_name}"
+    return f"not found: {project_name}"
 
 
 def _preview_link(case, acq_id_preview, acq_date, warnings):

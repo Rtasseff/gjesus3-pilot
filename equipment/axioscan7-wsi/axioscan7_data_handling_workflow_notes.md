@@ -368,7 +368,7 @@ project-linked acquisition is:
    ingests.
 4. **Hard-link into a project.** The acquisition is hard-linked into its project
    under `/projects/<proj>/raw_linked/` (project named from the
-   `AE-biomeGUNE-<project>` animal-project code). A hard link opens like the real
+   `AE-biomaGUNE-<project>` animal-project code). A hard link opens like the real
    file but takes no extra space.
 5. **Finder.** The Finder (`registries/index.html` global + the project's own
    `index.html`): the project's index is refreshed on ingest (the global index on a schedule — see [`tools/FINDER.md`](../../tools/FINDER.md)), so the slide is immediately searchable by sample,

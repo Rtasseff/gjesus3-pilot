@@ -63,7 +63,7 @@ def base_case(sample_type, **extra):
     case = {
         "sample_type": sample_type,
         "discovered": {"animal_num": "13", "project_code": "0423"},
-        "project_hint": "ae-biomegune-0423",
+        "project_name": "AE-biomaGUNE-0423",
         "subject_from_db": True,
         "subject_lookup": {"project_alias": "${discovered.project_code}",
                            "animal_code": "${discovered.animal_num}"},

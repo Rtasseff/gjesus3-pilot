@@ -1,8 +1,8 @@
 # 05 — Projects Area
 
 **Parent:** [Documentation Index](00_INDEX.md)
-**Status:** 🔶 Draft
-**Last Updated:** 2026-06-26
+**Status:** 🔶 Draft — except **§2a (Project Reference Model), which is ✅ DECIDED.**
+**Last Updated:** 2026-08-02 (new **§2a Project Reference Model** — the owning section for how a project is referred to: `project_id` + `name`, case-insensitive resolution, **folder == name verbatim**, one construction site. Retires the "project hint" vocabulary and the `proj-` folder prefix; §9 now covers the naming *convention* only. Prior: 2026-06-26.)
 
 ---
 
@@ -45,6 +45,106 @@ Researchers who do most of their analysis on local machines or other drives can 
 
 ---
 
+## 2a. Project Reference Model
+
+> **✅ DECIDED 2026-08-02.** This section **owns** the concept "how a project is
+> referred to" — its vocabulary, its resolution rule, and its consumers. Anything
+> that names or locates a project cites this section. The concept previously had
+> no owning section, which is how the vocabulary drifted into a different word
+> per layer (see §2a.5).
+
+### 2a.1 A project has exactly two identifiers
+
+| Identifier | Form | Role |
+|---|---|---|
+| **`project_id`** | `PROJ-XXXX` | **Machine key.** Immutable, systematic, assigned at creation. This is what `registry_raw.csv` stores, and what every join uses. |
+| **`name`** | human-readable, unique case-insensitively, OS-safe, hyphens not spaces | **Human key.** What operators type, what everyone says — **and the folder name, verbatim.** |
+
+There is no third thing. In particular there is **no "hint"**: what an operator
+supplies is the project's *name*, and the system resolves it to the *id*.
+
+### 2a.2 Vocabulary by layer
+
+| Layer | Name |
+|---|---|
+| GUI field label | **"Project name"** |
+| Config / recipe key | **`registry.project_name`** |
+| `registry_projects.csv` column | **`name`** |
+| Folder under `/projects/` | **the name, verbatim** |
+| `registry_raw.csv` column | **`project_id`** (holds the resolved `PROJ-XXXX`) |
+| `link_filename:` tokens | **`${project_name}`** (human) · **`${project_id}`** (machine) |
+| `_project.yaml` key | **`name:`** |
+
+Note the deliberate asymmetry: the operator's **input** is a name; the **stored**
+column is an id. Step 9.5 of the ingest is where one becomes the other. A column
+called `project_name` holding `PROJ-0011` would be a lie — which is exactly the
+mistake this model corrects.
+
+### 2a.3 Resolution rule
+
+Operator input under `registry.project_name` is matched against:
+
+1. an existing project's **`name`**, **case-insensitively** (the NAS filesystem
+   is case-insensitive, so two spellings can never be two folders), or
+2. a literal **`PROJ-XXXX`** id.
+
+On a match the pipeline attaches to that project. On no match, and with
+`ingest.auto_create_projects: true`, it **auto-creates** a project named exactly
+as typed (after space → hyphen), with a folder of the same name. With
+auto-create off, the acquisition is registered with **no** project — a blank
+`project_id` and no link — and the ingest logs a WARN saying so.
+
+After resolution the pipeline carries **both** identifiers: `project_id` (the
+resolved id, written to the registry) and `project_name` (the **canonical** name
+read back from `registry_projects.csv`). Canonicalization matters: an operator
+who typed `ae-biomagune-1123`, or who referenced the project by id, still gets
+`AE-biomaGUNE-1123` in link names and logs.
+
+**Name rules.** A name must be a legal single path component, because it *is* the
+folder: no `\ / : * ? " < > |`, no control characters, no leading/trailing space
+or dot, max 60 characters. Spaces are converted to hyphens — the GUI does this
+live as the operator types, so what they see is what gets created.
+
+### 2a.4 Invariants
+
+- folder basename **==** `name`
+- `folder_location` **==** `/projects/<name>/`
+- `registry_raw.project_id` ∈ `registry_projects.project_id` (or blank)
+- names are unique **case-insensitively**
+
+**One construction site.** [`tools/ingest/project_naming.py`](../tools/ingest/project_naming.py)
+is the only place that knows how a name becomes a path; `create_project.py` is
+the only thing that creates a project. **Every other consumer reads the stored
+`folder_location`** — never rebuilds a path from a name.
+
+### 2a.5 Consumers
+
+| Consumer | What it uses |
+|---|---|
+| [`ingest_raw.py`](../tools/ingest_raw.py) Step 9.5 | resolves `project_name` → `project_id` + canonical name; auto-creates |
+| [`ingest/linker.py`](../tools/ingest/linker.py) | `resolve_project` → `(project_id, name, folder_location)`; `lookup_project_folder` for the link path |
+| [`ingest/registry.py`](../tools/ingest/registry.py) | writes the `project_id` column (mirror: [06_REGISTRIES §2.2](06_REGISTRIES.md)) |
+| [`ingest/resolver.py`](../tools/ingest/resolver.py) | accepts `registry.project_name`; offers both link tokens (mirror: 06_REGISTRIES) |
+| [`create_project.py`](../tools/create_project.py) | validates the name, derives the folder, writes `name` + `folder_location` |
+| [`operator/collisions.py`](../tools/operator/collisions.py) | groups by name (case-insensitively); reads the stored folder |
+| [`operator/value_fields.py`](../tools/operator/value_fields.py) + the GUI | the "Project name" field and its space→hyphen conversion |
+| [`generate_index.py`](../tools/generate_index.py) · [`find_acq.py`](../tools/find_acq.py) | group/join by `project_id`; `--project` accepts id **or** name |
+| [`gather_metadata.py`](../tools/gather_metadata.py) · [`metadata_completeness.py`](../tools/metadata_completeness.py) | `--project` accepts id or name |
+| [`validate_registries.py`](../tools/validate_registries.py) | checks `project_id` exists in the projects registry |
+
+### 2a.6 What this replaced
+
+Until 2026-08-02 the operator field was called a **"project hint"**, the stored
+column was `project_hint` (though it held ids), the projects-registry column was
+`short_name`, and the folder was `proj-` + `lower(short_name)` — so the folder an
+operator opened never matched the name the GUI showed them. Three separate places
+implemented the folder rule and drifted apart. The old key `registry.project_hint`
+is **not accepted** (no deprecated alias): it raises the resolver's unknown-key
+error listing the allowed keys, so a stale config fails loudly. Migration record:
+[CHANGELOG.md](../CHANGELOG.md), 2026-08-02.
+
+---
+
 ## 3. Directory Structure
 
 ```
@@ -53,12 +153,12 @@ Researchers who do most of their analysis on local machines or other drives can 
 │   └── registry_projects.csv           # Projects registry (see 06_REGISTRIES)
 │
 └── projects/
-    └── proj-ipf-biomarkers/
+    └── ipf-biomarkers/                   # folder == the project name, verbatim (§2a)
         ├── _project.yaml
         ├── provenance.csv
         ├── index.html                  # per-project searchable finder (refreshed on ingest into this project — see tools/FINDER.md)
         ├── raw_linked/                 # hard links to raw acquisitions (NOT shortcuts)
-        │   └── ...                     # (created by ingest_raw.py when project_hint set — see 10_TOOLS §2.1.1;
+        │   └── ...                     # (created by ingest_raw.py when a project resolves — see 10_TOOLS §2.1.1;
         │                               #  link filename comes from the per-instrument `link_filename:`
         │                               #  template — see 10_TOOLS §2.1.5)
         ├── metadata/                   # 🕗 PLANNED/DEFERRED — study-level metadata (researcher-supplied)
@@ -130,7 +230,7 @@ Same format as Publications (see [07_PROVENANCE](07_PROVENANCE.md)):
 
 ```yaml
 project_id: PROJ-0001
-short_name: ipf-biomarkers
+name: ipf-biomarkers
 description: "IPF biomarker quantification study"
 status: active  # active | paused | closed
 owner: MBC
@@ -160,7 +260,7 @@ See [06_REGISTRIES](06_REGISTRIES.md) Section 4 for full schema. Key fields:
 | Field | Type | Required |
 |-------|------|----------|
 | `project_id` | String | Yes |
-| `short_name` | String | Yes |
+| `name` | String | Yes |
 | `description` | Text | Yes |
 | `owner` | String | Yes |
 | `start_date` | Date | Yes |
@@ -175,15 +275,17 @@ See [06_REGISTRIES](06_REGISTRIES.md) Section 4 for full schema. Key fields:
 
 > **⚠️ OPEN — project naming requires group consensus.**
 >
-> A project's `short_name` is the **human-meaningful** identifier the group will use every day — it should map to a durable unit of work that everyone recognizes. Candidates include funded project names, animal-project approval IDs (e.g. `AE-biomeGUNE-NNNN`), or explicit internal names the group agrees on.
+> A project's `name` (§2a) is the **human-meaningful** identifier the group will use every day — and it is the folder they open — so it should map to a durable unit of work that everyone recognizes. Candidates include funded project names, animal-project approval IDs (e.g. `AE-biomaGUNE-NNNN`), or explicit internal names the group agrees on.
+>
+> **This section is about the *convention* — which words make a good name. The *mechanics* of naming (the two identifiers, resolution, the folder rule) are settled in [§2a](#2a-project-reference-model).**
 >
 > **Experiments, assays, and studies are NOT projects.** A project typically *contains* many experiments, assays, or studies over its lifetime. Using an experiment label as the project name produces sprawling, low-value project folders that fragment work and obscure the actual scope.
 >
 > **Provisional patterns currently in use during the pilot:**
 >
-> | Instrument / batch | Provisional `short_name` pattern | Status |
+> | Instrument / batch | Provisional name pattern | Status |
 > |--------------------|----------------------------------|--------|
-> | AxioScan 7 (round-4) | `ae-biomegune-NNNN` (animal-project code, lowercased) | 🔶 Reasonable interim — animal-project codes are durable units |
+> | AxioScan 7 (round-4) | `AE-biomaGUNE-NNNN` (animal-project code) | 🔶 Reasonable interim — animal-project codes are durable units |
 > | Cell Observer (round-5 cells-mode) | `${researcher}-${experiment}` (e.g. `itziar-alphasma`) | ⚠️ **Stopgap only** — experiment is not a project |
 >
 > **Required next step:** Convene the relevant project-lead users to converge on a real naming convention before the pilot scales out. Only the project-lead users can decide what's meaningful for organizing *their* work; the data office cannot make this call for them. The system's value compounds once a consistent convention is in place — researchers will find their raw data, intermediates, and projects via these names, so the name needs to bear real meaning. Tracked as an open question in [00_INDEX.md](00_INDEX.md).
@@ -202,25 +304,28 @@ PROJ-<NNNN>
 
 **Example:** `PROJ-0001`
 
-The PROJ-ID is used in the registry. The folder uses a **short name** for human readability.
+The PROJ-ID is the machine key stored in `registry_raw.csv`. The folder uses the project **name** — see [§2a](#2a-project-reference-model).
 
-### 9.2 Folder Short Name
+### 9.2 Folder Name
+
+**The folder name IS the project name, verbatim** — no prefix, casing preserved
+(✅ DECIDED 2026-08-02; the rule and its rationale are in [§2a](#2a-project-reference-model)).
 
 **Requirements:**
-- Unique across all project folders
+- Unique across all project folders (case-insensitively — the NAS filesystem is)
 - Human-readable (describes the project)
-- Filesystem-safe: lowercase, hyphens, no spaces
-- Prefixed with `proj-` in the folder name
+- Filesystem-safe: no `\ / : * ? " < > |`, no leading/trailing space or dot, max 60 chars
+- Spaces are converted to hyphens (live, as the operator types)
 
 **Pattern:**
 ```
-proj-<short_name>
+<name>
 ```
 
 **Examples:**
-- `proj-ipf-biomarkers`
-- `proj-tumor-segmentation-eval`
-- `proj-pet-mri-fusion`
+- `ipf-biomarkers`
+- `AE-biomaGUNE-1123`
+- `tumor-segmentation-eval`
 
 ---
 
@@ -240,7 +345,7 @@ python tools/create_project.py \
 python tools/create_project.py --interactive
 ```
 
-**Auto-creation during ingest.** When `ingest_raw.py` runs with `ingest.auto_create_projects: true` and encounters a `project_hint` that doesn't match any existing project, `create_project` is invoked programmatically. The ingest config's optional `auto_create_project:` block (see [10_TOOLS §2.1.4](10_TOOLS.md)) supplies the new project's `owner`, `description`, and `notes` — values may be literal text or interpolate `discovered.<field>` parsed from the source data. First-write-wins: the block is read only on initial creation; subsequent ingests with the same `project_hint` reuse the existing project and ignore the block.
+**Auto-creation during ingest.** When `ingest_raw.py` runs with `ingest.auto_create_projects: true` and encounters a `registry.project_name` that doesn't match any existing project (§2a.3), `create_project` is invoked programmatically. The ingest config's optional `auto_create_project:` block (see [10_TOOLS §2.1.4](10_TOOLS.md)) supplies the new project's `owner`, `description`, and `notes` — values may be literal text or interpolate `discovered.<field>` parsed from the source data. First-write-wins: the block is read only on initial creation; subsequent ingests naming the same project reuse it and ignore the block.
 
 ---
 
@@ -262,4 +367,4 @@ python tools/create_project.py --interactive
 | PROJ-02 | What retention policy? | PI | ✅ Resolved — 6-month paused review |
 | PROJ-03 | How strict on provenance? | Data Mgmt Lead | ✅ Resolved — recommended, not required |
 | PROJ-04 | Where do researchers actually work now? | Users | 📣 Need input |
-| PROJ-05 | **Project naming convention** — group consensus needed. Experiments ≠ projects. Candidates: funded names, animal-project IDs, explicit internal names. Provisional patterns (`ae-biomegune-NNNN`, `${researcher}-${experiment}`) are stopgaps. See §9 for the warning callout. | Project-lead users + PI | ⚠️ Pilot blocker once cell-mode work scales beyond the test batch |
+| PROJ-05 | **Project naming convention** — group consensus needed. Experiments ≠ projects. Candidates: funded names, animal-project IDs, explicit internal names. Provisional patterns (`AE-biomaGUNE-NNNN`, `${researcher}-${experiment}`) are stopgaps. See §9 for the warning callout (naming *mechanics* are settled in §2a; only the convention is open). | Project-lead users + PI | ⚠️ Pilot blocker once cell-mode work scales beyond the test batch |

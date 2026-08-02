@@ -3,15 +3,15 @@
 # Production config. Same patterns as axioscan7_20260422.yaml plus:
 #   - composite sample_id via interpolation (`<project>_<sample_short>`)
 #     per 06_REGISTRIES §2.3 DRAFT guidance
-#   - full animal-project code as project_hint (`AE-biomeGUNE-<project>`)
-#     with auto-create on first encounter, short_name reuse after
+#   - full animal-project code as project_name (`AE-biomaGUNE-<project>`)
+#     with auto-create on first encounter, name reuse after
 #   - one config covers all three projects in the day folder
 
 ingest:
   delete_source_after_ingest: false
-  # Auto-create the project if `project_hint` doesn't match an existing
-  # project_id or short_name. First ingest of a given project chunk
-  # creates it; subsequent ingests reuse via short_name lookup.
+  # Auto-create the project if `project_name` doesn't match an existing
+  # project_id or project name. First ingest of a given project chunk
+  # creates it; subsequent ingests reuse via name lookup.
   auto_create_projects: true
 
 auto_discover:
@@ -45,8 +45,8 @@ registry:
   # AcquisitionDateAndTime.
   acquisition_datetime: discovered.czi_acquisition_datetime
   # Full animal-project code. First file for a given <project> chunk
-  # triggers auto-create with short_name = "ae-biomegune-<project>"
-  # (lowercased by tools/ingest_raw.py at create time). Subsequent
-  # files reuse via short_name lookup.
-  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  # triggers auto-create of the project named "AE-biomaGUNE-<project>"
+  # (name preserved verbatim; the folder matches). Subsequent files reuse
+  # it by name.
+  project_name:         "AE-biomaGUNE-${discovered.project}"
   notes:                "WGA fluorescence WSI batch (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"

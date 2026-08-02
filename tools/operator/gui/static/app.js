@@ -28,6 +28,11 @@ function getJSON(url) {
   return fetch(url).then((r) => r.json());
 }
 
+// The value-field key whose content becomes a folder name, so it gets the
+// space->hyphen treatment in both front-ends (05_PROJECTS "Project reference
+// model"). Matches tools/operator/value_fields.py.
+const PROJECT_NAME_KEY = "registry.project_name";
+
 // Controlled sample_type vocabulary <option>s, injected by the page from
 // window.SAMPLE_TYPES (06_REGISTRIES §2.4).
 function sampleTypeOptions() {
@@ -282,7 +287,10 @@ async function loadGaps() {
       const tfEl = document.createElement("div");
       const ex = document.createElement("span"); ex.className = "example";
       val.append(tfEl, ex);
-      runnerGapFields[f.key] = new TokenField(tfEl, { onChange: updateGapExamples });
+      runnerGapFields[f.key] = new TokenField(tfEl, {
+        onChange: updateGapExamples,
+        spacesToHyphens: f.key === PROJECT_NAME_KEY,
+      });
     }
     row.append(lab, val); grid.appendChild(row);
   });
@@ -781,6 +789,7 @@ function buildRequiredGrid() {
       val.append(tfEl, ex);
       builderFields[f.key] = new TokenField(tfEl, {
         onChange: () => { renderOverrideJSON(); updateBuilderExamples(); },
+        spacesToHyphens: f.key === PROJECT_NAME_KEY,
       });
     }
     row.append(lab, val);

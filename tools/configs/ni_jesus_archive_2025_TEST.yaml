@@ -67,12 +67,12 @@ registry:
   sample_type:          organism
   session_id:           "${discovered.user}_${discovered.series_id}_${discovered.acq_date_short}_${discovered.short_sample}"
   acquisition_datetime: discovered.acq_datetime_full
-  project_hint:         "ae-biomegune-${discovered.short_project}"
+  project_name:         "AE-biomaGUNE-${discovered.short_project}"
   notes:                "TEST INGEST 2026-05-26 REDO - purge after team exhibition (round-8 archive-mode NI: ${discovered.modality} of ${discovered.short_sample}, animal protocol ${discovered.short_project}, funded project ${discovered.series_id}; operator ${discovered.user}, acquired ${discovered.acq_datetime_full})"
 
 auto_create_project:
   owner:       "NI-platform"
-  description: "TEST auto-created during round-8 NI archive-mode ingest — animal-protocol short id ${discovered.short_project} (funded project ${discovered.series_id}). Purge after team exhibition. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
+  description: "TEST auto-created during round-8 NI archive-mode ingest — animal-protocol short id ${discovered.short_project} (funded project ${discovered.series_id}). Purge after team exhibition. PROVISIONAL project_name convention (05_PROJECTS §9 PROJ-05)."
   notes:       "Auto-created during round-8 NI ingest (originally 2026-05-22, redone 2026-05-26 after the round-8 bug fix). Will be purged with the rest of the quasi-production data after the team exhibition."
 
 # Unique-per-acquisition link name.

@@ -2,7 +2,7 @@
 """Generate per-top-folder BEST-GUESS ingest configs for the legacy Zeiss
 microscopy instruments (Cell Observer = CELL, Confocal LSM 900 = LSM9) that have
 no naming standard. One config per source top-folder = one provisional project
-(literal slugged project_hint). This keeps the source-drive copy to one folder at
+(literal slugged project name). This keeps the source-drive copy to one folder at
 a time (the drive is in daily use) and avoids any shared-pipeline change.
 
 Does ONE shallow listing of the base dir (light on the source drive). Writes
@@ -55,7 +55,7 @@ registry:
   sample_id:            "${{discovered.filename}}"
   sample_type:          "NA"
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "{project_slug}"
+  project_name:         "{project_slug}"
   notes:                "BEST-GUESS / LOW-CONFIDENCE — legacy {instrument}, no naming standard; project = source folder '{folder}', sample_id = filename; sample_type/anatomy guessed post-ingest. Verify before scientific reuse."
 
 operator: "${{discovered.czi_user}}"

@@ -62,8 +62,8 @@
 #   - `instrument`, `data_ecosystem`, `instrument_model`,
 #     `acquisition_datetime` use the .czi-embedded values where they
 #     beat any filename or folder-derived guess.
-#   - `sample_id`, `project_hint`: pilot conventions per
-#     06_REGISTRIES §2.3 (composite sample_id) and the AE-biomeGUNE-NNNN
+#   - `sample_id`, `project_name`: pilot conventions per
+#     06_REGISTRIES §2.3 (composite sample_id) and the AE-biomaGUNE-NNNN
 #     animal-project naming.
 #   - `auto_create_project:` — first-time project creation defaults; see
 #     10_TOOLS §2.1.4.
@@ -101,7 +101,7 @@
 # Per-instrument convention only — other groups using the same scanner
 # with different filename conventions would need their own template.
 #
-# Project naming note: AE-biomeGUNE-NNNN comes from the animal-project
+# Project naming note: AE-biomaGUNE-NNNN comes from the animal-project
 # approval system — durable and shared across the institute. Reasonable
 # interim pattern per 05_PROJECTS §9 (PROJ-05); not a stopgap.
 
@@ -177,7 +177,7 @@ registry:
   sample_id:            "${discovered.project}_${discovered.sample_short}"
   sample_type:          tissue
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "AE-biomeGUNE-${discovered.project}"
+  project_name:         "AE-biomaGUNE-${discovered.project}"
   notes:                "WGA fluorescence WSI batch (${discovered.stain} stain at ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na})"
 
 # operator = the tech who RAN the scope for this acquisition (SIDECAR-ONLY,

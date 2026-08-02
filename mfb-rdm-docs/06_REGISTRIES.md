@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** ✅ DECIDED — the `registry_raw.csv` schema (28 columns) is finalized and live in true production; subjects/projects registries are live. (Some forward-looking refinements remain 🔶 Draft, flagged inline and in the Open Questions table.)
-**Last Updated:** 2026-06-26 (doc refactor: corrected the §2.5 example to the real 28-column schema — every example row had been short an `operator` value plus the three enrichment columns; documented `registry_subjects.csv` (§2.8); moved the Publications registry to 🕗 Planned/empty; promoted the settled schema to ✅ DECIDED). Prior: 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
+**Last Updated:** 2026-08-02 (project reference model — `registry_raw.project_hint` → **`project_id`** (header-only rename; the column always held resolved ids) and `registry_projects.short_name` → **`name`** (case-preserved, == the folder). Model in [05_PROJECTS §2a](05_PROJECTS.md); mirror kept exact with `resolver.py`/`registry.py`.) Prior: 2026-06-26 (doc refactor: corrected the §2.5 example to the real 28-column schema — every example row had been short an `operator` value plus the three enrichment columns; documented `registry_subjects.csv` (§2.8); moved the Publications registry to 🕗 Planned/empty; promoted the settled schema to ✅ DECIDED). Prior: 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
 
 ---
 
@@ -92,7 +92,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `canonical_path` | String | ✅ Yes | Auto | Full path to acquisition folder. |
 | `checksum_present` | String (Y/N) | ✅ Yes | Auto | `Y` or `N` — is checksums.json present? |
 | `extended_metadata_present` | String (Y/N) | ✅ Yes | Auto | `Y` (full mode) or `N` (lightweight mode). |
-| `project_hint` | String | Optional | User | Associated project ID if known at deposit. Triggers **hard-link** creation into the project folder when set (the hard-link method — DECIDED + APPLIED 2026-06-02 — superseded the legacy `.lnk` shortcut; see [10_TOOLS §2.1.1](10_TOOLS.md)). |
+| `project_id` | String | Optional | Derived | The project this acquisition belongs to, as the canonical `PROJ-XXXX` id. **The operator supplies a project *name* (`registry.project_name`); ingest Step 9.5 resolves it and stores the id here** — see [05_PROJECTS §2a](05_PROJECTS.md). Blank when no project was set or the name could not be resolved. Triggers **hard-link** creation into the project folder when set (the hard-link method — DECIDED + APPLIED 2026-06-02 — superseded the legacy `.lnk` shortcut; see [10_TOOLS §2.1.1](10_TOOLS.md)). **RENAMED from `project_hint` 2026-08-02** — the column always held resolved ids, so the old name was wrong; header-only migration, values unchanged. |
 | `ingest_config` | String | 🔶 Recommended | Auto | Path (relative to repo root) of the YAML config that produced this row. Empty for interactive ingests or pre-2026-05-06 rows. Used for auditability and reproducibility. |
 | `notes` | String | Optional | User | Free-text notes. Supports `${discovered.<field>}` interpolation. |
 
@@ -122,7 +122,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 | ISA term | gjesus3 equivalent | Where recorded | Example |
 |---|---|---|---|
-| **Investigation** | Project | `registry_projects.csv` → `project_id` + `short_name` | `PROJ-0007` / `itziar-alphasma` (or for MRI, an animal-protocol-coded project like `PROJ-NNNN` with short_name `ae-biomegune-0525`) |
+| **Investigation** | Project | `registry_projects.csv` → `project_id` + `name` | `PROJ-0007` / `itziar-alphasma` (or for MRI, an animal-protocol-coded project like `PROJ-NNNN` named `AE-biomaGUNE-0525`) |
 | **Study** | Session — a coherent acquisition session (one animal session, one slide-loading round) | `registry_raw.csv` → `session_id` column (✅ DECIDED, see §2.2) | `jrc_251016_m18_0424` for an internal MRI session |
 | **Assay** | Acquisition — one scan with a distinct protocol | `registry_raw.csv` → `acq_id` (one row) | `ACQ-20251016-MRI-029` |
 
@@ -177,7 +177,7 @@ The subject ID is carried in the per-acquisition `metadata.json` **`subject:` bl
 
 #### 2.3.4 Ingest-tool implication (parse the animal short code)
 
-The instrument short code embeds `animal_code` with instrument-specific decoration: NI `m14`→`14`, MRI `m13`→`13`, AxioScan `ID13B`→`13` + organ `B`. The ingest tools must parse it into `animal_code` (+ `anatomical_entity` for tissue), derive the project alias from `project_hint` (`ae-biomegune-NNNN` → `NNNN`), and compose the canonical subject ID / DB lookup key. Tracked in `tasks/archive/tasks.md §3.2`. Current per-instrument templates carry an illustrative `facility_animal_id` that predates this and is corrected to the canonical form.
+The instrument short code embeds `animal_code` with instrument-specific decoration: NI `m14`→`14`, MRI `m13`→`13`, AxioScan `ID13B`→`13` + organ `B`. The ingest tools must parse it into `animal_code` (+ `anatomical_entity` for tissue), derive the project alias from the project name (`AE-biomaGUNE-NNNN` → `NNNN`), and compose the canonical subject ID / DB lookup key. Tracked in `tasks/archive/tasks.md §3.2`. Current per-instrument templates carry an illustrative `facility_animal_id` that predates this and is corrected to the canonical form.
 
 ### 2.4 Sample Type Vocabulary (DECIDED 2026-06-11)
 
@@ -216,7 +216,7 @@ REMBI separates concerns: **sample type** (the kind of biological material), **o
 > **Note:** The CSV example below shows the **full 28-column** production header (verified against the live `registries/registry_raw.csv` on 2026-06-26). The schema grows column-by-column with a defensive header check (see [10_TOOLS](10_TOOLS.md)) preventing silent shift; the last header growth was the 2026-06-10 restart, which was born with all 28 columns (`operator` + the three enrichment projections `sample_organism` / `subject_ids` / `anatomical_entity`). The rows below are **representative of real live rows**, lightly cleaned for readability (operator names abbreviated, notes trimmed). Note that microscopy rows leave `researcher` empty (the AxioScan filename carries only the `operator`), and NI/MRI rows set `operator == researcher`.
 
 ```csv
-acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,researcher,operator,data_source,sample_id,sample_type,sample_organism,subject_ids,anatomical_entity,session_id,primary_kind,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_hint,ingest_config,notes
+acq_id,registration_datetime,acquisition_datetime,data_ecosystem,instrument,instrument_model,modalities_in_study,researcher,operator,data_source,sample_id,sample_type,sample_organism,subject_ids,anatomical_entity,session_id,primary_kind,primary_file_name,original_name,file_format,file_size_mb,file_count,canonical_path,checksum_present,extended_metadata_present,project_id,ingest_config,notes
 ACQ-20260219-ZWSI-001,2026-06-14T20:31:27Z,2026-02-19T11:21:18.6309642Z,MICROSCOPY,ZWSI,Axioscan 7,,,MBC,internal,0424_ID29H,tissue,Mus musculus,29-AE-biomaGUNE-0424,heart,,file,ACQ-20260219-ZWSI-001.czi,20260219/MFB_MBC_0424_ID29H_WGA_10x.czi,.czi,490.1,1,/raw/MICROSCOPY/2026/2026-02/ACQ-20260219-ZWSI-001/,Y,Y,PROJ-0002,tools/configs/axioscan7_mfb_20260614.yaml,MFB AxioScan 7 WSI (WGA stain at 10x)
 ACQ-20251029-PET-001,2026-06-12T20:42:25Z,2025-10-29T10:03:11Z,DICOM,PET,Molecubes (PET/SPECT/CT),PT,irene,irene,internal,m13_0525,organism,Mus musculus,13-AE-biomaGUNE-0525,,irene_0525_251029_m13,folder,ACQ-20251029-PET-001.data,irene_0525_251029_0525_m13_20251029100311_PET,,28.6,1,/raw/DICOM/2025/2025-10/ACQ-20251029-PET-001/,Y,Y,PROJ-0001,tools/configs/ni_jesus_archive_2025.yaml,Archive-mode NI preload: PET of m13 (protocol 0525)
 ACQ-20220118-MRI-001,2026-06-13T07:05:18Z,2022-01-18T10:21:42.100+01:00,DICOM,MRI,Bruker BioSpec 11.7T,MR,jrc,jrc,internal,m1_1521,organism,Mus musculus,1-AE-biomaGUNE-1521,,jrc220118_m1_1521,folder,ACQ-20220118-MRI-001.data,20220118_100109_jrc220118_m1_1521_1_1/1,,0.6,9,/raw/DICOM/2022/2022-01/ACQ-20220118-MRI-001/,Y,Y,PROJ-0003,tools/configs/mri_jrc_animalfirst.yaml,"Internal MRI Bruker FcFLASH exam 1 (animal m1, protocol 1521)"
@@ -354,7 +354,7 @@ Index of project workspaces with ownership and status tracking.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `project_id` | String | ✅ Yes | Unique ID (e.g., `PROJ-0001`) |
-| `short_name` | String | ✅ Yes | Folder name. **See [05_PROJECTS §9](05_PROJECTS.md) for the open-question warning on naming conventions — group consensus required.** |
+| `name` | String | ✅ Yes | The project's human key — **and its folder name, verbatim** (no prefix, casing preserved, unique case-insensitively). See [05_PROJECTS §2a](05_PROJECTS.md) for the model and [§9](05_PROJECTS.md) for the open question on naming *conventions*. **RENAMED from `short_name` 2026-08-02.** |
 | `description` | String | ✅ Yes | Brief description of project scope. May be auto-populated at ingest-time creation; see `owner` note. |
 | `owner` | String | ✅ Yes | Primary owner/SPOC. When the project is auto-created by `ingest_raw.py` (via `auto_create_projects: true` and the `auto_create_project:` block — see [10_TOOLS §2.1.4](10_TOOLS.md)), the initial value can be supplied by literal or `${discovered.<field>}` interpolation. **First-write-wins:** subsequent ingests touching the same project never update this column. The source of truth after creation is `_project.yaml` (manually editable). |
 | `start_date` | Date | ✅ Yes | When project started |
@@ -366,8 +366,8 @@ Index of project workspaces with ownership and status tracking.
 ### 4.3 Example
 
 ```csv
-project_id,short_name,description,owner,start_date,status,last_activity,folder_location,notes
-PROJ-0001,ipf-biomarkers,IPF biomarker quantification study,MBC,2026-01-15,active,2026-02-10,/projects/proj-ipf-biomarkers/,May lead to PUB-0001
+project_id,name,description,owner,start_date,status,last_activity,folder_location,notes
+PROJ-0001,ipf-biomarkers,IPF biomarker quantification study,MBC,2026-01-15,active,2026-02-10,/projects/ipf-biomarkers/,May lead to PUB-0001
 ```
 
 ---
