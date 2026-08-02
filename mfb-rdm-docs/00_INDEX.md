@@ -6,7 +6,7 @@
 
 **Status:** ✅ **TRUE PRODUCTION** (active since the 2026-06-10 restart). Live scale: ~13,555 acquisitions in `/raw/`, ~50 projects (each hard-linked to its raw data), ~715 subjects in `registry_subjects.csv`; `publications/` deferred (empty).
 
-**Last Updated:** 2026-07-24 — scheduled global Finder rebuild handed to the separate **WorkstationOps** app (`finder-refresh` op); this repo keeps only the generator. Boundary, health check, and the repo-move interdependency are in [11_OPERATIONS §5.6](11_OPERATIONS.md). Recent index-level milestones are tabled under [Version History](#version-history) below; the full dated history lives in [CHANGELOG.md](../CHANGELOG.md).
+**Last Updated:** 2026-08-02 — **project reference model** ✅ DECIDED: the "project hint" concept is retired; a project has a `project_id` (`PROJ-XXXX`, machine key, the `registry_raw` column) and a `name` (human key — **and its folder name, verbatim**). New owning section [05_PROJECTS §2a](05_PROJECTS.md); mirrors updated in [06_REGISTRIES](06_REGISTRIES.md) + [10_TOOLS](10_TOOLS.md); forward rule ("one concept → one name → one owning section → one construction site") in [CONTRIBUTING-docs](../CONTRIBUTING-docs.md). Prior: 2026-07-24 — scheduled global Finder rebuild handed to the separate **WorkstationOps** app (`finder-refresh` op); this repo keeps only the generator. Boundary, health check, and the repo-move interdependency are in [11_OPERATIONS §5.6](11_OPERATIONS.md). Recent index-level milestones are tabled under [Version History](#version-history) below; the full dated history lives in [CHANGELOG.md](../CHANGELOG.md).
 
 **Newcomer pointers:** [README.md](../README.md) (3-role gateway) · [RESEARCHER_GUIDE.md](../RESEARCHER_GUIDE.md) (researchers) · [START_HERE.md](../START_HERE.md) (operators) · [GLOSSARY.md](../GLOSSARY.md) (terms) · [CHANGELOG.md](../CHANGELOG.md) (history).
 
@@ -182,7 +182,7 @@ Several specs are **mirrors of code** and must be kept in sync field-for-field (
 - [ ] Production review cadence not formally scheduled — effectively continuous via the per-round ingest cycle (the system is in true production since 2026-06-10); a formal cadence is still to be set. See [tasks/STATUS.md](../tasks/STATUS.md).
 
 ### Projects (see [05_PROJECTS](05_PROJECTS.md))
-- [ ] **Project naming convention requires group consensus** (PROJ-05). Project `short_name` should map to a durable, meaning-bearing unit (funded project name, animal-project approval ID, or explicit internal name). Experiments ≠ projects. Provisional patterns now in use: `ae-biomegune-NNNN` (AxioScan, reasonable interim) and `${researcher}-${experiment}` (Cell Observer cells-mode, stopgap only). Project-lead users must converge on a real convention as production scales out. See [05_PROJECTS §9](05_PROJECTS.md).
+- [ ] **Project naming convention requires group consensus** (PROJ-05). A project `name` should map to a durable, meaning-bearing unit (funded project name, animal-project approval ID, or explicit internal name). Experiments ≠ projects. Provisional patterns now in use: `AE-biomaGUNE-NNNN` (AxioScan, reasonable interim) and `${researcher}-${experiment}` (Cell Observer cells-mode, stopgap only). *(The naming **mechanics** are settled — [05_PROJECTS §2a](05_PROJECTS.md); only the **convention** is open.)* Project-lead users must converge on a real convention as production scales out. See [05_PROJECTS §9](05_PROJECTS.md).
 
 ---
 

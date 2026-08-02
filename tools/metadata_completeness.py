@@ -28,7 +28,7 @@ only. Never writes to the NAS.
 
 Usage:
     python tools/metadata_completeness.py --nas-root J:\\
-    python tools/metadata_completeness.py --nas-root J:\\ --project ae-biomegune-0525
+    python tools/metadata_completeness.py --nas-root J:\\ --project AE-biomaGUNE-0525
     # or rely on the GJESUS3_ROOT env var:
     python tools/metadata_completeness.py
 """

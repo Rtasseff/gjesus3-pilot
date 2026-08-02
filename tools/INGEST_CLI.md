@@ -48,7 +48,7 @@ By default a CLI ingest does **not** touch the researcher Finder. The global `re
 | `--dry-run` | `-n` | off | Log what would happen; touch nothing on NAS. **Use first.** |
 | `--nas-root <path>` | — | `$GJESUS3_ROOT` or `/mnt/gjesus3` | NAS mount point on this host. |
 | `--nas-unc <unc>` | — | `$GJESUS3_UNC` or `\\GJESUS3\gjesus3` | Legacy `.lnk` porting-seam only — **not used by the current hard-link linker** (hard links use local NAS-volume paths). Retained for backward compatibility; safe to omit. |
-| `--project <PROJ-NNNN>` | — | — | Project ID stamped on every row this run; recorded as `project_hint`. Overrides any value the YAML sets. |
+| `--project <name-or-id>` | — | — | Project applied to every row this run — a project **name** or a `PROJ-NNNN` id. Resolved at Step 9.5 and recorded as `project_id`. Overrides any value the YAML sets. |
 | `--delete-source` | — | off | Remove the source file/folder after copy + verify succeed. Parent day folder is never touched. Default OFF for safety; opt in per batch. |
 
 ---
@@ -77,7 +77,7 @@ filename_parse:
   fields: [group_code, operator, project, sample_short, stain, magnification]
 registry:
   sample_id:    "${discovered.project}_${discovered.sample_short}"   # -> "0525_ID26H"
-  project_hint: "AE-biomeGUNE-${discovered.project}"                  # -> "AE-biomeGUNE-0525"
+  project_name: "AE-biomaGUNE-${discovered.project}"                  # -> "AE-biomaGUNE-0525"
   researcher:   "<set per batch / GUI>"          # registry person column (renamed from operator 2026-06-09)
 operator:       discovered.operator              # SIDECAR-ONLY top-level key (the tech) -> "MBC"
 ```
@@ -167,7 +167,7 @@ tools/configs/
 
 | Where | What lives there | When to touch |
 |-------|------------------|---------------|
-| `tools/templates/instruments/` | Per-instrument starters with all the instrument-specific patterns (filename parse, registry mapping, project_hint convention) locked in. Edit only when the convention itself changes. | Add a new file when bringing a new instrument online. |
+| `tools/templates/instruments/` | Per-instrument starters with all the instrument-specific patterns (filename parse, registry mapping, project-name convention) locked in. Edit only when the convention itself changes. | Add a new file when bringing a new instrument online. |
 | `tools/templates/ingest_template.yaml` | Universal generic starter — fallback for instruments without their own template yet. | Edit only when the YAML schema itself changes. |
 | `tools/configs/` | Live, version-controlled per-batch configs (one per ingest run). Their relative path is stamped into every registry row's `ingest_config` column for auditability. | Add a new file every batch — copy the matching template, edit `staging_dir` + `notes`, run. |
 

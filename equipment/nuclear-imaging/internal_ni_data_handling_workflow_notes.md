@@ -261,7 +261,7 @@ This is the most important conceptual clarification (now empirically verified by
 
 Round-8 archives show that `series_id` and `short_project` are often the same number (when a funded project has a 1:1 animal protocol), but not always — the 1207 series uses animal protocol `0424` (different number). Some users conflate them in conversation — both feel like "the project number" — but they live in different administrative systems.
 
-**For gjesus3 project workspaces**, we use `<short_project>` (the animal-protocol short id) as the project `short_name` — same convention as MRI + AxioScan: `ae-biomegune-<short_project>`. This means round-8 NI cross-modally reuses `proj-ae-biomegune-{0424, 0525}` workspaces from rounds 4 + 6 when the protocol matches.
+**For gjesus3 project workspaces**, we use `<short_project>` (the animal-protocol short id) as the project `name` — same convention as MRI + AxioScan: `AE-biomaGUNE-<short_project>`. This means round-8 NI cross-modally reuses the `AE-biomaGUNE-{0424, 0525}` workspaces from rounds 4 + 6 when the protocol matches.
 
 ## Reconstruction handling (archive mode)
 
@@ -307,7 +307,7 @@ Example resolved: `PET_m14_20251029_20251029100641` (PET acquisition of mouse m1
 
 - **Live-machine NI ingest** — blocked on Unai answering the workflow question. Round-8 archive mode is the only NI path operational today.
 - **XML-aux metadata extraction** (analogous to ParaVision's JCAMP-DX extractor) — `discovered.ni_*` fields from `protocol.xml`, `acqparams.xml`, etc. Queued in [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md). Currently the YAML regex gives us most of what we need at registry level.
-- **Multi-modality project reconciliation** (funded-project id from NI vs animal-protocol short id from MRI → same researcher, same gjesus3 project?). Current convention uses the animal-protocol id (`short_project`) for project `short_name` — cross-modality demos work when the protocol matches.
+- **Multi-modality project reconciliation** (funded-project id from NI vs animal-protocol short id from MRI → same researcher, same gjesus3 project?). Current convention uses the animal-protocol id (`short_project`) for the project `name` — cross-modality demos work when the protocol matches.
 - **User-as-operator permissions:** NI is run directly by researchers (no dedicated technician); same model gap as internal MRI. Tracked in [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md).
 
 ## Related documents

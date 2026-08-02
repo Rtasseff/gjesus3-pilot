@@ -33,7 +33,7 @@ This is an **MVP to try and evaluate** — see *Scope & limitations* at the end.
 2. Type in the search box — it filters instantly across every visible column.
    The table columns are, in order: **Acq ID, Date, Instrument, Modality,
    Researcher, Operator, Sample, Subject, Organism, Sample type, Original name,
-   Project** (the project `short_name`) and **Owner** (the project owner). Click a
+   Project** (the project `name`) and **Owner** (the project owner). Click a
    column header to sort; **drag a column's right edge to resize it** (columns have
    default widths and truncate long values with "…" — hover a cell to see the full
    text); click a row to open the detail panel for everything else.

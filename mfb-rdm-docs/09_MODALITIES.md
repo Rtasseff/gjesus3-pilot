@@ -239,7 +239,7 @@ These come from the archive-basename regex (`tools/templates/instruments/molecub
 | `user` | NI user (e.g. `irene`) |
 | `series_id` | **Funded-project id** (e.g. `0525`, `1207`). Different from MRI's animal-protocol short id; see workflow notes for the distinction. |
 | `acq_date_short` | YYMMDD form of the acquisition date (e.g. `251029`) |
-| `short_project` | **Animal-protocol short id** (e.g. `0525`, `0424`). Drives `project_hint` (cross-modality reuse with rounds 4 + 6 `ae-biomegune-NNNN` workspaces). |
+| `short_project` | **Animal-protocol short id** (e.g. `0525`, `0424`). Drives `project_name` (cross-modality reuse with the rounds 4 + 6 `AE-biomaGUNE-NNNN` workspaces). |
 | `short_sample` | Sample identifier — `<animal type><number>` for animals (e.g. `m13`) or `phantom_*` free-text for QC |
 | `acq_datetime_full` | Full YYYYMMDDhhmmss timestamp (e.g. `20251029100641`) — drives the registry `acquisition_datetime`. Round-8 extended `resolver.normalize_acquisition_datetime` to handle this 14-digit form. |
 | `modality` | `PET` / `CT` / `SPECT` / `OI` — drives the per-case `registry.instrument` |

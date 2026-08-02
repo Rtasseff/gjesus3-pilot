@@ -119,7 +119,7 @@ field means: [`08_METADATA §4`](mfb-rdm-docs/08_METADATA.md).
 
 ## 4. Get and use a project workspace
 
-A **project** (`PROJ-<NNNN>`, with a folder like `proj-ae-biomegune-0423`) is a
+A **project** (`PROJ-<NNNN>`, with a folder named after the project — e.g. `AE-biomaGUNE-0423`) is a
 durable unit of work — typically a funded project or an animal-protocol scope, not
 a single experiment. It is where the group's analysis and organisation happen.
 
