@@ -70,10 +70,10 @@ real-shaped data caught what a dry run structurally could not.
 
 ## 3 · Leftovers — things still to do
 
-### 3.1 Push to `origin` — NOT DONE, needs Ryan's OK
-`main` is at `9be7ada` locally, unpushed. Everything else (production data,
-deployed exe) is already live, so **the repo is currently behind the running
-system** — worth closing promptly so `main` and reality agree.
+### 3.1 Push to `origin` — ✅ DONE 2026-08-02
+Pushed `44f7e2b..3f5c165` (13 commits) after Ryan delegated the close-out and a
+fresh live-NAS verification (0 `proj-*` folders, both registry headers renamed,
+recipes dir empty, exe deployed 16:18). `main` == `origin/main` == reality.
 
 ### 3.2 Operator comms — REQUIRED before the next operator ingest
 Two changes operators will notice, both already written up in
@@ -105,10 +105,10 @@ Safe to delete once a real operator ingest has succeeded through the new exe.
 | Path | What | Action |
 |---|---|---|
 | `D:\_dist_pn\gjesus3_ingest.exe` | the build that is now deployed (sha256 `ca2bd1c7…`) | keep until §3.3 is cleared, then delete |
-| `D:\_build_pn`, `D:\_smoke_pn` | PyInstaller work dir + smoke-test scratch NAS | **delete** (an automated `rm -rf` was denied; needs a manual removal) |
-| `D:\_idxcheck` | throwaway Finder output from a post-merge check | delete |
+| `D:\_build_pn`, `D:\_smoke_pn` | PyInstaller work dir + smoke-test scratch NAS | **delete manually** (automated `rm -rf` denied twice — P's run and the 2026-08-02 close-out) |
+| `D:\_idxcheck` | throwaway Finder output from a post-merge check | **delete manually** (same denial) |
 | `J:\...\tools\gjesus3_ingest.exe.old_20260802` | previous deployed exe | keep one cycle, then delete |
-| `J:\...\tools\gjesus3_ingest.exe.old_20260720` | the cycle before that | safe to delete now |
+| `J:\...\tools\gjesus3_ingest.exe.old_20260720` | the cycle before that | safe to delete now — **manual** (automated delete blocked 2026-08-02) |
 
 ---
 
