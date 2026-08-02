@@ -562,7 +562,7 @@ def expand_batch(cfg, nas_root=None):
         # project code + its 1-4 animal numbers, reusing the validated live-box
         # grammar (ni_live_discover.parse_subject). Populates discovered.project
         # + discovered.animal_codes (;-joined) so the multi-animal DB lookup and
-        # project_hint resolve. The single-animal archive path (no subject_parse
+        # project_name resolve. The single-animal archive path (no subject_parse
         # block) is untouched.
         sp_cfg = disco.get("subject_parse") or {}
         if sp_cfg:

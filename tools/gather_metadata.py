@@ -65,14 +65,15 @@ def _raw_sidecar_path(nas_root, row):
     return hits[0] if hits else None
 
 
-def _project_folder(nas_root, project_rows, project_hint):
-    """Return the absolute /projects/<proj>/ folder for a row's project_hint
-    (a PROJ-XXXX id), or None. Matches on project_id or short_name."""
-    if not project_hint:
+def _project_folder(nas_root, project_rows, project_ref):
+    """Return the absolute /projects/<name>/ folder for a row's project_id
+    (a PROJ-XXXX), or None. Also matches a project name, so the --project CLI
+    filter can be given either."""
+    if not project_ref:
         return None
-    key = project_hint.strip().lower()
+    key = project_ref.strip().lower()
     for prow in project_rows:
-        if key in (prow.get("project_id", "").lower(), prow.get("short_name", "").lower()):
+        if key in (prow.get("project_id", "").lower(), prow.get("name", "").lower()):
             loc = (prow.get("folder_location") or "").strip()
             if loc:
                 return os.path.join(nas_root, *loc.lstrip("/").rstrip("/").split("/"))
@@ -93,7 +94,7 @@ def merge_acq(nas_root, row, project_rows):
         log(f"raw sidecar unreadable for {acq}", "WARN")
         return None
 
-    proj_dir = _project_folder(nas_root, project_rows, row.get("project_hint", ""))
+    proj_dir = _project_folder(nas_root, project_rows, row.get("project_id", ""))
     if proj_dir:
         meta_dir = os.path.join(proj_dir, "metadata")
         # Per-acq study supplement -> nest under "study" (never clobber raw keys).
@@ -114,7 +115,7 @@ def merge_acq(nas_root, row, project_rows):
         if not (acq_study or study or biosamples):
             log(f"project metadata folder present but no files for {acq}: {meta_dir}", "INFO")
     else:
-        log(f"no project metadata for {acq} (hint={row.get('project_hint', '') or 'none'})",
+        log(f"no project metadata for {acq} (project={row.get('project_id', '') or 'none'})",
             "INFO")
     return doc
 
@@ -151,18 +152,16 @@ def main():
             log(f"acq_id not found in registry_raw.csv: {args.acq}", "ERROR")
             return 1
     else:
+        # --project accepts either identifier: the PROJ-id or the project's
+        # name. Both resolve to the PROJ-id, which is what registry_raw stores.
         key = args.project.strip().lower()
         ids = {p.get("project_id", "").lower(): p.get("project_id") for p in project_rows}
-        shorts = {p.get("short_name", "").lower(): p.get("project_id") for p in project_rows}
-        proj_id = ids.get(key) or shorts.get(key) or args.project
-        # Accept a row whose project_hint is the canonical PROJ id, the raw arg,
-        # OR a short_name left in place by a canonicalization-failed ingest
-        # (ingest_raw Step 9.5 leaves the raw hint when project lookup fails).
-        accept = {proj_id.lower(), key}
-        accept |= {s for s, pid in shorts.items() if pid and pid.lower() == proj_id.lower()}
-        rows = [r for r in raw_rows if (r.get("project_hint") or "").strip().lower() in accept]
+        names = {p.get("name", "").lower(): p.get("project_id") for p in project_rows}
+        proj_id = ids.get(key) or names.get(key) or args.project
+        rows = [r for r in raw_rows
+                if (r.get("project_id") or "").strip().lower() == proj_id.lower()]
         if not rows:
-            log(f"no acquisitions with project_hint matching {sorted(accept)}", "ERROR")
+            log(f"no acquisitions for project {proj_id}", "ERROR")
             return 1
 
     merged = [d for d in (merge_acq(nas_root, r, project_rows) for r in rows) if d is not None]

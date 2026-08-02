@@ -58,7 +58,13 @@ REGISTRY_FIELDS = [
     "canonical_path",
     "checksum_present",
     "extended_metadata_present",
-    "project_hint",
+    "project_id",        # RENAMED from "project_hint" 2026-08-02 — header-only
+                         # migration; the values were ALREADY resolved PROJ-XXXX
+                         # ids in all 13,582 rows (the old name was simply wrong).
+                         # Note the deliberate asymmetry: the operator's INPUT key
+                         # is `registry.project_name`, and Step 9.5 resolves that
+                         # name to the id stored here. See 05_PROJECTS "Project
+                         # reference model" + 06_REGISTRIES §2.3a.
     "ingest_config",
     "notes",
 ]
@@ -315,7 +321,10 @@ def build_row(acq_id, cfg, summary, dest_path, registration_dt,
         # that always write ≥1 checksum. See ingest_raw.py folder-copy branch.
         "checksum_present": cfg.get("checksum_present", "Y"),
         "extended_metadata_present": cfg.get("extended_metadata_present", "N"),
-        "project_hint": cfg.get("project_hint", ""),
+        # Step 9.5 resolves the operator's `project_name` to this id; if it could
+        # not resolve (no match, auto-create off) the key is absent and the
+        # column stays blank rather than recording an unresolvable name.
+        "project_id": cfg.get("project_id", ""),
         "ingest_config": cfg.get("ingest_config", ""),
         "notes": cfg.get("notes", ""),
     }

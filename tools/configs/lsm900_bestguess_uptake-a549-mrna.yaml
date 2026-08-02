@@ -23,7 +23,7 @@ registry:
   sample_id:            "${discovered.filename}"
   sample_type:          "NA"
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "uptake-a549-mrna"
+  project_name:         "uptake-a549-mrna"
   notes:                "BEST-GUESS / LOW-CONFIDENCE — legacy LSM9, no naming standard; project = source folder 'Uptake_A549_mRNA', sample_id = filename; sample_type/anatomy guessed post-ingest. Verify before scientific reuse."
 
 operator: "${discovered.czi_user}"

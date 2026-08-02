@@ -16,10 +16,10 @@ What it creates under <dest>:
                                      a full commit is exercised end-to-end.
         ingest_manifest.csv      <- HEADER ONLY (copied from the source NAS).
         registry_projects.csv    <- FULL COPY of the source NAS's projects, so a
-                                     project_hint like "ae-biomegune-0424"
+                                     project_name like "AE-biomaGUNE-0424"
                                      resolves to the real PROJ-XXXX (mirrors the
                                      exhibition projects). Templates also have
-                                     auto_create_projects:true, so a hint with no
+                                     auto_create_projects:true, so a name with no
                                      match still auto-creates -- either path works.
 
 Copying the HEADERS from the live registries (rather than hard-coding them)
@@ -56,7 +56,7 @@ _NAS_SUBDIRS = (
 
 # Registries that should be reset to HEADER ONLY (so everything is "new").
 _HEADER_ONLY = ("registry_raw.csv", "ingest_manifest.csv")
-# Registries copied WHOLE (so project_hints resolve to the real PROJ-XXXX).
+# Registries copied WHOLE (so project names resolve to the real PROJ-XXXX).
 _COPY_WHOLE = ("registry_projects.csv",)
 
 

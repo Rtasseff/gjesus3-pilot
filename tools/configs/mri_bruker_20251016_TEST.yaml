@@ -59,12 +59,12 @@ registry:
   sample_type:          organism
   session_id:           "${discovered.jrc_id}"
   acquisition_datetime: discovered.mri_acquisition_datetime
-  project_hint:         "ae-biomegune-${discovered.project_code}"
+  project_name:         "AE-biomaGUNE-${discovered.project_code}"
   notes:                "TEST INGEST 2026-05-27 v2 REDO - purge after team exhibition (internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, animal m${discovered.animal_num}, recon ${discovered.mri_recon_indices})"
 
 auto_create_project:
   owner:       "NMR-platform"
-  description: "TEST auto-created from internal MRI round-6 v2 — animal-protocol code ${discovered.project_code}. Purge after team exhibition. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
+  description: "TEST auto-created from internal MRI round-6 v2 — animal-protocol code ${discovered.project_code}. Purge after team exhibition. PROVISIONAL project_name convention (05_PROJECTS §9 PROJ-05)."
   notes:       "Auto-created during round-6 v2 ingest 2026-05-27. Will be purged with the rest of the quasi-production data after the team exhibition."
 
 # Project hard-link name (resolver-evaluated at link-creation time; no extension).

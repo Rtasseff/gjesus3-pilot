@@ -52,7 +52,7 @@ def lookup_project_folder(projects_registry_path, project_id):
     """Return the folder_location for a project_id, or None if not found.
 
     folder_location is the NAS-relative path stored in registry_projects.csv,
-    e.g. "/projects/proj-lions-cardiac-mri/".
+    e.g. "/projects/lions-cardiac-mri/" (== the project's name; 2026-08-02).
     """
     if not project_id or not os.path.exists(projects_registry_path):
         return None
@@ -66,29 +66,39 @@ def lookup_project_folder(projects_registry_path, project_id):
     return None
 
 
-def resolve_project(projects_registry_path, hint):
-    """Resolve a project hint to (project_id, folder_location).
+def resolve_project(projects_registry_path, name_or_id):
+    """Resolve an operator-supplied project reference.
 
-    Looks up `hint` first as a `project_id` (canonical PROJ-XXXX), then
-    falls back to matching `short_name` (case-insensitive). This lets a
-    YAML config use `project_hint: discovered.project` where the parsed
-    value is a human short name like "1022" — the registry row will
-    still record the canonical PROJ-XXXX after resolution.
+    Returns ``(project_id, name, folder_location)`` — the canonical triple
+    from registry_projects.csv — or ``(None, None, None)`` when the registry
+    doesn't exist or nothing matches.
 
-    Returns (None, None) if the registry doesn't exist or the hint
-    matches nothing.
+    `name_or_id` is matched first as a `project_id` (canonical PROJ-XXXX),
+    then against the project's `name` **case-insensitively** (the NAS
+    filesystem is case-insensitive, so `ae-biomagune-1022` and
+    `AE-biomaGUNE-1022` are the same project). Returning the stored `name`
+    is what lets the caller CANONICALIZE casing: an operator who typed a
+    lowercase variant, or who referenced the project by id, still gets the
+    project's real name recorded downstream.
+
+    Renamed from the old `hint` vocabulary 2026-08-02 (05_PROJECTS "Project
+    reference model"): what the operator supplies is the project's name, and
+    the column that stores the result is `project_id`.
     """
-    if not hint or not os.path.exists(projects_registry_path):
-        return None, None
-    hint_lower = hint.lower()
+    if not name_or_id or not os.path.exists(projects_registry_path):
+        return None, None, None
+    wanted = name_or_id.lower()
     with open(projects_registry_path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get("project_id") == hint:
-                return row["project_id"], row.get("folder_location") or None
-            if (row.get("short_name") or "").lower() == hint_lower:
-                return row["project_id"], row.get("folder_location") or None
-    return None, None
+            if (row.get("project_id") == name_or_id
+                    or (row.get("name") or "").lower() == wanted):
+                return (
+                    row["project_id"],
+                    row.get("name") or None,
+                    row.get("folder_location") or None,
+                )
+    return None, None, None
 
 
 def canonical_to_unc(canonical_path, nas_unc_root):
@@ -144,7 +154,7 @@ def create_hardlink(project_folder_abs, link_name, raw_primary_abs, dry_run=Fals
 
     Args:
         project_folder_abs: Absolute local path to the project folder on the
-            machine running the script (e.g. ``J:\\gjesus3-data\\projects\\proj-x``).
+            machine running the script (e.g. ``J:\\gjesus3-data\\projects\\my-project``).
         link_name: Destination name with NO extension — what the legacy `.lnk`
             shortcut was called, minus ``.lnk`` (the resolved ``link_filename:``;
             any trailing slash already stripped by the caller).
@@ -218,7 +228,7 @@ def create_lnk(
 
     Args:
         project_folder_abs: Absolute path to the project folder on the
-            machine running the script (e.g. \\\\GJESUS3\\gjesus3\\projects\\proj-x\\).
+            machine running the script (e.g. \\\\GJESUS3\\gjesus3\\projects\\my-project\\).
         original_name: Source archive name; used as the shortcut's filename
             with ".lnk" appended (e.g. "LEONE_1.01.zip" -> "LEONE_1.01.zip.lnk").
         target_unc_path: UNC path the shortcut should open. If this points

@@ -13,34 +13,40 @@ front-end can WARN the operator (the user's "do a dry-run to ensure there are no
 overwrites or collisions"). Two checks:
 
   - ``find_link_collisions(cases)`` -- IN-BATCH: two cases that resolve to the
-    same (project_hint, link_filename). Pure; no I/O. This is the primary risk
+    same (project_name, link_filename). Pure; no I/O. This is the primary risk
     once the link name is editable.
   - ``find_existing_link_targets(cases, nas_root)`` -- ON-NAS (best-effort): a
     link target that already exists on disk for a DIFFERENT acquisition (a name
     reused across batches). Re-ingesting the SAME acquisition is deduped upstream
     and is NOT flagged here.
 
-Both group by the resolved ``project_hint`` (the actual project folder key), NOT
-the preview's project string -- two distinct auto-create hints both previewing as
-"will auto-create" must not be mistaken for the same project.
+Both group by the case's ``project_name`` (the project key -- and, since
+2026-08-02, the folder name verbatim), NOT the preview's project string -- two
+distinct auto-create names both previewing as "will auto-create" must not be
+mistaken for the same project. Grouping is case-INSENSITIVE, because the NAS
+filesystem is: ``AE-biomaGUNE-1123`` and ``ae-biomagune-1123`` are one folder and
+so genuinely can collide.
 
 Each ``case`` is a dict as produced by the GUI's ``_case_to_dict`` (or any mapping
 carrying ``acq_id``, ``link_filename`` and a ``registry_resolved`` dict with
-``project_hint``).
+``project_name``).
 """
 
+import csv
 import os
 from collections import defaultdict
+
+from ingest import project_naming
 
 
 def _norm(s):
     return (s or "").strip()
 
 
-def _hint_of(case):
-    """The resolved project_hint for a case (the project-folder key), or ''."""
+def _project_of(case):
+    """The project name for a case (the project key), or ''."""
     reg = case.get("registry_resolved") or {}
-    return _norm(reg.get("project_hint"))
+    return _norm(reg.get("project_name"))
 
 
 def _link_of(case):
@@ -54,78 +60,113 @@ def _acq_of(case):
 def find_link_collisions(cases):
     """Return in-batch link-name collisions.
 
-    Groups the cases by ``(project_hint, link_filename)`` and returns every group
-    with more than one acquisition -- those would write the same link name into
-    the same project. Cases with no project (blank hint) create no link and are
+    Groups the cases by ``(project_name, link_filename)`` -- the project part
+    case-insensitively, since one folder serves both spellings -- and returns
+    every group with more than one acquisition; those would write the same link
+    name into the same project. Cases with no project create no link and are
     skipped; so are cases with an empty link name.
 
     Returns a list (sorted for stable display) of::
 
-        {"project_hint": ..., "link_filename": ..., "acq_ids": [...]}
+        {"project_name": ..., "link_filename": ..., "acq_ids": [...]}
     """
     groups = defaultdict(list)
+    display = {}
     for c in cases:
-        hint = _hint_of(c)
+        project = _project_of(c)
         link = _link_of(c)
-        if not hint or not link:
+        if not project or not link:
             continue  # no project -> no link -> cannot collide
-        groups[(hint, link)].append(_acq_of(c))
+        key = (project.lower(), link)
+        display.setdefault(key, project)
+        groups[key].append(_acq_of(c))
 
     collisions = []
-    for (hint, link), acq_ids in groups.items():
+    for key, acq_ids in groups.items():
         if len(acq_ids) > 1:
             collisions.append({
-                "project_hint": hint,
-                "link_filename": link,
+                "project_name": display[key],
+                "link_filename": key[1],
                 "acq_ids": sorted(acq_ids),
             })
-    collisions.sort(key=lambda d: (d["project_hint"], d["link_filename"]))
+    collisions.sort(key=lambda d: (d["project_name"].lower(), d["link_filename"]))
     return collisions
 
 
-def _project_folder(nas_root, project_hint):
-    """The on-disk project folder for a hint: <nas>/projects/proj-<hint>.
+def _folder_index(nas_root):
+    """Map name.lower() and project_id -> the STORED folder_location basename.
 
-    Mirrors the linker's convention (the project link lives under
-    ``projects/proj-<short_name>/raw_linked/``). Best-effort: the hint is the
-    short_name; the folder is ``proj-<short_name>``. Returns the path string
-    (not guaranteed to exist).
+    Read once per check from registry_projects.csv. Reading the recorded
+    location (rather than re-deriving a path from the name) is the rule this
+    module used to break: it built ``proj-<hint>`` itself, so it went on
+    checking a folder convention the rest of the system had left behind.
+    Returns {} when the registry is unreadable -- callers fall back to the
+    name-derived folder, which is correct for a not-yet-created project.
     """
-    return os.path.join(nas_root, "projects", f"proj-{project_hint}", "raw_linked")
+    path = os.path.join(nas_root, "registries", "registry_projects.csv")
+    index = {}
+    try:
+        with open(path, "r", encoding="utf-8-sig", newline="") as f:
+            for row in csv.DictReader(f):
+                folder = (row.get("folder_location") or "").strip("/").split("/")[-1]
+                if not folder:
+                    continue
+                name = (row.get("name") or "").strip()
+                pid = (row.get("project_id") or "").strip()
+                if name:
+                    index[name.lower()] = folder
+                if pid:
+                    index[pid.lower()] = folder
+    except (OSError, csv.Error):
+        return {}
+    return index
+
+
+def _project_folder(nas_root, project_name, index):
+    """The on-disk ``raw_linked`` dir for a project, as a path string.
+
+    Uses the project's recorded folder when it exists; for a project that has
+    not been created yet (an auto-create preview) falls back to the derived
+    folder -- which under the folder-==-name rule is what create_project would
+    make. Not guaranteed to exist.
+    """
+    folder = index.get(project_name.lower()) or project_naming.folder_name(project_name)
+    return os.path.join(nas_root, "projects", folder, "raw_linked")
 
 
 def find_existing_link_targets(cases, nas_root):
     """Best-effort ON-NAS overwrite check.
 
     For each case with a project + link name, test whether
-    ``<nas>/projects/proj-<hint>/raw_linked/<link_filename>`` already exists. An
-    existing target for a DIFFERENT acquisition means this run would overwrite /
-    collide with a previously-linked acquisition. A re-ingest of the SAME
-    acquisition is deduped upstream (it never reaches the linker), so anything
-    surfaced here is a genuine cross-batch name reuse worth a warning.
+    ``<nas>/<the project's folder>/raw_linked/<link_filename>`` already exists.
+    An existing target for a DIFFERENT acquisition means this run would
+    overwrite / collide with a previously-linked acquisition. A re-ingest of the
+    SAME acquisition is deduped upstream (it never reaches the linker), so
+    anything surfaced here is a genuine cross-batch name reuse worth a warning.
 
     Never raises (a stat error on one path is skipped). Returns a list of::
 
-        {"project_hint": ..., "link_filename": ..., "acq_id": ..., "path": ...}
+        {"project_name": ..., "link_filename": ..., "acq_id": ..., "path": ...}
     """
     out = []
     if not nas_root:
         return out
+    index = _folder_index(nas_root)
     for c in cases:
-        hint = _hint_of(c)
+        project = _project_of(c)
         link = _link_of(c)
-        if not hint or not link:
+        if not project or not link:
             continue
-        target = os.path.join(_project_folder(nas_root, hint), link)
+        target = os.path.join(_project_folder(nas_root, project, index), link)
         try:
             if os.path.exists(target):
                 out.append({
-                    "project_hint": hint,
+                    "project_name": project,
                     "link_filename": link,
                     "acq_id": _acq_of(c),
                     "path": target,
                 })
         except OSError:
             continue
-    out.sort(key=lambda d: (d["project_hint"], d["link_filename"]))
+    out.sort(key=lambda d: (d["project_name"].lower(), d["link_filename"]))
     return out

@@ -45,7 +45,7 @@ REGEN_CONFIG_MARKERS = ("mri_jrc_animalfirst_regen", "mri_jrc_projfirst_regen")
 
 
 def load_projects_index(nas_root):
-    """PROJ-ID -> folder_location (e.g. '/projects/proj-ae-biomegune-0618/')."""
+    """PROJ-ID -> folder_location (e.g. '/projects/AE-biomaGUNE-0618/')."""
     path = os.path.join(nas_root, "registries", "registry_projects.csv")
     idx = {}
     with open(path, "r", encoding="utf-8", errors="replace", newline="") as f:
@@ -114,7 +114,7 @@ def main(argv=None):
         sample_id = (row.get("sample_id") or "").strip()
         acq_date = acq_id.split("-")[1] if acq_id.count("-") >= 2 else ""
         exam = (row.get("original_name") or "").replace("\\", "/").rstrip("/").split("/")[-1]
-        proj_id = (row.get("project_hint") or "").strip()
+        proj_id = (row.get("project_id") or "").strip()
         folder_rel = proj_idx.get(proj_id, "")
         if not folder_rel:
             print(f"  ERROR {acq_id}: project {proj_id!r} not in registry_projects.csv")

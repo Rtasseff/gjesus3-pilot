@@ -157,7 +157,7 @@ def _subject_pairs(cfg_single, discovered, log):
     codes_packed = (discovered.get("animal_codes") or "").strip()
     if codes_packed:
         alias = (discovered.get("project") or "").strip() or \
-            subject_id.project_alias_from_hint(cfg_single.get("project_hint", ""))
+            subject_id.project_alias_from_name(cfg_single.get("project_name", ""))
         pairs = []
         for c in codes_packed.split(";"):
             c = c.strip()
@@ -178,7 +178,7 @@ def _subject_pairs(cfg_single, discovered, log):
         except resolver.ResolverError:
             alias = ""
     if not alias:
-        alias = subject_id.project_alias_from_hint(cfg_single.get("project_hint", ""))
+        alias = subject_id.project_alias_from_name(cfg_single.get("project_name", ""))
     code_str = ""
     if lookup_block.get("animal_code"):
         try:

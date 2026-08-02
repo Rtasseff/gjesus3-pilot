@@ -75,9 +75,9 @@ def main(argv=None):
             stem = actual_b[:-4] if actual_b.lower().endswith(".czi") else actual_b
             ext = actual_b[len(stem):]
             link_name = f"ZWSI_{stem}_{date}{ext}"
-            folder_rel = proj_idx.get((r.get("project_hint") or "").strip(), "")
+            folder_rel = proj_idx.get((r.get("project_id") or "").strip(), "")
             if not folder_rel:
-                print(f"  ERROR {acq}: project {r.get('project_hint')!r} not found")
+                print(f"  ERROR {acq}: project {r.get('project_id')!r} not found")
                 stats["errors"] += 1
                 continue
             project_abs = os.path.normpath(os.path.join(nas, folder_rel.lstrip("/")))

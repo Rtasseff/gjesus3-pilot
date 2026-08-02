@@ -27,13 +27,13 @@ from ingest import registry  # noqa: E402  (BOM-tolerant read_registry)
 SEARCH_FIELDS = [
     "acq_id", "acquisition_datetime", "instrument", "instrument_model",
     "modalities_in_study", "sample_id", "subject_ids", "sample_organism",
-    "anatomical_entity", "researcher", "operator", "project_hint", "session_id",
+    "anatomical_entity", "researcher", "operator", "project_id", "session_id",
     "original_name", "notes", "data_source",
 ]
 
 
 def _projects_index(nas):
-    """project_id -> {folder, short, owner, desc} from registry_projects.csv."""
+    """project_id -> {folder, name, owner, desc} from registry_projects.csv."""
     path = os.path.join(nas, "registries", "registry_projects.csv")
     idx = {}
     if os.path.isfile(path):
@@ -43,7 +43,7 @@ def _projects_index(nas):
                 if pid:
                     idx[pid] = {
                         "folder": (r.get("folder_location") or "").strip(),
-                        "short": (r.get("short_name") or "").strip(),
+                        "name": (r.get("name") or "").strip(),
                         "owner": (r.get("owner") or "").strip(),
                         "desc": (r.get("description") or "").strip(),
                         # A "closed" project keeps its registry row but its folder
@@ -60,7 +60,7 @@ def build_records(nas):
     Each record is the full registry row plus a few derived helpers:
       _raw_path        share-relative canonical path (e.g. /raw/.../ACQ.../)
       _project_folder  share-relative project folder (or "")
-      _project_short   project short_name (or "")
+      _project_name    the project's name == its folder basename (or "")
       _search          lower-cased blob for free-text matching
     Keeping the full row means the detail view / CLI can show any field.
     """
@@ -71,9 +71,9 @@ def build_records(nas):
     for r in rows:
         rec = dict(r)
         rec["_raw_path"] = (r.get("canonical_path") or "").strip()
-        p = proj_idx.get((r.get("project_hint") or "").strip()) or {}
+        p = proj_idx.get((r.get("project_id") or "").strip()) or {}
         rec["_project_folder"] = p.get("folder", "")
-        rec["_project_short"] = p.get("short", "")
+        rec["_project_name"] = p.get("name", "")
         rec["_project_owner"] = p.get("owner", "")
         rec["_project_desc"] = p.get("desc", "")
         rec["_project_status"] = p.get("status", "")
@@ -96,8 +96,13 @@ def matches(rec, *, query="", instrument="", researcher="", subject="",
         return False
     if anatomy and anatomy.lower() not in (rec.get("anatomical_entity") or "").lower():
         return False
-    if project and project.lower() not in (rec.get("project_hint") or "").lower():
-        return False
+    if project:
+        # Match the PROJ-id OR the project's name — nobody remembers PROJ-0037,
+        # and under the folder-==-name rule the name is what researchers see.
+        p = project.lower()
+        if p not in (rec.get("project_id") or "").lower() \
+                and p not in (rec.get("_project_name") or "").lower():
+            return False
     day = (rec.get("acquisition_datetime") or "")[:10]  # YYYY-MM-DD
     if since and day and day < since:
         return False

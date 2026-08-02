@@ -42,12 +42,12 @@ registry:
   sample_id:            "${discovered.cell_line}_${discovered.experiment}"
   sample_type:          cells
   acquisition_datetime: discovered.czi_acquisition_datetime
-  project_hint:         "${discovered.researcher}"
+  project_name:         "${discovered.researcher}"
   notes:                "TEST INGEST 2026-05-22 - purge after review (LSM 900 confocal of ${discovered.cell_line} cells; experiment ${discovered.experiment}; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na} ${discovered.czi_acquisition_mode}; ${discovered.czi_size_z}-slice Z-stack)"
 
 auto_create_project:
   owner:       "${discovered.researcher}"
-  description: "TEST auto-created from LSM 900 round-7 (Phase A) — researcher ${discovered.researcher} (first confocal project workspace). Purge after review. PROVISIONAL project_hint convention (05_PROJECTS §9 PROJ-05)."
+  description: "TEST auto-created from LSM 900 round-7 (Phase A) — researcher ${discovered.researcher} (first confocal project workspace). Purge after review. PROVISIONAL project_name convention (05_PROJECTS §9 PROJ-05)."
   notes:       "Auto-created on Phase A test ingest 2026-05-22. Will be purged with the rest of the round-7 test artifacts."
 
 # Default microscopy link_filename pattern — modality prefix + source

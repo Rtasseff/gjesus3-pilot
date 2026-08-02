@@ -3,7 +3,7 @@
 # *** LEGACY best-guess, LOW CONFIDENCE *** — these instruments had no historical
 # naming standard (the messy K:\gjesus\Ainhize\CONFOCAL LSM 900 tree). One config
 # per top-level source folder; the folder = one provisional project (literal slug
-# project_hint). Reliable fields come from the .czi itself; sample_type / anatomy /
+# project_name). Reliable fields come from the .czi itself; sample_type / anatomy /
 # control are GUESSED afterward by tools/backfill_microscopy_bestguess.py (off-NAS),
 # all marked source="auto-guess". This is the reusable shape for the external drives.
 #
@@ -24,7 +24,7 @@ registry:
   data_ecosystem:       MICROSCOPY
   instrument_model:     discovered.czi_microscope_name
   modalities_in_study:  NA
-  # researcher not reliably in the path -> NA (folder context kept in project_hint
+  # researcher not reliably in the path -> NA (folder context kept in project_name
   # + original_name). The acquiring ZEN account is captured as `operator:` below.
   researcher:           "NA"
   data_source:          internal
@@ -33,7 +33,7 @@ registry:
   sample_type:          "NA"     # left unset on purpose -> best-guess pass fills it
   acquisition_datetime: discovered.czi_acquisition_datetime
   # Provisional project = the source folder (slugged). PROVISIONAL (05_PROJECTS §9).
-  project_hint:         "claudia-uptake-ccmn-doxo"
+  project_name:         "claudia-uptake-ccmn-doxo"
   notes:                "BEST-GUESS / LOW-CONFIDENCE — legacy Confocal LSM900, no naming standard; project = source folder, sample_id = filename; sample_type/anatomy guessed post-ingest (source=auto-guess). Verify before scientific reuse."
 
 # ZEN account that captured the image (reliable, from the .czi).

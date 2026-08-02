@@ -128,10 +128,10 @@
 #     `<user>_<series_id>_<acq_date_short>_<short_sample>` is stable
 #     across modalities for one session: a PET .tgz and a CT .tgz of
 #     animal m14 on 2025-10-29 both resolve to the same session_id.
-#   - `project_hint: ae-biomegune-${discovered.short_project}` — same
+#   - `project_name: AE-biomaGUNE-${discovered.short_project}` — same
 #     pattern as AxioScan / MRI: the animal-protocol short id becomes
-#     the project short_name. Cross-modality reuse with existing
-#     `proj-ae-biomegune-{0423,0424,0525}` workspaces from rounds 4 + 6
+#     the project name. Cross-modality reuse with existing
+#     `AE-biomaGUNE-{0423,0424,0525}` workspaces from rounds 4 + 6
 #     happens automatically when short_project matches.
 #   - `auto_create_project:` — owner = NI-platform (no dedicated
 #     technician; researchers run the equipment).
@@ -279,13 +279,13 @@ registry:
   # The first 8 chars give us acq_date (YYYYMMDD) for the ACQ-ID.
   acquisition_datetime: discovered.acq_datetime_full
   # Same animal-protocol convention as AxioScan + MRI rounds: the
-  # short_project becomes the project short_name. Cross-modality reuse
+  # short_project becomes the project name. Cross-modality reuse
   # with existing workspaces happens automatically when short_project
-  # matches (PROJ-0003 = ae-biomegune-0423, PROJ-0004 = ae-biomegune-0424,
-  # PROJ-0005 = ae-biomegune-0525). Some NI batches may have
+  # matches (PROJ-0003 = AE-biomaGUNE-0423, PROJ-0004 = AE-biomaGUNE-0424,
+  # PROJ-0005 = AE-biomaGUNE-0525). Some NI batches may have
   # short_project values that don't yet have a workspace — auto-create
   # handles those.
-  project_hint:         "ae-biomegune-${discovered.short_project}"
+  project_name:         "AE-biomaGUNE-${discovered.short_project}"
   notes:                "Archive-mode NI preload (gnuclear2$ 2025/Jesus/Irene): ${discovered.modality} of ${discovered.short_sample} (animal protocol ${discovered.short_project}, funded project ${discovered.series_id}); operator ${discovered.user}, acquired ${discovered.acq_datetime_full}"
 
 # operator = the person who RAN the equipment for this acquisition (SIDECAR-ONLY,
@@ -295,11 +295,11 @@ operator: "${discovered.user}"
 
 # First-time project-creation defaults (10_TOOLS §2.1.4). NI projects
 # typically already exist (PROJ-0003..0005 from rounds 4 + 6 via the
-# same ae-biomegune-NNNN short_name); auto-create only fires when a
+# same AE-biomaGUNE-NNNN name); auto-create only fires when a
 # previously-unseen short_project shows up.
 auto_create_project:
   owner:       "NI-platform"
-  description: "Auto-created during NI archive-mode ingest; animal-protocol short id ${discovered.short_project} (funded project ${discovered.series_id}). PROVISIONAL project_hint — see 05_PROJECTS §9."
+  description: "Auto-created during NI archive-mode ingest; animal-protocol short id ${discovered.short_project} (funded project ${discovered.series_id}). PROVISIONAL project_name — see 05_PROJECTS §9."
   notes:       "Auto-created on first NI ingest. Edit owner via _project.yaml to record the researcher behind the animal protocol."
 
 # Name of the project hard link placed under /projects/<proj>/raw_linked/.

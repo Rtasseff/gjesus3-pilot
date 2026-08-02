@@ -105,18 +105,18 @@
 # --------------------------------------------------------------------------
 # ⚠️ PROVISIONAL PROJECT NAMING — see 05_PROJECTS §9 (PROJ-05)
 # --------------------------------------------------------------------------
-# This template uses `project_hint: ${researcher}-${experiment}` because
+# This template uses `project_name: ${researcher}-${experiment}` because
 # Cell Observer cells-mode folders don't carry a durable project handle
 # the way AxioScan animal-project codes do. This is a STOPGAP, not a
 # long-term convention. Experiments are metadata; projects are bigger
-# than that. The right project_hint will come from a group conversation
+# than that. The right project_name will come from a group conversation
 # about how to name projects meaningfully — funded grant names, an
 # internal scheme, or some other durable handle. Until that conversation
 # happens, this template will produce projects named like
 # `itziar-alphasma`, `itziar-othersight`, etc. — useful but not what we
 # want at scale.
 #
-# When the group converges on a real convention, replace the project_hint
+# When the group converges on a real convention, replace the project_name
 # expression below to match it. The auto_create_project: block stays.
 # --------------------------------------------------------------------------
 
@@ -184,8 +184,8 @@ registry:
   # Precise timestamp from the .czi.
   acquisition_datetime: discovered.czi_acquisition_datetime
   # PROVISIONAL — see warning at top of file (PROJ-05 open question).
-  # First-time auto-create produces short_name=lowercase of this string.
-  project_hint:         "${discovered.researcher}-${discovered.experiment}"
+  # First-time auto-create produces a project named exactly this string.
+  project_name:         "${discovered.researcher}-${discovered.experiment}"
   # EDIT: short description of this batch.
   notes:                "Cell-culture imaging (${discovered.cell_line} / ${discovered.experiment}): ${discovered.condition}, image ${discovered.image_num}; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na}"
 
@@ -202,8 +202,8 @@ operator: "${discovered.czi_user}"
 # after creation to refine.
 auto_create_project:
   owner:       "${discovered.researcher}"
-  description: "Auto-created from Cell Observer cells-mode ingest; experiment chunk '${discovered.experiment}', cell line ${discovered.cell_line}. PROVISIONAL project_hint — see 05_PROJECTS §9."
-  notes:       "Auto-created on first ingest. Owner = researcher folder name; rename short_name and update owner via _project.yaml as project naming convention matures."
+  description: "Auto-created from Cell Observer cells-mode ingest; experiment chunk '${discovered.experiment}', cell line ${discovered.cell_line}. PROVISIONAL project_name — see 05_PROJECTS §9."
+  notes:       "Auto-created on first ingest. Owner = researcher folder name; rename the project and update owner via _project.yaml as project naming convention matures."
 
 # Name of the project hard link placed under /projects/<proj>/raw_linked/.
 # (Hard link since 2026-06-02 — resolved value used verbatim, no extension;

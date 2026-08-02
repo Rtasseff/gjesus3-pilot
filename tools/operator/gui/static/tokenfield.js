@@ -105,6 +105,10 @@ if (typeof document !== "undefined") {
     constructor(el, opts = {}) {
       this.el = el;
       this.onChange = opts.onChange || null;
+      // Opt-in: the value must be a legal folder name, so a typed space becomes
+      // a hyphen AS TYPED (the operator sees the real name, rather than having
+      // it silently rewritten later). Used by the project-name field.
+      this.spacesToHyphens = !!opts.spacesToHyphens;
       el.setAttribute("contenteditable", "true");
       el.setAttribute("role", "textbox");
       el.classList.add("tokenfield");
@@ -121,7 +125,8 @@ if (typeof document !== "undefined") {
       // Plain-text paste only (never inherit rich HTML / nested editables).
       el.addEventListener("paste", (e) => {
         e.preventDefault();
-        const t = (e.clipboardData || window.clipboardData).getData("text");
+        let t = (e.clipboardData || window.clipboardData).getData("text");
+        if (this.spacesToHyphens) t = t.replace(/\s+/g, "-");
         document.execCommand("insertText", false, t);
       });
 
@@ -163,6 +168,13 @@ if (typeof document !== "undefined") {
     }
 
     _onKeydown(e) {
+      if (this.spacesToHyphens && e.key === " ") {
+        // Type the hyphen the name will actually use, in place of the space.
+        e.preventDefault();
+        document.execCommand("insertText", false, "-");
+        this._changed();
+        return;
+      }
       if (e.key !== "Backspace" && e.key !== "Delete") return;
       const sel = window.getSelection();
       if (!sel || !sel.isCollapsed || !sel.rangeCount) return;

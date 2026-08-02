@@ -12,7 +12,6 @@ See 05_PROJECTS.md and 10_TOOLS.md for full specification.
 import argparse
 import csv
 import os
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,13 +22,24 @@ from pathlib import Path
 from ingest import provenance as provenance_mod
 from ingest import csv_safe
 from ingest import resources
+# The name -> folder rule has ONE home (2026-08-02); this script is the only
+# thing that CREATES a project, and it derives the folder from there rather
+# than building a path string of its own. See 05_PROJECTS "Project reference
+# model".
+from ingest.project_naming import (
+    validate_project_name,
+    normalize_project_name,
+    folder_name as project_folder_name,
+    folder_location as project_folder_location,
+)
 
 
 # --- Constants ---
 
 PROJECT_REGISTRY_FIELDS = [
     "project_id",
-    "short_name",
+    "name",              # RENAMED from "short_name" 2026-08-02 — the project's
+                         # human key, case-preserved, and the folder verbatim.
     "description",
     "owner",
     "start_date",
@@ -44,24 +54,6 @@ def log(msg, level="INFO"):
     """Print a timestamped log message."""
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"[{ts}] {level}: {msg}")
-
-
-def validate_short_name(name):
-    """Validate that short_name is filesystem-safe.
-
-    Returns list of errors (empty if valid).
-    """
-    errors = []
-    if not name:
-        errors.append("Short name cannot be empty")
-        return errors
-    if not re.match(r"^[a-z0-9][a-z0-9-]*$", name):
-        errors.append(
-            f"Short name must be lowercase alphanumeric with hyphens only: '{name}'"
-        )
-    if len(name) > 60:
-        errors.append(f"Short name too long ({len(name)} chars, max 60)")
-    return errors
 
 
 def read_project_registry(registry_path):
@@ -90,10 +82,14 @@ def next_project_id(rows):
     return f"PROJ-{max_num + 1:04d}"
 
 
-def check_name_unique(rows, short_name):
-    """Check that short_name is not already in the registry."""
+def check_name_unique(rows, name):
+    """Check that `name` is not already in the registry.
+
+    Case-INSENSITIVE: the NAS filesystem is case-insensitive, so two names
+    differing only in case would fight over one folder.
+    """
     for row in rows:
-        if row.get("short_name", "").lower() == short_name.lower():
+        if row.get("name", "").lower() == name.lower():
             return False
     return True
 
@@ -108,7 +104,8 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
     """Create a new project workspace.
 
     Args:
-        name: Short name for the project (lowercase, hyphens).
+        name: The project's name — case-preserved, and the folder name
+            verbatim (spaces are normalized to hyphens).
         description: Brief description of the project.
         owner: Owner initials.
         nas_root: Path to NAS root (e.g., /mnt/gjesus3).
@@ -118,8 +115,9 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
     Returns:
         Tuple of (project_id, success).
     """
-    # --- Validate short name ---
-    errors = validate_short_name(name)
+    # --- Normalize + validate the name (it becomes the folder) ---
+    name = normalize_project_name(name)
+    errors = validate_project_name(name)
     if errors:
         for e in errors:
             log(e, "ERROR")
@@ -130,17 +128,16 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
     rows = read_project_registry(registry_path)
 
     if not check_name_unique(rows, name):
-        log(f"Short name '{name}' already exists in registry", "ERROR")
+        log(f"Project name '{name}' already exists in registry", "ERROR")
         return None, False
 
     # --- Generate ID ---
     project_id = next_project_id(rows)
     log(f"Generated project ID: {project_id}")
 
-    # --- Determine paths ---
-    folder_name = f"proj-{name}"
-    project_dir = os.path.join(nas_root, "projects", folder_name)
-    canonical_path = f"/projects/{folder_name}/"
+    # --- Determine paths (folder == name, verbatim) ---
+    project_dir = os.path.join(nas_root, "projects", project_folder_name(name))
+    canonical_path = project_folder_location(name)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # --- Summary ---
@@ -171,7 +168,7 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
     if os.path.exists(template_path):
         content = load_template(template_path)
         content = content.replace("{project_id}", project_id)
-        content = content.replace("{short_name}", name)
+        content = content.replace("{name}", name)
         content = content.replace("{description}", description)
         content = content.replace("{owner}", owner)
         content = content.replace("{start_date}", today)
@@ -179,7 +176,7 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
         # Fallback: generate inline
         content = (
             f"project_id: {project_id}\n"
-            f"short_name: {name}\n"
+            f"name: {name}\n"
             f'description: "{description}"\n'
             f"status: active\n"
             f"owner: {owner}\n"
@@ -212,7 +209,7 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
 
     row = {
         "project_id": project_id,
-        "short_name": name,
+        "name": name,
         "description": description,
         "owner": owner,
         "start_date": today,
@@ -238,7 +235,9 @@ def run_interactive(nas_root, dry_run=False):
     """Interactive mode for project creation."""
     print("=== Create New Project ===\n")
 
-    name = input("Short name (lowercase, hyphens, e.g. 'ipf-biomarkers'): ").strip()
+    name = input(
+        "Project name (also the folder name, e.g. 'AE-biomaGUNE-1123'): "
+    ).strip()
     description = input("Description: ").strip()
     owner = input("Owner (initials): ").strip()
     notes = input("Notes (optional): ").strip()
@@ -261,7 +260,7 @@ def main():
     )
     parser.add_argument(
         "--name", "-n",
-        help="Project short name (lowercase, hyphens, e.g. 'ipf-biomarkers')",
+        help="Project name — also the folder name (e.g. 'AE-biomaGUNE-1123')",
     )
     parser.add_argument(
         "--description", "-d",

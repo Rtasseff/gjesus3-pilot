@@ -12,7 +12,7 @@ front-ends so they can never drift:
 Before this module the two sides kept independent hard-coded lists (a JS
 `REQUIRED_FIELDS` and a Python `CRITICAL_FIELDS`). They disagreed — e.g.
 `registry.session_id` existed only in the builder, so leaving it blank in a
-recipe silently never surfaced in the runner, while `registry.project_hint`
+recipe silently never surfaced in the runner, while `registry.project_name`
 (present in both) worked. Driving both front-ends from this single list makes
 the behaviour uniform: blank-in-builder → fillable-in-runner for EVERY field,
 and adding/renaming a field is a one-line edit here that both sides pick up.
@@ -50,7 +50,7 @@ VALUE_FIELDS = [
     {"key": "registry.sample_id",           "label": "Sample ID",         "kind": "token",      "hint": "",                            "star": True,  "required": True,  "gap": True},
     {"key": "registry.sample_type",         "label": "Sample type",       "kind": "sampletype", "hint": "controlled vocabulary",       "star": False, "required": True,  "gap": True},
     {"key": "registry.acquisition_datetime", "label": "Acquisition date", "kind": "token",      "hint": "",                            "star": False, "required": False, "gap": True},
-    {"key": "registry.project_hint",        "label": "Project hint",      "kind": "token",      "hint": "link to a project",           "star": False, "required": False, "gap": True},
+    {"key": "registry.project_name",        "label": "Project name",      "kind": "token",      "hint": "the project's name — matches its folder", "star": False, "required": False, "gap": True},
     {"key": "registry.session_id",          "label": "Session ID",        "kind": "token",      "hint": "",                            "star": False, "required": False, "gap": True},
     {"key": "registry.notes",               "label": "Notes",             "kind": "token",      "hint": "",                            "star": False, "required": False, "gap": True},
     {"key": "link_filename",                "label": "Project link name", "kind": "token",      "hint": "the file name if left blank", "star": False, "required": False, "gap": True},

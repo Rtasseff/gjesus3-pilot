@@ -20,7 +20,7 @@ from pathlib import Path
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
     metadata_sidecar, provenance, resolver, enrichment, locking,
-    subjects_table,
+    subjects_table, project_naming,
 )
 import create_project as create_project_mod
 import animal_db
@@ -1258,17 +1258,29 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         readme.generate_readme(acq_id_str, cfg_single, summary, dest_dir)
         log("Wrote README.txt")
 
-        # --- Step 9.5: Resolve project_hint (canonicalize; optional auto-create) ---
+        # --- Step 9.5: Resolve the project name (canonicalize; optional auto-create) ---
         # Runs before the registry append so the row records the canonical
-        # PROJ-XXXX, not whatever raw hint came in. Step 12 (.lnk) reads the
-        # resolved value too.
-        project_hint = cfg_single.get("project_hint", "").strip()
-        if project_hint:
+        # PROJ-XXXX in its `project_id` column, not the name the operator typed.
+        # Step 12 (the hard link) and the `link_filename:` template both read the
+        # resolved values, so from here the case carries BOTH identifiers:
+        # `project_id` (the machine key, stored) and `project_name` (the human
+        # key == the folder). See 05_PROJECTS "Project reference model".
+        project_name = project_naming.normalize_project_name(
+            cfg_single.get("project_name", "")
+        )
+        if project_name:
+            cfg_single["project_name"] = project_name
             projects_registry = os.path.join(nas_root, "registries", "registry_projects.csv")
-            proj_id, _proj_folder = linker.resolve_project(projects_registry, project_hint)
+            proj_id, canon_name, _proj_folder = linker.resolve_project(
+                projects_registry, project_name
+            )
             if proj_id:
-                if proj_id != project_hint:
-                    log(f"Resolved project_hint '{project_hint}' -> {proj_id} (by short_name)")
+                if canon_name and canon_name != project_name:
+                    # Matched case-insensitively, or by PROJ-id — record the
+                    # project's real name so casing stays canonical downstream.
+                    log(f"Resolved project '{project_name}' -> {proj_id} ({canon_name})")
+                elif proj_id != project_name:
+                    log(f"Resolved project '{project_name}' -> {proj_id}")
                 # First-write-wins: if the YAML config supplied an
                 # auto_create_project: block but the project already exists,
                 # the block is silently ignored — log an INFO line so the
@@ -1279,11 +1291,16 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                         f"block ignored (first-write-wins). Edit "
                         f"_project.yaml directly if you need to update."
                     )
-                cfg_single["project_hint"] = proj_id
+                cfg_single["project_id"] = proj_id
+                if canon_name:
+                    cfg_single["project_name"] = canon_name
             else:
                 ingest_block = cfg_single.get("ingest") or {}
                 if ingest_block.get("auto_create_projects"):
-                    short_name_norm = project_hint.lower()
+                    # Created under the name exactly as given (post space->hyphen);
+                    # create_project validates it and derives folder == name. No
+                    # lowercasing — that transform is what made the folder stop
+                    # matching the name operators see.
 
                     # Resolve the optional auto_create_project: block against
                     # this case's discovered fields. The block is the new
@@ -1298,7 +1315,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     desc = acp_resolved.get("description") or (
                         f"Auto-created during ingest of "
                         f"{cfg_single.get('original_name', '?')} "
-                        f"(hint='{project_hint}')"
+                        f"(project '{project_name}')"
                     )
                     notes_for_proj = (
                         acp_resolved.get("notes") or "auto-created by ingest_raw.py"
@@ -1306,32 +1323,33 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
 
                     if not owner or owner == "?":
                         log(
-                            f"Auto-creating project '{short_name_norm}' with "
+                            f"Auto-creating project '{project_name}' with "
                             f"empty/unknown owner. Edit "
-                            f"projects/proj-{short_name_norm}/_project.yaml "
+                            f"projects/{project_name}/_project.yaml "
                             f"after creation to set ownership.",
                             "WARN",
                         )
 
-                    log(f"Auto-creating project: short_name='{short_name_norm}', owner='{owner}'")
+                    log(f"Auto-creating project: name='{project_name}', owner='{owner}'")
                     new_id, ok = create_project_mod.create_project(
-                        short_name_norm, desc, owner, nas_root,
+                        project_name, desc, owner, nas_root,
                         dry_run=False,
                         notes=notes_for_proj,
                     )
                     if ok and new_id:
-                        cfg_single["project_hint"] = new_id
+                        cfg_single["project_id"] = new_id
                     else:
                         log(
-                            f"Project auto-create failed for hint='{project_hint}'; "
-                            f"leaving registry project_hint as the raw value",
+                            f"Project auto-create failed for '{project_name}'; "
+                            f"this acquisition is registered with NO project "
+                            f"(blank project_id, no link)",
                             "WARN",
                         )
                 else:
                     log(
-                        f"project_hint='{project_hint}' not found in registry and "
-                        f"ingest.auto_create_projects is false; leaving registry "
-                        f"project_hint as the raw value",
+                        f"project_name='{project_name}' not found in registry and "
+                        f"ingest.auto_create_projects is false; this acquisition "
+                        f"is registered with NO project (blank project_id, no link)",
                         "WARN",
                     )
 
@@ -1399,23 +1417,25 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             "WARN",
         )
 
-    # --- Step 12: Project hard link (if project_hint set) ---
+    # --- Step 12: Project hard link (if the project resolved at Step 9.5) ---
     # Replaces the legacy .lnk shortcut (2026-06-02): the project copy is a
     # real file identical to the raw primary — same inode, zero extra storage,
     # and it carries raw's single security descriptor (a read-only raw file
     # stays read-only through the link). Hard links use LOCAL paths on the NAS
     # volume, so --nas-unc is no longer needed for linking.
-    project_hint = cfg_single.get("project_hint", "").strip()
-    if project_hint:
+    project_id = cfg_single.get("project_id", "").strip()
+    if project_id:
         projects_registry = os.path.join(
             nas_root, "registries", "registry_projects.csv"
         )
+        # Read the STORED folder_location — never rebuild the path from the
+        # name. That is the one construction site rule (05_PROJECTS).
         project_folder_rel = linker.lookup_project_folder(
-            projects_registry, project_hint
+            projects_registry, project_id
         )
         if not project_folder_rel:
             log(
-                f"project_hint={project_hint} not found in "
+                f"project_id={project_id} not found in "
                 f"registry_projects.csv; skipping hard-link creation",
                 "WARN",
             )
@@ -1620,9 +1640,9 @@ def run_interactive(nas_root, dry_run=False, nas_unc=None, delete_source=False,
         ).strip() or "NA",
         "notes":               input("Notes (optional, NA to skip): ").strip() or "NA",
     }
-    proj = input("Project ID (e.g. PROJ-0001, blank for none): ").strip()
+    proj = input("Project name or ID (e.g. AE-biomaGUNE-1123, blank for none): ").strip()
     if proj:
-        reg_block["project_hint"] = proj
+        reg_block["project_name"] = proj
 
     cfg_single["registry"] = reg_block
     cfg_single["ingest_config"] = ingest_config_path  # "" in interactive mode
@@ -1647,23 +1667,23 @@ def run_interactive(nas_root, dry_run=False, nas_unc=None, delete_source=False,
         sys.exit(1)
 
 
-def _touched_project_hints(acq_ids, nas_root):
-    """Distinct project_hint values (PROJ-ids) for the given acq_ids, read back
+def _touched_project_ids(acq_ids, nas_root):
+    """Distinct project_id values (PROJ-XXXX) for the given acq_ids, read back
     from the registry. Used by `--refresh-index projects` to regenerate only the
     project index(es) this run actually wrote into. Empty list if none resolve."""
     want = {a for a in acq_ids if a}
     if not want:
         return []
     from ingest import registry as _registry
-    hints, seen = [], set()
+    ids, seen = [], set()
     reg_path = os.path.join(nas_root, "registries", "registry_raw.csv")
     for row in _registry.read_registry(reg_path):
         if row.get("acq_id") in want:
-            h = (row.get("project_hint") or "").strip()
-            if h and h not in seen:
-                seen.add(h)
-                hints.append(h)
-    return hints
+            pid = (row.get("project_id") or "").strip()
+            if pid and pid not in seen:
+                seen.add(pid)
+                ids.append(pid)
+    return ids
 
 
 def main():
@@ -1692,7 +1712,10 @@ def main():
     )
     parser.add_argument(
         "--project",
-        help="Project ID (e.g. PROJ-0001) — recorded as project_hint in the raw registry",
+        help=(
+            "Project name or ID (e.g. AE-biomaGUNE-1123 / PROJ-0001) — resolved "
+            "at Step 9.5 and recorded as project_id in the raw registry"
+        ),
     )
     parser.add_argument(
         "--nas-unc",
@@ -1757,7 +1780,7 @@ def main():
         )
         sys.exit(2)
     # Project links are now hard links (local NAS-volume paths); they are
-    # created whenever a row's project_hint resolves, independent of nas_unc.
+    # created whenever a row's project name resolves, independent of nas_unc.
     if nas_unc:
         log(f"NAS UNC:  {nas_unc} (legacy .lnk seam only; unused by hard-link linker)")
 
@@ -1780,9 +1803,9 @@ def main():
         )
     else:
         cfg = config.load_config(args.config)
-        # CLI --project overrides project_hint in the registry: block
+        # CLI --project overrides project_name in the registry: block
         if args.project:
-            cfg.setdefault("registry", {})["project_hint"] = args.project
+            cfg.setdefault("registry", {})["project_name"] = args.project
 
         if config.is_batch_config(cfg):
             # Stamp ingest_config so each case's registry row records it.
@@ -1827,12 +1850,12 @@ def main():
                 log("Refreshing Finder indexes (global + all per-project)...")
                 generate_index.main(["--nas-root", nas_root, "--per-project"])
             else:  # "projects" — only the project(s) this run wrote into
-                hints = _touched_project_hints(touched_acq_ids, nas_root)
-                if hints:
-                    log(f"Refreshing {len(hints)} project index(es): {', '.join(hints)}")
+                pids = _touched_project_ids(touched_acq_ids, nas_root)
+                if pids:
+                    log(f"Refreshing {len(pids)} project index(es): {', '.join(pids)}")
                     argv = ["--nas-root", nas_root]
-                    for h in hints:
-                        argv += ["--project", h]
+                    for pid in pids:
+                        argv += ["--project", pid]
                     generate_index.main(argv)
                 else:
                     log("No project index to refresh (no linked project in this run).")

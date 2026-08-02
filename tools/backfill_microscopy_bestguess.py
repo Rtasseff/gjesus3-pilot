@@ -153,7 +153,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--nas-root", required=True)
-    ap.add_argument("--project", default=None, help="limit to this project_hint")
+    ap.add_argument("--project", default=None, help="limit to this project_id (PROJ-XXXX)")
     ap.add_argument("--instrument", default=None, choices=sorted(MICRO_INSTRUMENTS),
                     help="limit to CELL or LSM9")
     ap.add_argument("--apply", action="store_true")
@@ -175,7 +175,7 @@ def main(argv=None):
             continue
         if args.instrument and inst != args.instrument:
             continue
-        if args.project and (row.get("project_hint") or "") != args.project:
+        if args.project and (row.get("project_id") or "") != args.project:
             continue
         aid = row.get("acq_id", "")
         relpath = row.get("original_name", "")

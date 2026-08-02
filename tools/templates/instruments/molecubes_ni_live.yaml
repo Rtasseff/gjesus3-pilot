@@ -47,7 +47,7 @@ registry:
   # group the PET + CT of one animal-visit into one ISA "study":
   session_id:           "${discovered.series}_${discovered.date}_${discovered.subject}"
   # project from the subject prefix (§3A authoritative), via subject_parse:
-  project_hint:         "ae-biomegune-${discovered.project}"
+  project_name:         "AE-biomaGUNE-${discovered.project}"
   notes:                "Live-box NI sync: ${discovered.modality} of subject ${discovered.subject} (project ${discovered.project})"
 
 operator: irene                            # EDIT per sync

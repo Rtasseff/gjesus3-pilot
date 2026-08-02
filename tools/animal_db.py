@@ -28,7 +28,7 @@ WHERE IT RUNS / CREDENTIALS
     a superuser to recover later (deferred-recovery, 08_METADATA §4.4.6).
 
 THE JOIN (verified 2026-06-02)
-    project_hint `ae-biomegune-<NNNN>` → `projects.projectAlias = <NNNN>`
+    project name `AE-biomaGUNE-<NNNN>` → `projects.projectAlias = <NNNN>`
     → `projects.id` → `animals.id_project`; the instrument animal short code
     (`m13`/`m14`/`ID13B`) → `animals.animal_code` (the leading integer).
     (project, animal_code) is the unique animal key. The subject id is the
@@ -297,7 +297,7 @@ def lookup(project_alias, animal_code, conn=None, use_cache=True):
 
     Args:
         project_alias: the 4-char animal-protocol alias (e.g. "0525"), i.e.
-            the NNNN from project_hint "ae-biomegune-NNNN".
+            the NNNN from the project name "AE-biomaGUNE-NNNN".
         animal_code: the integer animal code (the leading number of the
             instrument short code; "m13" → 13).
         conn: optional open connection to reuse across a batch; if None, one

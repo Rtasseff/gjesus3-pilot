@@ -124,22 +124,24 @@
 # --------------------------------------------------------------------------
 # ⚠️ PROVISIONAL PROJECT NAMING — see 05_PROJECTS §9 (PROJ-05)
 # --------------------------------------------------------------------------
-# This template uses `project_hint: ${discovered.researcher}` because
+# This template uses `project_name: ${discovered.researcher}` because
 # LSM 900 confocal batches don't carry a durable project handle the way
-# AxioScan animal-project codes do. The researcher name (lowercased
-# at create-time, e.g. "LAURA" → "laura") becomes the project
-# short_name. This is a STOPGAP — same family of decision as the round-5
-# Cell Observer ${researcher}-${experiment} convention.
+# AxioScan animal-project codes do. The researcher name becomes the
+# project name verbatim — whatever casing the source folder carries is
+# what the project (and its folder) is called. This is a STOPGAP — same
+# family of decision as the round-5 Cell Observer
+# ${researcher}-${experiment} convention.
 #
-# The right long-term project_hint will come from the group's
+# The right long-term project_name will come from the group's
 # project-naming consensus conversation (PROJ-05). Until then, the
 # default groups all of one researcher's confocal work into one
 # project workspace, which is at least a reasonable middle ground.
 #
 # Per-batch configs MAY override with a more specific hyphenated string
-# (e.g. project_hint: "laura-uptake-lp-ionp-doxo") if you want batch-
-# granular projects. Mind the validator: `^[a-z0-9][a-z0-9-]*$` —
-# lowercase alphanumeric with hyphens only (NO underscores).
+# (e.g. project_name: "laura-uptake-lp-ionp-doxo") if you want batch-
+# granular projects. The name becomes the folder name, so it must be a
+# legal folder name (no \/:*?"<>|, no leading/trailing dot or space);
+# spaces are converted to hyphens.
 # --------------------------------------------------------------------------
 
 ingest:
@@ -194,7 +196,7 @@ registry:
   sample_type:          cells
   acquisition_datetime: discovered.czi_acquisition_datetime
   # PROVISIONAL — see warning at top of file (PROJ-05).
-  project_hint:         "${discovered.researcher}"
+  project_name:         "${discovered.researcher}"
   # EDIT: short description of this batch.
   notes:                "LSM 900 confocal of ${discovered.cell_line} cells; experiment '${discovered.experiment}'; ${discovered.czi_objective_mag}x NA${discovered.czi_objective_na} ${discovered.czi_acquisition_mode}; ${discovered.czi_size_z}-slice Z-stack"
 
@@ -207,8 +209,8 @@ operator: "${discovered.czi_user}"
 # initial project creation; ignored otherwise.
 auto_create_project:
   owner:       "${discovered.researcher}"
-  description: "Auto-created from LSM 900 confocal ingest; researcher ${discovered.researcher} (first project workspace). PROVISIONAL project_hint per 05_PROJECTS §9 — refine when the group settles a real naming convention."
-  notes:       "Auto-created on first ingest. Owner = researcher folder name; rename short_name and update owner via _project.yaml as the project naming convention matures."
+  description: "Auto-created from LSM 900 confocal ingest; researcher ${discovered.researcher} (first project workspace). PROVISIONAL project_name per 05_PROJECTS §9 — refine when the group settles a real naming convention."
+  notes:       "Auto-created on first ingest. Owner = researcher folder name; rename the project and update owner via _project.yaml as the project naming convention matures."
 
 # Name of the project hard link placed under /projects/<proj>/raw_linked/.
 # (Hard link since 2026-06-02 — resolved value used verbatim, no extension;
