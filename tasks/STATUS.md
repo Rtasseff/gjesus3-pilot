@@ -108,7 +108,9 @@ The genuinely in-flight items (kept tight — everything else is in
   off-NAS at `C:\Users\rtasseff\temp\gjesus3_projectnaming_backup_20260802` — keep until
   the first operator ingest confirms good. Model + consumer table:
   [`../mfb-rdm-docs/05_PROJECTS.md`](../mfb-rdm-docs/05_PROJECTS.md) §2a; full record in
-  [`../CHANGELOG.md`](../CHANGELOG.md). **Still open (deliberately):** the *semantic*
+  [`../CHANGELOG.md`](../CHANGELOG.md). **Open follow-ups (push, operator comms,
+  rollback-asset retention, disk leftovers) are tracked in
+  [`project_naming_handback.md`](project_naming_handback.md) — delete it once drained.** **Still open (deliberately):** the *semantic*
   re-projecting of person/topic projects (PROJ-05 / [`BACKLOG.md`](BACKLOG.md)) — this was
   mechanical normalization only; and the 5 closed-but-present folders, whose deletion
   remains a separate Data-Office action.
