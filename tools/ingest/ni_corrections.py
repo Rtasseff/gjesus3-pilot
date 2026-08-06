@@ -24,10 +24,16 @@ Correctable fields (v1):
   - project       -> overrides discovered.project  (BEFORE resolution; fixes project_hint
                      routing, the animal-facility DB lookup, and the packed subject_ids)
   - animal_codes  -> overrides discovered.animal_codes (`;`-joined mouse numbers; same)
-  - session_id    -> overrides the RESOLVED session_id (the ISA visit grouping)
-  - sample_id     -> overrides the RESOLVED sample_id (the subject label)
   - extra_metadata-> free-form `key=value;key=value` -> a `session_extra` sidecar block
                      (the home for tracer/compound — see 08_METADATA)
+
+NOT correctable, deliberately (dropped 2026-08-06): `session_id` and `sample_id` are
+DERIVED for NI — `session_id` from `<series>_<date>_<subject>` and `sample_id` from
+`<project>_<subject-folder>`, i.e. entirely from the two fields above. Offering them as
+editable columns made them a second, competing source of truth: they were written blank
+into every plan, and a project correction (0324->0325) re-derived `project_hint` but left
+a hand-set `sample_id` reading `0324_m61` — stale and wrong. Correct `project` /
+`animal_codes` and both re-derive correctly. Fewer columns, fewer questions.
 
 Persistence is the per-run file (operator passes `--corrections` each sync). KNOWN
 LIMITATION: a NEW reconstruction of a previously-corrected session, ingested on a later
@@ -47,16 +53,16 @@ NI_CORRECTION_FIELDS = [
     "session_path",    # READ-ONLY key: raw <series>/<date>/<subject> source relpath
     "project",         # -> discovered.project (pre-resolution)
     "animal_codes",    # -> discovered.animal_codes (pre-resolution; ;-joined)
-    "session_id",      # -> resolved session_id (post-resolution)
-    "sample_id",       # -> resolved sample_id (post-resolution)
     "extra_metadata",  # free-form key=value;key=value -> session_extra sidecar block
 ]
 
 # Fields applied to discovered BEFORE registry resolution (so project_hint /
 # subject DB lookup / subject_ids all re-derive from the corrected value).
 _PRE_FIELDS = {"project": "project", "animal_codes": "animal_codes"}
-# Fields applied to the RESOLVED case AFTER registry resolution.
-_POST_FIELDS = {"session_id": "session_id", "sample_id": "sample_id"}
+# No post-resolution value overrides: session_id / sample_id are DERIVED from the
+# pre-resolution fields above (see the module docstring). apply_post now carries
+# only the session_extra sidecar block.
+_POST_FIELDS = {}
 
 
 def session_key(discovered):
@@ -175,17 +181,16 @@ def apply_pre(case, corrections):
 
 
 def apply_post(case, row):
-    """Override the RESOLVED session_id/sample_id and stash session_extra.
+    """Stash the session_extra sidecar block on the RESOLVED case.
 
     Call in expand_batch AFTER apply_registry_block, with the row returned by
     apply_pre (so the lookup happens once). No-op if `row` is None.
+
+    Nothing resolved is overridden here any more — session_id / sample_id derive
+    from the corrected pre-resolution fields (see the module docstring).
     """
     if not row:
         return
-    for col, ckey in _POST_FIELDS.items():
-        val = (row.get(col) or "").strip()
-        if val:
-            case[ckey] = val
     extra = parse_extra(row.get("extra_metadata"))
     if extra:
         case["session_extra"] = extra

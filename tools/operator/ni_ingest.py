@@ -358,8 +358,6 @@ def _write_plan(result, path):
             "session_path": key,
             "project": disc.get("project", ""),
             "animal_codes": disc.get("animal_codes", ""),
-            "session_id": "",
-            "sample_id": "",
             "extra_metadata": "",
         }
     rows = list(seen.values())
@@ -401,7 +399,15 @@ def _run_live(args, nas_root):
     log(f"researcher: {researcher}   operator: {operator}", "INFO")
 
     # Condition/anatomy metadata (per-batch, optional, non-blocking).
-    interactive = (not args.no_prompt) and sys.stdin.isatty()
+    #
+    # NEVER prompt on a read-only pass. `--plan` writes a worksheet and stops and
+    # `--dry-run` commits nothing, so asking the operator is pure friction — and it
+    # asked at the NI box on 2026-08-05, three times, during the plan step. The NI
+    # live template supplies the per-batch anatomy default (Molecubes scans the whole
+    # animal every time), so the only genuinely per-batch question left is the
+    # condition one, and that belongs on a real ingest.
+    read_only = bool(args.plan) or bool(args.dry_run)
+    interactive = (not args.no_prompt) and sys.stdin.isatty() and not read_only
     meta_overrides = metadata_prompt.collect_overrides(
         {
             "is_control": args.is_control,
