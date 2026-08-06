@@ -478,7 +478,9 @@ def _run_live(args, nas_root):
     cfg["_ni_corrections"] = corr
 
     log("building preview (read-only)...", "INFO")
-    result = preview.preview_batch(cfg, nas_root)
+    # --plan returns before the preview table, so it never shows n_matched; skip
+    # that second full walk of the tree (see preview_batch).
+    result = preview.preview_batch(cfg, nas_root, count_matches=not args.plan)
     if result.blocking_errors:
         for err in result.blocking_errors:
             log(err, "ERROR")

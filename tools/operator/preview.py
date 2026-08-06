@@ -103,8 +103,15 @@ def _count_glob_matches(cfg):
     return sum(1 for m in matches if os.path.isdir(m) or os.path.isfile(m))
 
 
-def preview_batch(cfg, nas_root):
+def preview_batch(cfg, nas_root, count_matches=True):
     """Build a PreviewResult for the batch config `cfg` against `nas_root`.
+
+    `count_matches=False` skips the pre-dedup glob count — a SECOND full
+    recursive walk of the source tree that duplicates the one expand_batch is
+    about to do, and exists only to display `n_matched`. Callers that never show
+    that number (the NI `--plan` worksheet returns before the preview table) pass
+    False and halve the walking. Over SMB on the NI box, where the tree is deep
+    and every stat is a round trip, that walk is the expensive part.
 
     READ-ONLY: calls config.expand_batch (which only reads the registry for
     dedup) then replicates the acq_id / project / link resolution that
@@ -128,10 +135,11 @@ def preview_batch(cfg, nas_root):
     )
 
     # n_matched: count glob matches before dedup (best-effort, read-only).
-    try:
-        result.n_matched = _count_glob_matches(cfg)
-    except Exception as e:  # noqa: BLE001 — preview must never explode
-        result.warnings.append(f"could not count glob matches: {e}")
+    if count_matches:
+        try:
+            result.n_matched = _count_glob_matches(cfg)
+        except Exception as e:  # noqa: BLE001 — preview must never explode
+            result.warnings.append(f"could not count glob matches: {e}")
 
     # expand_batch resolves discovered + registry_resolved + original_name and
     # dedups against the live registry. Structural config errors raise
