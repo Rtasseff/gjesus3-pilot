@@ -188,15 +188,36 @@ The genuinely in-flight items (kept tight — everything else is in
   machine), reachability of the scanner host, and the NAS mount.
 - **NI live-box sync — go-live.** The live-machine sync code is built and verified
   end-to-end in a sandbox (it is a config, not a new orchestrator — the existing
-  `ingest_raw` does the walk). The remaining gate is **Gate-0**: confirm `os.link`
-  (hard-link) behaviour on the live NI Mac's CIFS mount, then a vetted one-shot
-  ingest per researcher. Archive-mode NI is already done and is the durable
+  `ingest_raw` does the walk). Archive-mode NI is already done and is the durable
   source-of-truth; live sync is the forward path for active project data.
-  **Remote access to the box is being established** so Gate-0 no longer needs a
-  physical access slot — reverse SSH tunnel, workstation half verified 2026-08-06,
-  box half installed at the next access window. See
-  [`../equipment/nuclear-imaging/live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md).
-  Gate-0 is the first real task for that tunnel (NI-RA-05).
+  - ✅ **Gate-0 CLOSED 2026-08-05 — answered, and the answer is NO.**
+    `tools/diagnostics/test_oslink.py` was run on the NI Mac against
+    `/Volumes/gjesus3/gjesus3-sandbox`: `os.link` → **`OSError ENOTSUP`**
+    (python 3.10.5, darwin). macOS over SMB/CIFS does not support hard links, so
+    the live box **cannot** create `raw_linked/` project links. This is a
+    filesystem-capability fact, not a bug. It is already handled: the ingest
+    still fully registers the acquisition (raw copy, checksums, metadata,
+    subjects, registry row) and defers the un-makeable link to
+    `registries/pending_links.csv`, drained later from the Windows workstation by
+    [`../tools/relink_pending.py`](../tools/relink_pending.py) — branch
+    `feat/ni-live-hardening`. Gate-0 needs no access slot and is **not** a task
+    for the tunnel; NI-RA-05 in
+    [`../equipment/nuclear-imaging/live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md)
+    can be closed against this result.
+  - 🕗 **What actually blocks go-live: an operator flow a researcher will use.**
+    Not Gate-0. The current flow is a 6-step developer test script
+    (`S:\gnuclear\2026\Jesus\Ryan\ni-live-test\RUN_THE_TEST.md`) that no
+    researcher will follow — and the 2026-08-05 on-box run stopped at the
+    read-only `--plan` step, so no ingest has yet been proven on the box. The
+    remaining work is simplification, tracked in
+    [`ni_live_operator_flow_plan.md`](ni_live_operator_flow_plan.md); findings
+    from the on-box run are in
+    [`ni_live_onbox_test_review.md`](ni_live_onbox_test_review.md).
+  - **Remote access to the box is being established** (reverse SSH tunnel;
+    workstation half verified 2026-08-06, **box half not yet run** — it needs a
+    physical access slot on the Mac). If it lands it gives a development access
+    point and retires `RUN_THE_TEST.md`; it is not a prerequisite for the work
+    above.
 - ✅ **No-DICOM MRI regeneration — DRAINED 2026-07-16** (branch
   `feat/dicom-regen-backfill`; full narrative in [`../CHANGELOG.md`](../CHANGELOG.md)).
   The worklist (`registries/pending_dicom_regen.csv`, 612 rows) is at **0 `pending`**:
