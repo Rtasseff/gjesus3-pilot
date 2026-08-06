@@ -1,6 +1,6 @@
 # Equipment Index
 
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-08-06
 
 This folder contains reference documentation for all imaging equipment whose data is in scope for the gjesus3 archival system. It is the map between the abstract system specs in [`mfb-rdm-docs/`](../mfb-rdm-docs/00_INDEX.md) and the concrete reality of each instrument: what its "raw" data looks like, how operators name and stage it, and how it reaches gjesus3.
 
@@ -197,6 +197,7 @@ The Nuclear Imaging platform has **two** multimodal imaging systems plus an auto
   - Platform description (md) — covers Molecubes, MILabs VECTor, and autoradiography
   - Internal NI data-handling workflow notes (md, future-round prep, 2026-05-22) — documents the archive structure on `\\cicmgsp02\gnuclear2$`, the `<archive name>.tgz → .tar → user/series/.../recon_<idx>/frame_<n>iter_30/*.dcm` nested layout, the **funded-project-id** semantics (distinct from MRI's animal-protocol short id), and the proposed `link_filename` pattern for the future NI ingest round. **Not implemented yet** — blocked on Platform Manager Unai answering one outstanding question on the naming convention.
   - **Live-machine data layout & sync rules** (md, 2026-06-11) — [`nuclear-imaging/live_machine_data_layout_and_sync_rules.md`](./nuclear-imaging/live_machine_data_layout_and_sync_rules.md). Analysis of a real recursive listing of the **Molecubes acquisition-box data dir** (3191 acquisitions), for the "researcher syncs their own folder to gjesus3" goal. Establishes the one reliable anchor (`<YYYYMMDDhhmmss>_<MODALITY>` folder), the variable-depth/noise/clock-skew messiness, and 10 concrete sync rules + a staged plan. The complement to the archive-mode notes (which defer this live path).
+  - **Live-machine remote access** (md, 2026-08-06) — [`nuclear-imaging/live_machine_remote_access.md`](./nuclear-imaging/live_machine_remote_access.md). How we reach the Molecubes acquisition box at all: it is NAT'd behind its own router, so it dials **out** to the Data Office workstation and we ride that reverse SSH tunnel back in. Covers the architecture (landing pad inside WSL, because the workstation has no admin rights), the safety classification for a **live acquisition machine** (what persists vs what is process-scoped), what is verified vs still untested, the 5-second forwarder bug that masqueraded as an authentication failure, and removal steps. Motivated by **Gate-0** for live-box sync (`os.link` on the box's CIFS mount) and by the fact that `datapath.txt` — the entire evidence base for the sync-rules document above — currently costs a physical visit to refresh. The workstation half lives in the separate `WorkstationOps` repo (operation `molecubes-tunnel`); the operator field card lives on the NAS at `S:\gnuclear\2026\Jesus\Ryan\tunnel.txt`.
 
 ---
 

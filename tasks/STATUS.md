@@ -192,6 +192,11 @@ The genuinely in-flight items (kept tight — everything else is in
   (hard-link) behaviour on the live NI Mac's CIFS mount, then a vetted one-shot
   ingest per researcher. Archive-mode NI is already done and is the durable
   source-of-truth; live sync is the forward path for active project data.
+  **Remote access to the box is being established** so Gate-0 no longer needs a
+  physical access slot — reverse SSH tunnel, workstation half verified 2026-08-06,
+  box half installed at the next access window. See
+  [`../equipment/nuclear-imaging/live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md).
+  Gate-0 is the first real task for that tunnel (NI-RA-05).
 - ✅ **No-DICOM MRI regeneration — DRAINED 2026-07-16** (branch
   `feat/dicom-regen-backfill`; full narrative in [`../CHANGELOG.md`](../CHANGELOG.md)).
   The worklist (`registries/pending_dicom_regen.csv`, 612 rows) is at **0 `pending`**:
