@@ -341,18 +341,28 @@ def _commit(cfg, nas_root, instrument_key=INSTRUMENT_KEY):
 LIVE_INSTRUMENT_KEY = "NI_LIVE"   # -> molecubes_ni_live.yaml
 
 
-def _write_plan(result, path):
-    """Write one corrections row per NEW session to `path`, then stop (read-only).
+def _write_plan(result, path, stored=None):
+    """Write one worksheet row per UNREVIEWED session to `path`, then stop.
 
     Groups the preview's new acquisitions by session (the raw <series>/<date>/
     <subject> key) and prefills project + animal_codes from the parse so the
     operator only has to change what's wrong (or add extra_metadata).
+
+    Sessions already in the NAS-side store are SKIPPED — a human has reviewed
+    them and their values apply automatically, including to reconstructions that
+    show up months later. That is what keeps the steady state at one command:
+    once everything has been reviewed once, --plan writes nothing.
     """
+    stored = stored or {}
     seen = {}
+    skipped = 0
     for c in result.cases:
         disc = c.discovered or {}
         key = ni_corrections.session_key(disc)
         if not key or key in seen:
+            continue
+        if key in stored:
+            skipped += 1
             continue
         seen[key] = {
             "session_path": key,
@@ -361,13 +371,17 @@ def _write_plan(result, path):
             "extra_metadata": "",
         }
     rows = list(seen.values())
+    if skipped:
+        log(f"{skipped} session(s) already reviewed — their stored values apply "
+            f"automatically; not re-listed.", "INFO")
     if not rows:
-        log("no new sessions to plan (nothing new in scope).", "INFO")
+        log("nothing to review: every session in scope has already been "
+            "reviewed. Run again with --go to sync.", "INFO")
         return 0
     ni_corrections.write_plan(path, rows)
-    log(f"wrote {len(rows)} session row(s) to {path}. Edit the values / add "
-        f"extra_metadata (e.g. tracer=FDG), then re-run with "
-        f"--corrections {path}.", "INFO")
+    log(f"wrote {len(rows)} session row(s) to {path}. Fix anything wrong / add "
+        f"extra_metadata (e.g. tracer=FDG), then re-run with --go — the edited "
+        f"worksheet is picked up and saved for future syncs.", "INFO")
     return 0
 
 
@@ -430,19 +444,38 @@ def _run_live(args, nas_root):
     template = templates.load_template(LIVE_INSTRUMENT_KEY)
     cfg = config_builder.build_config(template, overrides)
 
-    # --corrections: per-session fixes + metadata (values only; the REMI-path
-    # identity is never changed). Validate the header up front so a typo'd
-    # column fails loudly instead of silently doing nothing.
+    # Per-session corrections (values only; the REMI-path identity is never
+    # changed). Two sources, merged in this order:
+    #
+    #   1. the NAS-side store — every session reviewed on a previous sync. Loaded
+    #      ALWAYS, applied automatically. This is the D6 reversal (2026-08-06):
+    #      NI reconstructions arrive late and land in already-corrected sessions,
+    #      so a per-run-file-only design silently re-applied the uncorrected REMI
+    #      values to those late acquisitions.
+    #   2. --corrections <file> — an edited worksheet from this run's --plan step.
+    #      Wins over the store (it is the newer human edit) and is merged INTO the
+    #      store after a successful ingest, so it applies from then on.
+    registries_dir = os.path.join(nas_root, "registries")
+    corr = ni_corrections.read_store(registries_dir)
+    if corr:
+        log(f"corrections: {len(corr)} reviewed session(s) loaded from "
+            f"{ni_corrections.SESSION_CORRECTIONS_FILENAME}", "INFO")
+
+    worksheet = {}
     if args.corrections:
+        # Validate the header up front so a typo'd column (or a stale worksheet
+        # carrying the dropped session_id/sample_id) fails loudly instead of
+        # silently doing nothing.
         try:
             ni_corrections.assert_header(args.corrections)
         except Exception as e:  # noqa: BLE001
             log(str(e), "ERROR")
             return 2
-        corr = ni_corrections.read_corrections(args.corrections)
-        cfg["_ni_corrections"] = corr
-        log(f"corrections: {len(corr)} session(s) loaded from {args.corrections}",
-            "INFO")
+        worksheet = ni_corrections.read_corrections(args.corrections)
+        corr.update(worksheet)
+        log(f"corrections: {len(worksheet)} session(s) from {args.corrections} "
+            f"(these override the store and will be saved to it)", "INFO")
+    cfg["_ni_corrections"] = corr
 
     log("building preview (read-only)...", "INFO")
     result = preview.preview_batch(cfg, nas_root)
@@ -454,7 +487,7 @@ def _run_live(args, nas_root):
     # --plan: write the per-session worksheet for the NEW acquisitions, then stop
     # (read-only; no ingest).
     if args.plan:
-        return _write_plan(result, args.plan)
+        return _write_plan(result, args.plan, stored=corr)
 
     if not result.cases:
         log("no new NI reconstructions to sync (everything matched is already "
@@ -476,7 +509,23 @@ def _run_live(args, nas_root):
             return 0
 
     log("committing live sync...", "INFO")
-    return _commit(cfg, nas_root, instrument_key=LIVE_INSTRUMENT_KEY)
+    rc = _commit(cfg, nas_root, instrument_key=LIVE_INSTRUMENT_KEY)
+
+    # Persist this run's worksheet so its values apply to every future sync of
+    # these sessions — including reconstructions that appear months from now.
+    # After the commit, and non-blocking: the acquisitions are already safely
+    # registered, so a store write that fails must never fail the ingest.
+    if worksheet:
+        try:
+            added, updated = ni_corrections.merge_into_store(
+                registries_dir, list(worksheet.values()), log=log)
+            log(f"corrections saved: {added} new, {updated} updated in "
+                f"{ni_corrections.SESSION_CORRECTIONS_FILENAME}. You will not "
+                f"need to re-enter them.", "INFO")
+        except Exception as e:  # noqa: BLE001
+            log(f"could not save corrections to the store ({e}). The ingest "
+                f"itself is fine; re-pass --corrections next sync.", "WARN")
+    return rc
 
 
 # ------------------------------------------------------------------------- main

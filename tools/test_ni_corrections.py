@@ -105,5 +105,49 @@ check(nc.apply_pre(case2, corrections) is None, "apply_pre no-op when session no
 check(case2["discovered"]["project"] == "p", "apply_pre leaves discovered untouched on no match")
 check(nc.apply_pre(case2, {}) is None, "apply_pre no-op on empty corrections")
 
+# 8. the NAS-side store (D6 reversal, 2026-08-06) — corrections outlive the run
+with tempfile.TemporaryDirectory() as reg:
+    check(nc.read_store(reg) == {}, "read_store on a fresh NAS -> {} (no store yet)")
+
+    ws = [{"session_path": "1207/260212/0324_m61", "project": "0325",
+           "animal_codes": "61", "extra_metadata": "tracer=FDG"}]
+    added, updated = nc.merge_into_store(reg, ws)
+    check((added, updated) == (1, 0), "merge_into_store adds a new session")
+    check(os.path.isfile(nc.store_path(reg)), "store file created in registries/")
+
+    stored = nc.read_store(reg)
+    check(stored["1207/260212/0324_m61"]["project"] == "0325", "store round-trips project")
+    check(stored["1207/260212/0324_m61"]["extra_metadata"] == "tracer=FDG",
+          "store round-trips extra_metadata")
+
+    # re-merging the same values is a no-op (idempotent re-sync)
+    check(nc.merge_into_store(reg, ws) == (0, 0), "re-merging identical rows is a no-op")
+
+    # a blank cell means "untouched", never "clear the stored value"
+    nc.merge_into_store(reg, [{"session_path": "1207/260212/0324_m61",
+                               "project": "", "animal_codes": "",
+                               "extra_metadata": ""}])
+    check(nc.read_store(reg)["1207/260212/0324_m61"]["project"] == "0325",
+          "a blank cell does NOT clear a stored value")
+
+    # a real edit updates
+    a2, u2 = nc.merge_into_store(reg, [{"session_path": "1207/260212/0324_m61",
+                                        "project": "0326"}])
+    check((a2, u2) == (0, 1), "merge_into_store reports an update, not an add")
+
+    # THE D6 ACCEPTANCE TEST: a reconstruction discovered on a LATER sync, with no
+    # worksheet passed at all, still gets the stored correction. This is the case
+    # the per-run-file design got silently wrong.
+    late = {"discovered": {"series": "1207", "date": "260212",
+                           "subject": "0324_m61", "project": "0324",
+                           "animal_codes": "61", "ni_recon_idx": "3"}}
+    row = nc.apply_pre(late, nc.read_store(reg))
+    check(row is not None, "a late recon matches its session in the store")
+    check(late["discovered"]["project"] == "0326",
+          "late recon inherits the stored correction with NO worksheet passed")
+    nc.apply_post(late, row)
+    check(late.get("session_extra") == {"tracer": "FDG"},
+          "late recon inherits the stored tracer metadata too")
+
 print("\nALL NI-CORRECTIONS CHECKS PASSED" if _fail == 0 else f"\n{_fail} CHECK(S) FAILED")
 sys.exit(1 if _fail else 0)

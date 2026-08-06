@@ -45,6 +45,7 @@ import csv
 import os
 
 from . import csv_safe
+from . import locking
 
 NI_CORRECTIONS_FILENAME_HINT = "ni_corrections.csv"  # suggested name; operator-chosen
 
@@ -155,6 +156,76 @@ def assert_header(path):
             f"{os.path.basename(path)} is missing the required 'session_path' "
             f"key column."
         )
+
+
+# ------------------------------------------------------------------ NAS-side store
+
+SESSION_CORRECTIONS_FILENAME = "ni_session_corrections.csv"
+
+
+def store_path(registries_dir):
+    return os.path.join(registries_dir, SESSION_CORRECTIONS_FILENAME)
+
+
+def read_store(registries_dir):
+    """Load the persistent per-session corrections -> {session_path: rowdict}.
+
+    Returns {} when the store doesn't exist yet (first sync on a fresh NAS).
+    """
+    if not registries_dir:
+        return {}
+    return read_corrections(store_path(registries_dir))
+
+
+def merge_into_store(registries_dir, rows, log=None):
+    """Upsert `rows` into the NAS-side store, keyed on session_path. Returns
+    (added, updated).
+
+    This is the D6 reversal (2026-08-06): corrections must outlive the run that
+    made them, because NI reconstructions arrive late and land in sessions that
+    were already corrected. A per-run file silently re-applied the uncorrected
+    REMI values to those late acquisitions.
+
+    EVERY submitted worksheet row is stored, not just edited ones. The worksheet
+    IS the review step, so a row the operator left alone still means "a human
+    looked at this session and these values are right" — exactly what a late
+    reconstruction arriving months later should inherit. It also means a stored
+    session stops re-appearing in --plan, which is what makes the steady state
+    one command.
+
+    Only non-blank cells overwrite — a blank cell in an edited worksheet means
+    "I didn't touch this", never "clear the stored value". Serialized under the
+    registry lock and written atomically, same as the pending worklists.
+    """
+    rows = [r for r in (rows or []) if (r.get("session_path") or "").strip()]
+    if not rows or not registries_dir:
+        return (0, 0)
+    path = store_path(registries_dir)
+    added = updated = 0
+    with locking.registry_lock(registries_dir, log=log):
+        existing = read_corrections(path)
+        for r in rows:
+            key = r["session_path"].strip()
+            if key in existing:
+                cur = existing[key]
+                changed = False
+                for col in NI_CORRECTION_FIELDS:
+                    if col == "session_path":
+                        continue
+                    val = (r.get(col) or "").strip()
+                    if val and val != (cur.get(col) or "").strip():
+                        cur[col] = val
+                        changed = True
+                if changed:
+                    updated += 1
+            else:
+                existing[key] = {c: (r.get(c) or "").strip()
+                                 for c in NI_CORRECTION_FIELDS}
+                added += 1
+        ordered = sorted(existing.values(),
+                         key=lambda x: (x.get("session_path") or ""))
+        write_plan(path, ordered)
+    return (added, updated)
 
 
 def apply_pre(case, corrections):
