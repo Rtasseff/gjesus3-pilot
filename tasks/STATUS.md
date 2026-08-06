@@ -322,6 +322,21 @@ The genuinely in-flight items (kept tight — everything else is in
   box half installed at the next access window. See
   [`../equipment/nuclear-imaging/live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md).
   Gate-0 is the first real task for that tunnel (NI-RA-05).
+- 🕗 **NI historical pull from `S:\gnuclear` — IN PROGRESS on branch
+  `feat/ni-gnuclear-historical` (started 2026-08-12; no longer parked behind the live
+  work — see the plan's §-1 for why the two are independent).** Read-only Phase-0
+  inventory is
+  **done**: the active working space `S:\gnuclear\<YYYY>\Jesus\<user>\` (2022–2026) holds
+  **~2,124 distinct PET/CT acquisitions — ≈2,000 net-new** vs the ~132 NI in production,
+  and is the only reachable source for them today (`gnuclear3` access still pending).
+  **Catch:** it is a flattened analysis workspace (loose single-recon `.dcm` + derivatives,
+  **no `recon_N/`**), so neither existing NI pipeline fits — a **new file-as-primary DICOM
+  ingest path** (+ a canonical `(timestamp, modality)` dedup) is the real build. Plan (with
+  decisions D-A…D-E awaiting Ryan): [`ni_gnuclear_active_space_plan.md`](ni_gnuclear_active_space_plan.md);
+  layout finding:
+  [`../equipment/nuclear-imaging/gnuclear_active_workspace_layout.md`](../equipment/nuclear-imaging/gnuclear_active_workspace_layout.md).
+  Not to be confused with the NI *live-box* sync above — this is a one-time backfill of the
+  research workspace.
 - ✅ **No-DICOM MRI regeneration — DRAINED 2026-07-16** (branch
   `feat/dicom-regen-backfill`; full narrative in [`../CHANGELOG.md`](../CHANGELOG.md)).
   The worklist (`registries/pending_dicom_regen.csv`, 612 rows) is at **0 `pending`**:
