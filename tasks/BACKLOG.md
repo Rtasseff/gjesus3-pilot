@@ -946,3 +946,37 @@ single-operator workflow). See [`CHANGELOG.md`](../CHANGELOG.md) 2026-07-12.
 - [ ] **Consolidate the scattered `test_*.py` into a collectable suite (§2.1).**
   13 hand-rolled un-collectable tests across three dirs; date-stamped regression
   files keep accreting.
+
+## Ingest safety + audit-table clarity (from the NI test-data removal, 2026-08-06)
+
+Source: the removal of two synthetic NI acquisitions that a verification run wrote
+into true production on 2026-06-29 and that went unnoticed for five weeks
+(narrative in [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-06). Two items, one of
+which matters much more than the other.
+
+- [ ] **A `--nas-root` pointing at true production is silently accepted — add a
+  guard.** This is the item worth acting on. The 2026-06-29 run used a synthetic
+  source tree (a 5-byte `DCM-0` stub per acquisition) but passed
+  `--nas-root J:\gjesus3-data`; **nothing in the run distinguished it from a real
+  ingest**, and it auto-created a project on the way in. Options: a confirmation
+  prompt, or an explicit gate (`--i-know-this-is-production` or similar) when
+  `--nas-root` resolves to the live root. Note the ordinary operator path does not
+  need this — the GUI targets the live root by design — so the gate should key on
+  *interactive CLI use*, not on the path alone, or it becomes noise that gets
+  auto-answered. Related: the `ingest.auto_create_projects` flag defaults to
+  `false` precisely to stop typos creating rogue projects, and this run had it on.
+
+- [ ] **Make the auto-create path discoverable in the side-effect inventory
+  ([`10_TOOLS §2.1`](../mfb-rdm-docs/10_TOOLS.md)) — a clarity fix, not a missing
+  row.** The removal hand-off reported that the inventory "does not cover project
+  auto-creation." **That is not correct** — row **#10** covers it (the
+  `projects/<name>/` folder + `_project.yaml` + the `registry_projects.csv` row,
+  conditioned on `auto_create_projects` and a non-existent name), and it has been
+  there since the inventory was written (`ed62eca`, 2026-07-20). The reversal
+  performed on 2026-08-06 used rows #1/#3/#4/#5/#6/#7/#8/#9/#10 and found **nothing
+  missing**. The real defect is discoverability: an auto-created project's side
+  effects are spread across rows #7–#10, and #7 leads with the condition "resolves
+  to an **existing** project", which reads as though auto-creation is out of scope
+  — a careful reader concluded exactly that. Consider a one-line pointer from #7 to
+  #10, or grouping the four project-related rows under a sub-heading. Low priority;
+  the table is complete and worked in practice.
