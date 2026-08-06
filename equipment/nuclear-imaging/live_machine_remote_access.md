@@ -204,9 +204,15 @@ of them load-bearing:
   itself the means to debug the LaunchAgent remotely before the next visit.
 
 ⚠️ **The one unrecoverable failure** is arriving to find the workstation landing pad not running —
-nothing at the box can fix that, and the visit is lost. This is why `setup\test-tunnel-path.sh` must
-be run immediately before travelling, and why NI-RA-04 (auto-start at logon) matters more than it
-first appeared.
+nothing at the box can fix that, and the visit is lost. Two things now guard against it:
+
+- The landing pad is **scheduled at logon** (`WorkstationOps-MolecubesTunnel`), so it is up whenever
+  the workstation is, without anyone remembering to start it (NI-RA-04, done 2026-08-06).
+- `setup\test-tunnel-path.sh` should still be run immediately before travelling. The schedule makes
+  the pad *usually* up; the test is what makes it *known* up.
+
+A workstation reboot is **not** a lost visit: the box's LaunchAgent retries every 30s indefinitely,
+so once the pad returns the tunnel re-establishes itself with no trip to the box.
 
 ### An easy mistake, worth stating plainly
 
@@ -283,5 +289,5 @@ Other posture notes:
 | NI-RA-01b | Does the tunnel survive a full reboot of the box, and does user `molecubes` log in automatically? A LaunchAgent starts at login, not at the login window. | 🕗 Cannot be answered until installed |
 | NI-RA-02 | Was Remote Login already enabled on the box, or did we enable it? | ⚠️ Record during the next visit |
 | NI-RA-03 | What is the box's egress address as seen by the workstation? Needed before any forwarder allow-list. | ⚠️ Capture from `sshd` logs on first real connection |
-| NI-RA-04 | Should the workstation landing pad auto-start at logon? Requires a `Logon` trigger that `WorkstationOps\lib\scheduled-task.ps1` does not yet support. **Raised in priority:** arriving to find the landing pad down is the one failure with no recovery from inside the restricted room, and it costs the whole visit. | ❓ Deferred, but revisit before the visit after next |
+| NI-RA-04 | Should the workstation landing pad auto-start at logon? | ✅ **DONE 2026-08-06.** A `Logon` trigger was added to `WorkstationOps\lib\scheduled-task.ps1` and the op is registered as `WorkstationOps-MolecubesTunnel` (user-scoped, 1-min delay, `ExecutionTimeLimit=PT0S`). Verified by starting the task and running the full acceptance test against it: 9/9. Arriving to find the landing pad down was the one failure with no recovery from inside the restricted room. |
 | NI-RA-05 | Does Gate-0 (`os.link` on the box's CIFS mount) pass once remote access is available? | 🕗 The first real task for this tunnel |
