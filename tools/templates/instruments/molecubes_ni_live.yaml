@@ -70,6 +70,15 @@ auto_create_project:
 # disambiguates the per-recon acquisitions of that scan (per_recon_acquisitions).
 link_filename: "${discovered.modality}_${discovered.subject}_${acq_date}_${discovered.acq_datetime_full}_recon${discovered.ni_recon_idx}"
 
-# condition: / anatomy: — set once per batch when the control/disease/whole-body
-# state is known (same shape as molecubes_ni.yaml). Omitted here so the sync writes
-# the non-blocking null sentinels (WARN, still ingests); add the blocks to record them.
+# anatomy: — whole-body is a PLATFORM FACT for Molecubes, not a per-batch question.
+# The beta/X-CUBE scans the entire animal every time, so `is_whole_body: true` holds for
+# every live NI acquisition. Locked here (2026-08-06) so the operator is never asked:
+# at the box on 2026-08-05 this prompt fired during the read-only plan step, where no
+# answer could even be used. `--is-whole-body` still overrides for the exceptional case.
+anatomy:
+  is_whole_body: true
+
+# condition: — genuinely per-batch (there is no constant control/disease state), so it
+# is NOT set here. Left unset the sync writes the non-blocking null sentinel (WARN,
+# still ingests); `--is-control` / `--disease-model` / `--disease-state` record it, and
+# a real (non-dry-run) ingest still prompts for it on a TTY.

@@ -65,7 +65,6 @@ corrections = {
     "1207/260212/0324_m61": {
         "session_path": "1207/260212/0324_m61",
         "project": "0325", "animal_codes": "60",
-        "session_id": "VISIT-A", "sample_id": "MOUSE-60",
         "extra_metadata": "tracer=FDG",
     }
 }
@@ -78,11 +77,27 @@ check(case["discovered"]["animal_codes"] == "60", "apply_pre overrides discovere
 # raw path components are NOT touched (session key stays stable)
 check(case["discovered"]["subject"] == "0324_m61", "apply_pre leaves the raw subject (dedup/session key) intact")
 
-# 6. apply_post overrides resolved session_id/sample_id + stashes session_extra
+# 6. apply_post stashes session_extra and overrides NOTHING resolved
 nc.apply_post(case, row)
-check(case["session_id"] == "VISIT-A", "apply_post overrides resolved session_id")
-check(case["sample_id"] == "MOUSE-60", "apply_post overrides resolved sample_id")
 check(case.get("session_extra") == {"tracer": "FDG"}, "apply_post stashes session_extra (tracer)")
+# session_id / sample_id are DERIVED (from the corrected project + animal_codes), never
+# hand-set. Pinning this stops anyone re-adding them as columns: a hand-set sample_id
+# went stale the moment a project correction re-derived project_hint (0324->0325 left
+# sample_id reading 0324_m61 in true production, 2026-06-29).
+check("session_id" not in case, "apply_post does NOT set session_id (derived)")
+check("sample_id" not in case, "apply_post does NOT set sample_id (derived)")
+check("session_id" not in nc.NI_CORRECTION_FIELDS, "session_id is not a corrections column")
+check("sample_id" not in nc.NI_CORRECTION_FIELDS, "sample_id is not a corrections column")
+# a stale worksheet carrying the dropped columns must fail loudly, not silently ignore
+with tempfile.TemporaryDirectory() as _d:
+    _p = os.path.join(_d, "stale.csv")
+    with open(_p, "w", newline="", encoding="utf-8") as f:
+        f.write("session_path,project,animal_codes,session_id,sample_id,extra_metadata\n")
+    try:
+        nc.assert_header(_p)
+        check(False, "stale header with dropped columns should be rejected")
+    except RuntimeError:
+        check(True, "assert_header rejects a stale worksheet carrying session_id/sample_id")
 
 # 7. no match / empty corrections -> no-op
 case2 = {"discovered": {"series": "9999", "date": "260212", "subject": "x", "project": "p"}}
