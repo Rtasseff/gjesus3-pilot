@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-08-02
+**Last Updated:** 2026-08-06
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -218,6 +218,19 @@ The genuinely in-flight items (kept tight — everything else is in
     physical access slot on the Mac). If it lands it gives a development access
     point and retires `RUN_THE_TEST.md`; it is not a prerequisite for the work
     above.
+- 🕗 **NI historical pull from `S:\gnuclear` — QUEUED (parked behind the live work;
+  high priority, "we will do this in some capacity").** Read-only Phase-0 inventory is
+  **done**: the active working space `S:\gnuclear\<YYYY>\Jesus\<user>\` (2022–2026) holds
+  **~2,124 distinct PET/CT acquisitions — ≈2,000 net-new** vs the ~132 NI in production,
+  and is the only reachable source for them today (`gnuclear3` access still pending).
+  **Catch:** it is a flattened analysis workspace (loose single-recon `.dcm` + derivatives,
+  **no `recon_N/`**), so neither existing NI pipeline fits — a **new file-as-primary DICOM
+  ingest path** (+ a canonical `(timestamp, modality)` dedup) is the real build. Plan (with
+  decisions D-A…D-E awaiting Ryan): [`ni_gnuclear_active_space_plan.md`](ni_gnuclear_active_space_plan.md);
+  layout finding:
+  [`../equipment/nuclear-imaging/gnuclear_active_workspace_layout.md`](../equipment/nuclear-imaging/gnuclear_active_workspace_layout.md).
+  Not to be confused with the NI *live-box* sync above — this is a one-time backfill of the
+  research workspace.
 - ✅ **No-DICOM MRI regeneration — DRAINED 2026-07-16** (branch
   `feat/dicom-regen-backfill`; full narrative in [`../CHANGELOG.md`](../CHANGELOG.md)).
   The worklist (`registries/pending_dicom_regen.csv`, 612 rows) is at **0 `pending`**:
