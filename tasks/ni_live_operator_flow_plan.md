@@ -1,8 +1,22 @@
 # NI live sync — the operator flow a researcher will actually use (item 6)
 
-> **Status:** PLAN, not started. Written 2026-08-06 on branch `feat/ni-live-hardening`
-> (rebased onto `main` `dde99fc`; 8 commits ahead, 0 behind). Items 4 + 5 are DONE and
-> committed (`0fb84db`). **This is the last substantive work before merge.**
+> **Status: §3.1–3.5 BUILT 2026-08-06** on branch `feat/ni-live-hardening` (rebased onto
+> `main` `dde99fc`). All NI suites green. **What remains before merge is not more code —
+> it is running the thing on the box** (§5 gates).
+>
+> | § | What | State |
+> |---|---|---|
+> | 3.1 | Review step retired from the operator path | ✅ `6fda90f` |
+> | 3.2 | `--root` accepts either form; fails loudly on neither | ✅ `6fda90f` |
+> | 3.3 | `--plan` no longer walks the tree twice | ⚠️ `a7be9d8` — **structural fix only, NOT measured on the box.** If still slow, profile ON the box before changing anything else. Do not add a cache. |
+> | 3.4 | Persistent corrections store (D6 reversal) | ✅ `1137561` |
+> | 3.5 | Operator runbook replacing RUN_THE_TEST.md | ✅ `6fda90f` — `tools/operator/NI_LIVE_RUNBOOK.md` |
+>
+> Earlier: items 4 + 5 (drop derived columns, kill read-only prompts) `0fb84db`.
+>
+> **Not done and deliberately so:** the §5 merge gates. No `--go` ingest has ever run on
+> the box, so `pending_links.csv` still does not exist on any NAS and no `.../recon_N` row
+> or `session_extra` block exists outside a synthetic tree.
 >
 > **Context that must not be lost:** this branch's whole purpose is a tool researchers use
 > at the NI box to sync their own data. Everything else on it is plumbing. The 2026-08-05
