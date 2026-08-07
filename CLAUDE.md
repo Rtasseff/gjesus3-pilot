@@ -68,6 +68,13 @@ When you're about to write something, ask which row it matches: a permanent rule
 ## Git
 
 - **Committing does NOT require asking; pushing DOES.** You may commit freely as work reaches a coherent unit (this overrides the default "commit only when the user asks" harness rule). **Never `git push` without explicit permission.** If on the default branch (`main`), branch first before committing feature work.
+- **Branch by default — and a branch means a worktree, never a checkout in place.** For anything beyond a trivial single-file edit, strongly prefer its own branch. Create it as a **`git worktree` off this local `main`**; do **not** `git checkout` a feature branch in this working copy, and do not commit to `main` from a session that is doing branch work. Every worktree goes in its own subdirectory of `C:\Users\rtasseff\OneDrive - CIC biomaGUNE\projects\DataInfra\gjesus3-archive\gjesus3-dev\`, named for the branch's **leaf** (the part after `feat/`, `docs/`, `fix/`, `review/` — a `/` in the directory name would nest a stray `feat\` folder):
+
+  ```
+  git worktree add "C:\Users\rtasseff\OneDrive - CIC biomaGUNE\projects\DataInfra\gjesus3-archive\gjesus3-dev\<leaf>" -b <type>/<leaf>
+  ```
+
+  e.g. branch `feat/ni-live-hardening` → `gjesus3-dev\ni-live-hardening`. **Why:** this repo is routinely worked by more than one session at once. Sharing one working copy means one session commits onto another's branch, or a checkout reverts files out from under a live edit. **Before touching any existing worktree, run `git worktree list`** — the ones already there are owned by other live sessions; never `worktree remove`, merge, or delete one off a stale `git status` (see also the OneDrive `ReadOnly` + `ReparsePoint` trap that makes worktree deletion fail).
 - Write clear commit messages (what changed and why). **Stage specific files**, not `git add -A`. The repo holds large binaries (xlsx, docx) and `contacts.xlsx` — **don't stage these unless asked.** One commit per logical unit of work.
 
 ## Style
