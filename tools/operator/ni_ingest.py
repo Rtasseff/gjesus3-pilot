@@ -85,7 +85,7 @@ env = _CORE.env
 metadata_prompt = _CORE.metadata_prompt
 
 # The loader put tools/ on sys.path, so the ingest package resolves. ni_corrections
-# powers the --plan / --corrections cycle (live mode only).
+# owns the per-researcher corrections file (live mode only).
 from ingest import ni_corrections  # noqa: E402
 
 
@@ -341,19 +341,21 @@ def _commit(cfg, nas_root, instrument_key=INSTRUMENT_KEY):
 LIVE_INSTRUMENT_KEY = "NI_LIVE"   # -> molecubes_ni_live.yaml
 
 
-def _write_plan(result, path, stored=None):
-    """Write one worksheet row per UNREVIEWED session to `path`, then stop.
+def _append_plan_rows(result, path, existing=None):
+    """Add a row to the operator's corrections file for each UNSEEN session, then stop.
 
     Groups the preview's new acquisitions by session (the raw <series>/<date>/
     <subject> key) and prefills project + animal_codes from the parse so the
     operator only has to change what's wrong (or add extra_metadata).
 
-    Sessions already in the NAS-side store are SKIPPED — a human has reviewed
-    them and their values apply automatically, including to reconstructions that
-    show up months later. That is what keeps the steady state at one command:
-    once everything has been reviewed once, --plan writes nothing.
+    Sessions already IN the file are skipped and their existing rows are left
+    exactly as the operator wrote them — the file is theirs, kept forever, and
+    a row already in it means a human has looked at that session. That is what
+    keeps the steady state at one command: once everything has been reviewed
+    once, --plan adds nothing, and a reconstruction arriving months later
+    inherits the correction with no worksheet to re-pass.
     """
-    stored = stored or {}
+    existing = existing or {}
     seen = {}
     skipped = 0
     for c in result.cases:
@@ -361,7 +363,7 @@ def _write_plan(result, path, stored=None):
         key = ni_corrections.session_key(disc)
         if not key or key in seen:
             continue
-        if key in stored:
+        if key in existing:
             skipped += 1
             continue
         seen[key] = {
@@ -372,16 +374,20 @@ def _write_plan(result, path, stored=None):
         }
     rows = list(seen.values())
     if skipped:
-        log(f"{skipped} session(s) already reviewed — their stored values apply "
-            f"automatically; not re-listed.", "INFO")
+        log(f"{skipped} session(s) already in the file; their values apply "
+            f"automatically, so they are not re-listed.", "INFO")
     if not rows:
-        log("nothing to review: every session in scope has already been "
-            "reviewed. Run again with --go to sync.", "INFO")
+        log("nothing new to review. Run again with --go to sync.", "INFO")
         return 0
-    ni_corrections.write_plan(path, rows)
-    log(f"wrote {len(rows)} session row(s) to {path}. Fix anything wrong / add "
-        f"extra_metadata (e.g. tracer=FDG), then re-run with --go — the edited "
-        f"worksheet is picked up and saved for future syncs.", "INFO")
+    try:
+        added = ni_corrections.append_new_rows(path, rows)
+    except OSError as e:
+        log(f"could not write the corrections file {path} ({e}). Nothing else "
+            f"was changed; this pass is read-only.", "ERROR")
+        return 5
+    log(f"added {added} session row(s) to {path}. Open it, fix anything wrong / "
+        f"add extra_metadata (e.g. tracer=FDG), then re-run with --go. Rows you "
+        f"already have were not touched.", "INFO")
     return 0
 
 
@@ -445,36 +451,29 @@ def _run_live(args, nas_root):
     cfg = config_builder.build_config(template, overrides)
 
     # Per-session corrections (values only; the REMI-path identity is never
-    # changed). Two sources, merged in this order:
+    # changed). ONE file per researcher, on gnuclear beside the code, owned and
+    # edited by the operator and kept forever — `--plan` appends to it, every run
+    # reads it, nothing merges or rewrites it. `--corrections` just points at a
+    # different file (a test run, or a name that doesn't match the folder).
     #
-    #   1. the NAS-side store — every session reviewed on a previous sync. Loaded
-    #      ALWAYS, applied automatically. This is the D6 reversal (2026-08-06):
-    #      NI reconstructions arrive late and land in already-corrected sessions,
-    #      so a per-run-file-only design silently re-applied the uncorrected REMI
-    #      values to those late acquisitions.
-    #   2. --corrections <file> — an edited worksheet from this run's --plan step.
-    #      Wins over the store (it is the newer human edit) and is merged INTO the
-    #      store after a successful ingest, so it applies from then on.
-    registries_dir = os.path.join(nas_root, "registries")
-    corr = ni_corrections.read_store(registries_dir)
+    # Corrections MUST outlive the run that made them: NI reconstructions arrive
+    # late and land in sessions that were already corrected, so a per-run file
+    # silently re-applied the uncorrected REMI values to those late acquisitions.
+    corr_path = args.corrections or ni_corrections.resolve_path(researcher)
+    log(f"corrections file: {corr_path}", "INFO")
+    # Validate the header up front so a typo'd column (or a stale file carrying
+    # the dropped session_id/sample_id) fails loudly instead of silently doing
+    # nothing.
+    try:
+        ni_corrections.assert_header(corr_path)
+    except Exception as e:  # noqa: BLE001
+        log(str(e), "ERROR")
+        return 2
+    corr = ni_corrections.read_corrections(corr_path)
     if corr:
-        log(f"corrections: {len(corr)} reviewed session(s) loaded from "
-            f"{ni_corrections.SESSION_CORRECTIONS_FILENAME}", "INFO")
-
-    worksheet = {}
-    if args.corrections:
-        # Validate the header up front so a typo'd column (or a stale worksheet
-        # carrying the dropped session_id/sample_id) fails loudly instead of
-        # silently doing nothing.
-        try:
-            ni_corrections.assert_header(args.corrections)
-        except Exception as e:  # noqa: BLE001
-            log(str(e), "ERROR")
-            return 2
-        worksheet = ni_corrections.read_corrections(args.corrections)
-        corr.update(worksheet)
-        log(f"corrections: {len(worksheet)} session(s) from {args.corrections} "
-            f"(these override the store and will be saved to it)", "INFO")
+        log(f"corrections: {len(corr)} reviewed session(s) loaded", "INFO")
+    else:
+        log("corrections: none yet (the file will be created by --plan)", "INFO")
     cfg["_ni_corrections"] = corr
 
     log("building preview (read-only)...", "INFO")
@@ -486,10 +485,10 @@ def _run_live(args, nas_root):
             log(err, "ERROR")
         return 4
 
-    # --plan: write the per-session worksheet for the NEW acquisitions, then stop
-    # (read-only; no ingest).
+    # --plan: add a row per NEW session to the corrections file, then stop
+    # (nothing is ingested and no existing row is touched).
     if args.plan:
-        return _write_plan(result, args.plan, stored=corr)
+        return _append_plan_rows(result, corr_path, existing=corr)
 
     if not result.cases:
         log("no new NI reconstructions to sync (everything matched is already "
@@ -511,23 +510,10 @@ def _run_live(args, nas_root):
             return 0
 
     log("committing live sync...", "INFO")
-    rc = _commit(cfg, nas_root, instrument_key=LIVE_INSTRUMENT_KEY)
-
-    # Persist this run's worksheet so its values apply to every future sync of
-    # these sessions — including reconstructions that appear months from now.
-    # After the commit, and non-blocking: the acquisitions are already safely
-    # registered, so a store write that fails must never fail the ingest.
-    if worksheet:
-        try:
-            added, updated = ni_corrections.merge_into_store(
-                registries_dir, list(worksheet.values()), log=log)
-            log(f"corrections saved: {added} new, {updated} updated in "
-                f"{ni_corrections.SESSION_CORRECTIONS_FILENAME}. You will not "
-                f"need to re-enter them.", "INFO")
-        except Exception as e:  # noqa: BLE001
-            log(f"could not save corrections to the store ({e}). The ingest "
-                f"itself is fine; re-pass --corrections next sync.", "WARN")
-    return rc
+    # Nothing to save afterwards: the corrections file the operator edited IS
+    # the stored copy, so it already applies to every future sync of these
+    # sessions — including reconstructions that appear months from now.
+    return _commit(cfg, nas_root, instrument_key=LIVE_INSTRUMENT_KEY)
 
 
 # ------------------------------------------------------------------------- main
@@ -538,7 +524,7 @@ def _parse_args(argv):
         description=(
             "Ingest Nuclear Imaging (NI) acquisitions. LIVE mode (--live): point "
             "at your researcher data folder on the Molecubes box (no YAML, one "
-            "acquisition per reconstruction, optional --plan/--corrections). "
+            "acquisition per reconstruction, --plan to review what's new). "
             "ARCHIVE mode (default): point at one extracted acquisition folder or "
             "a batch root (extract .tgz first with tools/extract_ni_archives.py)."
         ),
@@ -567,18 +553,21 @@ def _parse_args(argv):
              "researcher.",
     )
     parser.add_argument(
-        "--plan", default=None, metavar="OUT.csv",
-        help="(live) READ-ONLY: write a corrections worksheet — one row per NEW "
-             "session — to OUT.csv and stop (no ingest). Edit it to fix wrong "
-             "REMI values (project / mouse ids) or add per-session metadata "
-             "(extra_metadata, e.g. 'tracer=FDG'), then re-run with "
-             "--corrections OUT.csv.",
+        "--plan", action="store_true",
+        help="(live) READ-ONLY: add a row to YOUR corrections file for each NEW "
+             "session, then stop (no ingest, and no existing row is touched). "
+             "Open the file to fix wrong REMI values (project / mouse ids) or "
+             "add per-session metadata (extra_metadata, e.g. 'tracer=FDG'), then "
+             "re-run with --go. The file is found automatically; its path is "
+             "printed on every run.",
     )
     parser.add_argument(
-        "--corrections", default=None, metavar="IN.csv",
-        help="(live) Apply per-session corrections + metadata from IN.csv (the "
-             "edited --plan worksheet). Corrected values populate the metadata "
-             "fields only; the sync identity (the REMI path) is never changed.",
+        "--corrections", default=None, metavar="FILE.csv",
+        help="(live) Use FILE.csv as the corrections file instead of the "
+             "automatic per-researcher one on gnuclear (test runs, or a "
+             "researcher name that doesn't match their folder). Corrected values "
+             "populate the metadata fields only; the sync identity (the REMI "
+             "path) is never changed.",
     )
     parser.add_argument(
         "--dry-run", action="store_true",

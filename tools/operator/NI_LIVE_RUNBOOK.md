@@ -9,32 +9,38 @@ Your data stays where it is — the sync only ever **reads** your folder.
 ## The short version
 
 ```
-ni-ingest <your folder> --live --plan check.csv     # 1. what's new?
-ni-ingest <your folder> --live --go                 # 2. sync it
+ni-ingest <your folder> --live --plan     # 1. what's new?
+ni-ingest <your folder> --live --go       # 2. sync it
 ```
 
 `<your folder>` is your own data folder on the box, e.g.
 `/Users/molecubes/Documents/volumes/remiW11/data/irene`.
 
-Step 1 writes nothing and changes nothing. If it says **"nothing to review"**, skip
-straight to step 2 — that is the normal case once you've synced before.
+Step 1 writes nothing to gjesus3 and changes nothing on your box. If it says
+**"nothing new to review"**, skip straight to step 2 — that is the normal case once
+you've synced before.
 
 ---
 
 ## Step 1 — see what's new
 
 ```
-ni-ingest <your folder> --live --plan check.csv
+ni-ingest <your folder> --live --plan
 ```
 
-This lists the scans that aren't on gjesus3 yet and writes `check.csv`: **one row per
-session**, with what we read off the folder names already filled in.
+This looks for scans that aren't on gjesus3 yet and adds **one row per session** to
+**your corrections file**, with what we read off the folder names already filled in.
+
+You don't have to name that file or remember where it is — the tool finds it and
+**prints its full path every time it runs**. It is called
+`ni_corrections_<your name>.csv` and it lives in your own folder on the shared
+`gnuclear` drive, alongside your other nuclear-imaging files.
 
 Open it in Excel. It looks like:
 
 | session_path | project | animal_codes | extra_metadata |
 |---|---|---|---|
-| `1207/260212/0324_m61_m62` | 0324 | 61;62 | |
+| `1207/260212/0324_m61` | 0324 | 61;62 | |
 
 - **`session_path`** — don't change this. It's how we find your folder.
 - **`project`** — the animal-protocol number.
@@ -48,29 +54,26 @@ REMI.
 
 If everything is right, just close the file. You don't have to edit anything.
 
+**The file is yours.** Step 1 only ever *adds* rows for sessions it has never seen. It
+never rewrites, reorders or clears anything you typed.
+
 ## Step 2 — sync
-
-```
-ni-ingest <your folder> --live --corrections check.csv --go
-```
-
-Or, if you didn't need to change anything:
 
 ```
 ni-ingest <your folder> --live --go
 ```
 
-That's it. It copies each reconstruction to gjesus3, records the metadata, and registers
-it.
+That's it — no filename, no extra flag. Your corrections file is read automatically. It
+copies each reconstruction to gjesus3, records the metadata, and registers it.
 
 ---
 
 ## Things worth knowing
 
-**Your corrections are remembered.** Once you fix a session, you never fix it again. The
-correction is saved on gjesus3 against that session, so when a new reconstruction of the
-same scan turns up weeks later, it gets your corrected values automatically. That's also
-why step 1 gets quieter over time — it only shows you sessions nobody has reviewed yet.
+**You fix a session once, ever.** The correction lives in your file, so when a new
+reconstruction of that same scan turns up weeks later it gets your corrected values
+automatically. That's also why step 1 gets quieter over time — it only shows you sessions
+that have never been reviewed.
 
 **Re-running is safe.** The sync skips anything already on gjesus3. Run it as often as you
 like — after every session, or once a week. Nothing is ever copied twice.
@@ -101,6 +104,9 @@ Use `--go` to skip it.
 **A scan you expected isn't listed** — it's most likely already synced (run without
 `--plan` to see the full table), or its reconstruction hasn't finished yet.
 
+**You can't find your corrections file** — read the `corrections file:` line the tool
+prints at the start of every run. That is always the file it is using.
+
 **Anything else** — stop and send the output to the data office. Don't re-run it repeatedly
 to try to clear an error; a stuck sync is safe to leave alone.
 
@@ -110,12 +116,18 @@ to try to clear an error; a stuck sync is safe to leave alone.
 
 - Live sync builds its config in memory from
   `tools/templates/instruments/molecubes_ni_live.yaml`. **There is no per-batch YAML.**
-- Corrections store: `registries/ni_session_corrections.csv`, keyed on the raw
-  `<series>/<date>/<subject>` relpath. Loaded on every `--live` run; an edited worksheet
-  merges into it after a successful commit.
+- **Corrections: one file per researcher, on `gnuclear`, kept forever.**
+  `<gnuclear>/<year>/<group>/<researcher>/ni_corrections_<researcher>.csv`, keyed on the
+  raw `<series>/<date>/<subject>` relpath. `ingest/ni_corrections.py::resolve_path`
+  derives the share root, year and group **from the running code's own path** — the code
+  is staged on `gnuclear`, so this resolves correctly on the Mac (a `/Volumes/…` mount)
+  with no env var and no flag. An existing file is reused wherever it already sits, so a
+  correction does not expire when the year rolls over. Off `gnuclear` (dev checkout) it
+  falls back to sitting next to the code. `--plan` appends unseen sessions and touches
+  nothing else; every `--live` run reads the file; **nothing merges or rewrites it.**
 - Deferred project links: `registries/pending_links.csv`, drained by
   `tools/relink_pending.py` from Windows.
 - `tools/ni_live_discover.py` is the read-only per-acquisition survey — a **diagnostic
   tool, not an operator step**. It answers "what does the whole tree look like", which the
-  worksheet deliberately doesn't.
+  corrections file deliberately doesn't.
 - Design + rationale: `tasks/ni_live_operator_flow_plan.md`.

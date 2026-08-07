@@ -21,30 +21,25 @@ not pytest.
 
 ## 2. The plan, in order
 
-### (a) Finish the NI live sync so it works exactly how operators need — CURRENT PHASE
+### (a) Finish the NI live sync so it works exactly how operators need — CODE COMPLETE
 Keep using the current approach: code lives in this repo, runs from the shared NAS
 (`gnuclear`), writes to `gjesus3`. **It has been running on the Mac fine.** Do not start
 simplifying yet — get it correct first, then trim.
 
-**The one open design item — where the corrections CSV lives.** Decided in principle
-2026-08-06, not yet built:
+**✅ The last open design item — where the corrections CSV lives — is BUILT (2026-08-07).**
+One file per researcher,
+`<gnuclear>/<year>/<group>/<researcher>/ni_corrections_<researcher>.csv`, off gjesus3 and
+onto the share the code already runs from. `resolve_path` derives the root/year/group
+**from the running code's own path**, so it works unchanged on the Mac (a `/Volumes/…`
+mount) with no env var and no flag, and the resolved path is logged every run. An existing
+file is reused wherever it already sits, so a correction never expires at year-end.
+The two files collapsed into one: `--plan` (now a bare flag) appends only unseen sessions
+and never touches an existing row; every run reads the file; nothing merges or rewrites it.
+The blank-cell rule is gone with the merge that required it. Full rationale:
+`tasks/ni_live_operator_flow_plan.md` §3.7.
 
-- Move it **off** `J:\gjesus3-data\registries\` and **next to the code on the shared
-  `gnuclear` NAS** — the errors are Mac-local reality (messy folder names on that box), the
-  code runs there, and keeping it off the Mac's local disk also helps the audit story (§3).
-- **`gnuclear` already stores things in a `year/group/user` layout, and the group + user
-  naming matches the Mac's.** Ryan flagged this as the natural home — work out the exact
-  path against that convention before implementing.
-- **One file per researcher** (e.g. `ni_corrections_irene.csv`). A single shared file gets
-  big and messy.
-- **Collapse two files into one.** Today `--plan` writes a new CSV which is then merged into
-  a separate stored copy — that merge is the *only* reason there is a rule about what a blank
-  cell means, and Ryan (rightly) called that needless complexity. Target: **one file the
-  operator owns and edits forever** — `--plan` appends rows for sessions it has never seen and
-  never touches existing rows; the operator edits in place; the ingest reads it. No merge, no
-  store-vs-worksheet distinction, no blank-cell rule.
-
-Everything else in phase (a) is built — see §5 for what landed.
+**Phase (a) is now code complete. What remains before merge is not code — it is running
+it on the box (§4).**
 
 ### (b) Simplify what runs on the NI acquisition Mac — NEXT, NOT NOW
 The idea to explore (Ryan's): copy a temporary dataset to a **gjesus3 staging location** and
@@ -87,20 +82,29 @@ not a CS person; to him the box is where numbers come out of the PET hardware.
   nothing, which he can run himself. Stronger than reading code, since code doesn't prove
   runtime behaviour.
 
-## 4. Merge gates — none of these exist yet
+## 4. Merge gates — still ON THE BOX, but no longer unproven
 
 No `--go` ingest has **ever** run on the box. The 2026-08-05 session stopped at the read-only
-`--plan` step. Before merging, prove on the box:
+`--plan` step. Before merging, prove **on the box**:
 
-1. A real `--go` producing `.../recon_N` registry rows (one acquisition per reconstruction).
-2. A corrected session showing a `session_extra` block in its `metadata.json`.
-3. `registries/pending_links.csv` written with `ENOTSUP` / `darwin` rows. **This file exists
-   on neither NAS today** — the deferred-link feature has never written a row for real.
-4. A second sync: idempotent (0 new), and a **late reconstruction registering into an
-   already-corrected session with the correction still applied.**
+| # | Gate | Off-box status |
+|---|---|---|
+| 1 | A real `--go` producing `.../recon_N` registry rows (one acquisition per reconstruction). | ✅ passes locally (2026-08-07) |
+| 2 | A corrected session showing a `session_extra` block in its `metadata.json`. | ✅ passes locally |
+| 3 | `registries/pending_links.csv` written with `ENOTSUP` / `darwin` rows. **This file exists on neither NAS today.** | ❌ **box only** — hard links succeed on Windows, so this can only fail-and-queue on the Mac |
+| 4 | A second sync: idempotent (0 new), and a **late reconstruction registering into an already-corrected session with the correction still applied.** | ✅ passes locally |
 
 Gate 4 is the acceptance test for the persistent-corrections change and is the one most
-likely to be got wrong.
+likely to be got wrong. **It now passes** against a synthetic tree + throwaway NAS
+(2026-08-07): `recon_1` added after the fact became `ACQ-20260212-CT-002`, routed to the
+*corrected* `AE-biomaGUNE-0325` with `session_extra={tracer,dose}` inherited and **nothing
+re-entered**, while `original_name` kept the uncorrected REMI path and the corrections file
+was not modified by three `--go` runs.
+
+**A local pass is not a box pass.** What the box still has to prove is everything the Mac
+does differently — SMB latency, `ENOTSUP` on `os.link` (gate 3), the real 141-scan tree, and
+`resolve_path` landing on the real `gnuclear` mount rather than a fake one. Do not treat
+gates 1/2/4 as closed; treat them as *no longer the risky part*.
 
 **Operator instructions are `tools/operator/NI_LIVE_RUNBOOK.md`** — two commands. The old
 `RUN_THE_TEST.md` staged at `S:\gnuclear\2026\Jesus\Ryan\ni-live-test\` is a *developer* test
@@ -112,7 +116,8 @@ there before the next box session.**
 | Commit | Change |
 |---|---|
 | `0fb84db` | Dropped `session_id` / `sample_id` from the corrections CSV — both are **derived** for NI, so offering them as editable columns created a competing source of truth. Real damage: a project correction re-derived `project_hint` while a hand-set `sample_id` went stale. Also stopped prompting for condition/anatomy on read-only passes (`--plan` / `--dry-run`), and locked `anatomy.is_whole_body: true` in the live template — Molecubes scans the whole animal every time, so it was never a per-batch question. `condition:` is deliberately NOT defaulted. |
-| `1137561` | **Corrections persist** instead of living in a throwaway per-run file. NI reconstructions arrive late and land in sessions that were already corrected, so the old design silently re-applied the *uncorrected* values to those new acquisitions. Currently stored at `registries/ni_session_corrections.csv` — **§2(a) moves this**. |
+| `1137561` | **Corrections persist** instead of living in a throwaway per-run file. NI reconstructions arrive late and land in sessions that were already corrected, so the old design silently re-applied the *uncorrected* values to those new acquisitions. Stored at `registries/ni_session_corrections.csv` — **superseded below.** |
+| (2026-08-07) | **One corrections file per researcher, on `gnuclear`, append-only.** Moved off `gjesus3/registries/` to `<gnuclear>/<year>/<group>/<researcher>/ni_corrections_<researcher>.csv`, and the two-file worksheet→store merge collapsed into a single file the operator owns and edits forever. The merge was the only thing that needed a blank-cell rule; both are gone. `--plan` is now a bare flag that appends unseen sessions and touches nothing else. Path is derived from the running code's own location (no env var, no flag, works on the Mac's `/Volumes/…` mount) and logged every run; an existing file is reused across years so a correction never expires. |
 | `6fda90f` | `--root` accepts either the parent of the researcher folder or the folder itself, and **raises** when it matches neither (it used to walk nothing, exit 0, and write a header-only CSV that read as "this researcher has no data" — that cost a slot at the box). Added `NI_LIVE_RUNBOOK.md`. Marked `ni_live_discover.py` a data-office diagnostic, not an operator step. |
 | `a7be9d8` | `--plan` no longer walks the source tree twice (`preview_batch` was re-running the identical recursive glob just to display a count `--plan` never prints). **Structural fix, NOT measured on the box** — if `--plan` is still slow there, profile ON the box first. **Do not add a cache.** |
 | `46e2120` | Gate-0 closed (see §6), operator-flow plan, on-box test review, production-cleanup list. |

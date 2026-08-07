@@ -9,8 +9,9 @@
 > | 3.1 | Review step retired from the operator path | ✅ `6fda90f` |
 > | 3.2 | `--root` accepts either form; fails loudly on neither | ✅ `6fda90f` |
 > | 3.3 | `--plan` no longer walks the tree twice | ⚠️ `a7be9d8` — **structural fix only, NOT measured on the box.** If still slow, profile ON the box before changing anything else. Do not add a cache. |
-> | 3.4 | Persistent corrections store (D6 reversal) | ✅ `1137561` |
+> | 3.4 | Persistent corrections store (D6 reversal) | ✅ `1137561` — **superseded by §3.7** |
 > | 3.5 | Operator runbook replacing RUN_THE_TEST.md | ✅ `6fda90f` — `tools/operator/NI_LIVE_RUNBOOK.md` |
+> | 3.7 | One corrections file per researcher, on gnuclear, append-only | ✅ 2026-08-07 |
 >
 > Earlier: items 4 + 5 (drop derived columns, kill read-only prompts) `0fb84db`.
 >
@@ -105,22 +106,55 @@ dedup check re-reading `registry_raw.csv`. **Acceptance: `--plan` on Irene's ~14
 finishes in well under 30 s.** If it turns out to be dominated by an unavoidable SMB walk,
 say so and stop — do not add a cache.
 
-### 3.4 Persistent corrections store (the D6 reversal)
-- **Where:** on the NAS beside the other worklists — `registries/ni_session_corrections.csv`.
-- **Key:** `session_path` (the raw `<series>/<date>/<subject>` relpath) — the same key
-  already used, and deliberately the *uncorrected* REMI path so identity never moves.
-- **Columns:** exactly today's post-item-4 set — `session_path`, `project`,
-  `animal_codes`, `extra_metadata`. **Do not re-add `session_id` / `sample_id`**; they are
-  derived and were removed in `0fb84db` for causing stale values in production.
-- **Write path:** `--plan` emits only sessions **not already in the store**; on ingest, an
-  edited worksheet is **merged into** the store (upsert on `session_path`).
-- **Read path:** every `--live` run loads the store and applies it automatically. The
-  explicit `--corrections <file>` flag stays as an override for one-off use, but is no
-  longer part of the normal flow.
-- **Reuse, do not reinvent:** follow `tools/ingest/pending_links.py` / `pending_dicom.py`
-  exactly — BOM-tolerant via `tools/ingest/csv_safe.py`, header-checked, atomic
-  temp+replace, idempotent on key, status preserved. Serialize with
-  `tools/ingest/locking.py` if it is written during an ingest.
+### 3.4 Persistent corrections (the D6 reversal) — ✅ superseded by §3.7
+
+First built at `registries/ni_session_corrections.csv` on gjesus3, as a NAS-side *store*
+that an edited per-run worksheet was **merged into**. Correct but too complex; **§3.7
+replaced it 2026-08-07.** What survives unchanged:
+
+- **Key:** `session_path` (the raw `<series>/<date>/<subject>` relpath) — deliberately the
+  *uncorrected* REMI path so identity never moves.
+- **Columns:** `session_path`, `project`, `animal_codes`, `extra_metadata`. **Do not
+  re-add `session_id` / `sample_id`**; they are derived and were removed in `0fb84db` for
+  causing stale values in production.
+- **Read path:** every `--live` run loads the corrections and applies them automatically;
+  no flag in the normal flow.
+- BOM-tolerance and the trailing-newline guard via `tools/ingest/csv_safe.py`, plus the
+  defensive header check.
+
+### 3.7 One file, on gnuclear, owned by the operator (2026-08-07)
+
+The two-file design (throwaway worksheet → merged into a stored copy) was the **only**
+reason there had to be a rule about what a blank cell means — "I didn't touch this" vs
+"clear the stored value". Ryan called that needless complexity and he was right. Replaced
+by one file per researcher that the operator owns and edits forever:
+
+- **Where:** `<gnuclear>/<year>/<group>/<researcher>/ni_corrections_<researcher>.csv` —
+  **not** on gjesus3. The errors are the Mac's local reality (messy hand-typed folder
+  names on that box), the code that reads them runs from `gnuclear`, and keeping the file
+  off the Mac's local disk is part of the §3 audit story: what we leave behind sits in one
+  visible place on a share the platform manager already owns.
+- **How it is found — no flag, no env var.** `ni_corrections.resolve_path` reads the share
+  root, year and group **off the running code's own path**, anchoring on gnuclear's
+  4-digit year folder. The code is staged on gnuclear, so this resolves on the NI Mac
+  (a `/Volumes/…` mount) exactly as it does from `S:` on Windows. The resolved path is
+  **logged on every run** — that is the operator's answer to "where is my file".
+  Researcher folders are matched case-insensitively (the Mac says `irene`, gnuclear says
+  `Irene`/`Claudia`). Off gnuclear (a dev checkout) it falls back to sitting next to the
+  code.
+- **No year hop.** An existing file is reused wherever it already is, searching years
+  newest-first. A correction must not expire because the calendar turned over, and
+  `--plan` must not re-list every reviewed session each January.
+- **One file per researcher**, not one shared file: a shared one gets big and messy, and
+  every operator would be editing rows that aren't theirs.
+- **Write path:** `--plan` **appends** rows for sessions it has never seen and touches
+  nothing else — an existing row is the operator's own edit and the tool has no business
+  rewriting it. Nothing is merged after an ingest, because the file the operator edited
+  *is* the stored copy.
+- **`--plan` takes no filename** (`store_true`). `--corrections FILE.csv` survives only as
+  "use this file instead" for test runs.
+- Net effect on the operator flow: two commands, one of them usually skipped, and no
+  filename to invent or remember.
 
 ### 3.5 A real operator runbook (replaces RUN_THE_TEST.md)
 One page, two commands, written for a researcher. `RUN_THE_TEST.md` stays where it is as a

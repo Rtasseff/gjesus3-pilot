@@ -30,14 +30,15 @@ check(nc.parse_extra("tracer=FDG; dose=10 MBq") == {"tracer": "FDG", "dose": "10
 check(nc.parse_extra("") == {}, "parse_extra('') -> {}")
 check(nc.parse_extra("nokey; =noval; ok=1") == {"ok": "1"}, "parse_extra skips keyless/blank pieces")
 
-# 3. write_plan + read_corrections round-trip
+# 3. append_new_rows + read_corrections round-trip
 with tempfile.TemporaryDirectory() as d:
     path = os.path.join(d, "corr.csv")
-    nc.write_plan(path, [
+    n = nc.append_new_rows(path, [
         {"session_path": "1207/260212/0324_m61", "project": "0324",
          "animal_codes": "61", "extra_metadata": "tracer=FDG"},
         {"session_path": "1207/260212/0525_m12", "project": "0525"},
     ])
+    check(n == 2, "append_new_rows creates the file and reports 2 added")
     corr = nc.read_corrections(path)
     check(len(corr) == 2, "read_corrections -> 2 rows")
     check(corr["1207/260212/0324_m61"]["extra_metadata"] == "tracer=FDG",
@@ -105,49 +106,128 @@ check(nc.apply_pre(case2, corrections) is None, "apply_pre no-op when session no
 check(case2["discovered"]["project"] == "p", "apply_pre leaves discovered untouched on no match")
 check(nc.apply_pre(case2, {}) is None, "apply_pre no-op on empty corrections")
 
-# 8. the NAS-side store (D6 reversal, 2026-08-06) — corrections outlive the run
-with tempfile.TemporaryDirectory() as reg:
-    check(nc.read_store(reg) == {}, "read_store on a fresh NAS -> {} (no store yet)")
+# 8. ONE file, append-only, owned by the operator (2026-08-07)
+with tempfile.TemporaryDirectory() as d:
+    path = os.path.join(d, "ni_corrections_irene.csv")
+    check(nc.read_corrections(path) == {}, "a file that doesn't exist yet -> {}")
 
-    ws = [{"session_path": "1207/260212/0324_m61", "project": "0325",
-           "animal_codes": "61", "extra_metadata": "tracer=FDG"}]
-    added, updated = nc.merge_into_store(reg, ws)
-    check((added, updated) == (1, 0), "merge_into_store adds a new session")
-    check(os.path.isfile(nc.store_path(reg)), "store file created in registries/")
+    # --plan pass 1: two sessions discovered, both new
+    plan1 = [{"session_path": "1207/260212/0324_m61", "project": "0324",
+              "animal_codes": "61", "extra_metadata": ""},
+             {"session_path": "1207/260212/0525_m12", "project": "0525",
+              "animal_codes": "12", "extra_metadata": ""}]
+    check(nc.append_new_rows(path, plan1) == 2, "--plan adds both new sessions")
 
-    stored = nc.read_store(reg)
-    check(stored["1207/260212/0324_m61"]["project"] == "0325", "store round-trips project")
-    check(stored["1207/260212/0324_m61"]["extra_metadata"] == "tracer=FDG",
-          "store round-trips extra_metadata")
+    # the operator edits IN PLACE: fixes a project, adds a tracer
+    rows = nc.read_corrections(path)
+    rows["1207/260212/0324_m61"]["project"] = "0326"
+    rows["1207/260212/0324_m61"]["extra_metadata"] = "tracer=FDG"
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        import csv as _csv
+        w = _csv.DictWriter(f, fieldnames=nc.NI_CORRECTION_FIELDS)
+        w.writeheader()
+        for r in rows.values():
+            w.writerow({k: r.get(k, "") for k in nc.NI_CORRECTION_FIELDS})
 
-    # re-merging the same values is a no-op (idempotent re-sync)
-    check(nc.merge_into_store(reg, ws) == (0, 0), "re-merging identical rows is a no-op")
+    # --plan pass 2: same sessions re-discovered -> nothing added, edits intact.
+    # This is what makes the steady state one command.
+    check(nc.append_new_rows(path, plan1) == 0, "--plan adds nothing on a re-run")
+    after = nc.read_corrections(path)
+    check(after["1207/260212/0324_m61"]["project"] == "0326",
+          "a re-run NEVER overwrites the operator's edit")
+    check(after["1207/260212/0324_m61"]["extra_metadata"] == "tracer=FDG",
+          "a re-run NEVER overwrites the operator's extra_metadata")
 
-    # a blank cell means "untouched", never "clear the stored value"
-    nc.merge_into_store(reg, [{"session_path": "1207/260212/0324_m61",
-                               "project": "", "animal_codes": "",
-                               "extra_metadata": ""}])
-    check(nc.read_store(reg)["1207/260212/0324_m61"]["project"] == "0325",
-          "a blank cell does NOT clear a stored value")
+    # --plan pass 3: a genuinely new session is appended alongside the edited ones
+    check(nc.append_new_rows(path, plan1 + [
+        {"session_path": "1207/260408/0522_143", "project": "0522",
+         "animal_codes": "143", "extra_metadata": ""}]) == 1,
+        "--plan appends only the session it has never seen")
+    check(len(nc.read_corrections(path)) == 3, "file now holds 3 sessions")
+    check(nc.read_corrections(path)["1207/260212/0324_m61"]["project"] == "0326",
+          "the append left the edited row alone")
 
-    # a real edit updates
-    a2, u2 = nc.merge_into_store(reg, [{"session_path": "1207/260212/0324_m61",
-                                        "project": "0326"}])
-    check((a2, u2) == (0, 1), "merge_into_store reports an update, not an add")
-
-    # THE D6 ACCEPTANCE TEST: a reconstruction discovered on a LATER sync, with no
-    # worksheet passed at all, still gets the stored correction. This is the case
-    # the per-run-file design got silently wrong.
+    # THE ACCEPTANCE TEST: a reconstruction discovered on a LATER sync, with no
+    # worksheet passed at all, still gets the correction. This is the case the
+    # per-run-file design got silently wrong.
     late = {"discovered": {"series": "1207", "date": "260212",
                            "subject": "0324_m61", "project": "0324",
                            "animal_codes": "61", "ni_recon_idx": "3"}}
-    row = nc.apply_pre(late, nc.read_store(reg))
-    check(row is not None, "a late recon matches its session in the store")
+    row = nc.apply_pre(late, nc.read_corrections(path))
+    check(row is not None, "a late recon matches its session in the file")
     check(late["discovered"]["project"] == "0326",
-          "late recon inherits the stored correction with NO worksheet passed")
+          "late recon inherits the correction with NOTHING re-entered")
     nc.apply_post(late, row)
     check(late.get("session_extra") == {"tracer": "FDG"},
-          "late recon inherits the stored tracer metadata too")
+          "late recon inherits the tracer metadata too")
+
+# 8b. append survives the two Excel hazards (BOM, no trailing newline)
+with tempfile.TemporaryDirectory() as d:
+    path = os.path.join(d, "excel.csv")
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        f.write("session_path,project,animal_codes,extra_metadata\r\n"
+                "a/b/c,0324,61,tracer=FDG")          # BOM + NO final newline
+    check(nc.append_new_rows(path, [{"session_path": "d/e/f", "project": "0525"}]) == 1,
+          "appends to a BOM'd file with no trailing newline")
+    got = nc.read_corrections(path)
+    check(len(got) == 2, "both rows readable after the append (no concatenation)")
+    check(got["a/b/c"]["extra_metadata"] == "tracer=FDG",
+          "the operator's last row survived the append intact")
+
+    # the operator may delete columns they don't use — honour the file's header
+    trimmed = os.path.join(d, "trimmed.csv")
+    with open(trimmed, "w", encoding="utf-8", newline="") as f:
+        f.write("session_path,project\n")
+    nc.append_new_rows(trimmed, [{"session_path": "x/y/z", "project": "0525",
+                                  "extra_metadata": "tracer=FDG"}])
+    check(nc.csv_safe.read_header(trimmed) == ["session_path", "project"],
+          "append uses the file's own header, not NI_CORRECTION_FIELDS")
+
+# 9. where the file lives — derived from the running code's own path
+check(nc.corrections_filename("irene") == "ni_corrections_irene.csv",
+      "corrections_filename -> ni_corrections_<researcher>.csv")
+check(nc.corrections_filename("Maria G") == "ni_corrections_maria-g.csv",
+      "corrections_filename lowercases + slugifies")
+check(nc.corrections_filename("") == "ni_corrections_unknown.csv",
+      "corrections_filename never returns a bare prefix")
+
+# NB: the root is compared by suffix — os.path.abspath on Windows prepends the
+# current drive to a POSIX-absolute path, so an equality check would only pass on
+# the Mac. Year and group are exact either way.
+_mac = nc.gnuclear_anchor("/Volumes/shares/gnuclear/2026/Jesus/Ryan/ni-live-test")
+check(_mac[0].replace("\\", "/").endswith("/Volumes/shares/gnuclear")
+      and _mac[1:] == ("2026", "Jesus"),
+      "gnuclear_anchor reads root/year/group off a Mac mount path")
+check(nc.gnuclear_anchor(r"S:\gnuclear\2026\Jesus\Ryan\ni-live-test\tools")
+      [1:] == ("2026", "Jesus"),
+      "gnuclear_anchor reads the same off a Windows S:\\ path")
+check(nc.gnuclear_anchor("/home/someone/repo/tools") is None,
+      "gnuclear_anchor -> None when the code isn't staged under a year folder")
+
+with tempfile.TemporaryDirectory() as d:
+    # not on gnuclear -> next to the code (dev checkout / local copy)
+    check(nc.resolve_path("irene", start_dir=d)
+          == os.path.join(d, "ni_corrections_irene.csv"),
+          "off gnuclear, the file falls back to sitting next to the code")
+
+    # a gnuclear-shaped tree: 2025 already holds Irene's file, code staged in 2026
+    root = os.path.join(d, "gnuclear")
+    os.makedirs(os.path.join(root, "2025", "Jesus", "Irene"))
+    os.makedirs(os.path.join(root, "2026", "Jesus", "Ryan", "ni-live-test"))
+    staged = os.path.join(root, "2026", "Jesus", "Ryan", "ni-live-test")
+    fresh = nc.resolve_path("claudia", start_dir=staged)
+    check(fresh == os.path.join(root, "2026", "Jesus", "claudia",
+                                "ni_corrections_claudia.csv"),
+          "a new researcher's file is created under the code's own year/group")
+
+    old = os.path.join(root, "2025", "Jesus", "Irene", "ni_corrections_irene.csv")
+    with open(old, "w", encoding="utf-8", newline="") as f:
+        f.write("session_path,project,animal_codes,extra_metadata\n")
+    # case-insensitive folder match (Mac says `irene`, gnuclear says `Irene`)
+    # AND the existing file wins over the current year: a correction must not
+    # expire just because the calendar turned over.
+    check(nc.resolve_path("irene", start_dir=staged) == old,
+          "an existing file is reused wherever it already is (no year hop)")
 
 print("\nALL NI-CORRECTIONS CHECKS PASSED" if _fail == 0 else f"\n{_fail} CHECK(S) FAILED")
 sys.exit(1 if _fail else 0)

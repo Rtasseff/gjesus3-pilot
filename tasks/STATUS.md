@@ -232,14 +232,23 @@ The genuinely in-flight items (kept tight — everything else is in
     for the tunnel; NI-RA-05 in
     [`../equipment/nuclear-imaging/live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md)
     can be closed against this result.
-  - 🕗 **What actually blocks go-live: an operator flow a researcher will use.**
-    Not Gate-0. The current flow is a 6-step developer test script
+  - 🕗 **What actually blocks go-live: an on-box run, not more code.**
+    Not Gate-0. The 6-step developer test script
     (`S:\gnuclear\2026\Jesus\Ryan\ni-live-test\RUN_THE_TEST.md`) that no
-    researcher will follow — and the 2026-08-05 on-box run stopped at the
-    read-only `--plan` step, so no ingest has yet been proven on the box. The
-    remaining work is simplification, tracked in
-    [`ni_live_operator_flow_plan.md`](ni_live_operator_flow_plan.md); findings
-    from the on-box run are in
+    researcher would follow has been replaced by a two-command operator runbook
+    ([`../tools/operator/NI_LIVE_RUNBOOK.md`](../tools/operator/NI_LIVE_RUNBOOK.md)),
+    and as of **2026-08-07 the simplification work is code complete** — the last
+    item was collapsing the corrections worksheet + NAS store into **one file per
+    researcher on `gnuclear`**, appended to by `--plan` and never rewritten.
+    Design + rationale in
+    [`ni_live_operator_flow_plan.md`](ni_live_operator_flow_plan.md) §3.7.
+    **What remains is running it on the box:** the 2026-08-05 run stopped at the
+    read-only `--plan` step, so no `--go` ingest has ever run there. Three of the
+    four merge gates now pass against a synthetic tree + throwaway NAS; the
+    fourth (`pending_links.csv` with `ENOTSUP`/`darwin` rows) is provable **only**
+    on the Mac, since hard links succeed on Windows. Single entry point for
+    picking this up: [`RESUME_ni_live.md`](RESUME_ni_live.md). Findings from the
+    on-box run are in
     [`ni_live_onbox_test_review.md`](ni_live_onbox_test_review.md).
   - **Remote access to the box is being established** (reverse SSH tunnel;
     workstation half verified 2026-08-06, **box half not yet run** — it needs a
