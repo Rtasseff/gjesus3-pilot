@@ -8,13 +8,21 @@ zero memory of any of this** — everything needed is here or in the docs this p
 
 ## 1. Where things stand
 
-- **Branch `feat/ni-live-hardening`**, pushed to origin, **16 commits ahead of `main`, 0 behind**
-  (rebased onto `main` `dde99fc` on 2026-08-06 — we had silently drifted 69 commits behind,
-  don't let that happen again).
+- **Branch `feat/ni-live-hardening`**, **18 commits ahead of `main`, 0 behind** (rebased onto
+  `origin/main` `6b2ef41` on 2026-08-07; before that onto `dde99fc` on 2026-08-06 — we had
+  silently drifted 69 commits behind once, don't let that happen again).
+- **`origin/feat/ni-live-hardening` still points at the OLD pre-rebase commits.** The next
+  push needs `--force-with-lease`, and **pushing requires explicit permission.**
 - **NOT merged, deliberately.** Merge waits on the on-box test (§4).
-- All NI test suites green: `tools/test_ni_corrections.py`, `test_ni_per_recon.py`,
-  `test_pending_links.py`, `test_ni_live_discover.py`, `tools/ingest/test_registry_fields.py`.
-- Backup tag `backup/ni-live-hardening-pre-rebase` = the pre-rebase tip `f2ee114`.
+- All 20 test suites green, NI ones included: `tools/test_ni_corrections.py` (48 checks),
+  `test_ni_per_recon.py`, `test_pending_links.py`, `test_ni_live_discover.py`,
+  `tools/ingest/test_registry_fields.py`.
+- Backup tags: `backup/ni-live-hardening-pre-rebase` = `f2ee114` (pre-2026-08-06);
+  `backup/ni-live-pre-rebase-20260807` = `2909b31` (pre-2026-08-07).
+- **Rebasing in this worktree leaves a `rebase-merge` dir git can't delete** — OneDrive marks
+  it ReadOnly, so git reports "currently rebasing" after a *successful* rebase. Clear ReadOnly
+  and remove `…/.git/worktrees/ni-live-hardening/rebase-merge`; do **not** `git rebase --abort`,
+  which would throw the rebase away.
 
 **Run the tests as `PYTHONPATH=tools python tools/<name>.py`** — they are hand-rolled scripts,
 not pytest.
@@ -158,10 +166,13 @@ reconstruction, `--live` mode (no per-batch YAML), corrections + tracer metadata
 
 ## 7. Open items NOT on this branch
 
-- **Two synthetic acquisitions are in TRUE PRODUCTION** (`ACQ-20260212-CT-001` / `-002`) from a
-  2026-06-29 verification run that pointed `--nas-root` at `J:\gjesus3-data` instead of a
-  throwaway NAS. **Removal list ready and handed off: `tasks/ni_prod_testdata_removal.md`.
-  Do not execute it from this branch.**
+- ✅ **DONE — the two synthetic production acquisitions are gone.** `ACQ-20260212-CT-001` /
+  `-002` (from the 2026-06-29 verification run that pointed `--nas-root` at `J:\gjesus3-data`
+  instead of a throwaway NAS) were removed and verified against production on 2026-08-06:
+  8 rows across 5 registry CSVs, both raw folders, and the auto-created `PROJ-0051` /
+  `AE-biomaGUNE-0325` in full; 0 residual references, 0 `validate_registries` errors; backup
+  off-NAS at `C:\Users\rtasseff\temp\gjesus3_ni_testdata_removal_20260806\`. Recorded on `main`
+  in `c92a60f`, which this branch now contains. `tasks/ni_prod_testdata_removal.md` is history.
 - **Backlog, high priority — `pending_dicom_regen.csv` header drift.** The live file has 9
   columns (`nonimage_marker`), the code expects 8, `_assert_header` raises, and
   `ingest_raw.py:1034` swallows it — so the DICOM regeneration queue is **write-broken in true
