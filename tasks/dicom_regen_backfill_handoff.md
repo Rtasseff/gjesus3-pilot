@@ -1,8 +1,11 @@
 # Handoff — MRI no-DICOM regeneration: backfill the DICOMs, then make the procedure official
 
 **Created:** 2026-07-16 · **Branch:** `feat/dicom-regen-backfill` · **Worktree:**
-`…/projects/gjesus3-dev/dicom-regen-backfill` (a worktree of the main repo at
-`…/RDM/highCap/gjesus3-pilot`, branched from `main` @ `6ded455`).
+`…/projects/gjesus3-dev/dicom-regen-backfill` (a worktree of the main repo, branched
+from `main` @ `6ded455`). Both of those paths are historical: on 2026-08-07 the repo
+moved to `…/projects/DataInfra/gjesus3-archive/gjesus3-pilot` (worktrees now under
+`…/gjesus3-archive/gjesus3-dev/`) and that worktree no longer exists. The branch
+itself is unaffected — recreate a worktree for it if you pick this up.
 
 **Status:** Investigation + staging done; **no fix started**. This document is the
 brief. Read it end-to-end before touching code — the first work item is a design
