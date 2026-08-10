@@ -110,9 +110,9 @@ The genuinely in-flight items (kept tight — everything else is in
   **shared**, and says the old version is **not kept** (no `.bak`, by decision).
   Verified headlessly against the live app + real AxioScan folders (**105 checks**) plus
   a **dry run of a real 17-file batch with the registry byte-identical afterwards**.
-  Detail in [`../CHANGELOG.md`](../CHANGELOG.md) (2026-08-10).
-  **⚠️ The deployed exe predates (C)** — it carries (A) + (B) only; rebuild + redeploy
-  when merging if operators need the overwrite before the next release.
+  Detail in [`../CHANGELOG.md`](../CHANGELOG.md) (2026-08-10). **Exe rebuilt +
+  REDEPLOYED with all three, and validated through the deployed exe** (105 checks +
+  the real dry run). Branch not yet merged to `main`.
 - **Project reference model — ✅ LANDED + MIGRATED IN PRODUCTION, exe redeployed (2026-08-02).**
   The last two items from the 2026-07-17 operator test. **"Project hint" is retired**: a
   project now has just `project_id` (`PROJ-XXXX`, machine key) and a **`name`** — what the
