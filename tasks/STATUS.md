@@ -96,7 +96,9 @@ The genuinely in-flight items (kept tight — everything else is in
   header — day folders are named by date, so `▼` is newest-first; folders stay above
   files, the choice is remembered, and the order is applied **in the backend before**
   the 3000-entry cap (a client-side reverse would show the wrong end of a big folder).
-  The modal is now one shared `static/folder_browser.js` instead of two drifting copies.
+  It also **reopens in the folder that button was last left in** (per target, across
+  restarts; a vanished folder falls back to home silently). The modal is now one
+  shared `static/folder_browser.js` instead of two drifting copies.
   **(B)** Five differently-worded buttons (two with the *identical* label, both buried
   in collapsed `<details>`) became **two verbs — "Read folder" and "Preview"** — and
   **picking a folder reads it automatically**, filling both palettes, the filter
