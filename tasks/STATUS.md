@@ -88,9 +88,9 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ LANDED
-  on `feat/gui-browse-sort-and-reload` (2026-08-10); exe rebuilt + REDEPLOYED to the
-  NAS + validated through the deployed exe. Branch not yet merged to `main`.**
+- **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ DONE
+  (2026-08-10); exe rebuilt + REDEPLOYED to the NAS + validated through the deployed
+  exe. Merged to `main` (`a679e6a`, `--no-ff`) and pushed; branch + worktree deleted.**
   Two usability complaints from the microscopy operator, both in the shared GUI layer,
   so **both pages** are fixed. **(A)** The Browse… list has a clickable `Name ▲/▼`
   header — day folders are named by date, so `▼` is newest-first; folders stay above
@@ -112,7 +112,10 @@ The genuinely in-flight items (kept tight — everything else is in
   a **dry run of a real 17-file batch with the registry byte-identical afterwards**.
   Detail in [`../CHANGELOG.md`](../CHANGELOG.md) (2026-08-10). **Exe rebuilt +
   REDEPLOYED with all three, and validated through the deployed exe** (105 checks +
-  the real dry run). Branch not yet merged to `main`.
+  the real dry run). **Rollback is one step:** the backup kept at
+  `C:\Users\rtasseff\temp\gjesus3_exe_backup_20260810\` is deliberately the *pre-branch*
+  2026-08-02 exe (`ca2bd1c7…`), not the intermediate build — restoring it undoes the
+  whole branch, not just the last increment.
 - **Project reference model — ✅ LANDED + MIGRATED IN PRODUCTION, exe redeployed (2026-08-02).**
   The last two items from the 2026-07-17 operator test. **"Project hint" is retired**: a
   project now has just `project_id` (`PROJ-XXXX`, machine key) and a **`name`** — what the
