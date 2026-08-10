@@ -242,6 +242,10 @@ Windows alternative to `mri-ingest`).
    `discovered.*` grid over your real files, map those values into the registry
    fields / link name / project via clickable token chips (each field shows a
    live resolved example; anything unresolved flags red), then **Save recipe**.
+   To **change** an existing recipe, load it, edit, keep the name and save: you
+   are asked to confirm and the status reads *Replaced*. The confirm names the
+   file, warns that recipes on the RDM System are **shared with every operator**
+   of that instrument, and states that the replaced version is **not kept**.
    For routine ingests you will not need this — just pick an existing recipe.
 
 ### Building the `.exe` (data office, one-time per release)

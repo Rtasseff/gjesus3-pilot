@@ -163,7 +163,7 @@ first. Verify the frozen exe by previewing **and** dry-run-ingesting a real
 | `POST /api/preview` | `scope.resolve_scope` → `config_builder.build_config` → `preview.preview_batch` | no |
 | `POST /api/discovered` | same, returns the `discovered.*` grid (+ `blocking_errors`, so an auto-read that finds nothing can say why) | no |
 | `POST /api/listdir` | `os.scandir` for the folder-browser modal; `desc` flips the name order **before** the 3000-entry cap | no |
-| `POST /api/save_recipe` | writes a JSON recipe into `recipes_dir()` | recipe file only |
+| `POST /api/save_recipe` | writes a YAML recipe into `recipes_dir()`; refuses an existing filename with **409 + `{exists, file}`** unless `overwrite: true` | recipe file only |
 | `POST /api/ingest` | `runner.run` (SSE-streamed log) | **yes — the real ingest** |
 
 The operator's folder pick (`scope.resolve_scope`) always sets
@@ -205,6 +205,24 @@ change the other. Two behaviours worth knowing:
 Both preferences live in `localStorage` (`gj3.folderBrowser.sortDesc`,
 `gj3.folderBrowser.lastDir`), every access wrapped — a browser that blocks it
 just loses the memory, it never breaks the browser.
+
+### `postJSON` carries the refusal, not only its text
+
+`postJSON()` (both copies) attaches `status` and the parsed body to the thrown
+`Error`. Some refusals are things the caller must **act on**, not merely print:
+`/api/save_recipe` answers a name collision with `409 + {exists, file}` so the
+save handler can offer to replace. Keep the two copies identical even though the
+MRI page has no endpoint that needs it — the point is that neither becomes the
+odd one out. Every existing `catch (e) { … e.message }` is unaffected.
+
+**Replacing a recipe** (`#b-save`): first attempt without `overwrite`; on
+`409 + exists`, a `window.confirm` naming **the file** (not the typed name —
+`"Study A"` and `"Study/A"` both sanitise to `study_a.yaml`), then the identical
+body resent with `overwrite: true`, reported as *Replaced* rather than *Saved*.
+The confirm says the replaced version is **not kept** (a deliberate 2026-08-10
+call — no `.bak`), and warns that the recipe is **shared on the RDM System** when
+`recipes_dir()` is the default; if the operator has pointed it somewhere else it
+names that folder instead.
 
 The spec bundles `static/` as a whole directory, so a new file here needs no
 `gjesus3_ingest.spec` edit — but verify through the frozen exe anyway.

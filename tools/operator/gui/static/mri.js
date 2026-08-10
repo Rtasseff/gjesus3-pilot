@@ -28,7 +28,16 @@ async function postJSON(url, body) {
   });
   let data = null;
   try { data = await r.json(); } catch (e) { /* non-json */ }
-  if (!r.ok) throw new Error((data && data.error) || `HTTP ${r.status}`);
+  if (!r.ok) {
+    // Kept identical to app.js's copy on purpose: status + body ride along on
+    // the Error so a caller can act on a structured refusal. No endpoint this
+    // page calls needs it today (recipes are microscopy-only) — the two copies
+    // are mirrored so neither becomes the odd one out.
+    const err = new Error((data && data.error) || `HTTP ${r.status}`);
+    err.status = r.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 

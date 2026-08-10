@@ -104,10 +104,15 @@ The genuinely in-flight items (kept tight — everything else is in
   **picking a folder reads it automatically**, filling both palettes, the filter
   dropdown and every live example from one call; Preview refreshes the same surfaces
   from its own response. Retires the latent bug where the always-visible Filter panel
-  depended on loaders inside panels that can be hidden. Verified headlessly against the
-  live app + real AxioScan folders (71 checks) plus a **dry run of a real 17-file batch
-  with the registry byte-identical afterwards**. Detail in
-  [`../CHANGELOG.md`](../CHANGELOG.md) (2026-08-10).
+  depended on loaders inside panels that can be hidden. **(C)** Saving a recipe over an
+  existing one now works — it was a dead-end warning, though the backend has always
+  supported `overwrite`; the confirm names the file, warns that RDM-System recipes are
+  **shared**, and says the old version is **not kept** (no `.bak`, by decision).
+  Verified headlessly against the live app + real AxioScan folders (**105 checks**) plus
+  a **dry run of a real 17-file batch with the registry byte-identical afterwards**.
+  Detail in [`../CHANGELOG.md`](../CHANGELOG.md) (2026-08-10).
+  **⚠️ The deployed exe predates (C)** — it carries (A) + (B) only; rebuild + redeploy
+  when merging if operators need the overwrite before the next release.
 - **Project reference model — ✅ LANDED + MIGRATED IN PRODUCTION, exe redeployed (2026-08-02).**
   The last two items from the 2026-07-17 operator test. **"Project hint" is retired**: a
   project now has just `project_id` (`PROJ-XXXX`, machine key) and a **`name`** — what the

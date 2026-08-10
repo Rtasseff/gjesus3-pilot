@@ -18,8 +18,15 @@ async function postJSON(url, body) {
   let data = null;
   try { data = await r.json(); } catch (e) { /* non-json */ }
   if (!r.ok) {
-    const msg = (data && data.error) || `HTTP ${r.status}`;
-    throw new Error(msg);
+    // Carry the status and the whole response body on the Error. Some endpoints
+    // answer a refusal with fields the caller must ACT on rather than merely
+    // print — /api/save_recipe's 409 returns {exists, file} so the save handler
+    // can offer to overwrite. Additive: every `catch (e) { … e.message }`
+    // behaves exactly as it did before.
+    const err = new Error((data && data.error) || `HTTP ${r.status}`);
+    err.status = r.status;
+    err.data = data;
+    throw err;
   }
   return data;
 }
@@ -94,7 +101,13 @@ function nasRoot() { return nasInput.value.trim(); }
 // every operator reads/writes the same set; persisted + overridable.
 const recipesDirInput = $("#recipes-dir");
 const recipesStatus = $("#recipes-status");
+// Last known /api/recipes_dir payload. The overwrite confirm needs it: replacing
+// a recipe in the DEFAULT folder changes a file on shared storage that every
+// operator of that instrument reads, which is a different thing to warn about
+// than replacing one in a folder this operator pointed at themselves.
+let recipesDirState = { recipes_dir: "", is_default: true };
 function setRecipesStatus(d) {
+  recipesDirState = d || recipesDirState;
   recipesStatus.textContent = d.is_default ? "default" : (d.exists ? "set" : "new");
   recipesStatus.className = "pill " + (d.exists ? "ok" : "");
 }
@@ -1375,21 +1388,58 @@ async function builderPreview() {
 $("#b-preview").addEventListener("click", builderPreview);
 
 // ---- save recipe ----
+// What the operator is actually agreeing to. Names the FILE, not the name they
+// typed: distinct names can sanitise to the same filename ("Study A" and
+// "Study/A" both -> study_a.yaml), so someone who believes they are creating a
+// new recipe must see which file is about to go.
+function overwritePrompt(file) {
+  const where = recipesDirState.is_default
+    ? "It is shared on the RDM System — every operator using it will get the new version."
+    : `It is in ${recipesDirState.recipes_dir || "your recipes folder"}.`;
+  return `Replace the existing recipe "${file}"?\n\n${where}\n\n` +
+         "The version being replaced is not kept.";
+}
+
 $("#b-save").addEventListener("click", async () => {
-  $("#b-save-status").textContent = "";
-  try {
-    const data = await postJSON("/api/save_recipe", {
-      instrument: bInstrument.value,
-      name: $("#b-recipe-name").value,
-      description: $("#b-recipe-desc").value,
-      overrides: builderOverrides(),
-    });
-    $("#b-save-status").innerHTML =
-      `<span class="new">Saved</span> ${esc(data.file)} → ${esc(data.path)}`;
+  const status = $("#b-save-status");
+  status.textContent = "";
+  // Built ONCE and reused for the retry, so a replace writes exactly what the
+  // first attempt would have (nothing can shift between the two requests).
+  const body = {
+    instrument: bInstrument.value,
+    name: $("#b-recipe-name").value,
+    description: $("#b-recipe-desc").value,
+    overrides: builderOverrides(),
+  };
+  const report = (data, replaced) => {
+    status.innerHTML = `<span class="new">${replaced ? "Replaced" : "Saved"}</span> ` +
+      `${esc(data.file)} → ${esc(data.path)}`;
     if (rInstrument.value === bInstrument.value) loadRecipes();
     loadBuilderRecipes();   // surface the new/updated recipe in the builder picker
+  };
+  try {
+    report(await postJSON("/api/save_recipe", body), false);
   } catch (e) {
-    $("#b-save-status").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
+    // 409 + exists: the backend refuses the FIRST write to an existing file on
+    // purpose. Ask, then resend the identical body with overwrite. Until now the
+    // operator just got the 409's "…resend with overwrite=true" — a sentence
+    // written for an API caller — which made "keep the name to overwrite it" (the
+    // hint Load recipe has always shown) a promise the UI couldn't keep.
+    if (e.status === 409 && e.data && e.data.exists) {
+      if (!window.confirm(overwritePrompt(e.data.file))) {
+        status.innerHTML = `<span class="muted">Not saved — <code>${esc(e.data.file)}</code> ` +
+          "was left as it is.</span>";
+        return;
+      }
+      try {
+        report(await postJSON("/api/save_recipe",
+                              Object.assign({}, body, { overwrite: true })), true);
+      } catch (e2) {
+        status.innerHTML = `<span class="bad">${esc(e2.message)}</span>`;
+      }
+      return;
+    }
+    status.innerHTML = `<span class="bad">${esc(e.message)}</span>`;
   }
 });
 
