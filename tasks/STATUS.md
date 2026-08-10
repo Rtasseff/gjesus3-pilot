@@ -88,6 +88,23 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ LANDED
+  on `feat/gui-browse-sort-and-reload` (2026-08-10); exe rebuilt + redeployed.**
+  Two usability complaints from the microscopy operator, both in the shared GUI layer,
+  so **both pages** are fixed. **(A)** The Browse… list has a clickable `Name ▲/▼`
+  header — day folders are named by date, so `▼` is newest-first; folders stay above
+  files, the choice is remembered, and the order is applied **in the backend before**
+  the 3000-entry cap (a client-side reverse would show the wrong end of a big folder).
+  The modal is now one shared `static/folder_browser.js` instead of two drifting copies.
+  **(B)** Five differently-worded buttons (two with the *identical* label, both buried
+  in collapsed `<details>`) became **two verbs — "Read folder" and "Preview"** — and
+  **picking a folder reads it automatically**, filling both palettes, the filter
+  dropdown and every live example from one call; Preview refreshes the same surfaces
+  from its own response. Retires the latent bug where the always-visible Filter panel
+  depended on loaders inside panels that can be hidden. Verified headlessly against the
+  live app + real AxioScan folders (71 checks) plus a **dry run of a real 17-file batch
+  with the registry byte-identical afterwards**. Detail in
+  [`../CHANGELOG.md`](../CHANGELOG.md) (2026-08-10).
 - **Project reference model — ✅ LANDED + MIGRATED IN PRODUCTION, exe redeployed (2026-08-02).**
   The last two items from the 2026-07-17 operator test. **"Project hint" is retired**: a
   project now has just `project_id` (`PROJ-XXXX`, machine key) and a **`name`** — what the

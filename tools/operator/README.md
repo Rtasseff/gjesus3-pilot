@@ -204,7 +204,12 @@ Windows alternative to `mri-ingest`).
 3. **Run a recipe** (the everyday case):
    - Pick your instrument (ZWSI / CELL / LSM9) and a saved **recipe** (a
      ready-made convention the data office prepared).
-   - Use the folder box to point at your day/batch folder.
+   - Use the folder box to point at your day/batch folder. In the **Browse…**
+     window, click the **Name ▲** heading to reverse the order — day folders are
+     named by date, so **Name ▼** puts today's at the top; the choice is
+     remembered. Picking a folder **reads it straight away**: the metadata labels
+     appear in every box below and a line under the folder says what was found.
+     **Read folder** re-reads it if that ever looks stale.
    - **Researcher** — type who *set up the experiment* (goes in the registry
      `researcher` column). On AxioScan this isn't in the filename, so set it; for
      the cell modes you can leave it blank to use the researcher folder name. The
@@ -212,8 +217,9 @@ Windows alternative to `mri-ingest`).
      automatically and is recorded in the sidecar.
    - **Study metadata** — a small panel lets you mark the sample as **control**
      or **case**, and for a case enter `disease_model` / `disease_state`. Type a
-     value, or open *"Pull a value from the CZI name / folders"* and click a
-     `discovered.*` chip to map it from the filename. Set once, applied to every
+     value, or open *"Use a metadata label value from the CZI name / folders"*
+     and click a `discovered.*` chip to map it from the filename (the chips are
+     already filled in from the folder you picked). Set once, applied to every
      acquisition in the run; leave it on "skip" to record nothing (non-blocking).
      Shown for **all** microscopy instruments — AxioScan tissue **and** the Cell
      Observer / LSM 900 cell modes (a disease-model cell line vs a wild-type
