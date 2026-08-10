@@ -165,6 +165,13 @@
         <button id="fb-go" type="button">Go</button>
       </div>
       <div id="fb-drives" class="fb-drives"></div>
+      <!-- Column-header strip: click to reverse the name order (folders always
+           stay on top). Same markup + ids as index.html; behaviour is the
+           shared static/folder_browser.js. -->
+      <div class="fb-sortbar">
+        <button id="fb-sort" type="button" class="fb-sort">Name <span id="fb-sort-arrow" class="fb-arrow">▲</span></button>
+        <span class="muted">click to reverse — newest first for date-named folders</span>
+      </div>
       <div id="fb-list" class="fb-list"></div>
       <div id="fb-error" class="errbox"></div>
       <footer class="fb-foot">
@@ -200,6 +207,7 @@
   </script>
   <script src="{{ url_for('static', filename='tokenfield.js') }}"></script>
   <script src="{{ url_for('static', filename='completion_modal.js') }}"></script>
+  <script src="{{ url_for('static', filename='folder_browser.js') }}"></script>
   <script src="{{ url_for('static', filename='mri.js') }}"></script>
 </body>
 </html>

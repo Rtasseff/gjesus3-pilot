@@ -120,94 +120,10 @@ $("#recipes-browse").addEventListener("click", () =>
 loadRecipesDir();
 
 // ---------------------------------------------------------------- folder browse
-// In-page folder browser. Unlike the OS folder-only dialog (which made every
-// folder look empty), this shows folders AND greyed files for context: click a
-// folder to open it, then "Use this folder". A LOCAL app, so /api/listdir lists
-// the local filesystem.
-const fb = {
-  overlay: $("#fb-overlay"), list: $("#fb-list"), pathInp: $("#fb-path"),
-  drives: $("#fb-drives"), err: $("#fb-error"), title: $("#fb-title"),
-  target: null, cur: "", parent: null, onPick: null,
-};
-
-function browseInto(input, title, onPick) {
-  if (!input) return;
-  fb.target = input;
-  fb.onPick = onPick || null;
-  fb.title.textContent = title || "Select a folder";
-  fb.err.textContent = "";
-  fb.overlay.hidden = false;
-  fbLoad(input.value.trim() || "");
-}
-
-function joinPath(base, name) {
-  if (!base) return name;
-  const sep = base.includes("\\") ? "\\" : "/";
-  return base.replace(/[\\/]+$/, "") + sep + name;
-}
-
-async function fbLoad(path) {
-  fb.err.textContent = "";
-  fb.list.innerHTML = "<div class='fb-empty'>Loading…</div>";
-  let data;
-  try {
-    data = await postJSON("/api/listdir", { path });
-  } catch (e) {
-    fb.list.innerHTML = "";
-    fb.err.textContent = e.message;
-    return;
-  }
-  fb.cur = data.path;
-  fb.parent = data.parent || null;
-  fb.pathInp.value = data.path;
-  $("#fb-up").disabled = !fb.parent;
-
-  fb.drives.innerHTML = (data.drives || []).map((d) =>
-    `<span class="fb-drive" data-path="${esc(d)}">${esc(d)}</span>`).join("");
-  $$("#fb-drives .fb-drive").forEach((el) =>
-    el.addEventListener("click", () => fbLoad(el.dataset.path)));
-
-  const items = [];
-  if (fb.parent) {
-    items.push(`<div class="fb-item dir" data-path="${esc(fb.parent)}"><span class="ic">↑</span><span>.. (up)</span></div>`);
-  }
-  (data.entries || []).forEach((e) => {
-    if (e.is_dir) {
-      items.push(`<div class="fb-item dir" data-name="${esc(e.name)}"><span class="ic">📁</span><span>${esc(e.name)}</span></div>`);
-    } else {
-      items.push(`<div class="fb-item file"><span class="ic">📄</span><span>${esc(e.name)}</span></div>`);
-    }
-  });
-  fb.list.innerHTML = items.length ? items.join("") : "<div class='fb-empty'>(empty folder)</div>";
-  if (data.truncated) fb.list.insertAdjacentHTML("beforeend", "<div class='fb-empty'>…list truncated (very large folder).</div>");
-
-  $$("#fb-list .fb-item.dir").forEach((el) => {
-    el.addEventListener("click", () =>
-      fbLoad(el.dataset.path || joinPath(fb.cur, el.dataset.name)));
-  });
-  if (data.error) fb.err.textContent = data.error;
-}
-
-function fbClose() { fb.overlay.hidden = true; fb.target = null; fb.onPick = null; }
-function fbSelect() {
-  const chosen = fb.cur, input = fb.target, cb = fb.onPick;
-  fbClose();
-  if (input) {
-    input.value = chosen;
-    input.dispatchEvent(new Event("input"));
-    input.dispatchEvent(new Event("change"));
-  }
-  if (cb) cb(chosen);
-}
-
-$("#fb-up").addEventListener("click", () => { if (fb.parent) fbLoad(fb.parent); });
-$("#fb-go").addEventListener("click", () => fbLoad(fb.pathInp.value.trim()));
-fb.pathInp.addEventListener("keydown", (e) => { if (e.key === "Enter") fbLoad(fb.pathInp.value.trim()); });
-$("#fb-select").addEventListener("click", fbSelect);
-$("#fb-close").addEventListener("click", fbClose);
-$("#fb-cancel").addEventListener("click", fbClose);
-fb.overlay.addEventListener("click", (e) => { if (e.target === fb.overlay) fbClose(); });
-
+// The in-page folder browser modal (with its reversible name order) lives in
+// static/folder_browser.js — ONE component shared with the MRI page, which
+// exposes browseInto(input, title, onPick). It was copy-pasted into both pages
+// until 2026-08-10.
 $("#nas-browse").addEventListener("click", () =>
   browseInto(nasInput, "Select the destination — the RDM System root (gjesus3-data)", () => saveNas()));
 $("#r-browse").addEventListener("click", () =>
@@ -267,7 +183,13 @@ async function loadGaps() {
     runnerGapMeta = data.gaps || [];
   } catch (e) { runnerGapMeta = []; }
 
-  if (!runnerGapMeta.length) { $("#r-gaps").hidden = true; grid.innerHTML = ""; return; }
+  if (!runnerGapMeta.length) {
+    // No gaps -> the whole panel is hidden. The labels still have to be read:
+    // the filter dropdown below needs them and owns no loader of its own.
+    $("#r-gaps").hidden = true; grid.innerHTML = "";
+    reloadLabelsForRecipe();
+    return;
+  }
   $("#r-gaps").hidden = false;
   grid.innerHTML = "";
   runnerGapMeta.forEach((f) => {
@@ -295,6 +217,16 @@ async function loadGaps() {
     row.append(lab, val); grid.appendChild(row);
   });
   updateGapExamples();
+  reloadLabelsForRecipe();
+}
+
+// A new recipe / instrument parses the SAME folder by different rules, so the
+// labels have to be re-read — otherwise the palettes and the filter dropdown
+// keep offering the previous recipe's labels. With no folder chosen there is
+// nothing to read: drop the labels rather than leave stale ones behind.
+function reloadLabelsForRecipe() {
+  if ($("#r-staging").value.trim()) loadFromFolder();
+  else { applyRunnerDiscovered([], {}); $("#r-load-status").textContent = ""; }
 }
 
 function runnerGapOverrides() {
@@ -338,24 +270,8 @@ function updateGapExamples() {
   });
 }
 
-async function loadGapFields() {
-  $("#r-gaps-palette").innerHTML = "Loading…";
-  try {
-    const data = await postJSON("/api/discovered", {
-      instrument: rInstrument.value, overrides: currentRecipeOverrides(),
-      staging_path: $("#r-staging").value, nas_root: nasRoot(), limit: 5,
-    });
-    runnerDiscoveredRow = (data.rows && data.rows[0]) ? data.rows[0].discovered : {};
-    runnerKeys = data.keys || [];
-    renderPalette($("#r-gaps-palette"), paletteEntries(runnerKeys, LINK_TOKEN_EXTRAS),
-                  Object.values(runnerGapFields)[0]);
-    runnerFilterUI.refresh();   // populate the filter field dropdowns too
-    updateGapExamples();
-  } catch (e) {
-    $("#r-gaps-palette").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
-  }
-}
-$("#r-gaps-load").addEventListener("click", loadGapFields);
+// (The one folder reader — loadFromFolder() — lives just below the study-metadata
+// panel, after the token-fields it refreshes.)
 
 // runner filter — same UI as the builder. The recipe's filter (if any) is shown
 // read-only AND forcibly applied; the operator can always ADD more conditions on
@@ -457,33 +373,6 @@ function runnerOverrides() {
                        runnerFilter(), runnerMetaOverrides());
 }
 
-async function loadMetaFields() {
-  $("#r-meta-chips").innerHTML = "Loading…";
-  try {
-    const data = await postJSON("/api/discovered", {
-      instrument: rInstrument.value,
-      overrides: currentRecipeOverrides(),
-      staging_path: $("#r-staging").value,
-      nas_root: nasRoot(),
-      limit: 5,
-    });
-    runnerDiscoveredRow = (data.rows && data.rows[0]) ? data.rows[0].discovered : {};
-    // Both "Show metadata labels from the folder" buttons (this one and
-    // #r-gaps-load) fetch the SAME /api/discovered data. Feed the shared
-    // runnerKeys + refresh the filter here too, so the runner filter dropdown
-    // fills no matter which of the two identically-labelled buttons the operator
-    // clicks — otherwise clicking this one loads visible labels but leaves the
-    // filter's data source empty.
-    runnerKeys = data.keys || [];
-    runnerFilterUI.refresh();
-    renderPalette($("#r-meta-chips"), paletteEntries(data.keys || [], LINK_TOKEN_EXTRAS), dmField);
-    updateMetaExamples();
-  } catch (e) {
-    $("#r-meta-chips").innerHTML = `<span class="bad">${esc(e.message)}</span>`;
-  }
-}
-$("#r-meta-load-fields").addEventListener("click", loadMetaFields);
-
 // Live resolved example for the disease token-fields (reuses resolveExample).
 function updateMetaExamples() {
   const ctx = runnerDiscoveredRow || {};
@@ -497,6 +386,113 @@ function updateMetaExamples() {
     ex.classList.toggle("bad", unresolved);
   });
 }
+
+// ---- READ FOLDER: the one loader ----------------------------------------
+// Every surface that depends on the folder's metadata labels — both palettes,
+// the filter dropdown, the live "→ example" lines — is fed by ONE
+// /api/discovered call, from ONE function.
+//
+// Until 2026-08-10 this was two functions behind two buttons carrying the SAME
+// label ("Show metadata labels from the folder"), each refreshing a different
+// subset, both buried in collapsed <details> inside panels that CAN be hidden
+// (#r-gaps when the recipe leaves no gaps, #r-meta when the template carries no
+// condition: block). Operators couldn't tell what to press — and on an
+// instrument whose template has no condition: block (molecubes_ni_live), a
+// fully-specified recipe would have left the filter dropdown with no way at all
+// to populate. One loader, owned by no panel, retires both problems: it runs by
+// itself when a source folder is chosen, the always-visible "Read folder"
+// button re-runs it, and Preview refreshes the same surfaces from its own
+// response.
+
+// Push a freshly-read set of labels into every dependent surface. Keys drive the
+// palettes + the filter dropdown; the first row drives the live examples.
+function applyRunnerDiscovered(keys, row) {
+  runnerKeys = keys || [];
+  runnerDiscoveredRow = row || {};
+  const entries = paletteEntries(runnerKeys, LINK_TOKEN_EXTRAS);
+  renderPalette($("#r-gaps-palette"), entries, Object.values(runnerGapFields)[0]);
+  renderPalette($("#r-meta-chips"), entries, dmField);
+  runnerFilterUI.refresh();
+  updateGapExamples();
+  updateMetaExamples();
+}
+
+// The union of discovered keys across previewed cases, + the first row. Lets
+// Preview refresh the labels with NO second backend call — /api/preview already
+// carries cases[].discovered.
+function discoveredFromCases(cases) {
+  const keys = [];
+  (cases || []).forEach((c) => Object.keys(c.discovered || {}).forEach((k) => {
+    if (!keys.includes(k)) keys.push(k);
+  }));
+  return { keys, row: (cases && cases[0]) ? (cases[0].discovered || {}) : {} };
+}
+
+let runnerReadSeq = 0;   // a slow earlier read must never overwrite a later one
+
+async function loadFromFolder() {
+  const path = $("#r-staging").value.trim();
+  const status = $("#r-load-status");
+  if (!path) { status.className = "muted"; status.textContent = ""; return; }
+  const seq = ++runnerReadSeq;
+  status.className = "muted";
+  status.textContent = "Reading the folder…";
+  let data;
+  try {
+    data = await postJSON("/api/discovered", {
+      instrument: rInstrument.value, overrides: currentRecipeOverrides(),
+      staging_path: path, nas_root: nasRoot(), limit: 5,
+    });
+  } catch (e) {
+    if (seq !== runnerReadSeq) return;
+    // Quiet + non-blocking: a bad path or an unset destination says so on this
+    // one line and changes nothing else. This runs unprompted, while the
+    // operator may still be typing — it must never block or disable anything.
+    status.className = "bad";
+    status.textContent = e.message;
+    return;
+  }
+  if (seq !== runnerReadSeq) return;   // a newer read already landed
+  applyRunnerDiscovered(data.keys || [],
+                        (data.rows && data.rows[0]) ? data.rows[0].discovered : {});
+  const blocking = data.blocking_errors || [];
+  if (blocking.length) {
+    // A broken recipe/template yields no rows, no drops and no warnings — say
+    // so, instead of leaving an unexplained empty palette.
+    status.className = "bad";
+    status.textContent = blocking.join(" / ");
+    return;
+  }
+  status.className = "muted";
+  const n = runnerKeys.length;
+  if (n) {
+    status.textContent = `Read this folder — ${n} metadata label${n === 1 ? "" : "s"} available below.`;
+  } else if (data.n_already_ingested) {
+    status.textContent =
+      `Read this folder — all ${data.n_already_ingested} file(s) here are already ingested, ` +
+      "so there are no new files to take metadata labels from.";
+  } else if (data.n_dropped) {
+    status.textContent =
+      `Read this folder — ${data.n_dropped} file(s) don't fit this recipe's naming ` +
+      "convention, so there are no labels. Press Preview to see why.";
+  } else {
+    status.textContent = "Read this folder — no files matched. Check the folder and the recipe.";
+  }
+}
+
+// Typing gets a debounce; a Browse… pick (which fires input AND change) reads
+// immediately, with the pending debounced read cancelled so the folder is
+// scanned once, not twice.
+const loadFromFolderDebounced = debounce(loadFromFolder, 500);
+$("#r-staging").addEventListener("input", loadFromFolderDebounced);
+$("#r-staging").addEventListener("change", () => {
+  loadFromFolderDebounced.cancel();
+  loadFromFolder();
+});
+$("#r-read-folder").addEventListener("click", () => {
+  loadFromFolderDebounced.cancel();
+  loadFromFolder();
+});
 
 function renderSummary(el, data) {
   // already-ingested (benign dedup) and dropped-on-error are NOW distinct — a
@@ -581,6 +577,14 @@ async function runnerPreview() {
       nas_root: nasRoot(),
     });
     lastRunnerCases = data.cases;
+    // Preview READS the folder too, so it must leave nothing stale — the
+    // operator's instinct ("Preview should fill everything in") is the right
+    // one. Free: /api/preview already returns cases[].discovered, so no second
+    // backend call. Only when it found cases: a preview with 0 new files says
+    // so in its own summary, and blanking the labels there would throw away
+    // good ones the operator is mid-way through using.
+    const disc = discoveredFromCases(data.cases);
+    if (disc.keys.length) applyRunnerDiscovered(disc.keys, disc.row);
     renderSummary($("#r-summary"), data);
     renderDropped($("#r-dropped"), data);
     if (data.blocking_errors && data.blocking_errors.length) {
@@ -842,7 +846,10 @@ function makeFilterBuilder(rowsSel, getKeys, onChange) {
     // filter shows its value but an EMPTY field, and is silently dropped on save
     // — the reason a template's group_code=MFB filter never reached the runner.
     if (selected && !opts.includes(selected)) opts.unshift(selected);
-    if (!opts.length) return '<option value="">(show metadata labels first)</option>';
+    // Says WHY it is empty and what to do — the old "(show metadata labels
+    // first)" pointed at a button the operator couldn't find. With the folder
+    // read automatically this should be rare.
+    if (!opts.length) return '<option value="">(no labels yet — pick a source folder)</option>';
     return '<option value="">— pick a metadata label —</option>' + opts.map((k) =>
       `<option value="${esc(k)}"${k === selected ? " selected" : ""}>${esc(tfHumanizeRef(k))}</option>`).join("");
   }
@@ -891,8 +898,14 @@ let builderLayout = null;
 function currentLevels() {
   return Math.max(0, parseInt($("#b-levels-count").value, 10) || 0);
 }
+// Trailing-edge debounce. `.cancel()` drops a pending call — used where a
+// change event follows an input event on the same action (a Browse… pick fires
+// both) and the work must happen once, immediately, not once more 500 ms later.
 function debounce(fn, ms) {
-  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+  let t;
+  const d = (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+  d.cancel = () => clearTimeout(t);
+  return d;
 }
 
 async function loadLayout() {
@@ -967,10 +980,17 @@ function renderFileExamples() {
     `<div class="muted">Example files split on "<code>${esc(sep)}</code>" — give one metadata label per chunk:</div>${rows}`;
 }
 
-$("#b-staging").addEventListener("change", loadLayout);
+// Picking / typing an example folder reads it: the layout tree AND the
+// discovered-labels grid, palette, filter dropdown and examples. (A Browse…
+// pick fires input AND change — cancel the pending debounce so it reads once.)
+$("#b-staging").addEventListener("input", () => readExampleFolderDebounced());
+$("#b-staging").addEventListener("change", () => {
+  readExampleFolderDebounced.cancel();
+  readExampleFolder();
+});
 $("#b-separator").addEventListener("input", () => { renderFileExamples(); renderOverrideJSON(); });
 $("#b-fields").addEventListener("input", renderOverrideJSON);
-bInstrument.addEventListener("change", () => { if ($("#b-staging").value.trim()) loadLayout(); });
+bInstrument.addEventListener("change", () => { if ($("#b-staging").value.trim()) readExampleFolder(); });
 
 // ---- assemble the override dict ----
 // STRUCTURAL keys (filter, filename_parse) are written EXPLICITLY — including an
@@ -1070,22 +1090,62 @@ function resolveExample(template, ctx, synth) {
   return { text: out, unresolved };
 }
 
-// ---- "Show the fields this produces" (section 1) ----
+// ---- "Read folder" (section 1) ----
+// The builder's half of the one-loader rule: reading the example folder
+// refreshes EVERY label-driven surface — the discovered grid, the chip palette,
+// the filter dropdown and the live examples. Runs on click, on its own when the
+// example folder or instrument changes, and (below) after "Preview".
+//
+// It reads DISCOVERED DATA ONLY. It must never seed field values from the
+// template: a fresh builder stays blank until the operator pulls a convention
+// in via "Load template defaults" or a saved recipe.
+function applyBuilderDiscovered(keys, row) {
+  builderKeys = keys || [];
+  builderDiscoveredRow = row || {};
+  // palette of friendly field chips + the full resolver token set; refresh
+  // dependent UIs. (Extras were 3 hard-coded tokens; now the whole documented
+  // resolver context, sourced from /api/link_tokens so it can't drift.)
+  renderPalette($("#b-palette"),
+    paletteEntries(builderKeys, LINK_TOKEN_EXTRAS),
+    builderFields["registry.sample_id"]);
+  $("#b-palette-hint").hidden = !builderKeys.length;
+  builderFilterUI.refresh();
+  updateBuilderExamples();
+}
+
+let builderReadSeq = 0;   // a slow earlier read must never overwrite a later one
+
 async function refreshGrid() {
+  const path = $("#b-staging").value.trim();
+  const status = $("#b-load-status");
+  if (!path) {
+    status.className = "muted selfend";
+    status.textContent = "Pick an example source folder above to see the labels.";
+    return;
+  }
+  const seq = ++builderReadSeq;
   $("#b-errors").textContent = "";
   $("#b-dropped").innerHTML = "";
   $("#b-grid-wrap").innerHTML = "Loading…";
+  status.className = "muted selfend";
+  status.textContent = "Reading the folder…";
   renderOverrideJSON();
   try {
     const data = await postJSON("/api/discovered", {
       instrument: bInstrument.value,
       overrides: builderOverrides(),
-      staging_path: $("#b-staging").value,
+      staging_path: path,
       nas_root: nasRoot(),
       limit: 25,
     });
-    builderKeys = data.keys || [];
-    builderDiscoveredRow = data.rows[0] ? data.rows[0].discovered : {};
+    if (seq !== builderReadSeq) return;   // a newer read already landed
+    applyBuilderDiscovered(data.keys || [],
+                           data.rows[0] ? data.rows[0].discovered : {});
+    // A structural config error yields no rows, no drops and no warnings —
+    // surface it rather than showing an unexplained empty grid.
+    if ((data.blocking_errors || []).length) {
+      $("#b-errors").textContent = data.blocking_errors.join("\n");
+    }
     renderDropped($("#b-dropped"), data);   // path-level / parse problems, up top
     if (!data.rows.length) {
       $("#b-grid-wrap").innerHTML =
@@ -1099,21 +1159,27 @@ async function refreshGrid() {
         "</tr>").join("");
       $("#b-grid-wrap").innerHTML = `<table>${head}${rows}</table>`;
     }
-    // palette of friendly field chips + the full resolver token set; refresh
-    // dependent UIs. (Extras were 3 hard-coded tokens; now the whole documented
-    // resolver context, sourced from /api/link_tokens so it can't drift.)
-    renderPalette($("#b-palette"),
-      paletteEntries(builderKeys, LINK_TOKEN_EXTRAS),
-      builderFields["registry.sample_id"]);
-    $("#b-palette-hint").hidden = !builderKeys.length;
-    builderFilterUI.refresh();
-    updateBuilderExamples();
+    const n = builderKeys.length;
+    status.textContent = n
+      ? `Read this folder — ${n} metadata label${n === 1 ? "" : "s"}.`
+      : "Read this folder — no metadata labels yet.";
   } catch (e) {
+    if (seq !== builderReadSeq) return;
+    // Quiet + non-blocking — this also fires unprompted, as the folder is typed.
     $("#b-grid-wrap").innerHTML = "";
     $("#b-errors").textContent = e.message;
+    status.textContent = "";
   }
 }
-$("#b-refresh-grid").addEventListener("click", refreshGrid);
+$("#b-refresh-grid").addEventListener("click", () => {
+  readExampleFolderDebounced.cancel();
+  refreshGrid();
+});
+
+// Choosing an example folder reads it — the operator's mental model is "I
+// picked the folder, so read it", and nothing here writes into their settings.
+function readExampleFolder() { loadLayout(); refreshGrid(); }
+const readExampleFolderDebounced = debounce(readExampleFolder, 500);
 
 // ---- load template defaults into the builder ----
 function setTF(key, val) {
@@ -1295,7 +1361,12 @@ async function builderPreview() {
       $("#b-errors").textContent = data.blocking_errors.join("\n");
     }
     $("#b-map-table-wrap").innerHTML = renderCasesTable(data.cases);
-    if (data.cases[0]) { builderDiscoveredRow = data.cases[0].discovered; updateBuilderExamples(); }
+    // Same rule as the runner: Preview reads the folder, so it leaves nothing
+    // stale — the palette, the filter dropdown and the examples all refresh
+    // from cases[].discovered, with no second backend call. Skipped when the
+    // preview found nothing, rather than blanking labels already in use.
+    const disc = discoveredFromCases(data.cases);
+    if (disc.keys.length) applyBuilderDiscovered(disc.keys, disc.row);
   } catch (e) {
     $("#b-map-table-wrap").innerHTML = "";
     $("#b-errors").textContent = e.message;
