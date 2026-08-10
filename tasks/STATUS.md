@@ -89,7 +89,8 @@ The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
 - **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ LANDED
-  on `feat/gui-browse-sort-and-reload` (2026-08-10); exe rebuilt + redeployed.**
+  on `feat/gui-browse-sort-and-reload` (2026-08-10); exe rebuilt + REDEPLOYED to the
+  NAS + validated through the deployed exe. Branch not yet merged to `main`.**
   Two usability complaints from the microscopy operator, both in the shared GUI layer,
   so **both pages** are fixed. **(A)** The Browse… list has a clickable `Name ▲/▼`
   header — day folders are named by date, so `▼` is newest-first; folders stay above
