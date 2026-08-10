@@ -207,7 +207,10 @@ Windows alternative to `mri-ingest`).
    - Use the folder box to point at your day/batch folder. In the **Browse…**
      window, click the **Name ▲** heading to reverse the order — day folders are
      named by date, so **Name ▼** puts today's at the top; the choice is
-     remembered. Picking a folder **reads it straight away**: the metadata labels
+     remembered. Browse… also **reopens in the folder you used last** (per box,
+     and across restarts), so getting to today's folder is ↑ Up and one click;
+     if that folder has since gone, it quietly starts from home instead.
+     Picking a folder **reads it straight away**: the metadata labels
      appear in every box below and a line under the folder says what was found.
      **Read folder** re-reads it if that ever looks stale.
    - **Researcher** — type who *set up the experiment* (goes in the registry

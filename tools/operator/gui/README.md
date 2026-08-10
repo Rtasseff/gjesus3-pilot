@@ -188,10 +188,23 @@ is a page-killing `SyntaxError`.
 `folder_browser.js` is the Browse… modal, factored out of the two near-verbatim
 copies in `app.js`/`mri.js` (2026-08-10). Its **markup** is still duplicated in
 `templates/index.html` and `templates/mri.html` — same ids in both; change one,
-change the other. Its `Name ▲/▼` header re-fetches with `desc` rather than
-reversing the received list, because `/api/listdir` truncates at 3000 entries
-*after* it sorts — a client-side reverse would silently show the wrong end of a
-large folder. The choice is remembered in `localStorage`.
+change the other. Two behaviours worth knowing:
+
+- **Sort.** The `Name ▲/▼` header re-fetches with `desc` rather than reversing
+  the received list, because `/api/listdir` truncates at 3000 entries *after* it
+  sorts — a client-side reverse would silently show the wrong end of a large
+  folder.
+- **Where it opens.** In order: the target box's own value → the folder that
+  button was last left in → the home folder. The last folder is remembered **per
+  target** (`{inputId: path}`), because one modal serves the source folder, the
+  RDM System root, the recipes folder and the MRI staging folder. A remembered
+  folder that no longer resolves falls back to home **silently** and is
+  forgotten (`fbLoad(path, {remembered: true})`) — a stale memory is not the
+  operator's mistake; a path they *typed* still errors normally.
+
+Both preferences live in `localStorage` (`gj3.folderBrowser.sortDesc`,
+`gj3.folderBrowser.lastDir`), every access wrapped — a browser that blocks it
+just loses the memory, it never breaks the browser.
 
 The spec bundles `static/` as a whole directory, so a new file here needs no
 `gjesus3_ingest.spec` edit — but verify through the frozen exe anyway.

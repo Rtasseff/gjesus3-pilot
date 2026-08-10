@@ -21,6 +21,13 @@
  * choice sticks for the session and, when the browser allows it, across
  * restarts of the app (localStorage) — so it is a click once, not once a day.
  *
+ * WHERE IT OPENS. In order: the target box's own value; else the folder that
+ * button was last left in (remembered per target, across restarts); else the
+ * home folder. Operators click down the same tree every morning, so reopening
+ * there is the difference between one click and five. A remembered folder that
+ * has since gone away falls back to home SILENTLY and is forgotten — a stale
+ * memory is not the operator's mistake and must not look like an error.
+ *
  * Exposes: window.browseInto. Deliberately declares NOTHING in global scope
  * beyond that — app.js and mri.js already define $, esc, postJSON there.
  */
@@ -45,13 +52,43 @@
     return data;
   }
 
-  // ---- sort order (persisted best-effort; a blocked localStorage is fine) ----
+  // ---- persisted preferences (best-effort; a blocked localStorage is fine) ----
   const SORT_KEY = "gj3.folderBrowser.sortDesc";
+  const LASTDIR_KEY = "gj3.folderBrowser.lastDir";
+
   function loadSortDesc() {
     try { return window.localStorage.getItem(SORT_KEY) === "1"; } catch (e) { return false; }
   }
   function saveSortDesc(v) {
     try { window.localStorage.setItem(SORT_KEY, v ? "1" : "0"); } catch (e) { /* ignore */ }
+  }
+
+  // Last folder each Browse… button was left in, remembered PER TARGET
+  // (`{inputId: path}`). Per-target matters: the same modal serves the source
+  // folder, the RDM System root, the recipes folder and the MRI staging folder,
+  // and one shared memory would send an operator browsing for a day folder to
+  // whichever of those they last looked at.
+  function loadLastDirs() {
+    try { return JSON.parse(window.localStorage.getItem(LASTDIR_KEY) || "{}") || {}; }
+    catch (e) { return {}; }
+  }
+  function targetKey() {
+    return (fb.target && fb.target.id) || "_";
+  }
+  function rememberDir(key, path) {
+    if (!key || !path) return;
+    try {
+      const all = loadLastDirs();
+      all[key] = path;
+      window.localStorage.setItem(LASTDIR_KEY, JSON.stringify(all));
+    } catch (e) { /* ignore */ }
+  }
+  function forgetDir(key) {
+    try {
+      const all = loadLastDirs();
+      delete all[key];
+      window.localStorage.setItem(LASTDIR_KEY, JSON.stringify(all));
+    } catch (e) { /* ignore */ }
   }
 
   const fb = {
@@ -70,7 +107,18 @@
     fb.title.textContent = title || "Select a folder";
     fb.err.textContent = "";
     fb.overlay.hidden = false;
-    fbLoad(input.value.trim() || "");
+    // Where to open. The box's own value wins — it is the most specific thing
+    // the operator has said. Otherwise reopen where this button was last left,
+    // which across app restarts saves re-clicking down the same tree every
+    // morning. Falling through to "" lets the backend pick the home folder.
+    const own = input.value.trim();
+    if (own) { fbLoad(own); return; }
+    const remembered = loadLastDirs()[targetKey()];
+    // `remembered: true` — a folder that has since been moved, renamed or
+    // unmounted must NOT greet the operator with an error; it silently drops
+    // back to the home folder and the stale memory is discarded.
+    if (remembered) fbLoad(remembered, { remembered: true });
+    else fbLoad("");
   }
 
   function joinPath(base, name) {
@@ -89,7 +137,11 @@
     }
   }
 
-  async function fbLoad(path) {
+  async function fbLoad(path, opts) {
+    const remembered = !!(opts && opts.remembered);
+    // Pin the target NOW: closing the modal mid-load nulls fb.target, and the
+    // memory must land under the button that asked for this listing.
+    const key = targetKey();
     fb.err.textContent = "";
     fb.list.innerHTML = "<div class='fb-empty'>Loading…</div>";
     renderSortHeader();
@@ -98,6 +150,7 @@
       data = await listdir(path, fb.sortDesc);
     } catch (e) {
       fb.list.innerHTML = "";
+      if (remembered) { forgetDir(key); fbLoad(""); return; }   // stale memory: just go home
       fb.err.textContent = e.message;
       return;
     }
@@ -129,7 +182,16 @@
       el.addEventListener("click", () =>
         fbLoad(el.dataset.path || joinPath(fb.cur, el.dataset.name)));
     });
-    if (data.error) fb.err.textContent = data.error;
+    if (data.error) {
+      // A missing folder is answered with the home folder AND an error string.
+      // For a remembered path that is not the operator's mistake — drop the
+      // stale memory and show the home folder without an alarming message.
+      if (remembered) forgetDir(key);
+      else fb.err.textContent = data.error;
+    } else {
+      // Reopen here next time this button is used.
+      rememberDir(key, data.path);
+    }
   }
 
   function fbClose() { fb.overlay.hidden = true; fb.target = null; fb.onPick = null; }
