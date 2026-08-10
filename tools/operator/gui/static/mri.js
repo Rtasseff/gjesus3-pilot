@@ -28,7 +28,16 @@ async function postJSON(url, body) {
   });
   let data = null;
   try { data = await r.json(); } catch (e) { /* non-json */ }
-  if (!r.ok) throw new Error((data && data.error) || `HTTP ${r.status}`);
+  if (!r.ok) {
+    // Kept identical to app.js's copy on purpose: status + body ride along on
+    // the Error so a caller can act on a structured refusal. No endpoint this
+    // page calls needs it today (recipes are microscopy-only) — the two copies
+    // are mirrored so neither becomes the odd one out.
+    const err = new Error((data && data.error) || `HTTP ${r.status}`);
+    err.status = r.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -61,82 +70,9 @@ $("#nas-save").addEventListener("click", saveNas);
 nasInput.addEventListener("keydown", (e) => { if (e.key === "Enter") saveNas(); });
 
 // ---------------------------------------------------------------- folder browser
-// Same component as the microscopy page (app.js): a modal over /api/listdir
-// that shows folders + greyed files so the operator confirms the right place.
-const fb = {
-  overlay: $("#fb-overlay"), list: $("#fb-list"), pathInp: $("#fb-path"),
-  drives: $("#fb-drives"), err: $("#fb-error"), title: $("#fb-title"),
-  target: null, cur: "", parent: null, onPick: null,
-};
-
-function browseInto(input, title, onPick) {
-  if (!input) return;
-  fb.target = input;
-  fb.onPick = onPick || null;
-  fb.title.textContent = title || "Select a folder";
-  fb.err.textContent = "";
-  fb.overlay.hidden = false;
-  fbLoad(input.value.trim() || "");
-}
-function joinPath(base, name) {
-  if (!base) return name;
-  const sep = base.includes("\\") ? "\\" : "/";
-  return base.replace(/[\\/]+$/, "") + sep + name;
-}
-async function fbLoad(path) {
-  fb.err.textContent = "";
-  fb.list.innerHTML = "<div class='fb-empty'>Loading…</div>";
-  let data;
-  try { data = await postJSON("/api/listdir", { path }); }
-  catch (e) { fb.list.innerHTML = ""; fb.err.textContent = e.message; return; }
-  fb.cur = data.path;
-  fb.parent = data.parent || null;
-  fb.pathInp.value = data.path;
-  $("#fb-up").disabled = !fb.parent;
-
-  fb.drives.innerHTML = (data.drives || []).map((d) =>
-    `<span class="fb-drive" data-path="${esc(d)}">${esc(d)}</span>`).join("");
-  $$("#fb-drives .fb-drive").forEach((el) =>
-    el.addEventListener("click", () => fbLoad(el.dataset.path)));
-
-  const items = [];
-  if (fb.parent) {
-    items.push(`<div class="fb-item dir" data-path="${esc(fb.parent)}"><span class="ic">↑</span><span>.. (up)</span></div>`);
-  }
-  (data.entries || []).forEach((e) => {
-    if (e.is_dir) {
-      items.push(`<div class="fb-item dir" data-name="${esc(e.name)}"><span class="ic">📁</span><span>${esc(e.name)}</span></div>`);
-    } else {
-      items.push(`<div class="fb-item file"><span class="ic">📄</span><span>${esc(e.name)}</span></div>`);
-    }
-  });
-  fb.list.innerHTML = items.length ? items.join("") : "<div class='fb-empty'>(empty folder)</div>";
-  if (data.truncated) fb.list.insertAdjacentHTML("beforeend", "<div class='fb-empty'>…list truncated (very large folder).</div>");
-
-  $$("#fb-list .fb-item.dir").forEach((el) => {
-    el.addEventListener("click", () =>
-      fbLoad(el.dataset.path || joinPath(fb.cur, el.dataset.name)));
-  });
-  if (data.error) fb.err.textContent = data.error;
-}
-function fbClose() { fb.overlay.hidden = true; fb.target = null; fb.onPick = null; }
-function fbSelect() {
-  const chosen = fb.cur, input = fb.target, cb = fb.onPick;
-  fbClose();
-  if (input) {
-    input.value = chosen;
-    input.dispatchEvent(new Event("input"));
-    input.dispatchEvent(new Event("change"));
-  }
-  if (cb) cb(chosen);
-}
-$("#fb-up").addEventListener("click", () => { if (fb.parent) fbLoad(fb.parent); });
-$("#fb-go").addEventListener("click", () => fbLoad(fb.pathInp.value.trim()));
-fb.pathInp.addEventListener("keydown", (e) => { if (e.key === "Enter") fbLoad(fb.pathInp.value.trim()); });
-$("#fb-select").addEventListener("click", fbSelect);
-$("#fb-close").addEventListener("click", fbClose);
-$("#fb-cancel").addEventListener("click", fbClose);
-fb.overlay.addEventListener("click", (e) => { if (e.target === fb.overlay) fbClose(); });
+// The modal itself (list, navigation, reversible name order) is the SHARED
+// component in static/folder_browser.js, loaded by both pages; it exposes
+// browseInto(input, title, onPick). This page only wires its own buttons to it.
 $("#nas-browse").addEventListener("click", () =>
   browseInto(nasInput, "Select the destination — the RDM System root (gjesus3-data)", () => saveNas()));
 

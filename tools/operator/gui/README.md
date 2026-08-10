@@ -1,6 +1,6 @@
 # Ingest GUI (`gjesus3_ingest.exe`) — microscopy + MRI
 
-*Last Updated: 2026-06-26*
+*Last Updated: 2026-08-10*
 
 A local Flask web-app that lets an operator run the validated ingest pipeline
 from the browser — no hand-written YAML. It is a **thin front-end** over the
@@ -17,13 +17,32 @@ Phase 4 of [`tasks/archive/operator_ingest_tooling_plan.md`](../../../tasks/arch
 > [`tools/OPERATOR_FAQ.md`](../../OPERATOR_FAQ.md). This page is the developer /
 > data-office reference (architecture, freezing, the core endpoint map).
 
+## Two verbs
+
+Everything an operator presses is one of two things, and both pages use the
+same word for each (2026-08-10 — before that there were five differently-worded
+buttons for what is really these two actions, and operators couldn't tell them
+apart):
+
+- **Read folder** — read the source/example folder's `discovered.*` metadata
+  labels and refresh EVERY surface that depends on them: both chip palettes,
+  the filter dropdown, and the live "→ example" lines. One function,
+  `loadFromFolder()` (runner) / `refreshGrid()` (builder), one
+  `POST /api/discovered`. **It also runs on its own** when a folder is picked or
+  typed, so in the normal case nobody has to press it — the button is the retry.
+  It reads discovered data only; it never seeds field values from the template.
+- **Preview** — show the resulting read-only table. Preview *also* refreshes the
+  label surfaces, from the `cases[].discovered` its own response already
+  carries (no second call), so pressing it can never leave anything stale.
+
 ## Two paths
 
 - **Run a recipe** (the common case): pick instrument → pick a saved recipe
-  (from `tools/operator/recipes/`) → point at the day/batch folder → **Preview**
-  (a read-only "what will happen" table: acq_id, project, link name, resolved
-  registry row, *X new / Y already-ingested*, warnings) → **Ingest** with a live
-  streaming log. A *Dry-run* checkbox (default on) writes nothing.
+  (from `tools/operator/recipes/`) → point at the day/batch folder (its labels
+  load by themselves) → **Preview** (a read-only "what will happen" table:
+  acq_id, project, link name, resolved registry row, *X new / Y
+  already-ingested*, warnings) → **Ingest** with a live streaming log. A
+  *Dry-run* checkbox (default on) writes nothing.
   - **Dry-run default (testing period).** Dry-run defaults **ON** so operators
     learn the tool with no risk of an accidental write; a high-contrast banner
     shows while it is on, and a dry run ends with a clear "NOTHING was written"
@@ -142,14 +161,71 @@ first. Verify the frozen exe by previewing **and** dry-run-ingesting a real
 | `GET /api/template` | `templates.load_template` (returns `auto_discover`/`registry`/`link_filename`/`ingest` defaults + the `condition` block if any — the runner gates the Study-metadata panel on it) | no |
 | `GET/POST /api/nas_root` | `env.is_valid_nas_root` | NAS-root state file only |
 | `POST /api/preview` | `scope.resolve_scope` → `config_builder.build_config` → `preview.preview_batch` | no |
-| `POST /api/discovered` | same, returns the `discovered.*` grid | no |
-| `POST /api/save_recipe` | writes a JSON recipe into `recipes_dir()` | recipe file only |
+| `POST /api/discovered` | same, returns the `discovered.*` grid (+ `blocking_errors`, so an auto-read that finds nothing can say why) | no |
+| `POST /api/listdir` | `os.scandir` for the folder-browser modal; `desc` flips the name order **before** the 3000-entry cap | no |
+| `POST /api/save_recipe` | writes a YAML recipe into `recipes_dir()`; refuses an existing filename with **409 + `{exists, file}`** unless `overwrite: true` | recipe file only |
 | `POST /api/ingest` | `runner.run` (SSE-streamed log) | **yes — the real ingest** |
 
 The operator's folder pick (`scope.resolve_scope`) always sets
 `auto_discover.staging_dir`; the recipe/builder overrides supply everything
 else. `copy_strategy` / `acquisition_layout` stay template-locked
 (`config_builder` rejects any attempt to override them).
+
+## Shared front-end files (`static/`)
+
+Both pages are plain classic scripts sharing one global scope, so a shared file
+must expose itself on `window` and declare nothing else globally — `app.js` and
+`mri.js` already define `$`, `$$`, `esc`, `postJSON` there, and a redeclaration
+is a page-killing `SyntaxError`.
+
+| file | exposes | loaded by |
+|---|---|---|
+| `tokenfield.js` | `TokenField`, `renderPalette`, `paletteEntries`, `tfHumanizeRef` | both |
+| `completion_modal.js` | `showCompletionModal` | both |
+| `folder_browser.js` | `browseInto` | both |
+| `app.js` / `mri.js` | the page itself | one each |
+
+`folder_browser.js` is the Browse… modal, factored out of the two near-verbatim
+copies in `app.js`/`mri.js` (2026-08-10). Its **markup** is still duplicated in
+`templates/index.html` and `templates/mri.html` — same ids in both; change one,
+change the other. Two behaviours worth knowing:
+
+- **Sort.** The `Name ▲/▼` header re-fetches with `desc` rather than reversing
+  the received list, because `/api/listdir` truncates at 3000 entries *after* it
+  sorts — a client-side reverse would silently show the wrong end of a large
+  folder.
+- **Where it opens.** In order: the target box's own value → the folder that
+  button was last left in → the home folder. The last folder is remembered **per
+  target** (`{inputId: path}`), because one modal serves the source folder, the
+  RDM System root, the recipes folder and the MRI staging folder. A remembered
+  folder that no longer resolves falls back to home **silently** and is
+  forgotten (`fbLoad(path, {remembered: true})`) — a stale memory is not the
+  operator's mistake; a path they *typed* still errors normally.
+
+Both preferences live in `localStorage` (`gj3.folderBrowser.sortDesc`,
+`gj3.folderBrowser.lastDir`), every access wrapped — a browser that blocks it
+just loses the memory, it never breaks the browser.
+
+### `postJSON` carries the refusal, not only its text
+
+`postJSON()` (both copies) attaches `status` and the parsed body to the thrown
+`Error`. Some refusals are things the caller must **act on**, not merely print:
+`/api/save_recipe` answers a name collision with `409 + {exists, file}` so the
+save handler can offer to replace. Keep the two copies identical even though the
+MRI page has no endpoint that needs it — the point is that neither becomes the
+odd one out. Every existing `catch (e) { … e.message }` is unaffected.
+
+**Replacing a recipe** (`#b-save`): first attempt without `overwrite`; on
+`409 + exists`, a `window.confirm` naming **the file** (not the typed name —
+`"Study A"` and `"Study/A"` both sanitise to `study_a.yaml`), then the identical
+body resent with `overwrite: true`, reported as *Replaced* rather than *Saved*.
+The confirm says the replaced version is **not kept** (a deliberate 2026-08-10
+call — no `.bak`), and warns that the recipe is **shared on the RDM System** when
+`recipes_dir()` is the default; if the operator has pointed it somewhere else it
+names that folder instead.
+
+The spec bundles `static/` as a whole directory, so a new file here needs no
+`gjesus3_ingest.spec` edit — but verify through the frozen exe anyway.
 
 ## Import-collision note
 

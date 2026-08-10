@@ -528,12 +528,20 @@ def api_listdir():
     returns the folder's subfolders AND files (files are shown greyed, for
     context only), plus the parent + drive list to navigate. Local app, so
     listing the local filesystem is fine.
+
+    `desc` flips the name order (Z->A). Instrument source folders are named by
+    date (…/AxioScan/20260522), so reverse-name IS newest-first — the same
+    reasoning as the SFTP exam list below. The sort is done HERE, before the
+    _BROWSE_LIMIT cap, so a reversed view of a huge folder shows its true LAST
+    entries; reversing the truncated list in the browser would silently show the
+    wrong end.
     """
     data = request.get_json(silent=True) or {}
     raw = (data.get("path") or "").strip()
+    desc = bool(data.get("desc"))
     path = os.path.abspath(raw) if raw else os.path.expanduser("~")
 
-    out = {"path": path, "parent": None, "entries": [],
+    out = {"path": path, "parent": None, "entries": [], "desc": desc,
            "drives": _list_drives(), "error": None, "truncated": False}
 
     if not os.path.isdir(path):
@@ -555,8 +563,11 @@ def api_listdir():
                 except OSError:
                     is_dir = False
                 entries.append({"name": e.name, "is_dir": is_dir})
-        # folders first, then files; case-insensitive name order
-        entries.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+        # Case-insensitive name order (flipped by `desc`), then a STABLE pass
+        # that lifts folders above files — so the grouping never flips, only the
+        # name order does.
+        entries.sort(key=lambda x: x["name"].lower(), reverse=desc)
+        entries.sort(key=lambda x: not x["is_dir"])
         if len(entries) > _BROWSE_LIMIT:
             out["truncated"] = True
             entries = entries[:_BROWSE_LIMIT]
@@ -805,6 +816,12 @@ def api_discovered():
         "n_already_ingested": result.n_already_ingested,
         "n_dropped": result.n_dropped,
         "dropped": result.dropped,
+        # A structural config error (e.g. a recipe naming a retired registry
+        # column) makes expand_batch return NOTHING, with no dropped rows and no
+        # warnings. /api/preview has always reported that; this endpoint used to
+        # swallow it, which since the labels are now read automatically would
+        # leave the operator staring at an empty palette with no reason given.
+        "blocking_errors": result.blocking_errors,
         "keys": seen_keys,
         "rows": rows,
         "warnings": result.warnings,

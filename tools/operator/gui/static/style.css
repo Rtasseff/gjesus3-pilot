@@ -173,6 +173,16 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
 .fb-drive { font: 12px ui-monospace, Consolas, monospace; padding: .15rem .5rem;
   border: 1px solid var(--border); border-radius: 5px; background: #f1f5f9; cursor: pointer; }
 .fb-drive:hover { background: #e2e8f0; }
+/* Column-header strip above the list — the Explorer idiom operators asked for:
+   click "Name" to reverse the order (folders always stay on top). */
+.fb-sortbar { display: flex; align-items: center; gap: .6rem; margin: 0 .9rem;
+  padding: .1rem 0; }
+.fb-sort { border: none; background: none; cursor: pointer; font: inherit;
+  font-size: .82rem; font-weight: 600; color: var(--ink);
+  padding: .25rem .45rem; border-radius: 5px; }
+.fb-sort:hover { background: #eff6ff; }
+.fb-sort .fb-arrow { color: var(--muted); font-size: .78rem; }
+.fb-sortbar .muted { font-size: .75rem; }
 .fb-list { flex: 1; overflow: auto; border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border); margin: 0 .9rem; }
 .fb-item { display: flex; align-items: center; gap: .5rem; padding: .3rem .4rem;

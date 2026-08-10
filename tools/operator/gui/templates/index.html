@@ -57,14 +57,22 @@
       </label>
     </div>
     <p id="r-recipe-desc" class="muted"></p>
+    <!-- Source folder + the TWO verbs, in one place: "Read folder" reads the
+         folder's metadata labels into every box below (it also runs on its own
+         as soon as a folder is picked — this button is the retry / refresh),
+         and "Preview" shows what would be ingested. Before 2026-08-10 the read
+         was two identically-labelled buttons buried in collapsed <details>,
+         which is why operators couldn't tell what to press. -->
     <div class="row">
       <label class="grow">Source folder <span class="muted">— the instrument day/batch folder to upload files from</span>
         <input id="r-staging" type="text"
                placeholder="S:\goptical\GOpticalUsers data\AxioScan\20260522">
       </label>
       <button id="r-browse" type="button" class="browse">Browse…</button>
+      <button id="r-read-folder" type="button" title="Re-read this folder's metadata labels">Read folder</button>
       <button id="r-preview" type="button" class="primary">Preview</button>
     </div>
+    <p id="r-load-status" class="muted"></p>
 
     <!-- Value fields the chosen recipe leaves blank are "pushed" here to fill per
          batch (★ ones are required, the rest optional). The runner asks
@@ -77,10 +85,10 @@
       <div id="r-gaps-grid" class="reqgrid"></div>
       <details>
         <summary>Use a metadata label value from the CZI name / folders</summary>
-        <p class="muted">Click or drag a metadata label into a box above; it resolves per file at ingest. Set the folder + RDM System root, then show them.</p>
-        <div class="row">
-          <button id="r-gaps-load" type="button">Show metadata labels from the folder</button>
-        </div>
+        <p class="muted">Click or drag a metadata label into a box above; it
+          resolves per file at ingest. The labels are read from the source
+          folder automatically — press <strong>Read folder</strong> at the top
+          to re-read it.</p>
         <div id="r-gaps-palette" class="palette"></div>
       </details>
     </fieldset>
@@ -95,7 +103,7 @@
       <legend>Filter <span class="muted">— only ingest files that match (optional)</span></legend>
       <div id="r-filter-recipe" class="muted" hidden></div>
       <div id="r-filter-edit">
-        <p class="muted">Add label = value conditions to NARROW this batch further (e.g. one group); any filter already in effect is shown above and always applies. Click "Show metadata labels from the folder" above to fill the label list.</p>
+        <p class="muted">Add label = value conditions to NARROW this batch further (e.g. one group); any filter already in effect is shown above and always applies. The label list fills in from the source folder — press <strong>Read folder</strong> at the top if it looks empty or out of date.</p>
         <div id="r-filter-rows"></div>
         <button id="r-filter-add" type="button">+ Add condition</button>
       </div>
@@ -127,10 +135,9 @@
       <details>
         <summary>Use a metadata label value from the CZI name / folders</summary>
         <p class="muted">Click or drag a metadata label into a box above; it
-          resolves per file at ingest. Set the folder + RDM System root, then show them.</p>
-        <div class="row">
-          <button id="r-meta-load-fields" type="button">Show metadata labels from the folder</button>
-        </div>
+          resolves per file at ingest. The labels are read from the source
+          folder automatically — press <strong>Read folder</strong> at the top
+          to re-read it.</p>
         <div id="r-meta-chips" class="palette"></div>
       </details>
     </fieldset>
@@ -225,8 +232,12 @@
       </div>
       <div id="b-file-examples" class="fileex"></div>
 
+      <!-- Same verb as the runner: "Read folder" reads the example folder with
+           the rules above and shows the labels they produce. It also runs on
+           its own when the example folder changes. -->
       <div class="row">
-        <button id="b-refresh-grid" type="button" class="primary">Show the metadata labels this produces</button>
+        <button id="b-refresh-grid" type="button" class="primary">Read folder</button>
+        <span id="b-load-status" class="muted selfend"></span>
       </div>
       <div id="b-errors" class="errbox"></div>
       <div id="b-dropped" class="dropbox"></div>
@@ -250,7 +261,7 @@
       <div id="b-required" class="reqgrid"></div>
       <label class="check"><input id="b-auto-create" type="checkbox" checked> Auto-create the project if a project of that name doesn't exist yet</label>
       <div class="row">
-        <button id="b-preview" type="button" class="primary">Preview example</button>
+        <button id="b-preview" type="button" class="primary">Preview</button>
       </div>
       <div id="b-map-summary" class="summary"></div>
       <div id="b-map-dropped" class="dropbox"></div>
@@ -279,7 +290,8 @@
 
   <!-- In-page folder browser (the Browse… buttons). Shows folders AND files
        (files greyed, for context) so operators can see they're in the right
-       place, then click "Use this folder". -->
+       place, then click "Use this folder". Markup is duplicated in mri.html
+       (same ids); the behaviour is the shared static/folder_browser.js. -->
   <div id="fb-overlay" class="fb-overlay" hidden>
     <div class="fb-modal">
       <header class="fb-head">
@@ -293,6 +305,14 @@
         <button id="fb-go" type="button">Go</button>
       </div>
       <div id="fb-drives" class="fb-drives"></div>
+      <!-- Column-header strip: click to reverse the name order (folders always
+           stay on top). Day/batch folders are named by date, so Z→A is
+           newest-first. Handled by static/folder_browser.js, which re-fetches
+           so the >3000-entry cap always trims the far end. -->
+      <div class="fb-sortbar">
+        <button id="fb-sort" type="button" class="fb-sort">Name <span id="fb-sort-arrow" class="fb-arrow">▲</span></button>
+        <span class="muted">click to reverse — newest first for date-named folders</span>
+      </div>
       <div id="fb-list" class="fb-list"></div>
       <div id="fb-error" class="errbox"></div>
       <footer class="fb-foot">
@@ -322,6 +342,7 @@
   <script>window.SAMPLE_TYPES = {{ sample_types|tojson }};</script>
   <script src="{{ url_for('static', filename='tokenfield.js') }}"></script>
   <script src="{{ url_for('static', filename='completion_modal.js') }}"></script>
+  <script src="{{ url_for('static', filename='folder_browser.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
