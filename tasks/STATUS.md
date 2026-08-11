@@ -88,6 +88,27 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **Project Manager GUI — 🔶 SCOPED, NOT BUILT (2026-08-11). Branch
+  `feat/project-manager-gui`, worktree `gjesus3-dev\project-manager-gui`.** A
+  researcher-facing counterpart to the operator ingest tools: list projects from
+  `registry_projects.csv`, edit `description` / `owner` / `status` / `notes`, create a
+  project (folder + registry row), and **import data into a project** — from `/raw/`
+  (tick acquisitions → hard links + provenance, the existing linker, no parallel path) or
+  from local/mounted storage (folder browser → copy → provenance). Also introduces the
+  recommended project subfolders **`working/` · `outputs/` · `metadata/` · `raw_linked/`**,
+  auto-created on new projects and backfilled onto the 49 existing ones (**0 have them
+  today**). Full scoping, live-state survey and the four decisions to settle first are in
+  [`../tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md`](../tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md)
+  on that branch. **Three things it changes that are worth knowing before it lands:** it
+  answers the *"Select-in-Finder → assemble a project"* backlog item (a served page can do
+  what a `file://` page can't); it makes acquisitions in **more than one project** routine,
+  which `registry_raw.project_id` cannot represent (single-valued — the extra association
+  goes in `notes` + provenance, strengthening the case for the provenance-driven project
+  index); and self-service project creation **contradicts**
+  [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md) §4, which currently says projects are
+  created centrally — a policy call for the Data Office, flagged in the handoff. Project
+  **rename** and the meaning of **`status = closed`** are deliberately out of scope and
+  now in [`BACKLOG.md`](BACKLOG.md) (low / medium).
 - **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ DONE
   (2026-08-10); exe rebuilt + REDEPLOYED to the NAS + validated through the deployed
   exe. Merged to `main` (`a679e6a`, `--no-ff`) and pushed; branch + worktree deleted.**

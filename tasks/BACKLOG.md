@@ -431,6 +431,52 @@ it from the **project's own provenance file** instead of the registry. Raised by
     "select-in-Finder → assemble a project" item above should *write* into this same
     provenance-driven model.
 
+## Project Manager GUI — deferred scope (2026-08-11)
+
+Context: the **Project Manager GUI** (branch `feat/project-manager-gui`; scoping in
+`tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md`) gives researchers a front-end to edit
+project fields, create projects, and import data into them. Two capabilities were
+**deliberately left out** of that tool and parked here.
+
+- [ ] **🔽 LOW — Rename a project.** The GUI can edit `description` / `owner` / `status` /
+  `notes`, but **not `name`**, because since 2026-08-02 the project's `name` **is its
+  folder name, verbatim** (see [`05_PROJECTS §2a`](../mfb-rdm-docs/05_PROJECTS.md) —
+  ✅ DECIDED). A rename is therefore not a cell edit; it is a migration touching at least:
+  the folder on the NAS; `registry_projects.csv` (`name` **and** `folder_location`);
+  every `registry_raw.csv` row whose `project_id` points at it (the id is stable, so this
+  may be zero work — confirm); the project's `provenance.csv` (`output_path` values are
+  project-relative, so probably safe — confirm); the per-project `index.html`; and any
+  `.lnk` / documentation referencing the old path. Hard links themselves survive a parent
+  rename (they are directory entries, not paths), so `raw_linked/` should be fine — but
+  that must be **verified on the live SMB share**, not assumed. There is a precedent to
+  copy: `tools/migrate_project_naming.py` renamed 48 folders during the 2026-08-02 cut.
+  *Why low:* renames are rare, the Data Office can do one by hand with that script, and a
+  half-correct self-service rename is far worse than no rename.
+
+- [ ] **🔸 MEDIUM — Define what `status = closed` actually does.** The GUI exposes a status
+  dropdown (`active` / `paused` / `closed` per the
+  [`05_PROJECTS §4`](../mfb-rdm-docs/05_PROJECTS.md) lifecycle), but today setting
+  `closed` **only changes a string in the registry** — nothing else happens. That is a gap
+  with real consequences, because §4.x and §5 already say deletion is **blocked** until
+  close-out preserves study-level metadata into `/raw/`, and §5 is ✅ DECIDED. Open
+  questions, all needing a Data Office answer before anything is built:
+  - Does closing **freeze** the project (read-only ACLs, no further imports), or is it
+    just a label? A student flipping a dropdown should probably not be able to freeze a
+    shared folder.
+  - What does closing do about the **close-out preservation step** (§4.x) — block the
+    status change until it has run, warn, or queue the project for the Data Mgmt Lead?
+    The close-out tool itself does not exist yet.
+  - Is `closed` reversible in the GUI, or one-way once close-out has run?
+  - Should closing set a `closed_date` / `outcome`? `_project.yaml` already has both
+    fields (`closed_date`, `outcome`, `promoted_to`); `registry_projects.csv` has
+    **neither** — so recording them means either a projects-registry schema change or
+    accepting that the YAML is the only home.
+  - **Live precedent to respect:** 8 projects are already `closed`, and 3 of them
+    (`PROJ-0003`, `PROJ-0008`, `PROJ-0009`) have had their folders **deleted** — closed
+    with no folder is a normal end state, and any tooling must not treat it as corruption.
+  *Why medium:* the dropdown ships before this is answered, so the gap is live the moment
+  the tool is in researchers' hands.
+
 ## True-production restart — subsystem review (correction pass 2026-06-11)
 
 - [ ] **Review which pilot subsystems carry forward vs. are replaced by
