@@ -431,6 +431,37 @@ it from the **project's own provenance file** instead of the registry. Raised by
     "select-in-Finder → assemble a project" item above should *write* into this same
     provenance-driven model.
 
+## Server-era identity — logged-in user drives ownership + edit rights (2026-08-11)
+
+Context: a **dedicated RDM server for gjesus3 is expected in ~2 months (≈ Oct 2026)**. All
+the tool code goes live there and the current per-tool `.exe`s are **redesigned as one web
+app** — the ingest front-ends and the Project Manager GUI stop being separate downloads.
+Until then, tools are built to be *as similar as possible* so combining them later is
+cheap (see `tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md` §2.1).
+
+The single capability the exe era cannot have: **an exe on a shared workstation does not
+know who is sitting at it.** A server does.
+
+- [ ] **Use the logged-in user for project ownership and edit rights.** Once there is a
+  server with real sessions:
+  - **`owner` on create becomes automatic** — stamped from the logged-in user instead of
+    typed by hand. (Today it is free text, and the live registry shows the cost: `jguser`
+    and `Jguser` are the same person recorded two ways, alongside `NMR-platform`,
+    `NI-platform`, `MBC`, `AUA`, `zeiss` — a mix of people, platforms and accounts in one
+    column.) Keep `owner` an ordinary editable field until then, so this needs no
+    migration — just a better default.
+  - **Who may edit which project** becomes checkable: owner (and the Data Office) can edit;
+    others read. Today the Project Manager GUI can only offer *"anyone with access may
+    edit anything"*, which is acceptable for a small trusted group and will not scale.
+  - **Provenance `creator` stops being a prompt.** Every import currently has to *ask* who
+    is doing it (handoff §4.3); with a session it is known. This is the field most likely
+    to be filled in carelessly, so it is the one that benefits most.
+  - Consider whether the same identity should feed the registry `researcher` / `operator`
+    columns at ingest, rather than the config's `operator:` key.
+  - *Depends on:* the server actually landing, and a decision on the auth source (AD /
+    institute SSO / local accounts). Related: the internal-web-serving capability already
+    proven on this workstation, and `02_INFRASTRUCTURE` for where the server sits.
+
 ## Project Manager GUI — deferred scope (2026-08-11)
 
 Context: the **Project Manager GUI** (branch `feat/project-manager-gui`; scoping in

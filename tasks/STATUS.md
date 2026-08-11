@@ -99,16 +99,34 @@ The genuinely in-flight items (kept tight — everything else is in
   auto-created on new projects and backfilled onto the 49 existing ones (**0 have them
   today**). Full scoping, live-state survey and the four decisions to settle first are in
   [`../tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md`](../tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md)
-  on that branch. **Three things it changes that are worth knowing before it lands:** it
-  answers the *"Select-in-Finder → assemble a project"* backlog item (a served page can do
-  what a `file://` page can't); it makes acquisitions in **more than one project** routine,
-  which `registry_raw.project_id` cannot represent (single-valued — the extra association
-  goes in `notes` + provenance, strengthening the case for the provenance-driven project
-  index); and self-service project creation **contradicts**
-  [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md) §4, which currently says projects are
-  created centrally — a policy call for the Data Office, flagged in the handoff. Project
-  **rename** and the meaning of **`status = closed`** are deliberately out of scope and
-  now in [`BACKLOG.md`](BACKLOG.md) (low / medium).
+  on that branch. It answers the *"Select-in-Finder → assemble a project"* backlog item —
+  a served page can do what a `file://` page can't. **Four Data Office calls made
+  2026-08-11, all recorded in the handoff:**
+  **(1) Multi-project = a semicolon list in `registry_raw.project_id`** (`PROJ-0001;PROJ-0007`),
+  following the existing `modalities_in_study` / `subject_ids` convention — a mapping table
+  was rejected as over-engineering (a real DB schema is a future endeavour). Five reader
+  sites must learn to split, and they fail **silently** today; the `generate_index.py`
+  grouping one is mandatory, since without it the first acq added to a second project
+  **disappears from the index of the project it was already in**. 06_REGISTRIES is an
+  integrity mirror here and must be updated.
+  **(2) The deferred-hard-link queue already exists** on `feat/ni-live-hardening`
+  (`ingest/pending_links.py` + `registries/pending_links.csv` + `relink_pending.py`, built
+  for the NI Mac, which can't `os.link` over SMB). **Do not build a second one** —
+  cherry-pick `0418ca6` (first commit on that branch, applies cleanly bar a 1-line
+  CHANGELOG, and its own test suite passes). ⚠️ It predates the 2026-08-02 naming cut and
+  references the retired `project_hint`; git won't flag it. It also lacks the
+  `registry_lock` that `pending.py` has — fine for one operator, not for a multi-student
+  GUI.
+  **(3) Separate `.exe`, built for the merge that's coming** — a dedicated RDM server is
+  expected in ~2 months, after which all tools become **one web app** and the exes retire.
+  Until then: maximum similarity, not clever integration.
+  **(4) Anyone with access may create a project — but only through the system.**
+  [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md) §4 ("ask the Data Management Lead")
+  changes; what stays centralised is the *mechanism*, not the *permission*. Already true
+  in practice — `auto_create_project` mints projects for any operator running an ingest.
+  Deferred to [`BACKLOG.md`](BACKLOG.md): project **rename** (low), **`status = closed`**
+  semantics (medium), and **server-era identity** (owner-on-create + per-project edit
+  rights from the logged-in user).
 - **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ DONE
   (2026-08-10); exe rebuilt + REDEPLOYED to the NAS + validated through the deployed
   exe. Merged to `main` (`a679e6a`, `--no-ff`) and pushed; branch + worktree deleted.**

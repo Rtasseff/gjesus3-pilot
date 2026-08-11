@@ -55,40 +55,77 @@ possible, prompting the user only for what genuinely can't be derived.
 
 Four things worth knowing before you plan. Each is verified against the live system.
 
-**(a) There is no pending-hard-links queue. You would be the first writer of one.**
-The request says *"if hardlinks cannot be made… append to a list of files we need to make
-hardlinks for, other scripts do this already."* The **pattern** exists and is well
-established — `registries/pending_subject_metadata.csv` (`ingest/pending.py`) and
-`registries/pending_dicom_regen.csv` (`ingest/pending_dicom.py`), both drained by a
-recovery tool. But there is **no pending-links list**, and the ingest's own hard-link
-failure path does not queue anything — `tools/ingest_raw.py:1520` catches `OSError` and
-logs a `WARN`, and that is the end of it. If you add the queue, you are adding a new
-registry-level artifact: follow `ingest/pending.py` exactly (idempotent on key, atomic
-temp+replace, defensive header check, `locking.registry_lock`), and give it a drain tool.
-`tools/relink_projects.py --create-missing` is the closest existing drain and may be
-extendable rather than duplicated.
+**(a) The pending-hard-links queue EXISTS — on another branch. Do not write a second one.**
+It was built on `feat/ni-live-hardening` (worktree `gjesus3-dev\ni-live-hardening`) to
+solve the same problem from the other end: the NI acquisition console is a **Mac**, and
+macOS over SMB refuses `os.link` with `ENOTSUP [Errno 45]`, so an on-box ingest registers
+the acquisition perfectly but cannot create the `raw_linked/` link.
 
-**(b) `registry_raw.csv` has ONE `project_id` column — it cannot hold two projects.**
-Verified: 28 columns, `project_id` singular, e.g. `PROJ-0001`. The request correctly
-anticipates this by asking for the **`notes`** column to record the additional
-association. Accept that, but understand the consequence and make it explicit in the
-docs you touch: once an acquisition is in two projects, **the registry is no longer the
-authoritative answer to "which projects contain this acquisition"** — the union of
-`provenance.csv` files is. `generate_index.py` and `find_acq.py` group by `project_id`,
-so a second association will **not** appear in the Finder or in a per-project index.
+| Piece | File | Role |
+|---|---|---|
+| Writer | `tools/ingest/pending_links.py` | queued from the `except` in `ingest_raw.py` when `create_hardlink` raises |
+| Worklist | `registries/pending_links.csv` | one row per acquisition still needing its link |
+| Drainer | `tools/relink_pending.py` | run from Windows: `--nas-root J:/gjesus3-data` |
 
-**This is already a known and accepted direction, not a new problem** — see the
-*"Finder — provenance-driven project index"* backlog item (2026-06-23, §1.5 below).
-It states the case plainly: `project_id` is *"stamped once at ingest"*, researchers
-*"later reorganize / re-home acqs into projects meaningful to them"*, and a
-`project_id` filter therefore *"goes stale"* while provenance tracks reality. Your
-tool is the thing that makes re-homing routine, so it makes that staleness real
-rather than theoretical.
+**Do not copy it into this branch and do not reimplement it.** Two implementations of one
+deferred-link queue is exactly the outcome to avoid. See §1.6 for how it gets to `main`
+and what you must adapt — this is settled, but there is a real trap in it.
 
-Do **not** widen `project_id` to fix it. That column is an integrity mirror
-(06_REGISTRIES ↔ `registry.py`) and widening it is a Data Office schema decision.
-Write the note, keep provenance correct and complete, and note in your CHANGELOG
-entry that this work strengthens the case for the provenance-driven index.
+Worth knowing: it records the full recovery payload (`project_id`, `link_name`,
+`raw_primary_canonical`, `primary_kind`, `reason`, `host_os`) so the drain pass can
+reconstruct the exact `create_hardlink` call, and the ingest drops a visible
+`<link_name>.PENDING-LINK.txt` stand-in in `raw_linked/` so the researcher sees that
+something is coming rather than an empty folder. **Reuse that stand-in idea** — a student
+who imports 20 acquisitions on a machine that can't link needs to see 20 somethings.
+
+**(b) Multi-project is a semicolon list in `project_id` — ✅ DECIDED 2026-08-11.**
+An acquisition can belong to more than one project. **Record that as a
+semicolon-separated list in the existing `project_id` column** —
+`PROJ-0001;PROJ-0007`. Not a mapping table, not the `notes` column.
+
+This is the **house convention, already used for exactly this**, so you are following a
+pattern rather than inventing one:
+
+| Column | Packed by | Documented |
+|---|---|---|
+| `modalities_in_study` | ingest | 06_REGISTRIES §"semicolon-separated DICOM modality codes (e.g. `PT;CT`)" |
+| `subject_ids` (note the plural) | `ingest/registry.py:281` — `";".join(...)` | 08_METADATA |
+| `discovered.animal_codes` | `ingest/config.py:576` | — |
+
+A separate many-to-one mapping table was considered and **rejected as
+over-engineering**: this is a simple registry, and converting it to a real DB schema is
+a future endeavour, not this tool's job.
+
+**What you must fix for it to work.** `project_id` is single-valued *in the readers*
+today; five sites join or group on the whole cell and must learn to split. They fail
+**silently**, which is why they are listed individually:
+
+| Site | What happens with `A;B` today | Needed |
+|---|---|---|
+| `generate_index.py:309` (per-project grouping) | forms a bogus `"PROJ-0001;PROJ-0007"` group → the acq appears in **neither** project's index | split; emit into each |
+| `generate_index.py:66` (payload) | shows the raw joined string | split; Finder may carry the list (see below) |
+| `find_acq.py:42,74` (project join) | `proj_idx.get("A;B")` misses → the record silently loses its project folder / name / owner | split; join each |
+| `validate_registries.py:289` | `PROJ_ID_RE.match` fails on the list, so the existence check is **skipped, not failed** | split; validate each id |
+| `find_acq.py:103` (filter) | substring test — accidentally still matches | make it deliberate, not accidental |
+
+The `generate_index.py` grouping one is not optional: without it, the first acquisition
+your tool adds to a second project **vanishes from the index of the project it was
+already in.** That is a visible regression, introduced by this work.
+
+Ryan's call on the Finder: carrying a semicolon list for project and owner in the index
+is fine, **or** the Finder may show only the first project — but either way **the
+registry must record all of them.** Prefer carrying the list; the split is done by then
+anyway.
+
+Doc consequence: `project_id` is an **integrity mirror** (06_REGISTRIES ↔
+`ingest/registry.py`), so 06_REGISTRIES' column definition must be updated to say the
+column is a semicolon-separated list, in the same words `modalities_in_study` uses.
+This is a Data Office decision and it has been made — record it, don't re-litigate it.
+
+Related but **not** superseded: the *"provenance-driven project index"* backlog item
+(§1.5). It predicted precisely this — `project_id` *"stamped once at ingest"*,
+researchers *"later reorganize / re-home acqs"*. The semicolon list fixes the
+**recording**; that item is about the **view**. Leave it open.
 
 **(c) `create_project.py` already exists and already does most of "Create new project".**
 `tools/create_project.py` mints the `PROJ-NNNN` id, validates + normalizes the name via
@@ -131,41 +168,120 @@ because it is the intended source of truth for what a project actually contains.
 
 ---
 
+### 1.6 How `pending_links` reaches `main` — and the trap in it
+
+**Decision: cherry-pick the single commit `0418ca6`; do NOT merge
+`feat/ni-live-hardening`.** That branch is 14 ahead / 19 behind `main` and carries
+~3,800 lines of NI live-sync work (live mode, per-recon model, corrections files) that
+is **untested**. Merging it to obtain one module would be a bad trade.
+
+`0418ca6` *"feat(ni): defer un-makeable project hard links to pending_links.csv"* is the
+**first commit on that branch**, sitting directly on merge-base `6b2ef41`, which is an
+ancestor of `main`. Verified: of the seven files it touches, the only one `main` has
+also changed since the merge-base is `CHANGELOG.md` — a one-line append. So the pick is
+clean apart from a trivial CHANGELOG resolution.
+
+It is also **not** untested in the way the rest of the branch is: it ships
+`tools/test_pending_links.py`, which **passes** (run 2026-08-11 — 10 checks: idempotency,
+status preserved across re-ingest, header mismatch raises, missing file → `[]`).
+
+Risk to `main` is near zero because **the code is dormant on Windows.** The whole hook
+lives inside the `except` branches of the Step-12 link block; `create_hardlink` succeeds
+on NTFS/SMB from Windows, so the success path is untouched.
+
+> **⚠️ THE TRAP — it applies cleanly and then breaks at runtime.** The commit is dated
+> **2026-06-25**, *before* the 2026-08-02 project-reference-model cut, and it contains:
+>
+> ```python
+> project_id=(proj_id or project_hint),
+> ```
+>
+> **`project_hint` no longer exists on `main`** — the vocabulary was retired
+> repo-wide, zero occurrences left. `proj_id` is also the wrong name here: it is
+> assigned inside an earlier `if project_name:` block, while the Step-12 link block
+> uses **`project_id`** (see `ingest_raw.py:1438`). Git will not flag any of this,
+> because `main` never touched `ingest_raw.py` since the merge-base.
+>
+> **Whoever picks it must change that line to `project_id=project_id`** and confirm the
+> name is in scope at the call site. Left alone it is a latent `NameError` on the exact
+> path that only ever runs when something has already gone wrong.
+
+**One quality gap to close, and it is yours to close because your tool is what makes it
+matter.** `pending_links.py` mirrors `pending_dicom.py`: BOM-tolerant, header-checked,
+atomic temp+replace, idempotent on `acq_id` — but **no locking**, and a bare
+`path + ".tmp"` temp name. The other sibling, `pending.py`, does it properly: the whole
+read-modify-write runs under `locking.registry_lock(registries_dir)` and the temp is
+pid-suffixed (`f"{path}.tmp.{os.getpid()}"`) precisely so two processes can't collide.
+
+For a single operator running one ingest, unlocked read-all/write-all is survivable. For
+a GUI several students can open at once it is a lost-update waiting to happen — two
+imports queue links, both read the same rows, the second write drops the first's. **Bring
+`pending_links.py` up to `pending.py`'s standard** (lock + pid temp) as part of this work.
+Do it on `main` after the pick, or on this branch — but coordinate, because
+`feat/ni-live-hardening` also owns that file.
+
+**Coordination:** that worktree belongs to another live session. Read from it freely;
+**never** merge, rebase, delete, or `worktree remove` it. The cherry-pick is Ryan's to
+authorise and sequence.
+
+---
+
 ## 2. Decisions to settle before writing code
 
 Take these to Ryan if you are unsure. Recommendations given, but they are his call.
 
-### 2.1 Separate app + separate `.exe`, or a third page in the ingest exe?
+### 2.1 Separate `.exe` — ✅ DECIDED (2026-08-11). Build for the merge that's coming.
 
-The NAS `tools\` folder today holds **one** 95 MB `gjesus3_ingest.exe` with two `.lnk`
-shortcuts pointing at it (`Microscopy Ingest.lnk`, `MRI Ingest.lnk`) — one app, two
-pages (`/` and `/mri`). Adding `Project Manager.lnk` → same exe, `/projects` would honour
-that pattern most literally and give you `folder_browser.js`, `style.css`, the saved
-`nas_root`, and the whole freeze recipe for free.
+**A separate app and a separate exe.** Different audience (researchers vs. operators) and,
+decisively, a different release cadence: folding this into `gjesus3_ingest.exe` means
+every project-manager tweak forces a redeploy of the production ingest exe — the artifact
+just replaced under a backup-and-rollback procedure.
 
-**Recommendation: a separate app and a separate exe.** The audience is different
-(students vs. operators), and more importantly **release cadence is different** — folding
-this in means every project-manager tweak forces a redeploy of the production ingest exe,
-which is the artifact we just replaced under a backup-and-rollback procedure. Keep the
-blast radius small.
+**But build it knowing the exes are temporary.** In roughly **2 months (≈ Oct 2026)** a
+dedicated RDM server is expected for gjesus3. All of this code goes live there, and the
+tools get **redesigned as one web app** — no more exes, no more per-tool shortcuts. So the
+goal right now is *not* clever integration; it is **maximum similarity**, for two reasons:
+familiar for the operator today, and cheap to fold together later.
 
-The cost is the shared front-end assets. **Do not copy `folder_browser.js`** — the
-browse/sort branch that just landed existed partly to *delete* exactly that duplication
-between `app.js` and `mri.js`. Either promote the shared assets to a common directory
-served by both apps, or have the new app serve the existing `tools/operator/gui/static/`
-through a second route. Whichever you choose, both PyInstaller specs must bundle it.
+Concretely, that means: same visual language (share `style.css`, don't fork it), same
+interaction idioms (the folder browser, the Preview/Read-folder two-verb model, the
+409-style overwrite confirm), same server shape (Flask, `/api/*` JSON endpoints, the same
+`nas_root` resolution and saved-state mechanism). Where you must choose between "clever
+and different" and "boring and identical to the ingest GUI", **choose identical.**
 
-### 2.2 Who is allowed to run this, and does it change the researcher-facing policy?
+**Do not copy `folder_browser.js`.** The branch that just landed existed partly to
+*delete* exactly that duplication between `app.js` and `mri.js`. Promote the shared
+assets to a common directory served by both apps, or serve
+`tools/operator/gui/static/` from the new app through a second route. Either way, both
+PyInstaller specs must bundle it.
 
-`RESEARCHER_GUIDE.md:126` currently tells researchers: *"To get a project workspace, ask
-the Data Management Lead — projects are created centrally so the registry and links stay
-consistent."* A self-service create button **contradicts that line.** Either the tool is
-Data-Office / operator-run (and the guide stands), or students self-serve (and the guide
-must be rewritten). The request says "help students modify projects", which points at
-self-service.
+### 2.2 Who can create projects — ✅ DECIDED (2026-08-11). Open access, mediated path.
 
-**Recommendation: ship it self-service, and rewrite that line.** But confirm with Ryan —
-it is a policy change, not a doc typo, and it interacts with §2.3.
+`RESEARCHER_GUIDE.md:126` currently says: *"To get a project workspace, ask the Data
+Management Lead — projects are created centrally so the registry and links stay
+consistent."* **That line changes.**
+
+The distinction to write carefully, because it is the whole point: **anyone with access
+may create a project — but only through the system.** What stays centralised is the
+*mechanism*, not the *permission*. Nobody hand-creates folders in the top-level
+`projects/` directory; creation goes through this tool so the registry row, the folder
+name, the required subfolders, and `_project.yaml` are all correct and consistent.
+
+This is a smaller change than it looks: **it is already true in practice.** Any operator
+who can run an ingest can already create a project — `auto_create_project` mints one
+whenever a config names a project that doesn't exist yet (`ingest_raw.py:1326-1335`).
+This tool makes that capability explicit and gives it a front door, rather than granting
+something new.
+
+Rewrite §4's first bullet accordingly. Keep the *reason* — consistency of registry and
+links — and drop the *gatekeeper*.
+
+> **🕗 Not yet: who owns what.** Ownership is typed in by hand today, and there is no
+> identity to check it against — an exe on a shared workstation doesn't know who is
+> sitting at it. When the server lands it will, and owner-on-create plus per-project edit
+> permissions become automatic. Backlogged (§1 → *"Server-era identity"* in
+> `tasks/BACKLOG.md`); **do not try to solve it in the exe.** Do keep `owner` an ordinary
+> editable field so the server-era version can populate it without a migration.
 
 ### 2.3 What stops two students corrupting the registry at once?
 
@@ -288,16 +404,20 @@ acquisition:
    what happened. **`creator` is the field to prompt for** — ingest fills it from the
    recipe's `operator:`, which you don't have. That is the one genuinely
    user-supplied field; everything else derives.
-5. **Record the association in `registry_raw.notes`** (§1.4b), via a locked
-   `registry.update_row` call. Append to the existing note, never replace it — those
-   notes carry real provenance text (e.g. *"Archive-mode NI preload (gnuclear2$ …)"*).
-   Use a parseable, greppable form. If `project_id` is blank, consider setting it instead;
-   if it already names a *different* project, that is exactly the multi-project case and
-   only the note gets appended.
-6. **On `OSError`** (cross-volume, or the machine can't make hard links — the tool may run
-   somewhere the NAS is a UNC path, not a mapped volume): queue it (§1.4a) rather than
-   failing the batch, and tell the user plainly which acquisitions are queued and what
-   drains the queue.
+5. **Record the association in `registry_raw.project_id`** as a semicolon list (§1.4b),
+   via a locked `registry.update_row` call. Blank → set it. Already this project →
+   no-op (idempotent; a re-import must not produce `PROJ-0001;PROJ-0001`). Already a
+   *different* project → append, preserving the existing id **first** so the original
+   association stays the primary one. Do **not** put the association in `notes` — those
+   carry real provenance text (e.g. *"Archive-mode NI preload (gnuclear2$ …)"*) and are
+   not machine-readable.
+6. **On `OSError`** (cross-volume, or a mount with no hard-link support — this tool may
+   well run somewhere the NAS is a UNC path rather than a mapped volume): **queue it via
+   `ingest/pending_links.py`** (§1.4a / §1.6), drop the `.PENDING-LINK.txt` stand-in, and
+   carry on with the rest of the batch. Then tell the user plainly, in the UI: how many
+   were queued, that their data is safely registered, and that a data-office pass
+   (`tools/relink_pending.py`) completes the links. A student must never be left thinking
+   the import failed when it succeeded.
 
 Refresh the project's `index.html` afterwards — `generate_index.py --project PROJ-NNNN`
 is the cheap single-project path the ingest GUI already uses.
@@ -340,11 +460,14 @@ Meanings to document — keep them one line each:
 - **not** write provenance rows for empty directories (provenance tracks files);
 - report the 5 folders missing `_project.yaml` rather than repairing them (§3).
 
-**Docs to update** (all four, per the "new convention" rule in `CLAUDE.md`):
+**Docs to update** (per the "new convention" rule in `CLAUDE.md`):
 - `mfb-rdm-docs/05_PROJECTS.md §3` — extend the existing tree; narrow the 🕗 note (§1.4d).
-- `RESEARCHER_GUIDE.md §2` and **§4** — the researcher-facing "recommended" statement,
-  plus the §2.2 policy line if that decision goes self-service. §3.2's 🕗 note also
-  mentions `metadata/` not existing — narrow it the same way.
+- `mfb-rdm-docs/06_REGISTRIES.md` — **`project_id` is now a semicolon-separated list**
+  (§1.4b). Integrity mirror with `ingest/registry.py`; word it like
+  `modalities_in_study`.
+- `RESEARCHER_GUIDE.md §2`, **§3.2**, **§4** — the "recommended subfolders" statement;
+  the §2.2 rewrite (anyone may create, only through the system); and §3.2's 🕗 note,
+  which also says `metadata/` doesn't exist — narrow it the same way as §3.
 - `mfb-rdm-docs/10_TOOLS.md` — the new tool + the backfill script.
 - `mfb-rdm-docs/00_INDEX.md` — bump **Last Updated**.
 - `CHANGELOG.md` — append one dated entry. **Append only; never rewrite a past row.**
@@ -415,15 +538,21 @@ share and currently describes only the ingest tools).
 
 ## 7. Definition of done
 
-- [ ] All four §2 decisions settled and recorded in the code or the CHANGELOG entry.
-- [ ] Projects-registry writes are locked + atomic (§2.3) — including `create_project.py`.
+- [ ] `pending_links` is on `main` via cherry-pick, with the `project_hint` line fixed
+      (§1.6) — **not** reimplemented here.
+- [ ] `pending_links.py` brought up to `pending.py`'s standard: `registry_lock` around
+      the read-modify-write, pid-suffixed temp (§1.6).
+- [ ] Multi-project semicolon list written by the tool **and** read by all five sites in
+      the §1.4b table — verify an acq in two projects appears in **both** per-project
+      indexes.
+- [ ] §2.3 decision settled; projects-registry writes are locked + atomic — including
+      `create_project.py`.
 - [ ] Update / create / import-raw / import-local all work end to end against a scratch NAS.
-- [ ] Hard-link failure is queued and drainable, not swallowed (§4.3.6) — **or** the
-      queue is consciously dropped from scope and that is written down.
+- [ ] Hard-link failure is queued, stand-in written, and the UI says so plainly (§4.3.6).
 - [ ] Backfill script run `--dry-run` then live; the 3 folderless and 5 yaml-less
       projects reported, not mangled.
-- [ ] Docs updated: 05_PROJECTS §3, RESEARCHER_GUIDE §2/§3.2/§4, 10_TOOLS, 00_INDEX
-      Last Updated, CHANGELOG entry appended.
+- [ ] Docs updated: 05_PROJECTS §3, **06_REGISTRIES (`project_id` list)**,
+      RESEARCHER_GUIDE §2/§3.2/§4, 10_TOOLS, 00_INDEX Last Updated, CHANGELOG appended.
 - [ ] `tasks/STATUS.md` updated. **Check it at the end** — the last branch left a stale
       "not yet merged" claim on `main`, which is the first thing the next session reads.
 - [ ] This handoff file deleted in the landing commit.
