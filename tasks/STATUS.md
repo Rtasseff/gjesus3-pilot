@@ -118,10 +118,26 @@ The genuinely in-flight items (kept tight — everything else is in
   existing ones — **not yet run against the live NAS**), and a **locked/atomic writer for
   `registry_projects.csv`** (`ingest/projects_registry.py`; `create_project.py` now holds
   the lock across its whole read-decide-write).
-  **What is left:** run the backfill on `J:` (`--dry-run` first); build the exe off-OneDrive
-  and have Ryan verify it; then deploy backup-first. Deferred by decision to
-  [`BACKLOG.md`](BACKLOG.md): project **rename** (low), **`status = closed`** semantics
-  (medium), and **server-era identity** (owner-on-create + per-project edit rights).
+  **Exe built + verified frozen (2026-08-12):** `gjesus3_manager.exe`, **13,113,252 bytes,
+  sha256 `d060d566…`**, built off-OneDrive to `D:\_dist_mgr\` (work dir `D:\_build_mgr\`).
+  Exercised end to end **through the frozen exe** against a scratch NAS — create (with the
+  **templated** `_project.yaml`, i.e. the bundled `tools/templates/project.yaml` resolved,
+  not the silent inline fallback), import from raw (both primary kinds), provenance,
+  registry write, and the in-frozen per-project `index.html` refresh. The shared assets
+  serve correctly from `/shared/` inside the bundle.
+  **What is left, and all three need Ryan:**
+  1. **Run the backfill on `J:`.** `--dry-run` against the live NAS confirms the handoff's
+     survey exactly — **49 folders, 147 subfolders to create**, the **3** folderless closed
+     rows (PROJ-0003/0008/0009) skipped and listed, the **5** `_project.yaml`-less folders
+     (PROJ-0005/0006/0007/0016/0017) reported. Nothing written yet.
+  2. **Verify the exe by hand**, then deploy backup-first to
+     `\\GJESUS3\gjesus3\gjesus3-data\tools\` with a `.lnk`, and update
+     `tools/operator/gui/nas_tools_README.txt` (mirrored to `tools\README.txt` on the
+     share; it currently describes only the ingest tools).
+  3. **Merge this branch to `main`** — it is not merged.
+  Deferred by decision to [`BACKLOG.md`](BACKLOG.md): project **rename** (low),
+  **`status = closed`** semantics (medium), and **server-era identity** (owner-on-create +
+  per-project edit rights).
 - **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ DONE
   (2026-08-10); exe rebuilt + REDEPLOYED to the NAS + validated through the deployed
   exe. Merged to `main` (`a679e6a`, `--no-ff`) and pushed; branch + worktree deleted.**
