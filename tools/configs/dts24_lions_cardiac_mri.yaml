@@ -91,11 +91,29 @@ anatomy:
     ontology: UBERON
     id:       UBERON:0000948
 
-# NOTE: no `condition:` block. These are clinical patients whose disease state
-# varies case by case, and inventing a batch-level value would be worse than a
-# recorded null. The ingest writes is_control: null + a WARN per acquisition,
-# which is the intended non-blocking behaviour (08_METADATA §4.7). Fill this in
-# later via the recovery-tool pattern if study arms are defined for DTS24.
+# Disease context, quoted from the collaborator's OWN study definition
+# (Foglio2 "Short name") — not derived by us. The population fact is what goes
+# in `disease_state`: every subject here is a cardiac transplant recipient.
+# `disease_model` names what the study set out to evaluate in them.
+#
+# `is_control: null` is deliberate and correct, NOT a gap to be filled later.
+# There is no healthy-control arm — all 42 are transplant patients — so
+# "control vs case" does not apply, and asserting either value would be false.
+# The ingest WARNs once per acquisition about the null; that is expected here.
+#
+# ⚠️ DO NOT record pulmonary-hypertension status in this block. Right-heart
+# catheterisation for these subjects IS present, as data, in the attached
+# `hemodynamics` table (mean PAP, wedge, cardiac index). PH status is therefore
+# derivable per case — but the count swings 12 vs 4 of 38 depending on whether
+# you apply the 2022 (mPAP > 20) or 2015 (mPAP >= 25) ESC/ERS threshold, so
+# freezing one classification into the registry would bake in OUR choice of
+# definition and misrepresent it as the collaborator's. Ryan's call 2026-08-12:
+# let it live as data. PH here is a secondary finding, not the cohort label.
+condition:
+  is_control:    null
+  disease_state: "cardiac transplant recipient"
+  disease_model: "antibody-mediated damage in cardiac transplant"
+  source:        "collaborator study definition (grant PI20/01389)"
 
 auto_create_project:
   owner:       "JRC"

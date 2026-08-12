@@ -61,7 +61,28 @@ anatomy:
     ontology: UBERON
     id:       UBERON:0000948
 
-# No `condition:` block — see the LIONS config for why.
+# Disease context, quoted from the collaborator's OWN study definition
+# (Foglio2 "Short name") — not derived by us.
+#
+# `disease_state: heart failure` is the POPULATION fact and is safe to assert:
+# the study is explicitly "...en insuficiencia cardiaca". Pulmonary vasculopathy
+# is what the study set out to EVALUATE in that population, so it belongs in
+# `disease_model`, not `disease_state`.
+#
+# ⚠️ These 33 are NOT labelled as pulmonary hypertension, despite the cohort
+# name reading as "Hipertension Pulmonar en Insuficiencia Cardiaca". Unlike
+# LIONS there is NO hemodynamic data for this cohort — no right-heart cath, no
+# mean PAP — so per-subject PH status is neither recorded nor derivable, and
+# the collaborator's sheets carry no diagnosis or group column. Ryan's call
+# 2026-08-12: without confirmation, do not assert it. Equally, they must NOT
+# be labelled control. Hence disease_state = the confirmed population fact and
+# is_control = null. If the collaborators later confirm per-case PH status,
+# add it via the recovery-tool pattern rather than re-ingesting.
+condition:
+  is_control:    null
+  disease_state: "heart failure"
+  disease_model: "pulmonary vasculopathy in heart failure"
+  source:        "collaborator study definition (grant PI17/01569)"
 
 auto_create_project:
   owner:       "JRC"
