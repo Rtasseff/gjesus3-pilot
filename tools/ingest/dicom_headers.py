@@ -28,7 +28,7 @@ tags are deliberately excluded even though they are present in the source:
 Age is preserved instead, coarsened to whole years (`P39Y`): that is the
 scientifically useful part of a DOB with the identifying precision removed.
 The raw values remain in the archived source DICOMs; this module simply
-declines to propagate them upward. See 08_METADATA §4.9.
+declines to propagate them upward. See 08_METADATA §4.10.
 
 Adding a tag here is a privacy decision, not a convenience one — check it
 against that list before extending `_SAFE_TAGS`.
@@ -199,7 +199,7 @@ def extract(path):
         "_extraction": {
             "instances_parsed": parsed,
             "policy": "curated allow-list; PatientName and PatientBirthDate "
-                      "deliberately not extracted (08_METADATA §4.9)",
+                      "deliberately not extracted (08_METADATA §4.10)",
         },
     }
     return (discovered, section)

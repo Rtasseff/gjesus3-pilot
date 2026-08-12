@@ -10,7 +10,7 @@ Schema follows the on-disk shape already deployed for DICOM acquisitions
       "user_supplied": {researcher, operator, data_source, instrument,
                         sample_id, sample_type, original_name, notes},
       "discovered": {<field>: <value>, ...}        # everything auto_discover surfaced
-      "user_provided_metadata": {...}               # operator-supplied tables (§4.8)
+      "user_provided_metadata": {...}               # operator-supplied tables (§4.9)
       "<ecosystem_section>": {...}                  # "dicom", "microscopy", ...
     }
 
@@ -74,7 +74,7 @@ def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None
             primary `subject`. None (omitted) for single-subject instruments,
             so their sidecars are byte-for-byte unchanged.
         user_provided_metadata: OPTIONAL operator-supplied tabular metadata
-            (08_METADATA §4.8), built by ingest/user_tables.py from the
+            (08_METADATA §4.9), built by ingest/user_tables.py from the
             `user_metadata:` config block. Sits AFTER the curated blocks and
             BEFORE the ecosystem section: the values are ASSERTED BY A PERSON,
             so they must not be mistaken for a curated field above or an

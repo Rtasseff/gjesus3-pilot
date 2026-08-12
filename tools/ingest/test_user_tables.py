@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test_user_tables.py — operator-supplied table attachment (08_METADATA §4.8).
+"""test_user_tables.py — operator-supplied table attachment (08_METADATA §4.9).
 
 Covers the join hazards that make `user_metadata:` blocks fail SILENTLY, which
 is the dangerous failure mode here: a case that doesn't match simply has no

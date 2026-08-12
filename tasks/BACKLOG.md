@@ -363,6 +363,66 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   Prep is already in place: keep the flat registry clean and keep DICOM UIDs
   captured (done) — that's what makes the eventual platform import frictionless.
 
+## Metadata model — what `user_provided_metadata` is standing in for (2026-08-12)
+
+> Raised by Ryan at the moment the block was designed, and deliberately **not**
+> solved then: DTS24 needed the collaborator tables captured, and over-fitting
+> the schema to one dataset would have been worse than a recorded stand-in.
+> The block that shipped ([08_METADATA §4.9](../mfb-rdm-docs/08_METADATA.md)) is
+> flat and per-acquisition; both items below are cases where that is the wrong
+> shape and we know it. **Priority: medium** — revisit before a second or third
+> dataset makes the stand-in load-bearing.
+
+- [ ] **META-10 — Study-level metadata and the ISA hierarchy (investigation /
+  study / assay).** Study data describes *what is being done*, one level above
+  an acquisition, so copying it into every acquisition's sidecar is duplication
+  with no join. We have already leaned this way twice: the animal-facility
+  `procedures` block ([§4.4.7](../mfb-rdm-docs/08_METADATA.md)) and the
+  `session_id` registry column (already annotated "ISA study grouping" in
+  `resolver.USER_CONTROLLABLE_COLUMNS`). DTS24's `source_project` block —
+  the originating grant, identical on all 42/33 acquisitions of a cohort — is a
+  third. Design question: does gjesus3 adopt an explicit ISA-style layer
+  (investigation → study → assay), and if so does it live in
+  `/projects/<proj>/metadata/` (the study-level location already specified in
+  §1.1 but built on 0 of 52 projects) rather than in the per-acquisition
+  sidecar? Ties to the deferred study-level metadata work and to the
+  metadata-only search DB item above.
+- [ ] **META-11 — A clinical/derived *measurement* is a new data type, not
+  metadata.** DTS24's cardiac hemodynamics (28 columns of pressures, cardiac
+  index, Fick) is currently attached to the MRI acquisition as
+  `user_provided_metadata.hemodynamics`. That is expedient and wrong in
+  principle: it is its **own measurement**, of its **own data type**, related to
+  the MRI only because it came from the **same subject**. The model that
+  captures it properly is subject-linked acquisitions of differing types — which
+  is also what would let a non-imaging assay (bloods, histology scores, clinical
+  scores) enter the system at all. Today `raw/` is organized by imaging
+  ecosystem (MICROSCOPY / DICOM / EM) with no home for a tabular clinical
+  measurement. Design question: a new ecosystem/data-type for non-image
+  measurements, keyed by `subject_ids`, versus keeping such tables as
+  acquisition metadata. **Do not add more measurement tables via `user_metadata:`
+  before deciding** — that is how the stand-in becomes permanent.
+
+## Human-subject data — policy beyond the ingest (2026-08-12)
+
+- [ ] **META-12 — Human/clinical data policy.** DTS24 is the first human data in
+  a system designed end to end for preclinical animal work. The ingest side is
+  settled ([08_METADATA §4.10](../mfb-rdm-docs/08_METADATA.md)): the DICOM
+  extractor is a privacy allow-list, no date of birth is propagated into the
+  sidecars or `registry_subjects.csv`, and human cohorts use an operator
+  `subject:` block with a pseudonymous id so the animal-facility DB is never
+  consulted. **What is NOT settled:** (a) the archived source `.zip`/`.rar`
+  files still contain full DICOM headers with DOB and patient name — should
+  sources be de-identified on ingest, or is "identifiers stay in the immutable
+  archive, never in the searchable layer" the standing rule? (b) access control
+  for human data on the share — the current model is a single `GJesus` group
+  with Read baseline ([permission model](../mfb-rdm-docs/02_INFRASTRUCTURE.md)),
+  which does not distinguish human from animal data; (c) retention, and the
+  legal basis / data-sharing agreement covering reuse of collaborator clinical
+  data for DTS24; (d) whether `subject:`'s animal-facility field names
+  (`facility_animal_id`, `strain`, `cohort_id`) should gain a human-appropriate
+  alias. Also note the `subject:` block schema currently has no way to say
+  "this subject is human" other than `species: Homo sapiens`.
+
 ## ✅ Finder — "Select-in-Finder → assemble a project" (2026-06-23) — **DONE 2026-08-12, differently**
 
 > **Delivered by the Project Manager GUI** ([`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)),

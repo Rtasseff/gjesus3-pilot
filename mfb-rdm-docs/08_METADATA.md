@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** 🔶 Draft (acquisition-level sidecar shape is ✅ DECIDED + live)  
-**Last Updated:** 2026-06-26 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: study-level `/projects/<proj>/metadata/` marked 🕗 PLANNED/DEFERRED (Phase 4 — exists on 0 of 50 live projects; see [tasks/BACKLOG.md](../tasks/BACKLOG.md)); concrete real-sidecar examples added (§4.3a); Phase-3 enrichment writer (`subject:`/`condition:`/`anatomy:` sidecar blocks, non-blocking §4.7) live + promoted to ✅ DECIDED; the registry `subject_ids` column — added 2026-06-11 (S1) as `subject_id`, **renamed to packed `subject_ids` 2026-06-12 (NI-LIVE-08)** — auto from `subject.facility_animal_id` (§4.4).
+**Last Updated:** 2026-08-12 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: **§4.8 `user_provided_metadata:` block** (operator-supplied collaborator tables, attached per acquisition, human-asserted and namespaced so it never competes with computed registry fields) and **§4.9 curated DICOM-header extraction + the human-subject privacy line** (opt-in allow-list, no raw dump, no date of birth propagated), both shipped for the DTS24 re-ingest. Earlier: study-level `/projects/<proj>/metadata/` marked 🕗 PLANNED/DEFERRED (Phase 4 — exists on 0 of 50 live projects; see [tasks/BACKLOG.md](../tasks/BACKLOG.md)); concrete real-sidecar examples added (§4.3a); Phase-3 enrichment writer (`subject:`/`condition:`/`anatomy:` sidecar blocks, non-blocking §4.7) live + promoted to ✅ DECIDED; the registry `subject_ids` column — added 2026-06-11 (S1) as `subject_id`, **renamed to packed `subject_ids` 2026-06-12 (NI-LIVE-08)** — auto from `subject.facility_animal_id` (§4.4).
 
 ---
 
@@ -232,6 +232,7 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
   "subject":       { ... },                       // when sample_type ∈ {organism, tissue} — see §4.4
   "condition":     { ... },                       // when sample_type ∈ {organism, tissue} — see §4.5 (is_control tri-state, non-blocking)
   "anatomy":       { ... },                       // when sample_type = organism (in-vivo NI/MRI) — see §4.6 (is_whole_body tri-state, non-blocking)
+  "user_provided_metadata": { ... },              // when the config declares `user_metadata:` tables — see §4.8
   "<ecosystem_section>": { ... }
 }
 ```
@@ -243,7 +244,8 @@ The sidecar is written by `tools/ingest/metadata_sidecar.py` for every full-mode
 | `subject` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29, extended 2026-06-03. Preclinical subject metadata: `facility_animal_id` (the reused canonical **subject id**) + species / strain / sex / date_of_birth → derived age_at_acquisition (required) + optional genotype / weight / cohort_id / **structured** procedures `[{type,date}]`. **Per-subject, fixed.** Source: animal-facility-DB > study-level YAML > instrument auto-extracts. On ingest-time DB miss / no-credentials, written as `source: "pending-db"` and queued for superuser recovery (§4.4.6). See §4.4. |
 | `condition` (when `sample_type ∈ {organism, tissue}`) | DRAFT 2026-05-29; **non-blocking** 2026-06-03. Disease state + experimental role: `is_control` (highly-recommended **tri-state** `true`/`false`/`null` — WARN if null, never blocks), `disease_model` + `disease_state` (recommended free-text) + optional `control_type` / `treatment` / `timepoint_days` / `study_arm`. **Per-acquisition; set once per batch/session.** Source: operator-entered; `disease_model` auto-seeds from DB `projects.name`. See §4.5 + §4.7. |
 | `anatomy` (when `sample_type = organism`) | DRAFT 2026-06-03; **non-blocking**. Anatomical coverage of an in-vivo scan: `is_whole_body` (highly-recommended **tri-state** — WARN if null, never blocks — the dead-simple full-body-vs-ROI flag) + UBERON-coded `region` (recommended when not whole-body) + optional `additional_regions` / `auto_hint`. **Per-acquisition.** Source: operator-entered (not in the animal-DB; DICOM `BodyPartExamined` empty upstream); optional non-authoritative auto-hint from MRI ProtocolName+FOV / NI bed-range. See §4.6 + §4.7. |
-| `<ecosystem_section>` | The structured embedded-metadata block keyed by ecosystem subfield: `microscopy` (for .czi), `mri` (for Bruker ParaVision — new 2026-05-20). Each has curated buckets at the top for human skimming + a `_raw_metadata` dump for forensic preservation. |
+| `user_provided_metadata` (when the config declares `user_metadata:`) | ✅ IMPLEMENTED 2026-08-12. A collaborator's own spreadsheet, attached per acquisition and namespaced by an operator-chosen label. **Human-asserted, never computed** — it deliberately sits between the curated blocks and the machine-written ecosystem section, and may repeat registry fields with conflicting values (the registry stays authoritative). Non-blocking. See §4.8. |
+| `<ecosystem_section>` | The structured embedded-metadata block keyed by ecosystem subfield: `microscopy` (for .czi), `mri` (for Bruker ParaVision — new 2026-05-20), `dicom` (curated plain-DICOM headers, opt-in — new 2026-08-12, §4.9). Each has curated buckets at the top for human skimming + a `_raw_metadata` dump for forensic preservation — **except `dicom`, which has no raw dump by design (§4.9).** |
 
 > **✅ Enrichment writer IMPLEMENTED (Phase 3, 2026-06-03).** The `subject:` / `condition:` / `anatomy:` blocks above are no longer planned-only — they are written at ingest. New orchestrator `tools/ingest/enrichment.py` (`build_enrichment`) is called from `ingest_raw.py` **Step 8.4** and its result is nested by `metadata_sidecar.build_sidecar(... subject=, condition=, anatomy=)` in the key order `acq_id, generated, generator, user_supplied, discovered, subject, condition, anatomy, <ecosystem_section>`. The writer is **non-blocking** (§4.7): it never raises on missing data, writing explicit sentinels (`is_control`/`is_whole_body` `null`, free-text `""`, `source: "unknown"` or `"pending-db"`) + a WARN. Supporting modules: `ingest/subject_id.py` (short-code parser `m13→13`, `ID13B→13`+organ; project-alias from the project name), `ingest/pending.py` (the deferred-recovery pending list, §4.4.6), `ingest/resolver.py` (validate/resolve for `condition`/`anatomy`/`subject`/`subject_lookup`/`subject_from_db` + `to_tristate`/`to_number` coercers), and the animal-facility-DB lookup `tools/animal_db.py`. The YAML surface that feeds it (`auto_discover.subject_from_db` + `subject_lookup:`, top-level `condition:` / `anatomy:` / optional `subject:`) is documented in [10_TOOLS §2.1](10_TOOLS.md). The registry **`subject_id` column shipped 2026-06-11 (S1)** — auto-populated from the sidecar `subject.facility_animal_id`, then **renamed to packed `subject_ids` 2026-06-12** ([06_REGISTRIES §2.2](06_REGISTRIES.md)). The **`anatomical_entity` column** shipped at the true-production restart (2026-06-10). What remains is the **Phase 4 enrichment backfill** of the still-empty recommended fields across the historical archive (§4.7.5; [tasks/BACKLOG.md](../tasks/BACKLOG.md)).
 
@@ -946,6 +948,76 @@ They ingest cleanly: `subject:` auto-fills from the DB, `condition.disease_model
 | imaging method / modality | **REMBI "imaging method"** / **FBbi** | [FBbi biological imaging methods](https://www.ebi.ac.uk/ols4/ontologies/fbbi). |
 
 Cross-ref: [06_REGISTRIES §2.4](06_REGISTRIES.md) (sample_type vocab). Per-instrument template comment headers carry a one-line pointer to this section.
+
+---
+
+### 4.9 `user_provided_metadata:` Block — Operator-Supplied Tables (✅ IMPLEMENTED 2026-08-12)
+
+Some batches arrive with an accompanying spreadsheet: a collaborator's own table carrying per-acquisition facts the instrument files do not (contributing centre, per-case caveats, the grant the data was originally collected under). `user_metadata:` in the ingest config attaches such a table to every acquisition's sidecar under `user_provided_metadata`. Implemented by `tools/ingest/user_tables.py`; YAML surface documented in [10_TOOLS §2.1](10_TOOLS.md).
+
+#### 4.9.1 Why its own block, after the curated ones
+
+Placement is `... condition, anatomy, user_provided_metadata, <ecosystem_section>` — after everything the pipeline curates, before the instrument extract. Two reasons:
+
+1. **These values are asserted by a person, not computed.** Real collaborator sheets routinely repeat columns the ingest derives itself — file size, file count, canonical path, checksum-present — and the two disagree (their `"415 MB"` versus the computed size; their `checksum present: Y` is a claim, ours is a verified manifest). Namespacing under `user_provided_metadata.<label>` means a reader always knows which is which: **the registry remains the single source of computed truth, and the collaborator's assertion is preserved verbatim as provenance.** Nothing is dropped — the decision (2026-08-12) was lossless capture over pruning, with an optional `skip_columns:` for the cases that want it.
+2. **It is not instrument-embedded metadata.** Sitting above the ecosystem section keeps it clearly distinct from `mri:` / `ni:` / `dicom:`, which are machine-written.
+
+#### 4.9.2 Schema
+
+```json
+"user_provided_metadata": {
+  "<label>": {
+    "_source": {
+      "file": "dataset_information_HPIC.xlsx",
+      "sheet": "Foglio1",
+      "matched_on": { "column": "AcquisitionID", "value": "HPIC02" },
+      "field_descriptions": { "<field>": "<the sheet's own documentation>" }
+    },
+    "<field>": "<value>", ...
+  }
+}
+```
+
+**The sub-block key is an operator-chosen `label`, not the filename.** Two cohorts of one project may ship the same logical table under different filenames (`dataset_information_HPIC.xlsx` / `..._lions.xlsx`); a filename key would make them two different fields and break any cross-cohort query. The label unifies them; `_source.file` keeps the exact provenance. Labels may not start with `_`.
+
+Two orientations: `row` (one row per acquisition, joined on `key_column`) and `vertical` (a Field/Value table describing the whole batch — e.g. the originating grant, identical on every acquisition in it).
+
+#### 4.9.3 Joining is the failure mode to guard
+
+A case that doesn't match simply has no block, which is easy to miss until the data is already in `/raw/`. Hence:
+
+- **Key transforms.** `decimal2` is the one that matters: Excel stores an id like `1.10` as the *number* 1.1, which stringifies to `"1.1"` and silently fails to match the `LEONE_1.10` case folder. Three of the 42 real LIONS cases depend on it. Also `first_token` (`"HPIC37 S63090"` → `HPIC37`) and `strip_prefix:<p>`.
+- **Non-blocking by default** (§4.7): an unmatched case WARNs and is omitted. A table that must match every case declares `on_missing: error`. When a sheet holds numeric keys and no transform is set, the WARN says so explicitly.
+- **Structural validation at config load**, so a typo fails before any data is copied.
+
+#### 4.9.4 Scope — what this block is deliberately NOT
+
+This is a flat, per-acquisition attachment, and two tempting uses are out of scope by design:
+
+- **Study-level structure.** The ISA model (investigation / study / assay) is hierarchical and does not belong copied into every acquisition's sidecar. We have already leaned this way once with the animal-facility `procedures` (§4.4.7) and the `session_id` column. Tracked as **META-10** in [tasks/BACKLOG.md](../tasks/BACKLOG.md).
+- **New measurement data.** Clinical hemodynamics attached to a cardiac MRI is not metadata *about* that MRI — it is its own measurement, of its own data type, linked by subject. Attaching it here is an expedient, not the model. Tracked as **META-11**.
+
+Both are recorded rather than solved, so the first use (DTS24) could proceed without over-committing the schema.
+
+### 4.10 DICOM-Header Extraction and the Human-Subject Privacy Line (✅ DECIDED 2026-08-12)
+
+`auto_discover.dicom_headers: true` enables `tools/ingest/dicom_headers.py`, the curated extractor for plain DICOM (neither ParaVision nor Molecubes) that fills the `dicom:` ecosystem section §4.3 had reserved. **Opt-in — off by default, so no existing config changes behaviour.**
+
+It recovers genuinely useful per-acquisition facts that were previously blank for collaborator batches: scanner model, field strength, institution, body part, modality set, patient sex, weight and age.
+
+**It is an allow-list, and it has no `_raw_metadata` bucket — unlike every other ecosystem extractor.** That asymmetry is deliberate and must be preserved:
+
+| | |
+|---|---|
+| **Excluded** | `PatientName`, `PatientBirthDate`, and the other direct identifiers in `_DENY_TAGS`. |
+| **Why** | A full date of birth is a direct identifier, and a quasi-identifier in combination with sex + study date. The source DICOMs are immutable and archived; `metadata.json` and `registry_subjects.csv` are the **searchable, indexed, hard-linked-into-projects** layer. A raw header dump would copy identifiers out of the former into the latter. |
+| **Kept instead** | Age, coarsened to whole years (`P39Y`) — the scientifically useful part of a DOB with the identifying precision removed. |
+
+The raw values remain untouched in the archived source files; the extractor simply declines to propagate them upward. **Adding a tag to `_SAFE_TAGS` is a privacy decision, not a convenience one.**
+
+Corollary for human cohorts: give them an explicit operator `subject:` block. It overrides the animal-facility DB path entirely (so nothing is queued to `pending_subject_metadata.csv`), and `facility_animal_id` — the schema's canonical subject-id field — should hold the collaborator's already-pseudonymous case id, never a patient identifier. Leave `date_of_birth` unset and supply the derived `age_at_acquisition`.
+
+> ⚠️ **GAP — broader human-data policy.** DTS24 is the first human clinical data in a system designed for preclinical animal work. This section settles what the *ingest* propagates. It does **not** settle retention, access control for human data on the share, the legal basis for reuse, or whether the archived source DICOMs should themselves be de-identified. Tracked as **META-12** in [tasks/BACKLOG.md](../tasks/BACKLOG.md).
 
 ---
 

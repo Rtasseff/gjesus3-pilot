@@ -88,6 +88,36 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **DTS24 collaborator re-ingest — 🕗 READY TO RUN, NOT YET RUN.** Branch
+  `feat/dts24-user-metadata` (worktree `gjesus3-dev\dts24-user-metadata`), not merged,
+  not pushed. The 75 external cardiac-MRI acquisitions (LIONS 42 + HPIC 33) were
+  removed by the 2026-06-10 purge — **confirmed absent from live production** — and
+  both the source archives and the extracted staging trees survive off-NAS intact.
+  Everything is prepared and validated **without writing to the NAS**; the ingest
+  itself awaits Ryan's go-ahead.
+  - Configs: `tools/configs/dts24_{lions,hpic}_cardiac_mri.yaml` (supersede the
+    `*_TEST.yaml` pair, kept as historical). One project **DTS24** for both cohorts,
+    minted with the next free id at run time (`PROJ-0054` as of 2026-08-12; ids are
+    never reused, and another session may claim it first). Run LIONS first (it creates the project), then HPIC.
+  - Two new capabilities shipped for it: the `user_provided_metadata` sidecar block
+    ([`08_METADATA §4.9`](../mfb-rdm-docs/08_METADATA.md) ·
+    [`10_TOOLS §2.1.7`](../mfb-rdm-docs/10_TOOLS.md)) and opt-in curated DICOM-header
+    extraction ([`§4.10`](../mfb-rdm-docs/08_METADATA.md) ·
+    [`§2.1.8`](../mfb-rdm-docs/10_TOOLS.md)). Both default to off/absent, so no
+    existing config or sidecar changes.
+  - Validated: 42 + 33 = 75 cases expand, all three collaborator spreadsheets join
+    **100%**, DICOM extraction succeeds 75/75, simulated sidecars carry **no date of
+    birth**. `PYTHONPATH=tools python tools/ingest/test_user_tables.py` passes, as do
+    the four pre-existing ingest suites.
+  - ⚠️ **First human clinical data in the system.** The ingest-side privacy line is
+    decided ([`§4.10`](../mfb-rdm-docs/08_METADATA.md)); the wider policy —
+    de-identifying the archived sources, access control, retention, legal basis — is
+    **open** as backlog **META-12**. Also raised: **META-10** (ISA study level) and
+    **META-11** (a clinical measurement is its own data type, not metadata).
+  - One judgement call left to Ryan: no `condition:` block is set, so all 75 rows get
+    `is_control: null` + a WARN. That is the intended non-blocking behaviour, and
+    inventing a batch-level disease state for clinical patients would be worse.
+
 - **Project Manager GUI — ✅ DONE (2026-08-12): built, verified by hand, exe DEPLOYED to
   the NAS, subfolder backfill run live. Merged to `main` (`253ac0d`, `--no-ff`); branch +
   worktree retired.** A researcher-facing

@@ -5,7 +5,7 @@ table that carries per-acquisition facts the instrument files do not
 (contributing centre, per-case caveats, the grant the data was originally
 collected under). This module reads such a table and nests it in the
 `metadata.json` sidecar under `user_provided_metadata` — see
-[08_METADATA §4.8](../../mfb-rdm-docs/08_METADATA.md).
+[08_METADATA §4.9](../../mfb-rdm-docs/08_METADATA.md).
 
 Why its own block, and why namespaced by label:
 

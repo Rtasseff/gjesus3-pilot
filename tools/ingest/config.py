@@ -57,7 +57,7 @@ def _extract_dicom_embedded(path, dicom_headers=False):
     behaviour. It is a curated allow-list, not a raw header dump — the
     first data to use it is human clinical MRI, so what it may and may
     not surface is a privacy decision documented in ingest/dicom_headers.py
-    and 08_METADATA §4.9.
+    and 08_METADATA §4.10.
 
     Returns either a 2-tuple `(discovered, section_dict)` or a 3-tuple
     `(discovered, section_dict, section_name)`. The 3-tuple form lets
@@ -253,7 +253,7 @@ def _validate_enrichment_blocks(cfg, disco):
     Covers the Phase 3 enrichment config — the `subject:` / `condition:` /
     `anatomy:` blocks plus the `auto_discover.subject_from_db` flag and
     `auto_discover.subject_lookup` map — and the `user_metadata:` table list
-    (08_METADATA §4.8). Raises ValueError on a structurally invalid config
+    (08_METADATA §4.9). Raises ValueError on a structurally invalid config
     (fail-fast); the field VALUES are resolved non-blockingly later by
     ingest/enrichment.py and ingest/user_tables.py.
 

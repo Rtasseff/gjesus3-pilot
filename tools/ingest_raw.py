@@ -1240,7 +1240,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         # anatomical_entity straight from subject_block / anatomy_block — passed
         # to build_row at Step 10 — so the stash is no longer needed.)
 
-        # --- Step 8.45: Operator-supplied tables (08_METADATA §4.8) ---
+        # --- Step 8.45: Operator-supplied tables (08_METADATA §4.9) ---
         # A batch may ship with a collaborator's own spreadsheet carrying
         # per-case facts the instrument files don't (contributing centre, the
         # grant the data was originally collected under, per-case caveats).

@@ -21,7 +21,7 @@
 #   * `dicom_headers: true` (below) reads a CURATED ALLOW-LIST of DICOM tags.
 #     PatientName and PatientBirthDate are deliberately NOT extracted — a full
 #     DOB is a direct identifier. Age is kept, coarsened to whole years.
-#     See ingest/dicom_headers.py and 08_METADATA §4.9.
+#     See ingest/dicom_headers.py and 08_METADATA §4.10.
 #   * The `subject:` block below is an OPERATOR OVERRIDE, which suppresses the
 #     animal-facility DB lookup entirely. `facility_animal_id` is the schema's
 #     canonical subject-id field; here it holds the collaborator's already-
@@ -103,7 +103,7 @@ auto_create_project:
   notes:       "Created on the DTS24 LIONS re-ingest 2026-08-12. External data reused internally; original funding/provenance is per-acquisition, not project-level."
 
 # Operator-supplied tables attached to each acquisition's sidecar under
-# `user_provided_metadata` (08_METADATA §4.8).
+# `user_provided_metadata` (08_METADATA §4.9).
 #
 # key_transform: decimal2 is REQUIRED here and is not cosmetic. The sheet
 # stores case ids as NUMBERS, so `1.10` is held as 1.1 and would silently fail
