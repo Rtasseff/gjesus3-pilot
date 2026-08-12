@@ -10,6 +10,7 @@ Schema follows the on-disk shape already deployed for DICOM acquisitions
       "user_supplied": {researcher, operator, data_source, instrument,
                         sample_id, sample_type, original_name, notes},
       "discovered": {<field>: <value>, ...}        # everything auto_discover surfaced
+      "user_provided_metadata": {...}               # operator-supplied tables (§4.8)
       "<ecosystem_section>": {...}                  # "dicom", "microscopy", ...
     }
 
@@ -51,7 +52,8 @@ def build_user_supplied(cfg):
 
 
 def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None,
-                  subject=None, condition=None, anatomy=None, subjects=None):
+                  subject=None, condition=None, anatomy=None, subjects=None,
+                  user_provided_metadata=None):
     """Construct the sidecar dict.
 
     Args:
@@ -65,11 +67,19 @@ def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None
             blocks (08_METADATA §4.4–4.6), built by ingest/enrichment.py for
             organism/tissue acquisitions. Each is added only when not None,
             keeping the key order acq_id .. discovered, subject, subjects,
-            condition, anatomy, <ecosystem_section> (08_METADATA §4.3).
+            condition, anatomy, user_provided_metadata, <ecosystem_section>
+            (08_METADATA §4.3).
         subjects: OPTIONAL list of subject blocks for a multi-animal NI scan
             (NI-LIVE-08) — written as the `subjects:[]` array alongside the
             primary `subject`. None (omitted) for single-subject instruments,
             so their sidecars are byte-for-byte unchanged.
+        user_provided_metadata: OPTIONAL operator-supplied tabular metadata
+            (08_METADATA §4.8), built by ingest/user_tables.py from the
+            `user_metadata:` config block. Sits AFTER the curated blocks and
+            BEFORE the ecosystem section: the values are ASSERTED BY A PERSON,
+            so they must not be mistaken for a curated field above or an
+            instrument extract below. None (omitted) when no table is
+            configured, so every existing sidecar shape is unchanged.
 
     Returns:
         ordered dict ready for json.dump.
@@ -90,6 +100,8 @@ def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None
         sidecar["condition"] = condition
     if anatomy is not None:
         sidecar["anatomy"] = anatomy
+    if user_provided_metadata:
+        sidecar["user_provided_metadata"] = user_provided_metadata
     if ecosystem_section_name:
         sidecar[ecosystem_section_name] = ecosystem_section or {}
     return sidecar

@@ -20,7 +20,7 @@ from pathlib import Path
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
     metadata_sidecar, provenance, resolver, enrichment, locking,
-    subjects_table, project_naming,
+    subjects_table, project_naming, user_tables,
 )
 import create_project as create_project_mod
 import animal_db
@@ -1240,6 +1240,22 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         # anatomical_entity straight from subject_block / anatomy_block — passed
         # to build_row at Step 10 — so the stash is no longer needed.)
 
+        # --- Step 8.45: Operator-supplied tables (08_METADATA §4.8) ---
+        # A batch may ship with a collaborator's own spreadsheet carrying
+        # per-case facts the instrument files don't (contributing centre, the
+        # grant the data was originally collected under, per-case caveats).
+        # Non-blocking like the enrichment blocks above: a case with no
+        # matching row WARNs and is omitted rather than failing the ingest,
+        # unless that table declares `on_missing: error`.
+        user_meta_block = user_tables.build_user_metadata(
+            cfg_single.get("user_metadata"),
+            cfg_single.get("discovered") or {},
+            log=log,
+            dry_run=dry_run,
+        )
+        if user_meta_block:
+            log(f"Attached user metadata: {', '.join(user_meta_block)}")
+
         sidecar_dict = metadata_sidecar.build_sidecar(
             acq_id_str,
             cfg_single,
@@ -1249,6 +1265,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             subjects=multi_subjects,
             condition=condition_block,
             anatomy=anatomy_block,
+            user_provided_metadata=user_meta_block,
         )
         sidecar_path = metadata_sidecar.write_sidecar(dest_dir, sidecar_dict)
         cfg_single["extended_metadata_present"] = "Y"
