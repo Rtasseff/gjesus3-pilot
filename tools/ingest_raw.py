@@ -1501,7 +1501,14 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     pending_links.append_pending_link(
                         os.path.join(nas_root, "registries"),
                         acq_id=acq_id_str,
-                        project_id=(proj_id or project_hint),
+                        # `project_id` is the live variable in this block (set
+                        # from cfg_single above). The original branch commit read
+                        # `proj_id or project_hint` — both predate the 2026-08-02
+                        # project-reference cut: `project_hint` no longer exists
+                        # anywhere, and `proj_id` is scoped to the earlier
+                        # resolve block. Left as-is this raised NameError on the
+                        # one path that only runs when linking already failed.
+                        project_id=project_id,
                         link_name=link_name,
                         raw_primary_canonical=raw_primary_rel,
                         primary_kind=kind,
