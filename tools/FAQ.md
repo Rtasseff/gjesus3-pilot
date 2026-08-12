@@ -10,7 +10,7 @@ start with the [Researcher Guide](../RESEARCHER_GUIDE.md).
 > the active life of a project. It is the **working layer**, not a long-term archive —
 > the instrument platforms keep their own deep raw archives.
 
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-08-12
 
 ---
 
@@ -71,6 +71,34 @@ be accidentally changed. A project just **points at** those same raw files (see 
 hard-link question), so grouping a scan into your project costs no extra disk space
 and never copies or moves the original.
 
+Inside a project you'll find four folders: **`raw_linked\`** (links to your scans —
+tool-managed, don't edit it by hand), **`working\`** (in-progress analysis),
+**`outputs\`** (results worth keeping) and **`metadata\`** (study-level metadata —
+the folder exists, what goes in it is still being designed 🕗). Add more if you want;
+nothing depends on you keeping to just these.
+
+### 4a. How do I get a project, or put data into one?
+
+Use the **Project Manager** (`gjesus3_manager.exe`, on the share in `tools\`). It is
+the researcher counterpart to the ingest tools, and it does four things: shows your
+projects and lets you edit a project's description / owner / status / notes; **creates
+a new project**; **adds scans that are already on gjesus3 into a project**; and
+**copies your own files in** (into `working\` by default).
+
+- **Anyone with access may create a project** — but always through this tool, never by
+  making a folder in `projects\` by hand. Going through the tool is what keeps the
+  registry entry, the folder name and the project file consistent; that consistency is
+  what makes the Finder, the links and the retention rules work.
+- **Adding a scan makes a link, not a copy** — no extra space, and `raw/` is never
+  touched (see the hard-link question). **Copying your own files does use space.**
+- **A scan can belong to more than one project.** Adding it to a second project does
+  not take it out of the first.
+- It asks for **your name**, because everything it writes into your project is recorded
+  in the project's `provenance.csv` — the record of where each file came from.
+
+If something looks wrong, or you need a project **renamed**, ask the Data Management
+Lead — a rename moves the folder and every link inside it, so it isn't self-service.
+
 ### 5. What's in a `metadata.json` sidecar?
 
 Every acquisition has a small `metadata.json` file sitting next to it — the
@@ -88,8 +116,9 @@ searchable "label" for that scan. The Finder reads it, and you can open it yours
   *what study state* the scan is, and *what body part*. Anything not yet known is left
   blank rather than guessed.
 
-The sidecar in `raw/` is **immutable** — it is never edited after ingest. (A separate,
-study-level metadata area inside projects is **planned** but not yet deployed 🕗 — see
+The sidecar in `raw/` is **immutable** — it is never edited after ingest. (Every project
+now has a `metadata\` folder for a separate, *study*-level metadata area, but what goes
+in it is still being designed 🕗 — nothing writes or reads it yet. See
 [tasks/BACKLOG.md](../tasks/BACKLOG.md).)
 
 ### 6. What does "hard link" mean for my files?

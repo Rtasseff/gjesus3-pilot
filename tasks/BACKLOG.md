@@ -363,7 +363,20 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   Prep is already in place: keep the flat registry clean and keep DICOM UIDs
   captured (done) — that's what makes the eventual platform import frictionless.
 
-## Finder — "Select-in-Finder → assemble a project" (2026-06-23)
+## ✅ Finder — "Select-in-Finder → assemble a project" (2026-06-23) — **DONE 2026-08-12, differently**
+
+> **Delivered by the Project Manager GUI** ([`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)),
+> not by the Finder page. This item named its own blocker exactly right — a static page over
+> `file://` cannot touch the filesystem, so this "requires a helper / CLI / back-end beyond
+> the browser page". The Project Manager **is** that back-end: it has a server, so it reads
+> `registry_raw.csv` server-side, offers the same filters (through `find_acq`, the same join
+> engine this item pointed at), takes a tick-list, and creates the links. Its design rule is
+> the one written here — it drives the **existing** `linker.create_hardlink` + the ingest
+> provenance step rather than a parallel path, so the links and provenance rows are identical
+> to ingest-time ones (same inode, same shape). What differs from the sketch below: the
+> selection happens in the tool's own served page rather than in the generated
+> `index.html`, and no selection-manifest hand-off was needed. The original text is kept
+> below for the reasoning.
 
 Context: the registry **Finder** ([`tools/FINDER.md`](../tools/FINDER.md)) today is a
 read-only locator — a generated, self-contained `registries/index.html` a researcher
@@ -403,6 +416,15 @@ This item explores a **different, possibly better** way to build the project-lev
 it from the **project's own provenance file** instead of the registry. Raised by the data office
 2026-06-23 — **shape still open, discuss before building.**
 
+> **Still open after 2026-08-12, and partly vindicated.** This item predicted precisely the
+> problem the Project Manager had to solve — `project_id` *"stamped once at ingest"* while
+> researchers *"later reorganize / re-home acqs"*. Making `project_id` a semicolon list
+> ([`06_REGISTRIES §2.3b`](../mfb-rdm-docs/06_REGISTRIES.md)) fixes the **recording**: an
+> acquisition can now honestly belong to two projects. This item is about the **view**, and
+> nothing above is superseded. The Project Manager keeps provenance complete and accurate on
+> every import — a row per link, a row per copied file — precisely so it stays the credible
+> source of truth if this lands.
+
 - [ ] **Build the project `index.html` from the project's provenance file, not from `project_id`.**
   At ingest, every raw acquisition hard-linked into a project is recorded in that project's
   **provenance** (see [`07_PROVENANCE`](../mfb-rdm-docs/07_PROVENANCE.md) + the ingest
@@ -437,7 +459,7 @@ Context: a **dedicated RDM server for gjesus3 is expected in ~2 months (≈ Oct 
 the tool code goes live there and the current per-tool `.exe`s are **redesigned as one web
 app** — the ingest front-ends and the Project Manager GUI stop being separate downloads.
 Until then, tools are built to be *as similar as possible* so combining them later is
-cheap (see `tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md` §2.1).
+cheap (see [`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)).
 
 The single capability the exe era cannot have: **an exe on a shared workstation does not
 know who is sitting at it.** A server does.
@@ -464,8 +486,8 @@ know who is sitting at it.** A server does.
 
 ## Project Manager GUI — deferred scope (2026-08-11)
 
-Context: the **Project Manager GUI** (branch `feat/project-manager-gui`; scoping in
-`tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md`) gives researchers a front-end to edit
+Context: the **Project Manager GUI** (built 2026-08-12; see
+[`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)) gives researchers a front-end to edit
 project fields, create projects, and import data into them. Two capabilities were
 **deliberately left out** of that tool and parked here.
 

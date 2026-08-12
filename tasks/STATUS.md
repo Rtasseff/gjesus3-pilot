@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-08-02
+**Last Updated:** 2026-08-12
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -88,45 +88,40 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **Project Manager GUI — 🔶 SCOPED, NOT BUILT (2026-08-11). Branch
-  `feat/project-manager-gui`, worktree `gjesus3-dev\project-manager-gui`.** A
-  researcher-facing counterpart to the operator ingest tools: list projects from
-  `registry_projects.csv`, edit `description` / `owner` / `status` / `notes`, create a
-  project (folder + registry row), and **import data into a project** — from `/raw/`
-  (tick acquisitions → hard links + provenance, the existing linker, no parallel path) or
-  from local/mounted storage (folder browser → copy → provenance). Also introduces the
-  recommended project subfolders **`working/` · `outputs/` · `metadata/` · `raw_linked/`**,
-  auto-created on new projects and backfilled onto the 49 existing ones (**0 have them
-  today**). Full scoping, live-state survey and the four decisions to settle first are in
-  [`../tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md`](../tools/manager/PROJECT_MANAGER_GUI_HANDOFF.md)
-  on that branch. It answers the *"Select-in-Finder → assemble a project"* backlog item —
-  a served page can do what a `file://` page can't. **Four Data Office calls made
-  2026-08-11, all recorded in the handoff:**
-  **(1) Multi-project = a semicolon list in `registry_raw.project_id`** (`PROJ-0001;PROJ-0007`),
-  following the existing `modalities_in_study` / `subject_ids` convention — a mapping table
-  was rejected as over-engineering (a real DB schema is a future endeavour). Five reader
-  sites must learn to split, and they fail **silently** today; the `generate_index.py`
-  grouping one is mandatory, since without it the first acq added to a second project
-  **disappears from the index of the project it was already in**. 06_REGISTRIES is an
-  integrity mirror here and must be updated.
-  **(2) The deferred-hard-link queue already exists** on `feat/ni-live-hardening`
-  (`ingest/pending_links.py` + `registries/pending_links.csv` + `relink_pending.py`, built
-  for the NI Mac, which can't `os.link` over SMB). **Do not build a second one** —
-  cherry-pick `0418ca6` (first commit on that branch, applies cleanly bar a 1-line
-  CHANGELOG, and its own test suite passes). ⚠️ It predates the 2026-08-02 naming cut and
-  references the retired `project_hint`; git won't flag it. It also lacks the
-  `registry_lock` that `pending.py` has — fine for one operator, not for a multi-student
-  GUI.
-  **(3) Separate `.exe`, built for the merge that's coming** — a dedicated RDM server is
-  expected in ~2 months, after which all tools become **one web app** and the exes retire.
-  Until then: maximum similarity, not clever integration.
-  **(4) Anyone with access may create a project — but only through the system.**
-  [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md) §4 ("ask the Data Management Lead")
-  changes; what stays centralised is the *mechanism*, not the *permission*. Already true
-  in practice — `auto_create_project` mints projects for any operator running an ingest.
-  Deferred to [`BACKLOG.md`](BACKLOG.md): project **rename** (low), **`status = closed`**
-  semantics (medium), and **server-era identity** (owner-on-create + per-project edit
-  rights from the logged-in user).
+- **Project Manager GUI — ✅ BUILT + VERIFIED against a scratch NAS (2026-08-12); 🕗 exe not
+  built, nothing deployed. Branch `feat/project-manager-gui`, worktree
+  `gjesus3-dev\project-manager-gui` — NOT merged to `main`.** A researcher-facing
+  counterpart to the operator ingest tools, `tools/manager/gui/` on port 5001: list
+  projects and edit `description` / `owner` / `status` / `notes`, create a project, and
+  **add data to a project** — from `/raw/` (search with the Finder's filters, tick, →
+  hard links + provenance through the existing linker, no parallel path) or from
+  local/mounted storage (tick files → copy → provenance). Spec:
+  [`../mfb-rdm-docs/10_TOOLS.md`](../mfb-rdm-docs/10_TOOLS.md) §5.3; narrative in
+  [`../CHANGELOG.md`](../CHANGELOG.md) (2026-08-12). It **answers** the *"Select-in-Finder
+  → assemble a project"* backlog item (marked done there) — a served page can do what a
+  `file://` page can't. **The four Data Office calls of 2026-08-11 are all implemented:**
+  **(1) `registry_raw.project_id` is now a semicolon list** (`PROJ-0001;PROJ-0007`) —
+  owning section [`06_REGISTRIES §2.3b`](../mfb-rdm-docs/06_REGISTRIES.md), one definition
+  in `ingest/project_ids.py`. **Eight** silently-failing reader sites were fixed, not the
+  five originally listed (a sweep found `ingest_raw._touched_project_ids`,
+  `relink_projects` and `metadata_completeness` too); `tools/test_project_ids.py` pins that
+  an acquisition in two projects appears in **both** per-project indexes.
+  **(2) The deferred-link queue was adopted, not rebuilt** (cherry-pick, see the row
+  below), and its missing `registry_lock` + pid temp are now in place.
+  **(3) Separate exe, maximum similarity** — shared `style.css`, `folder_browser.js`
+  (extended with a *file* multi-select mode in the shared copy), completion modal, `/api/*`
+  shape and SSE stream; `/api/listdir`'s body moved to a shared `tools/filebrowse.py`.
+  **(4) Anyone with access may create a project — through the system**;
+  [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md) §4 rewritten.
+  Also landed: the **subfolder convention** `raw_linked/` · `working/` · `outputs/` ·
+  `metadata/` (created on every new project; `tools/backfill_project_subfolders.py` for the
+  existing ones — **not yet run against the live NAS**), and a **locked/atomic writer for
+  `registry_projects.csv`** (`ingest/projects_registry.py`; `create_project.py` now holds
+  the lock across its whole read-decide-write).
+  **What is left:** run the backfill on `J:` (`--dry-run` first); build the exe off-OneDrive
+  and have Ryan verify it; then deploy backup-first. Deferred by decision to
+  [`BACKLOG.md`](BACKLOG.md): project **rename** (low), **`status = closed`** semantics
+  (medium), and **server-era identity** (owner-on-create + per-project edit rights).
 - **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ DONE
   (2026-08-10); exe rebuilt + REDEPLOYED to the NAS + validated through the deployed
   exe. Merged to `main` (`a679e6a`, `--no-ff`) and pushed; branch + worktree deleted.**

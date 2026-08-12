@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft — except **§2a (Project Reference Model), which is ✅ DECIDED.**
-**Last Updated:** 2026-08-02 (new **§2a Project Reference Model** — the owning section for how a project is referred to: `project_id` + `name`, case-insensitive resolution, **folder == name verbatim**, one construction site. Retires the "project hint" vocabulary and the `proj-` folder prefix; §9 now covers the naming *convention* only. Prior: 2026-06-26.)
+**Last Updated:** 2026-08-12 (**§3** — the recommended subfolders `raw_linked/` · `working/` · `outputs/` · `metadata/` are now created by every tool that makes a project and were backfilled onto the existing ones; the 🕗 note is **narrowed** from "`metadata/` does not exist" to "the directory exists, its *contents* stay deferred". **§7** states which copy is authoritative. **§10** records the ✅ 2026-08-11 decision that anyone with access may create a project — through the system — and names the Project Manager GUI. Prior: 2026-08-02 (new **§2a Project Reference Model** — the owning section for how a project is referred to: `project_id` + `name`, case-insensitive resolution, **folder == name verbatim**, one construction site. Retires the "project hint" vocabulary and the `proj-` folder prefix; §9 now covers the naming *convention* only. Prior: 2026-06-26.)
 
 ---
 
@@ -161,14 +161,27 @@ error listing the allowed keys, so a stale config fails loudly. Migration record
         │   └── ...                     # (created by ingest_raw.py when a project resolves — see 10_TOOLS §2.1.1;
         │                               #  link filename comes from the per-instrument `link_filename:`
         │                               #  template — see 10_TOOLS §2.1.5)
-        ├── metadata/                   # 🕗 PLANNED/DEFERRED — study-level metadata (researcher-supplied)
-        │   ├── study.json              #   study aim, hypothesis, principal contact
-        │   ├── biosamples.json         #   biosample-level details (strain, age, sex, treatment)
-        │   └── <acq_id>.json           #   optional per-acquisition supplements
+        ├── working/                    # scratch and in-progress analysis
+        ├── outputs/                    # results worth keeping: figures, derived images, reports
+        ├── metadata/                   # study-level metadata — DIRECTORY CREATED; contents 🕗 PLANNED/DEFERRED
+        │   ├── study.json              #   🕗 study aim, hypothesis, principal contact
+        │   ├── biosamples.json         #   🕗 biosample-level details (strain, age, sex, treatment)
+        │   └── <acq_id>.json           #   🕗 optional per-acquisition supplements
         └── ... (researcher-organized analysis output, notes, working files)
 ```
 
-> **🕗 PLANNED/DEFERRED — `metadata/` is not deployed yet.** The study-level metadata layer is the writeable counterpart to the read-only `/raw/<ACQ-ID>/metadata.json` sidecars, but as of the current state it exists on **none** of the live projects — the tools that populate it (Excel → study-metadata importer, `gather_metadata.py`, close-out merge) are all planned (Phase 4). Architecture rationale in [08_METADATA §1](08_METADATA.md); the writer family and their status are in [08_METADATA §1.5a](08_METADATA.md). The file shapes (`study.json`, `biosamples.json`, per-acq supplements) are deferred to the Excel-import tool spec — see [tasks/BACKLOG.md](../tasks/BACKLOG.md). When the layer ships, `metadata/` will be **the only place researchers should edit study-level metadata.**
+**The four subfolders are the recommended convention (2026-08-12).** Every tool that creates a project makes all four (`create_project.py` → `ingest/project_layout.py`, which is the one definition), and [`tools/backfill_project_subfolders.py`](../tools/backfill_project_subfolders.py) added them to the projects that predate the convention. One line each:
+
+| Folder | What belongs in it |
+|---|---|
+| `raw_linked/` | Hard links to raw acquisitions. **Tool-managed** — don't hand-edit. |
+| `working/` | Scratch and in-progress analysis. |
+| `outputs/` | Results worth keeping: figures, derived images, reports. |
+| `metadata/` | Study-level metadata. Directory created; **contents still deferred** (below). |
+
+It is a *recommendation made real*, not a rule: nothing fails because a project has extra folders, and no tool deletes what a researcher put there.
+
+> **🕗 PLANNED/DEFERRED — the study-metadata LAYER, not the directory.** Since 2026-08-12 `metadata/` itself **is** created (empty) on every project. What stays deferred is everything that would fill it: the writers (Excel → study-metadata importer, `gather_metadata.py`, close-out merge) and the file shapes (`study.json`, `biosamples.json`, per-acq supplements). As of the current state the layer's *contents* exist on **none** of the live projects. Architecture rationale in [08_METADATA §1](08_METADATA.md); the writer family and their status are in [08_METADATA §1.5a](08_METADATA.md); the file shapes are deferred to the Excel-import tool spec — see [tasks/BACKLOG.md](../tasks/BACKLOG.md). When the layer ships, `metadata/` will be **the only place researchers should edit study-level metadata.**
 
 **`raw_linked/` uses hard links, not Windows shortcuts.** Each entry is a real filesystem hard link to the acquisition's primary entity in `/raw/` — to a researcher it looks and opens exactly like the original file (or folder, via a per-file-hard-linked `.data/`), with no extra disk space consumed and no broken-shortcut failure mode. This superseded the earlier `.lnk` shortcut method (DECIDED + APPLIED 2026-06-02). Mechanism in [10_TOOLS §2.1.1](10_TOOLS.md).
 
@@ -248,6 +261,10 @@ promoted_to: null  # e.g., PUB-0003
 notes: |
   Initial exploratory analysis of IPF biomarker data.
 ```
+
+**Which copy is authoritative — ✅ the registry row.** `description`, `owner`, `status` and `notes` live in **both** `registry_projects.csv` and this file; they are meant to agree. `registry_projects.csv` is the record the tools read (the Finder joins against it, `linker` resolves folders from it); `_project.yaml` is the copy a researcher sees when they open the folder. **Any tool that edits one edits both** — the Project Manager GUI writes the registry row first and then rewrites the matching keys here, preserving this file's comments. If a folder has no `_project.yaml` (five pre-`create_project.py` folders don't) the registry edit still applies and the tool says so. Where the two disagree, the registry row wins.
+
+**Never stamped by an edit: `start_date` and `last_activity`.** Since the 2026-07-14/15 production update these mean **acquisition** dates — the project's first and newest acquisition — not ingest or edit dates. Editing a description must not move `last_activity`; no editing tool may write either field.
 
 **Auto-population at ingest-time creation.** When a project is auto-created by `ingest_raw.py` (with `ingest.auto_create_projects: true`), the ingest config's optional `auto_create_project:` block supplies the initial values for `owner`, `description`, and `notes` — resolver-evaluated, so they can pull from `discovered.<field>` parsed from filenames or paths. See [10_TOOLS §2.1.4](10_TOOLS.md). **First-write-wins:** the block is read only on the project's initial creation; subsequent ingests touching the same project ignore it. The source of truth after creation is this `_project.yaml` file — edit it directly to correct or extend the auto-populated values.
 
@@ -331,9 +348,15 @@ The PROJ-ID is the machine key stored in `registry_raw.csv`. The folder uses the
 
 ## 10. Tooling
 
+**Who may create a project — ✅ DECIDED 2026-08-11.** **Anyone with access to gjesus3 may create a project — but only through the system.** What is centralised is the *mechanism*, not the *permission*: nobody hand-makes a folder in `projects/`, because creation through a tool is what keeps the registry row, the folder name, the required subfolders and `_project.yaml` consistent with each other. This is a smaller change than it sounds — it was already true in practice, since any operator running an ingest with `auto_create_projects: true` could mint one. The front doors are the **Project Manager GUI** (researchers) and `create_project.py` (data office).
+
+> **🕗 Ownership is typed in, not verified.** An exe on a shared workstation doesn't know who is sitting at it, so `owner` is an ordinary editable field. Owner-on-create and per-project edit rights arrive with the RDM server — tracked in [`tasks/BACKLOG.md`](../tasks/BACKLOG.md) ("Server-era identity"). Keep `owner` editable so that lands without a migration.
+
+**Front-end:** `tools/manager/gui/` — the Project Manager GUI (researcher-facing; also updates a project, and imports data into one). See [10_TOOLS §5.3](10_TOOLS.md).
+
 **Script:** `tools/create_project.py`
 
-Creates a new project folder with required structure and registry entry. See [10_TOOLS](10_TOOLS.md) for full specification.
+Creates a new project folder with the recommended structure (§3) and the registry entry. The whole read-decide-write runs under the registry lock, so two people creating a project at the same moment cannot mint the same `PROJ-NNNN` or both claim one name. See [10_TOOLS](10_TOOLS.md) for full specification.
 
 **Usage:**
 ```bash
