@@ -369,10 +369,33 @@ def expand_batch(cfg, nas_root=None):
     # Discover cases (allow both files and directories).
     # recursive=True is harmless for non-"**" patterns and enables
     # recursive discovery when path_parse expects multiple folder levels.
-    search = os.path.join(staging_dir, pattern)
-    matches = sorted(globmod.glob(search, recursive=True))
-    if not matches:
-        raise ValueError(f"No matches for {search}")
+    #
+    # `ni_gnuclear_flat: true` replaces the glob with a fan-in discovery: the
+    # S:\gnuclear working space has loose DICOMs at a depth of 0-8 levels rather
+    # than one folder per acquisition, so acquisitions are assembled by GROUPING
+    # files on the machine-issued filename. Opt-in, and used by exactly one
+    # template (molecubes_ni_gnuclear.yaml); every other config still globs.
+    ni_flat_index = {}
+    if disco.get("ni_gnuclear_flat"):
+        from . import ni_flat
+        researchers = disco.get("researchers") or None
+        if researchers:
+            researchers = {r.lower() for r in researchers}
+        matches, ni_flat_index = ni_flat.discover(
+            staging_dir, registry_path=registry_path, researchers=researchers,
+            require_project=bool(disco.get("require_project", True)),
+        )
+        if not matches:
+            raise ValueError(
+                f"No NI acquisitions discovered under {staging_dir} "
+                f"(nothing matched the reconstruction filename grammar, or all "
+                f"of it is already registered)."
+            )
+    else:
+        search = os.path.join(staging_dir, pattern)
+        matches = sorted(globmod.glob(search, recursive=True))
+        if not matches:
+            raise ValueError(f"No matches for {search}")
 
     cases = []
     for match_path in matches:
@@ -437,6 +460,19 @@ def expand_batch(cfg, nas_root=None):
             discovered["filename"] = match_basename
         else:
             discovered["folder_name"] = match_basename
+
+        # Fan-in discovery (ni_gnuclear_flat): this match stands for a GROUP of
+        # files, and its identity is the machine-issued acquisition key rather
+        # than a path. Setting original_name to that key makes the existing
+        # (acq_date, original_name) dedup canonical and directory-independent —
+        # which this source badly needs, since one reconstruction is copied into
+        # up to 48 folders and 6 appear under two different year folders.
+        flat = ni_flat_index.get(match_path)
+        if flat:
+            discovered.update(flat["discovered"])
+            case["ni_flat_members"] = flat["members"]
+            case["original_name"] = flat["acq_key"]
+            rel_match = flat["acq_key"]
 
         # Pick the source for filename_parse / regex_extract. `name`
         # uses the match basename (file or folder); `parent_name` uses

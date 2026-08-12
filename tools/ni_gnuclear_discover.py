@@ -64,7 +64,11 @@ DCM_RE = re.compile(
 
 # --- structural noise between the subject folder and the DICOM ---------------
 NOISE_RE = re.compile(
-    r"^(recon_?\d+|frame_?\d+|iter_?\d+|frames?|\d+\s*frames?"
+    # `<14digit>_<MODALITY>` is the machine-issued ACQUISITION folder — it appears
+    # in the 13 box-shaped trees in 2022-23 and is never a subject. Without it the
+    # walk-up stopped on the anchor and reported it as the subject folder.
+    r"^(\d{14}_(pet|ct|spect|oi)"
+    r"|recon_?\d+|frame_?\d+|iter_?\d+|frames?|\d+\s*frames?"
     r"|pet|ct|spect|oi|pet[_ -]?ct|ct[_ -]?pet|spect[_ -]?ct"
     r"|new[ _]?recon.*|reconstruct(ed|ions?).*|nuevas?[ _]reconstrucciones?"
     r"|dicom|dicoms|images?|data)$",

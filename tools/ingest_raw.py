@@ -200,6 +200,50 @@ def _resolve_archive_primary(cfg_single, ingest_block):
     )
 
 
+def copy_ni_flat(members, dest_dir, acq_id_str, log_fn):
+    """Copy one flat-source NI acquisition (`copy_strategy: ni_molecubes_flat`).
+
+    The sibling of `copy_ni_acquisition` for DICOMs staged off the researcher
+    working space, where an acquisition is a GROUP of loose files rather than a
+    `recon_<idx>/` folder. `members` is built by `ingest.ni_flat.discover` and
+    each entry already carries its destination name, so the resulting
+    `<ACQ-ID>.data/` is shaped exactly like the archive/live path's:
+
+        <ACQ-ID>.data/
+          recon0.dcm                (static PET/SPECT, or CT)
+          recon0_frame1.dcm, ...    (dynamic PET, one file per frame)
+          recon0_frameMULTI.dcm     (only when no per-frame files exist)
+
+    Returns {dst_relpath: sha256} for checksums.json. Raises RuntimeError if the
+    plan is empty or a copy fails verification.
+    """
+    data_dirname = f"{acq_id_str}.data"
+    out_dir = os.path.join(dest_dir, data_dirname)
+    os.makedirs(out_dir, exist_ok=True)
+
+    if not members:
+        raise RuntimeError(
+            f"No source DICOMs for {acq_id_str} — refusing to register an empty "
+            f"acquisition."
+        )
+
+    dest_checksums = {}
+    for mem in members:
+        src, dst_base = mem["src"], mem["dst"]
+        dst = os.path.join(out_dir, dst_base)
+        src_hash = checksum.sha256_file(src)
+        _copy_to_nas(src, dst)
+        dst_hash = checksum.sha256_file(dst)
+        if dst_hash != src_hash:
+            raise RuntimeError(
+                f"Verification FAILED for {dst_base} "
+                f"({src_hash[:12]} vs {dst_hash[:12]})"
+            )
+        dest_checksums[os.path.join(data_dirname, dst_base)] = dst_hash
+    log_fn(f"NI flat copy: {len(dest_checksums)} DICOM(s) -> {data_dirname}/")
+    return dest_checksums
+
+
 def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn):
     """Folder-as-primary copy for a Molecubes Nuclear Imaging acquisition.
 
@@ -844,7 +888,8 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         # (legacy — to be aligned in the MRI redo round).
         copy_dest = dest_dir
         copy_strategy_preview = (ingest_block.get("copy_strategy") or "").lower()
-        if copy_strategy_preview in ("ni_molecubes", "mri_paravision_v2"):
+        if copy_strategy_preview in ("ni_molecubes", "ni_molecubes_flat",
+                                     "mri_paravision_v2"):
             cfg_single["primary_file_name"] = f"{acq_id_str}.data"
         else:
             cfg_single["primary_file_name"] = acq_id_str
@@ -968,6 +1013,11 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 dest_checksums = copy_ni_acquisition(
                     source_path, dest_dir, acq_id_str, log,
                 )
+            elif copy_strategy == "ni_molecubes_flat":
+                dest_checksums = copy_ni_flat(
+                    cfg_single.get("ni_flat_members") or [],
+                    dest_dir, acq_id_str, log,
+                )
             elif copy_strategy == "mri_paravision_v2":
                 reconstructions = ingest_block.get("reconstructions")
                 auto_regenerate_dicom = bool(ingest_block.get("auto_regenerate_dicom", False))
@@ -990,7 +1040,8 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             else:
                 log(
                     f"Unknown copy_strategy: {copy_strategy!r}. "
-                    f"Valid: 'paravision_exam', 'mri_paravision_v2', 'ni_molecubes'.",
+                    f"Valid: 'paravision_exam', 'mri_paravision_v2', "
+                    f"'ni_molecubes', 'ni_molecubes_flat'.",
                     "ERROR",
                 )
                 _rollback_uncommitted(dest_dir, log)
