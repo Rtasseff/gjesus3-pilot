@@ -24,13 +24,16 @@ are diagnostics (so it's clear the Mac-SMB `ENOTSUP` is what deferred it).
 
 Mirrors `tools/ingest/pending_dicom.py`: BOM-tolerant, header-checked, read-all/
 write-all atomically, idempotent on `acq_id` (status preserved across re-ingests).
+Concurrency follows `pending.py` (the stricter sibling): the whole
+read-modify-write runs under `locking.registry_lock` and the temp file is
+pid-suffixed — see `append_pending_link`.
 """
 
 import csv
 import os
 from datetime import datetime
 
-from . import csv_safe
+from . import csv_safe, locking
 
 PENDING_LINKS_FILENAME = "pending_links.csv"
 
@@ -81,7 +84,10 @@ def _assert_header(path):
 def _write_all(path, rows):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     # Atomic temp+replace so a crash mid-write never truncates the worklist.
-    tmp = path + ".tmp"
+    # The pid suffix (matching pending.py) keeps two processes writing the queue
+    # at the same moment from colliding on ONE shared temp name — otherwise
+    # process A's os.replace can pick up process B's half-written bytes.
+    tmp = f"{path}.tmp.{os.getpid()}"
     with open(tmp, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=PENDING_LINKS_FIELDS)
         writer.writeheader()
@@ -92,43 +98,59 @@ def _write_all(path, rows):
 
 def append_pending_link(registries_dir, acq_id, project_id, link_name,
                         raw_primary_canonical, primary_kind, reason="",
-                        host_os="", queued_at=None):
+                        host_os="", queued_at=None, _hold_lock=True):
     """Queue (or refresh) an acquisition whose project hard link couldn't be made.
 
     Idempotent on `acq_id`: a re-ingest refreshes the recovery fields but preserves
     `status` (so a row the relink pass already marked "linked" is never reset to
     "pending"). New rows get status="pending".
 
+    The whole read-modify-write runs under ``locking.registry_lock`` (the same
+    mutex the registry append uses), because this is a read-ALL / write-ALL queue:
+    two writers that each read the same rows would have the second write silently
+    drop the first's addition. That was survivable while the only caller was one
+    operator running one ingest; the Project Manager GUI can put several students
+    on it at once, each queueing a batch. Mirrors ``pending.append_pending``.
+    Pass ``_hold_lock=False`` only from a caller that ALREADY holds the lock —
+    ``registry_lock`` is not reentrant and a nested acquire would deadlock until
+    the timeout. Ingest's only call site (Step 12's ``_queue_pending_link``) runs
+    after the Step-10 registry lock is released, so it self-locks by default.
+
     Returns the absolute path written.
     """
     path = pending_links_path(registries_dir)
-    _assert_header(path)
-    rows = read_pending_links(path)
     queued_at = queued_at or _now_iso()
 
-    by_id = {r.get("acq_id"): r for r in rows}
-    if acq_id in by_id:
-        r = by_id[acq_id]
-        r["project_id"] = project_id
-        r["link_name"] = link_name
-        r["raw_primary_canonical"] = raw_primary_canonical
-        r["primary_kind"] = primary_kind
-        r["reason"] = reason
-        r["host_os"] = host_os
-        r["queued_datetime"] = queued_at
-        # status intentionally preserved.
-    else:
-        rows.append({
-            "acq_id": acq_id,
-            "project_id": project_id,
-            "link_name": link_name,
-            "raw_primary_canonical": raw_primary_canonical,
-            "primary_kind": primary_kind,
-            "reason": reason,
-            "host_os": host_os,
-            "queued_datetime": queued_at,
-            "status": "pending",
-        })
+    def _do():
+        _assert_header(path)
+        rows = read_pending_links(path)
+        by_id = {r.get("acq_id"): r for r in rows}
+        if acq_id in by_id:
+            r = by_id[acq_id]
+            r["project_id"] = project_id
+            r["link_name"] = link_name
+            r["raw_primary_canonical"] = raw_primary_canonical
+            r["primary_kind"] = primary_kind
+            r["reason"] = reason
+            r["host_os"] = host_os
+            r["queued_datetime"] = queued_at
+            # status intentionally preserved.
+        else:
+            rows.append({
+                "acq_id": acq_id,
+                "project_id": project_id,
+                "link_name": link_name,
+                "raw_primary_canonical": raw_primary_canonical,
+                "primary_kind": primary_kind,
+                "reason": reason,
+                "host_os": host_os,
+                "queued_datetime": queued_at,
+                "status": "pending",
+            })
+        _write_all(path, rows)
+        return path
 
-    _write_all(path, rows)
-    return path
+    if _hold_lock:
+        with locking.registry_lock(registries_dir):
+            return _do()
+    return _do()

@@ -1742,14 +1742,18 @@ def _touched_project_ids(acq_ids, nas_root):
     if not want:
         return []
     from ingest import registry as _registry
+    from ingest import project_ids as _project_ids
     ids, seen = [], set()
     reg_path = os.path.join(nas_root, "registries", "registry_raw.csv")
     for row in _registry.read_registry(reg_path):
         if row.get("acq_id") in want:
-            pid = (row.get("project_id") or "").strip()
-            if pid and pid not in seen:
-                seen.add(pid)
-                ids.append(pid)
+            # `project_id` is a `;`-separated list: refresh EVERY project the
+            # acquisition belongs to. Passing the joined cell straight to
+            # `generate_index --project` matched no project and refreshed none.
+            for pid in _project_ids.split_project_ids(row.get("project_id")):
+                if pid not in seen:
+                    seen.add(pid)
+                    ids.append(pid)
     return ids
 
 

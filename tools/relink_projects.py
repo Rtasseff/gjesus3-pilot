@@ -42,6 +42,7 @@ import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ingest import linker, provenance, resolver  # noqa: E402
+from ingest import project_ids as pids  # noqa: E402  (the ;-separated project cell)
 
 _CONFIG_CACHE = {}
 
@@ -212,8 +213,10 @@ def create_missing_project(project_abs, project_id, registry, dry_run=False):
     stats = {"created_file": 0, "created_folder": 0, "skipped": 0, "errors": 0}
     linked = already_linked_acqs(prov_path)
 
+    # `project_id` is a `;`-separated list — membership, not equality, or an
+    # acquisition shared with a second project would never get its missing link.
     rows = [r for r in registry.values()
-            if (r.get("project_id") or "").strip() == project_id
+            if pids.has_project_id(r.get("project_id"), project_id)
             and r["acq_id"] not in linked]
     for row in rows:
         acq_id = row["acq_id"]
