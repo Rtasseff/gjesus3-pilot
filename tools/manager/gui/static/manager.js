@@ -57,6 +57,10 @@ document.querySelectorAll(".tab").forEach((t) => {
     t.classList.add("active");
     $("tab-" + t.dataset.tab).classList.add("active");
     showError("");
+    // Open the acquisition picker with data already in it. An empty table with
+    // no explanation reads as "there is nothing here"; the Finder people are
+    // used to shows its rows immediately and you narrow from there.
+    if (t.dataset.tab === "fromraw" && !state.rawRows.length) runSearch(true);
   });
 });
 
@@ -431,18 +435,28 @@ $("r-go").addEventListener("click", async () => {
     link_names: planLinkNames(),
     creator,
   }, $("r-log"), (payload) => {
-    const total = (payload.linked || 0) + (payload.queued || 0)
-                + (payload.skipped || 0) + (payload.failed || 0);
+    // `total` deliberately EXCLUDES the skipped ones. A skip is not a failure —
+    // it is "already in this project" or "that name is taken", both of which the
+    // researcher chose to see and neither of which needs an alarming modal. The
+    // modal's own arithmetic is `total - ok`, so counting skips in it would
+    // title a clean run "finished with issues".
+    const ok = (payload.linked || 0) + (payload.queued || 0);
+    const failedIds = (payload.results || [])
+      .filter((r) => r.outcome === "failed").map((r) => r.acq_id);
     window.showCompletionModal({
-      ok: (payload.linked || 0) + (payload.queued || 0),
-      total,
+      ok,
+      total: ok + (payload.failed || 0),
       unit: "acquisitions",
       title: "Added to your project",
       titleFail: "Finished — with issues",
       headline: payload.summary,
       failLine: `${payload.failed || 0} could not be added`,
+      failedAcqIds: failedIds,
       rows: [
         { label: "Project", value: payload.project_id },
+        payload.skipped ? { label: "Skipped",
+          value: `${payload.skipped} — already in this project, or the name was `
+               + `taken (see the log)` } : null,
         payload.queued ? { label: "Links pending",
           value: `${payload.queued} — your data is registered; the data office `
                + `completes the file links` } : null,
@@ -484,6 +498,7 @@ async function refreshLocalPlan() {
                                 : "No files chosen.";
   if (!n || !$("l-project").value) {
     $("l-plan").innerHTML = ""; $("l-totals").textContent = "";
+    $("l-state").textContent = "";      // clear the "copies N files" promise too
     $("l-go").disabled = true;
     if (n && !$("l-project").value) $("l-totals").textContent = "Pick a project.";
     return;
@@ -561,17 +576,24 @@ $("l-go").addEventListener("click", async () => {
     overwrite: Array.from(state.localOverwrite),
     creator,
   }, $("l-log"), (payload) => {
-    const total = (payload.copied || 0) + (payload.skipped || 0) + (payload.failed || 0);
+    // As above: skipped files are not failures (they were already there and the
+    // researcher did not confirm a replace), so they stay out of the ok/total
+    // arithmetic and are reported on their own line.
+    const ok = payload.copied || 0;
     window.showCompletionModal({
-      ok: payload.copied || 0,
-      total,
+      ok,
+      total: ok + (payload.failed || 0),
       unit: "files",
       title: "Copied into your project",
       titleFail: "Finished — with issues",
-      headline: `${payload.copied || 0} of ${total} file`
-              + `${total === 1 ? "" : "s"} copied into the project.`,
+      headline: `${ok} file${ok === 1 ? "" : "s"} copied into the project.`,
       failLine: `${payload.failed || 0} could not be copied`,
-      rows: [{ label: "Into", value: payload.dest_dir }],
+      rows: [
+        { label: "Into", value: payload.dest_dir },
+        payload.skipped ? { label: "Skipped",
+          value: `${payload.skipped} — already there, or not a file (see the log)` }
+          : null,
+      ].filter(Boolean),
     });
     state.localFiles = []; state.localOverwrite.clear();
     refreshLocalPlan();
