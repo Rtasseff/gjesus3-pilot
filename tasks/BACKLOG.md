@@ -339,6 +339,23 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)
   and NI `--user` (override the parsed user), once the person-home above exists.
+- [ ] **`dicom_utils.summarize_source` opens every file in the source tree
+  (measured 2026-08-12).** `find_dicom_files` has no limit in the `file_count`
+  path, and for extensionless DICOM it must open each file to check the `DICM`
+  magic at byte 128 — so a collaborator case of ~21,000 instances costs ~21,000
+  opens, plus a second `os.walk` doing `getsize` on each for the total. Measured
+  **29–75 s per case** on local disk; the DTS24 batch of 75 cases is ~880,000
+  file opens and dominates its ingest wall-clock entirely (the actual archive
+  copy is one file per acquisition). Tolerable only because staging is local —
+  the same walk over SMB is the exact "thousands of tiny files" cost that made
+  the original collaborator round painful, and is why
+  `extract_xmri_archives.py` now warns against a NAS `--dest`.
+  The fix is already sketched in a TODO in that function: for
+  `acquisition_layout: archive`, count entries in the produced archive's central
+  directory instead of walking the source. That is both faster and *more*
+  correct — `file_count` is meant to describe the acquisition as stored. Cheap
+  win: `detect_modality` / `extract_study_date` already pass `limit=20`; only
+  the `file_count` call is unbounded.
 
 ## Metadata vocabularies & search (correction pass 2026-06-11)
 
