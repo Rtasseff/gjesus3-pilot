@@ -1,8 +1,10 @@
 # Plan — ingest historical NI from the **active working space** `S:\gnuclear`
 
-**Status:** PLAN — ✅ Phase 0 (inventory) DONE; **UNPARKED 2026-08-12** onto branch
-`feat/ni-gnuclear-historical` (worktree `gjesus3-dev\ni-gnuclear-historical`, branched off
-**`main` `5e9ab44`**). Phase 1 code awaits the D-A…D-E decisions in §6 **plus the new D-F in §-1.**
+**Status:** **PHASES 0–2 DONE, PHASE 1 BUILT + TESTED, 2026-08-12.** Branch
+`feat/ni-gnuclear-historical` (worktree `gjesus3-dev\ni-gnuclear-historical`, off **`main`
+`5e9ab44`**). D-A/D-B/D-D/D-E/D-F are **decided — see §-2**; only **D-G** (§0.6) is open, and
+it gates just the 655 held-back acquisitions. **Next gate: a scale run into
+`J:\gjesus3-sandbox` (Phase 3) before any production batch.**
 **High priority — we WILL do this in some capacity** (Ryan, 2026-06-25); deferred only so it doesn't
 block the in-flight **documentation refactor** and to allow more review of the details. Do **not** drop
 it. **Created:** 2026-06-25. **Author:** Data Office (Ryan + agent).
@@ -10,6 +12,44 @@ it. **Created:** 2026-06-25. **Author:** Data Office (Ryan + agent).
 **Goal:** fill in *more* historical Nuclear-Imaging data by reading the messy active working space
 `S:\gnuclear` (years → `Jesus\` → user folders), beyond the single `gnuclear2$\2025\Jesus\Irene`
 slice already in production (132 acqs).
+
+---
+
+## §-2. WHERE IT ACTUALLY STANDS (2026-08-12 evening) — read this first
+
+**The data is staged and the ingest is built and tested. Nothing has been written to
+production.**
+
+| | |
+|---|---|
+| **Snapshot** | `J:\gjesus3-data\staging\ni_gnuclear_20260812\` — **2,485 files / 286.3 GB**, pulled read-only off `S:\gnuclear`, **0 failures**, per-file sha256 in `_manifest.jsonl`, `--verify` re-read in progress |
+| **Ready to ingest** | **1,526** acquisitions (2,312 total − 131 already in production − 655 held back) |
+| **Proven** | full ingest end-to-end on a throwaway NAS: 3 acquisitions incl. a 4-frame dynamic PET → correct `.data/`, registry rows, packed multi-animal `subject_ids`, **live animal-DB hits**, project auto-create, hard links, provenance |
+| **Idempotency** | re-run = 0 cases, exit 0, registry unchanged |
+| **Tests** | `tools/test_ni_flat.py` **20/20**, plus all **19** pre-existing suites green |
+| **Not done** | Phase 3 scale run into `J:\gjesus3-sandbox`; then Phase 4 production, batch by batch |
+
+### Decisions taken (Ryan, 2026-08-12: "stop deciding, move it forward")
+
+- **D-A proceed** with `S:\gnuclear`. **D-D** everything under `…\Jesus\` in scope, no allow-list.
+  **D-E** primary DICOM only; derivatives are a later pass.
+- **D-B/D-F → per-recon**, conforming to what `feat/ni-live-hardening` landed. Explicitly **not**
+  an override of that branch: where the shared grammar needed widening (`RAT63`), it was
+  normalised in the new tool instead of editing `ni_live_discover.ANIMAL_RE`.
+- **D-G is the only one left** and it is not blocking — see §0.6.
+
+### The three new pieces
+
+| File | Role |
+|---|---|
+| `tools/pull_ni_gnuclear.py` | read-only, resumable, checksummed staging of the DICOMs |
+| `tools/ni_gnuclear_discover.py` | read-only review table (Phase 2 vetting) |
+| `tools/ingest/ni_flat.py` + `copy_ni_flat` + `molecubes_ni_gnuclear.yaml` | the ingest path |
+
+Surgery in shared code is deliberately tiny and opt-in: ~20 lines in `expand_batch` behind
+`ni_gnuclear_flat`, one `elif` in the copy dispatch. **`_build_dedupe_index` is untouched** — the
+canonical dedup comes from setting `original_name` to the acquisition key — so the merge conflict
+surface against `feat/ni-live-hardening` is close to nil (§-1c).
 
 ---
 
