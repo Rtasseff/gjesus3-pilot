@@ -227,6 +227,70 @@ recon files; the distinct-acquisition count above already collapses them.)
 
 ---
 
+## 0.6 PHASE 0 RE-RUN + PHASE 2 RESULTS (2026-08-12) — measured, not estimated
+
+Re-walked the whole share and ran the new review tool over every acquisition. **The answer to
+"can we get this data" is YES.** Numbers below are measured against the live share on
+2026-08-12, and they *confirm* §0.5's headline (2,124 distinct scans) while correcting three
+of its structural claims.
+
+### Volume (final)
+
+| | |
+|---|---|
+| `.dcm` under `<year>/Jesus/` | **2,700** |
+| matching the reconstruction grammar | **2,690** (the 10 rejects are derivatives — `ATTMAP`, `CT_PET_coreg`, `-suv`) |
+| distinct **scans** `(timestamp, modality)` | **2,124** — exactly §0.5's figure, independently reproduced |
+| distinct **acquisitions** `(timestamp, modality, algo, recon_idx)` | **2,312** ← the per-recon unit (D-F) |
+| files to stage after dedup | **2,485** |
+| bytes | **286.3 GB** |
+| already in production | **132 NI rows, 131 of which overlap** — gnuclear is a near-superset |
+
+### Three corrections to §0.5
+
+1. **`recon_N/` folders DO exist here.** §0.5 concluded "zero anchor directories, zero
+   `recon_N/`" from a 2024+2025 sample. 2022–2023 contain 13 box-shaped
+   `<14digit>_<MOD>/recon_N/frame_N/iter_30/` trees (135 files). The flat layout is still
+   overwhelmingly dominant (2,565 of 2,700), and **one rule covers both**: discover by
+   *filename*, not by folder shape.
+2. **The same reconstruction is copied into many folders** — 47 acquisitions appear in more
+   than one directory, one of them in **48**. Keying identity on the directory would have
+   produced ~370 duplicate rows *from this source alone*, before any cross-source concern.
+   Six acquisitions are duplicated across two different **year** folders, so per-year batching
+   cannot dedup independently — identity must be global and directory-independent.
+3. **`frameMULTI` must not be skipped unconditionally.** The box copy always drops those
+   bundles because per-frame DICOMs sit beside them. Here **63 reconstructions have a
+   `frameMULTI` file and nothing else** — a blanket skip would have silently lost that dynamic
+   PET. Rule adopted: drop the bundle only when per-frame siblings exist (9 dropped, 65 kept).
+
+### Phase 2 — how well does the messy tree parse?
+
+`tools/ni_gnuclear_discover.py` (read-only) over all 2,312:
+
+| Outcome | Count | Read |
+|---|---|---|
+| **project code resolved automatically** | **1,657 (72%)** | ready to ingest |
+| no project code in the path | **655 (28%)** | needs input — see below |
+| `species-unknown` | 1,802 | **benign** — folder says `15`, not `m15`; the facility DB carries species |
+| `project<-parent` | 1,140 | **benign** — this is the designed recovery path, not a defect |
+| `unparsed` token | 307 | descriptive folder words (`68Ga`, `Gated`, `highres`) |
+| `no-animals` | 167 | no animal number in the subject folder |
+| date disagreement | 13 | genuine typed-date-vs-machine-date mismatches |
+| loose at `<year>/Jesus/` root | 3 | no researcher folder at all |
+
+**The 655 are not malformed.** Those researchers filed by **study/tracer name instead of
+animal-protocol code** — `FDG`, `Starget`, `cancer`, `metalak`, `ionp`, `Flurpiridaz`, `FTHA`,
+`fapi`, `nanoclusters`, `Dieta cetogenica` — across **73 `(researcher, series)` groups**, and
+**75% of them still parse their animal numbers**. One mapping line per group closes it; the top
+12 groups alone cover 55%.
+
+→ **D-G (new, blocks the second half only).** AE protocol codes are **regulatory identifiers
+and must not be invented**, so this needs real values from the researchers or the Data Office.
+Ingest the **1,657** now and hold the 655 pending that table — nothing about ingesting the
+clean set makes the rest harder later, because dedup is on the machine timestamp.
+
+---
+
 ## 1. What we already have (reuse, do not rebuild)
 
 | Capability | Where | Note |
