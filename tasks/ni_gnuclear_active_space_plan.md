@@ -27,7 +27,31 @@ production.**
 | **Proven** | full ingest end-to-end on a throwaway NAS: 3 acquisitions incl. a 4-frame dynamic PET → correct `.data/`, registry rows, packed multi-animal `subject_ids`, **live animal-DB hits**, project auto-create, hard links, provenance |
 | **Idempotency** | re-run = 0 cases, exit 0, registry unchanged |
 | **Tests** | `tools/test_ni_flat.py` **20/20**, plus all **19** pre-existing suites green |
-| **Not done** | Phase 3 scale run into `J:\gjesus3-sandbox`; then Phase 4 production, batch by batch |
+| **✅ PHASE 3 PASSED** | **227/227** (`Itziar`, 2024+2025, 19.9 GB) into `J:\gjesus3-sandbox-ni20260812` — see below |
+| **Not done** | **Phase 4 production, batch by batch — needs Ryan's explicit go-ahead** |
+
+### Phase 3 scale run — PASSED 2026-08-12
+
+Cohort `Itziar` (227 acquisitions, 19.9 GB, project `1123`, spanning 2024 **and** 2025 — so it
+exercises the cross-year case).
+
+| Check | Result |
+|---|---|
+| batch | **227 success / 0 failed / 0 ERROR** |
+| registry | 227 rows, **227 distinct `acq_id`, 227 distinct `original_name`** — no duplicates |
+| on disk | 227 acquisition folders + 227 `.data/`, box-compatible `recon<N>.dcm` naming |
+| checksums | `checksum_present=Y` on all 227 |
+| subjects | 70 rows in `registry_subjects.csv`; **1** acquisition flagged `source=unknown` (its path has no subject folder — flagged, not guessed) |
+| project links | **227 hard links** under `AE-biomaGUNE-1123/raw_linked/` |
+| pending queues | **none created** — every DB lookup and every hard link succeeded |
+| `validate_registries` | **0 errors**, 227 warnings, all the intended `condition.is_control` null sentinel |
+| idempotency | re-run → **0 cases, exit 0, still 227 rows** |
+
+⚠️ **The shared `J:\gjesus3-sandbox` is unusable until migrated.** Its `registry_raw.csv` header
+still carries `project_hint` (renamed to `project_id` on 2026-08-02), so
+`registry.assert_header_compatible` refuses to append. It failed at the *first* case having
+written nothing — the guard working correctly. This run used a clean
+`J:\gjesus3-sandbox-ni20260812\` rather than mutating a sandbox another session may own.
 
 ### Decisions taken (Ryan, 2026-08-12: "stop deciding, move it forward")
 
