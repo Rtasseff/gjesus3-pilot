@@ -9,8 +9,13 @@ zero memory of any of this** — everything needed is here or in the docs this p
 ## 1. Where things stand
 
 - **Branch `feat/ni-live-hardening`**, **18 commits ahead of `main`, 0 behind** (rebased onto
-  `origin/main` `6b2ef41` on 2026-08-07; before that onto `dde99fc` on 2026-08-06 — we had
-  silently drifted 69 commits behind once, don't let that happen again).
+  **local** `main` `85af9d6` on 2026-08-12; before that `origin/main` `6b2ef41` on 2026-08-07
+  and `dde99fc` on 2026-08-06 — we had silently drifted 69 commits behind once, don't let
+  that happen again).
+- **⚠️ REBASE ONTO LOCAL `main`, NOT `origin/main`.** As of 2026-08-12 local `main`
+  (`85af9d6`) is **3 commits ahead of `origin/main`** (`b882e4a`) and is the only one that
+  has the pending-links adoption. Rebasing onto `origin/main` silently misses it and
+  reintroduces a second deferred-link queue. Check both: `git rev-parse main origin/main`.
 - **`origin/feat/ni-live-hardening` still points at the OLD pre-rebase commits.** The next
   push needs `--force-with-lease`, and **pushing requires explicit permission.**
 - **NOT merged, deliberately.** Merge waits on the on-box test (§4).
@@ -18,7 +23,8 @@ zero memory of any of this** — everything needed is here or in the docs this p
   `test_ni_per_recon.py`, `test_pending_links.py`, `test_ni_live_discover.py`,
   `tools/ingest/test_registry_fields.py`.
 - Backup tags: `backup/ni-live-hardening-pre-rebase` = `f2ee114` (pre-2026-08-06);
-  `backup/ni-live-pre-rebase-20260807` = `2909b31` (pre-2026-08-07).
+  `backup/ni-live-pre-rebase-20260807` = `2909b31`; `backup/ni-live-pre-rebase-20260812`
+  = `988e237`.
 - **Rebasing in this worktree leaves a `rebase-merge` dir git can't delete** — OneDrive marks
   it ReadOnly, so git reports "currently rebasing" after a *successful* rebase. Clear ReadOnly
   and remove `…/.git/worktrees/ni-live-hardening/rebase-merge`; do **not** `git rebase --abort`,
@@ -90,6 +96,26 @@ not a CS person; to him the box is where numbers come out of the PET hardware.
   nothing, which he can run himself. Stronger than reading code, since code doesn't prove
   runtime behaviour.
 
+## 3a. The deferred-link queue now belongs to `main` — do not re-own it
+
+**2026-08-12, Ryan.** The first commit of this branch (`0418ca6`, `pending_links.csv` +
+`relink_pending.py`) was **cherry-picked onto `main`** so the Project Manager GUI could use
+the same queue instead of growing a second one. Merged as `85af9d6`. Consequences:
+
+- **`0418ca6` is redundant here.** On the 2026-08-12 rebase git dropped it automatically
+  (*"skipped previously applied commit"*). If a future rebase conflicts on it instead,
+  **`git rebase --skip` is the right answer.** Everything after it replays normally.
+- **One line differs from this branch's original, deliberately — do NOT revert it.**
+  `ingest_raw.py` now queues with `project_id=project_id`, not `proj_id or project_hint`.
+  `project_hint` was retired repo-wide on 2026-08-02 and `proj_id` is only bound inside the
+  earlier resolve block, so the original was a latent `NameError` on the deferred-link path
+  (it survived only because `or` short-circuits when `proj_id` is truthy). Ryan's fix is
+  `6276a81`; verified present after the rebase.
+- **`pending_links.py` hardening is assigned to `feat/project-manager-gui` — do not
+  duplicate it.** It takes no `registry_lock` and uses a non-pid temp name (it mirrors
+  `pending_dicom.py`). Fine for one operator, unsafe behind a multi-user GUI. **Coordinate
+  before touching that file**; the same concern is logged here as the S7 backlog item.
+
 ## 4. Merge gates — still ON THE BOX, but no longer unproven
 
 No `--go` ingest has **ever** run on the box. The 2026-08-05 session stopped at the read-only
@@ -130,8 +156,9 @@ there before the next box session.**
 | `a7be9d8` | `--plan` no longer walks the source tree twice (`preview_batch` was re-running the identical recursive glob just to display a count `--plan` never prints). **Structural fix, NOT measured on the box** — if `--plan` is still slow there, profile ON the box first. **Do not add a cache.** |
 | `46e2120` | Gate-0 closed (see §6), operator-flow plan, on-box test review, production-cleanup list. |
 
-Earlier commits (rebased): deferred project links → `pending_links.csv`, one acquisition per
-reconstruction, `--live` mode (no per-batch YAML), corrections + tracer metadata.
+Earlier commits (rebased): one acquisition per reconstruction, `--live` mode (no per-batch
+YAML), corrections + tracer metadata. **The deferred-project-links commit is no longer one
+of them** — it was cherry-picked onto `main` and is now upstream of this branch (§3a).
 
 ## 6. Facts established, don't re-litigate
 
