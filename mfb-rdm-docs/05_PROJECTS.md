@@ -1,8 +1,8 @@
 # 05 — Projects Area
 
 **Parent:** [Documentation Index](00_INDEX.md)
-**Status:** 🔶 Draft — except **§2a (Project Reference Model), which is ✅ DECIDED.**
-**Last Updated:** 2026-08-12 (**§3** — the recommended subfolders `raw_linked/` · `working/` · `outputs/` · `metadata/` are now created by every tool that makes a project and were backfilled onto the existing ones; the 🕗 note is **narrowed** from "`metadata/` does not exist" to "the directory exists, its *contents* stay deferred". **§7** states which copy is authoritative. **§10** records the ✅ 2026-08-11 decision that anyone with access may create a project — through the system — and names the Project Manager GUI. Prior: 2026-08-02 (new **§2a Project Reference Model** — the owning section for how a project is referred to: `project_id` + `name`, case-insensitive resolution, **folder == name verbatim**, one construction site. Retires the "project hint" vocabulary and the `proj-` folder prefix; §9 now covers the naming *convention* only. Prior: 2026-06-26.)
+**Status:** 🔶 Draft — except **§2a (Project Reference Model)** and **§3a (Project-folder ownership)**, which are ✅ DECIDED.
+**Last Updated:** 2026-08-12 (new **§3a — project folders are researcher-owned**, ✅ DECIDED: the system creates, populates, documents and teaches, but mandates nothing; researchers may reorganise or delete anything inside their project folder, **including hard links**, so **no system-of-record fact may be derived from a project folder's contents**. `/raw/` + `registries/` are the system of record and are self-sufficient without `/projects/`. Pairs with [06_REGISTRIES §2.3b](06_REGISTRIES.md) — an acquisition is registered to exactly one project. Same day, earlier: **§3** — the recommended subfolders `raw_linked/` · `working/` · `outputs/` · `metadata/` are now created by every tool that makes a project and were backfilled onto the existing ones; the 🕗 note is **narrowed** from "`metadata/` does not exist" to "the directory exists, its *contents* stay deferred". **§7** states which copy is authoritative. **§10** records the ✅ 2026-08-11 decision that anyone with access may create a project — through the system — and names the Project Manager GUI. Prior: 2026-08-02 (new **§2a Project Reference Model** — the owning section for how a project is referred to: `project_id` + `name`, case-insensitive resolution, **folder == name verbatim**, one construction site. Retires the "project hint" vocabulary and the `proj-` folder prefix; §9 now covers the naming *convention* only. Prior: 2026-06-26.)
 
 ---
 
@@ -174,7 +174,7 @@ error listing the allowed keys, so a stale config fails loudly. Migration record
 
 | Folder | What belongs in it |
 |---|---|
-| `raw_linked/` | Hard links to raw acquisitions. **Tool-managed** — don't hand-edit. |
+| `raw_linked/` | Hard links to raw acquisitions. Tools put them here; **researchers may prune them** — see §3a. |
 | `working/` | Scratch and in-progress analysis. |
 | `outputs/` | Results worth keeping: figures, derived images, reports. |
 | `metadata/` | Study-level metadata. Directory created; **contents still deferred** (below). |
@@ -184,6 +184,25 @@ It is a *recommendation made real*, not a rule: nothing fails because a project 
 > **🕗 PLANNED/DEFERRED — the study-metadata LAYER, not the directory.** Since 2026-08-12 `metadata/` itself **is** created (empty) on every project. What stays deferred is everything that would fill it: the writers (Excel → study-metadata importer, `gather_metadata.py`, close-out merge) and the file shapes (`study.json`, `biosamples.json`, per-acq supplements). As of the current state the layer's *contents* exist on **none** of the live projects. Architecture rationale in [08_METADATA §1](08_METADATA.md); the writer family and their status are in [08_METADATA §1.5a](08_METADATA.md); the file shapes are deferred to the Excel-import tool spec — see [tasks/BACKLOG.md](../tasks/BACKLOG.md). When the layer ships, `metadata/` will be **the only place researchers should edit study-level metadata.**
 
 **`raw_linked/` uses hard links, not Windows shortcuts.** Each entry is a real filesystem hard link to the acquisition's primary entity in `/raw/` — to a researcher it looks and opens exactly like the original file (or folder, via a per-file-hard-linked `.data/`), with no extra disk space consumed and no broken-shortcut failure mode. This superseded the earlier `.lnk` shortcut method (DECIDED + APPLIED 2026-06-02). Mechanism in [10_TOOLS §2.1.1](10_TOOLS.md).
+
+---
+
+## 3a. Who owns a project folder — the boundary that matters
+
+> **✅ DECIDED 2026-08-12 (Data Office).** The contents of `/projects/<proj>/` are **researcher-owned**. The system creates the structure, populates `raw_linked/` and `provenance.csv`, documents and teaches — but **mandates nothing**. Researchers may reorganise, rename, or **delete** anything inside their own project folder, including hard links.
+>
+> **Therefore: no system-of-record fact may be derived from a project folder's contents.** `/raw/` and `registries/` are the system of record, and are self-sufficient without `/projects/`.
+
+**Why this is a design position and not a concession.** Researchers do not work inside the RDM system, and today the system does not offer enough value to make them. They pull data out and analyse it elsewhere; some do not register raw files at all. A system that only stays correct when people comply would be wrong most of the time. So the split is deliberate: **`/raw/` + `registries/` are ours and are enforced; `/projects/` is theirs and is encouraged.** Project folders are a *convenience layer* — real, useful, worth maintaining, and never authoritative. As the system earns more of the group's trust this boundary can move; it should move by agreement, not by a tool quietly assuming compliance.
+
+**What follows from it, concretely:**
+
+- **`raw_linked/` is a convenience shortcut, not an index of project membership.** Researchers routinely prune it — hundreds of acquisitions in one folder is unusable, and deleting links is *allowed*. A missing link destroys nothing: the raw data, its checksums, its sidecar and its registry row are all untouched, and the link can be recreated.
+- **Do not write a validator that treats a missing link or provenance row as an integrity error.** It is not one. (Measured 2026-08-12: of 11,053 links the system recorded creating, 35 had been deleted — small, but the point is that it is *permitted*, so the number is not the argument.)
+- **Do not "repair" a project folder in bulk.** Recreating links a researcher deliberately removed is worse than leaving the gap. Where a project genuinely wants its links rebuilt, that is a conversation with its owner, then `relink_projects.py --create-missing`.
+- **Project-level questions are answered from the project's own `provenance.csv`**, which the system writes — not from the registry, and not from a directory listing.
+
+**The counterpart obligation.** Because the project layer is disposable, anything that must survive has to live in `/raw/` or `/publications/`. That is what §4.x's close-out step is for, and why project deletion is blocked until it runs.
 
 ---
 

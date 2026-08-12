@@ -32,17 +32,27 @@ WHAT THE PROJECT MANAGER DOES (researchers)
     app is what keeps the registry entry, the folder name and the project file
     consistent with each other.
   - Add scans that are ALREADY on gjesus3 into a project. This makes a link, not
-    a copy: no extra space is used and raw\ is never touched. One scan can belong
-    to more than one project.
+    a copy: no extra space is used and raw\ is never touched. Add the same scan
+    to as many projects as you like.
+    NOTE: the registry keeps listing the ONE project a scan was acquired for, so
+    searching the registry by project finds where data was acquired, not
+    everywhere it is used. To see what a project holds now, look in the project
+    folder, or at its provenance.csv.
   - Copy your own files (figures, analysis, notes) into a project, into working\
     by default. This DOES use space on the share.
   Everything it writes into a project is recorded in that project's
   provenance.csv, which is why it asks for your name.
 
-  Every project has four folders: raw_linked\ (links to your scans - the tools
-  manage it, don't edit it by hand), working\ (in-progress analysis), outputs\
-  (results worth keeping) and metadata\ (study-level metadata - the folder
-  exists, what goes in it is still being designed). Add more if you want.
+  Every project has four folders: raw_linked\ (links to your scans), working\
+  (in-progress analysis), outputs\ (results worth keeping) and metadata\
+  (study-level metadata - the folder exists, what goes in it is still being
+  designed). Add more if you want.
+
+  YOUR PROJECT FOLDER IS YOURS. Organise it however you like, and delete links
+  in raw_linked\ you don't want - a folder listing hundreds of scans isn't
+  useful. Deleting a link never touches the data: the scan, its checksums and
+  its registry entry are all still there and still in the Finder, and the link
+  can be put back. The four folders are a recommendation, not a rule.
 
   It cannot RENAME a project - that moves the folder and every link inside it,
   so it is a Data Office job. Ask Ryan.

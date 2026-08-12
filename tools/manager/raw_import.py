@@ -9,13 +9,20 @@ and is why this module reuses the ingest pieces rather than writing its own:
 
     linker.create_hardlink   the link (file primary vs folder primary)
     provenance.append_entry  the provenance row
-    registry.update_row      the project association
+    project_ids              the write-once registry association
     pending_links            the deferred queue when the mount can't link
 
 A project link made here is therefore byte-for-byte the same kind of thing as a
 link made at ingest time — same inode, same provenance shape, same recovery
 path. `/raw/` is never written: the only writes are hard links FROM raw, rows in
 `registries/`, and files inside the project folder.
+
+**AN IMPORT DOES NOT RE-REGISTER THE ACQUISITION** (✅ DECIDED 2026-08-12,
+06_REGISTRIES §2.3b). An acquisition is registered to exactly ONE project — the
+one ingest established. Importing it into a second project builds the *filesystem*
+association (link + provenance in that project) and deliberately leaves
+`registry_raw.project_id` alone. Sharing works; it is just not registered. The
+registry only gains a value where it had none.
 
 WHAT AN IMPORT IS. An acquisition already exists and is already registered; an
 import only says "this project also contains it". So it is:
@@ -201,17 +208,27 @@ def _write_standin(raw_linked_dir, link_name, acq_id, raw_primary_rel):
         pass  # the worklist is the durable record; the pointer is cosmetic
 
 
-def _add_project_to_rows(nas_root, acq_ids, project_id, log):
-    """Add `project_id` to each acquisition's `project_id` cell — ONE pass.
+def _record_project_when_unassigned(nas_root, acq_ids, project_id, log):
+    """Set `project_id` on each acquisition that does not have one — ONE pass.
 
-    Deliberately not `registry.update_row` per acquisition: that reads and
-    rewrites the whole ~13,500-row registry each time, so a 20-acquisition
-    import would rewrite it twenty times over SMB. This is a single locked
-    read-modify-write that publishes all of them atomically.
+    **Write-once policy** (✅ DECIDED 2026-08-12, 06_REGISTRIES §2.3b): an
+    acquisition is registered to exactly ONE project. A row that already names a
+    project — the same one or a different one — is **left alone**. So for a shared
+    acquisition this pass changes nothing, and that is the correct outcome, not a
+    failure: the hard link and the destination project's provenance row are still
+    written by the caller. The registry records what ingest established; the
+    project folder records what the researcher assembled.
 
-    Idempotent per the cell rules (`ingest/project_ids.py`): blank -> set;
-    already this project -> untouched; already a DIFFERENT project -> appended
-    with the existing id kept FIRST, so the original association stays primary.
+    In practice `changed` is 0 on nearly every import, because ingest resolves or
+    auto-creates a project for every acquisition (0 of 13,781 rows were blank when
+    this policy was adopted). The blank branch is a safety net for an ingest path
+    that leaves the project unresolved, not a routine one.
+
+    Deliberately not `registry.update_row` per acquisition: that reads and rewrites
+    the whole ~13,800-row registry each time, so a 20-acquisition import would
+    rewrite it twenty times over SMB. This is a single locked read-modify-write
+    that publishes all of them atomically.
+
     Returns the number of rows actually changed.
     """
     import csv
@@ -228,11 +245,14 @@ def _add_project_to_rows(nas_root, acq_ids, project_id, log):
         for row in rows:
             if (row.get("acq_id") or "").strip() not in want:
                 continue
-            cell, did = pids.add_project_id(row.get("project_id"), project_id)
+            cell, did = pids.set_project_id_if_blank(row.get("project_id"), project_id)
             if did:
                 row["project_id"] = cell
                 changed += 1
         if not changed:
+            # Nothing to publish — every acquisition already had a project. Not an
+            # error; skip the rewrite entirely rather than rewriting 13,800 rows
+            # identically.
             return 0
         tmp = f"{path}.tmp.{os.getpid()}"
         with open(tmp, "w", encoding="utf-8", newline="") as f:
@@ -241,7 +261,7 @@ def _add_project_to_rows(nas_root, acq_ids, project_id, log):
             for row in rows:
                 w.writerow({k: row.get(k, "") for k in registry.REGISTRY_FIELDS})
         os.replace(tmp, path)
-    log(f"Recorded the project on {changed} registry row(s).")
+    log(f"Registered {changed} previously-unassigned acquisition(s) to this project.")
     return changed
 
 
@@ -256,18 +276,21 @@ def import_acquisitions(nas_root, project, rows, creator, link_names=None,
     Per acquisition, in this order:
       1. hard link (or folder of per-file hard links) via `linker.create_hardlink`
       2. provenance row (idempotent on `output_path`)
-      3. — after the loop — one locked pass adding the project to each
-         `registry_raw.project_id`
+      3. — after the loop — one locked pass that sets `registry_raw.project_id`
+         **only on rows that had none** (write-once; see the module docstring)
 
     On `OSError` the acquisition is queued to `registries/pending_links.csv`,
     a stand-in is written, and the batch CARRIES ON. That is the case where the
     machine running this can reach the NAS over a mount that cannot hard-link
     (macOS over SMB returns ENOTSUP; a UNC path can behave the same). The
-    acquisition is still associated with the project and its data is still
-    registered — the import did NOT fail, and the summary says so in those
-    words so nobody deletes and retries something that worked.
+    acquisition is still added to the project and its data is still registered —
+    the import did NOT fail, and the summary says so in those words so nobody
+    deletes and retries something that worked.
 
-    Returns: {linked, queued, skipped, failed, results[], project_id}
+    Returns: {linked, queued, skipped, failed, results[], project_id,
+              registered, shared} — where `registered` counts rows that gained a
+    project_id (normally 0) and `shared` counts acquisitions added to this project
+    while staying registered to their original one (normally all of them).
     """
     log = log or (lambda msg, level="INFO": None)
     project_id = (project.get("project_id") or "").strip()
@@ -355,10 +378,18 @@ def import_acquisitions(nas_root, project, rows, creator, link_names=None,
         associate.append(acq_id)
         results.append({**item, "outcome": "linked"})
 
+    registered = 0
     if associate:
-        _add_project_to_rows(nas_root, associate, project_id, log)
+        registered = _record_project_when_unassigned(
+            nas_root, associate, project_id, log
+        )
+    # `registered` is normally 0 and that is the expected, correct outcome — see
+    # _record_project_when_unassigned. Surfaced so the UI can say what happened
+    # rather than leaving the researcher to infer it from silence.
+    shared = len(associate) - registered
 
-    return {**counts, "results": results, "project_id": project_id}
+    return {**counts, "results": results, "project_id": project_id,
+            "registered": registered, "shared": shared}
 
 
 def _queue(nas_root, registries_dir, raw_linked, acq_id, project_id, link_name,
@@ -396,10 +427,15 @@ def summary_sentence(result):
     if result["linked"]:
         bits.append(f"{result['linked']} added")
     if result["queued"]:
+        # NOT "registered" — since 2026-08-12 an import does not re-register an
+        # acquisition that already belongs to a project (06_REGISTRIES §2.3b), so
+        # that word would be wrong for the common case. "Recorded" is true either
+        # way: the provenance row is written even when the link is deferred.
         bits.append(
-            f"{result['queued']} registered, links pending — your data is safely "
-            f"recorded in the project; this machine's connection to the share "
-            f"cannot create the file links, so the data office completes them")
+            f"{result['queued']} recorded, links pending — your data is safe and "
+            f"the addition is logged in the project; this machine's connection to "
+            f"the share cannot create the file links, so the data office completes "
+            f"them")
     if result["skipped"]:
         bits.append(f"{result['skipped']} skipped")
     if result["failed"]:

@@ -148,9 +148,21 @@ a single experiment. It is where the group's analysis and organisation happen.
   it costs no space and never touches `/raw/`. Anything the tool writes into your
   project is recorded in the project's `provenance.csv`, which is why it asks for
   your name.
-- **One acquisition can belong to more than one project.** Adding it to a second
-  project does not remove it from the first — both projects get their own link to
-  the same raw data.
+- **You can add one acquisition to as many projects as you like.** Adding it to a
+  second project does not remove it from the first — each project gets its own
+  link to the same raw data, and neither costs extra space.
+  **But the registry records one project per acquisition: the one it was acquired
+  for.** So searching the registry by project tells you where data was *acquired*,
+  not everywhere it is *used*. To see what a project contains today, look in the
+  project folder — or at its `provenance.csv`, which lists everything the tools
+  put there and when.
+- **Your project folder is yours.** Organise it however you like — move things,
+  add folders, and **delete links in `raw_linked\` you don't want.** A folder
+  listing hundreds of acquisitions isn't useful, and pruning it breaks nothing:
+  deleting a link never touches the data. The acquisition, its checksums and its
+  registry entry are all still there, still findable in the Finder, and the link
+  can be put back. The four folders are a *recommendation* we think will serve
+  you, not a rule.
 - **Inside your project**, `raw_linked\` links the project to its raw
   acquisitions (created automatically when data is ingested for that project, or
   when you add one yourself). The rest of the folder is yours to organise:
