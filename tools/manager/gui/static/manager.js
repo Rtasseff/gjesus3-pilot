@@ -460,6 +460,17 @@ $("r-go").addEventListener("click", async () => {
         payload.queued ? { label: "Links pending",
           value: `${payload.queued} — your data is registered; the data office `
                + `completes the file links` } : null,
+        // Say this plainly rather than let the researcher discover it later: the
+        // acquisition IS in their project (link + provenance), but the registry
+        // still lists whichever project it was acquired for. An acquisition is
+        // registered to exactly one project — 06_REGISTRIES §2.3b.
+        payload.shared ? { label: "Registered to",
+          value: `${payload.shared} of these stay registered to the project they `
+               + `were acquired for — they are in your project folder, but the `
+               + `registry lists one project per acquisition` } : null,
+        payload.registered ? { label: "Newly registered",
+          value: `${payload.registered} had no project and are now registered to `
+               + `this one` } : null,
       ].filter(Boolean),
     });
     state.rawSel.clear();

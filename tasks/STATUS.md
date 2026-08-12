@@ -88,6 +88,35 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **One project per acquisition + the project-folder ownership boundary — ✅ CODE + DOCS
+  DONE (2026-08-12); 🕗 exe NOT rebuilt, nothing redeployed. Branch
+  `fix/project-id-single-valued`, worktree `gjesus3-dev\project-id-single-valued`.**
+  Reverses the one-day-old semicolon-list decision and, more importantly, writes down the
+  boundary that reversal exposed.
+  **(1) `registry_raw.project_id` is write-once** — one project, the one ingest established
+  ([`06_REGISTRIES §2.3b`](../mfb-rdm-docs/06_REGISTRIES.md)). Sharing an acquisition across
+  projects still works: the link is made and the destination project's `provenance.csv`
+  records it — it is just **not registered**. Searching the registry by project is rare and
+  always means *where it was acquired*, which write-once preserves; against that the list
+  cost eight readers that failed **silently** when they forgot to split. **The readers were
+  kept** (a single value is a length-1 list) — only the writer changed, so nothing was
+  reverted that didn't need to be. `add_project_id` survives, called by no tool, guarded by
+  a `git grep` check in `test_project_ids.py` that fails if anything wires it back in.
+  **(2) Project folders are researcher-owned** (new
+  [`05_PROJECTS §3a`](../mfb-rdm-docs/05_PROJECTS.md), ✅ DECIDED): the system creates,
+  populates, documents and teaches, but **mandates nothing** — researchers may delete
+  anything in their project folder, hard links included. **So no system-of-record fact may
+  be derived from a project folder's contents.** Written down because it had already been
+  violated in scoping: a proposed validator check treated a missing link as an integrity
+  error, which would have read 1,939 associations-without-provenance as defects. They are
+  not. (Measured: of 11,053 links the system created, **35 — 0.3% — have since been
+  deleted**. Small, but permission is the argument, not the number.) §3a also warns off the
+  bulk "repair" that nearly followed, which for one project would have dumped **635**
+  unwanted links into a folder its owner had been pruning.
+  Full suite green (20 files); **no NAS state written.** Also backlogged: the **metadata
+  database** that models project↔acquisition properly. **Next: rebuild + redeploy
+  `gjesus3_manager.exe`** — the researcher-visible wording changed (the completion modal now
+  says how many stay registered elsewhere). The ingest exe is unaffected.
 - **Project Manager GUI — ✅ DONE (2026-08-12): built, verified by hand, exe DEPLOYED to
   the NAS, subfolder backfill run live. Merged to `main` (`253ac0d`, `--no-ff`); branch +
   worktree retired.** A researcher-facing
