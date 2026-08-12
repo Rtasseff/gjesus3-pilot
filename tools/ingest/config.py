@@ -381,15 +381,19 @@ def expand_batch(cfg, nas_root=None):
         researchers = disco.get("researchers") or None
         if researchers:
             researchers = {r.lower() for r in researchers}
-        matches, ni_flat_index = ni_flat.discover(
+        matches, ni_flat_index, n_files_seen = ni_flat.discover(
             staging_dir, registry_path=registry_path, researchers=researchers,
             require_project=bool(disco.get("require_project", True)),
         )
-        if not matches:
+        # Only a source with NO reconstructed DICOMs at all is an error (wrong
+        # path / empty snapshot). Finding files but selecting none is the
+        # ordinary idempotent re-run and must exit cleanly — raising there made
+        # a successful no-op look like a crash.
+        if not matches and not n_files_seen:
             raise ValueError(
-                f"No NI acquisitions discovered under {staging_dir} "
-                f"(nothing matched the reconstruction filename grammar, or all "
-                f"of it is already registered)."
+                f"No reconstructed NI DICOMs found under {staging_dir} — "
+                f"nothing matched the filename grammar "
+                f"<14digit>_<MODALITY>_<ALGO>_<recon>.dcm. Check the path."
             )
     else:
         search = os.path.join(staging_dir, pattern)

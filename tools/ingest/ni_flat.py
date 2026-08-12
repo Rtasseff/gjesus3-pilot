@@ -86,11 +86,16 @@ def dst_basename(filename, recon_idx):
 
 def discover(staging_dir, registry_path=None, researchers=None,
              require_project=True):
-    """Walk `staging_dir` and return (matches, index).
+    """Walk `staging_dir` and return (matches, index, n_files_seen).
 
     `matches` is one representative source FILE per acquisition (so the existing
     per-case loop in expand_batch still has a real path to work with); `index`
     maps that path -> everything the case needs.
+
+    `n_files_seen` is what lets the caller tell "this path is wrong / empty"
+    (raise) apart from "everything here is already ingested" (a clean no-op).
+    An idempotent re-run is the NORMAL case for a bulk pull — it must not look
+    like a failure.
     """
     by_key = {}
     for dirpath, _dirs, filenames in os.walk(staging_dir):
@@ -174,6 +179,7 @@ def discover(staging_dir, registry_path=None, researchers=None,
         print(f"[ni_flat] {n_skip_noproject} acquisition(s) HELD BACK — no animal-"
               f"protocol code in the path. These need a (researcher, series) -> "
               f"code mapping; run tools/ni_gnuclear_discover.py to list them.")
+    n_files = sum(len(v) for v in by_key.values())
     print(f"[ni_flat] {len(matches)} acquisition(s) discovered from "
-          f"{sum(len(v) for v in by_key.values())} DICOM file(s).")
-    return matches, index
+          f"{n_files} DICOM file(s).")
+    return matches, index, n_files
