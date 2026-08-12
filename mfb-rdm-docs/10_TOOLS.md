@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
-**Last Updated:** 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; built + verified, 🕗 not yet deployed. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
+**Last Updated:** 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
 
 ---
 
@@ -986,7 +986,7 @@ import — lazy-loaded — and `ftp_mirror.py` is bundled as data). **Build OUTS
 in-app "? Help" link) + `README.txt`. One exe serves both pages; operators run it from the
 NAS (≈3-5 s self-extract on first launch). Build/deploy reference: `tools/operator/gui/README.md`.
 
-### 5.3 Project Manager GUI — `gjesus3_manager` (built 2026-08-12; 🕗 not yet deployed)
+### 5.3 Project Manager GUI — `gjesus3_manager` (DECIDED, shipped 2026-08-12)
 
 The **researcher**-facing counterpart to the operator ingest GUI: a local Flask app
 (`tools/manager/gui/app.py`, port **5001** so it can run alongside the ingest GUI) over the
@@ -1041,8 +1041,17 @@ ingest spec). Build **OUTSIDE OneDrive**. Bundles the shared static assets and
 `tools/templates/project.yaml`; excludes paramiko/numpy/czifile, which it never touches.
 Pinned end-to-end by `tools/test_manager.py` (drives the real app against a scratch NAS).
 
-**Status 🕗:** built and verified against a scratch NAS; **not built as an exe and not
-deployed to the NAS.**
+**Deployed 2026-08-12** to `\\gjesus3\gjesus3\gjesus3-data\tools\` as
+`gjesus3_manager.exe` (13,113,252 bytes, sha256 `d060d566…`) + a `Project Manager.lnk`,
+alongside `gjesus3_ingest.exe` (which the deploy left byte-identical — the point of a
+second exe). `tools\README.txt` on the share covers both apps.
+
+> **When testing, point it at a scratch RDM-System root.** With no saved root of its own
+> the app falls back to the ingest GUI's, so on a machine that already runs the ingest
+> tools its **first launch opens against live production**. That default is deliberate
+> (one less setup step on an operator machine), but it means a "just trying it out"
+> session writes real registry rows — which is exactly what happened during the
+> 2026-08-12 verification (see the CHANGELOG entry and its clean-up).
 
 ---
 

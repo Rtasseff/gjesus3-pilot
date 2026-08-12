@@ -82,7 +82,9 @@ Overview: [`operator/README.md`](operator/README.md). Operator questions:
 
 ## Researcher-facing
 
-Researchers do not run scripts. They use the **Finder** — the generated
+Researchers do not run scripts — they use two double-click apps on the share.
+
+**Finding data — the Finder.** The generated
 `registries/index.html` on the share (plus a per-project `index.html` in each
 project folder): double-click over SMB, search by id / instrument / date /
 subject / region, and **Copy path** straight to the data. See
@@ -96,7 +98,7 @@ concern, not the researcher's.)
 `/raw/` acquisitions into a project as hard links, and copy local files in — each
 with provenance. A thin front-end over [`manager/`](manager/) + [`ingest/`](ingest/);
 it never reimplements a rule. Spec: [`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md).
-**🕗 Built and verified; not yet deployed to the NAS.**
+**Deployed to the NAS 2026-08-12** (`gjesus3_manager.exe` + `Project Manager.lnk`).
 
 ---
 

@@ -118,26 +118,33 @@ The genuinely in-flight items (kept tight — everything else is in
   existing ones — **not yet run against the live NAS**), and a **locked/atomic writer for
   `registry_projects.csv`** (`ingest/projects_registry.py`; `create_project.py` now holds
   the lock across its whole read-decide-write).
-  **Exe built + verified frozen (2026-08-12):** `gjesus3_manager.exe`, **13,113,252 bytes,
-  sha256 `d060d566…`**, built off-OneDrive to `D:\_dist_mgr\` (work dir `D:\_build_mgr\`).
-  Exercised end to end **through the frozen exe** against a scratch NAS — create (with the
-  **templated** `_project.yaml`, i.e. the bundled `tools/templates/project.yaml` resolved,
-  not the silent inline fallback), import from raw (both primary kinds), provenance,
-  registry write, and the in-frozen per-project `index.html` refresh. The shared assets
-  serve correctly from `/shared/` inside the bundle.
-  **What is left, and all three need Ryan:**
-  1. **Run the backfill on `J:`.** `--dry-run` against the live NAS confirms the handoff's
-     survey exactly — **49 folders, 147 subfolders to create**, the **3** folderless closed
-     rows (PROJ-0003/0008/0009) skipped and listed, the **5** `_project.yaml`-less folders
-     (PROJ-0005/0006/0007/0016/0017) reported. Nothing written yet.
-  2. **Verify the exe by hand**, then deploy backup-first to
-     `\\GJESUS3\gjesus3\gjesus3-data\tools\` with a `.lnk`, and update
-     `tools/operator/gui/nas_tools_README.txt` (mirrored to `tools\README.txt` on the
-     share; it currently describes only the ingest tools).
-  3. **Merge this branch to `main`** — it is not merged.
-  Deferred by decision to [`BACKLOG.md`](BACKLOG.md): project **rename** (low),
-  **`status = closed`** semantics (medium), and **server-era identity** (owner-on-create +
-  per-project edit rights).
+  **✅ DEPLOYED 2026-08-12.** `gjesus3_manager.exe` (**13,113,252 bytes, sha256
+  `d060d566…`**) is live at `\\GJESUS3\gjesus3\gjesus3-data\tools\` with a
+  `Project Manager.lnk`, verified by hand by Ryan first. Built off-OneDrive
+  (`D:\_build_mgr` / `D:\_dist_mgr`), staged as `.exe.new` and atomically renamed, then
+  checksum-verified. **`gjesus3_ingest.exe` is provably untouched** (sha256 `cde997ba…`) —
+  the point of a second exe. `tools\README.txt` now covers both apps (mirrored from
+  `tools/operator/gui/nas_tools_README.txt`). Pre-deploy backup + a checksum manifest of
+  the whole `tools\` folder at `C:\Users\rtasseff\temp\gjesus3_manager_deploy_20260812\`;
+  **rollback = delete the two new files, restore `README.txt`.**
+  **✅ Subfolder backfill run live:** **147 directories** created across all 49 project
+  folders (49 × 3 — `raw_linked/` already existed everywhere); the 3 folderless closed rows
+  skipped and listed, the 5 `_project.yaml`-less folders reported. Every registry CSV kept
+  its previous mtime; a re-run reports `created: 0 · already complete: 49`.
+  **⚠️ One production cleanup, done:** verifying the exe was done against the **live**
+  system, which created `PROJ-0054` / `99_test` and imported 6 acquisitions into it (the
+  first real two-project cells). Removed backup-first by byte-exact line editing
+  (`C:\Users\rtasseff\temp\gjesus3_99test_removal_20260812\`): 0 occurrences of PROJ-0054
+  anywhere, only the two intended files changed, 13,737 raw rows and 52 project rows, all 6
+  acquisitions back to their original single project, **0 multi-project rows**, id retired
+  not reused. Cause: the manager falls back to the ingest GUI's saved RDM-System root when
+  it has none of its own, so its first launch on a configured machine points at production.
+  **Deliberately left as-is** (Ryan's call) — the convenience is worth it; just point it at
+  a scratch root when testing.
+  **What is left:** **merge this branch to `main`** — it is not merged, and that is the
+  only outstanding step. Deferred by decision to [`BACKLOG.md`](BACKLOG.md): project
+  **rename** (low), **`status = closed`** semantics (medium), and **server-era identity**
+  (owner-on-create + per-project edit rights).
 - **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ DONE
   (2026-08-10); exe rebuilt + REDEPLOYED to the NAS + validated through the deployed
   exe. Merged to `main` (`a679e6a`, `--no-ff`) and pushed; branch + worktree deleted.**
