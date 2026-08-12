@@ -66,6 +66,15 @@ A few concepts make everything else click into place:
   holds **links** back to the raw acquisitions that belong to the project — a link
   looks and opens like the real file but takes no extra space and does not copy or
   move the original. (More in §4.)
+- **Four folders inside every project** — the recommended layout. They are
+  created for you, and you are free to add more:
+
+  | Folder | What goes in it |
+  |---|---|
+  | `raw_linked\` | Links to your raw acquisitions. **Managed by the tools** — don't edit it by hand. |
+  | `working\` | Scratch and in-progress analysis. |
+  | `outputs\` | Results worth keeping: figures, derived images, reports. |
+  | `metadata\` | Study-level metadata. The folder exists; what goes in it is still being designed (see §3.2). |
 - **metadata.json sidecar** — next to each acquisition in `/raw/` is a
   `metadata.json` file: the **searchable face** of that acquisition. It holds what
   you (or the operator) supplied, fields auto-extracted from the file and its
@@ -107,12 +116,13 @@ are **recommended, never blocking** — if something is unknown the ingest recor
 placeholder and a warning and continues, so your data is never held up. What each
 field means: [`08_METADATA §4`](mfb-rdm-docs/08_METADATA.md).
 
-> 🕗 **Study-level project metadata (planned, not yet live).** A richer,
-> *study-level* metadata area inside each project (`projects/<proj>/metadata/`,
-> for things like study aim and biosample sheets) is **designed but not deployed
-> yet** — it exists on none of the live projects today. Until it lands, keep
-> study context in your own notes and flag it to the Data Management Lead. Status
-> and plan: [`tasks/BACKLOG.md`](tasks/BACKLOG.md); design:
+> 🕗 **Study-level project metadata (the folder exists; what goes in it does not
+> yet).** Every project now has a `metadata\` folder, but the richer
+> *study-level* metadata layer that belongs in it — study aim, biosample sheets,
+> per-acquisition supplements — is **designed and not deployed**. Nothing writes
+> or reads it today. Until it lands, keep study context in your own notes and
+> flag it to the Data Management Lead. Status and plan:
+> [`tasks/BACKLOG.md`](tasks/BACKLOG.md); design:
 > [`05_PROJECTS §3`](mfb-rdm-docs/05_PROJECTS.md).
 
 ---
@@ -123,12 +133,28 @@ A **project** (`PROJ-<NNNN>`, with a folder named after the project — e.g. `AE
 durable unit of work — typically a funded project or an animal-protocol scope, not
 a single experiment. It is where the group's analysis and organisation happen.
 
-- **To get a project workspace**, ask the **Data Management Lead** (Ryan Tasseff,
-  Data Office) — projects are created centrally so the registry and links stay
-  consistent.
+- **To get a project workspace, make one.** Anyone with access to gjesus3 may
+  create a project — but always **through the Project Manager**, never by making
+  a folder in `projects\` by hand. Going through the tool is what keeps the
+  registry entry, the folder name and the project file consistent with each
+  other; that consistency is what makes the Finder, the links and the retention
+  rules work. If anything looks wrong, ask the Data Management Lead (Ryan
+  Tasseff, Data Office).
+- **The Project Manager** (`gjesus3_manager.exe`, on the share in `tools\`) is
+  where you do all of this from one page: see your projects, edit a project's
+  description / owner / status / notes, create a new one, **add existing
+  acquisitions from gjesus3 into a project**, and **copy your own files in**
+  (into `working\` by default). Adding an acquisition makes a link, not a copy —
+  it costs no space and never touches `/raw/`. Anything the tool writes into your
+  project is recorded in the project's `provenance.csv`, which is why it asks for
+  your name.
+- **One acquisition can belong to more than one project.** Adding it to a second
+  project does not remove it from the first — both projects get their own link to
+  the same raw data.
 - **Inside your project**, `raw_linked\` links the project to its raw
-  acquisitions (created automatically when data is ingested for that project). The
-  rest of the folder is yours to organise: analysis output, derived images, notes.
+  acquisitions (created automatically when data is ingested for that project, or
+  when you add one yourself). The rest of the folder is yours to organise:
+  `working\` for in-progress analysis, `outputs\` for results worth keeping (§2).
 - **Derived data lives in the project, not in `/raw/`.** Anything you generate
   (e.g. NIfTI conversions, segmentations, figures) belongs under your project
   folder; raw stays untouched and is the thing everything traces back to.

@@ -37,7 +37,11 @@
   // Click the dim backdrop (but not the card) to dismiss.
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
 
-  // opts: { ok, total, unit?, failedAcqIds?: string[], rows?: [{label, value}] }
+  // opts: { ok, total, unit?, failedAcqIds?: string[], rows?: [{label, value}],
+  //         title?, titleFail?, headline?, failLine? }
+  // The four optional strings let a NON-ingest run (the Project Manager's
+  // import) reuse this modal instead of forking a near-identical one. The
+  // defaults are the ingest wording, so the ingest pages are unaffected.
   window.showCompletionModal = function (opts) {
     const o = opts || {};
     const total = o.total || 0;
@@ -49,16 +53,17 @@
 
     modal.classList.toggle("has-fail", !allOk);
     if (checkEl) checkEl.textContent = allOk ? "✓" : "!";
-    titleEl.textContent = allOk ? "Ingest complete"
-                                : "Ingest finished — with issues";
+    titleEl.textContent = allOk ? (o.title || "Ingest complete")
+                                : (o.titleFail || "Ingest finished — with issues");
 
-    let html = `<p class="done-stat">${ok} of ${total} ${esc(unit)} ` +
-      `ingested into the RDM System.</p>`;
+    let html = `<p class="done-stat">` + (o.headline ? esc(o.headline)
+      : `${ok} of ${total} ${esc(unit)} ingested into the RDM System.`) + `</p>`;
     if (!allOk) {
       const ids = failed.slice(0, 6).map(esc).join(", ");
-      html += `<p class="done-fail">${nFail} did not ingest` +
+      html += `<p class="done-fail">` +
+        (o.failLine ? esc(o.failLine) : `${nFail} did not ingest`) +
         (ids ? ` (${ids}${failed.length > 6 ? " …" : ""})` : "") +
-        `. See the ingest log below for details.</p>`;
+        `. See the log below for details.</p>`;
     }
     const rows = (o.rows || []).filter((r) => r && r.value);
     if (rows.length) {

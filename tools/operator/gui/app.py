@@ -90,6 +90,9 @@ value_fields = importlib.import_module(f"{core.__name__}.value_fields")
 # offered only discovered.* keys (+ 3 hard-coded builder extras), so those fields
 # were undraggable even though they resolve fine at ingest.
 from ingest import resolver as _resolver  # noqa: E402
+# Shared folder-listing backend (tools/filebrowse.py) — the counterpart of the
+# shared static/folder_browser.js, used by this app and the Project Manager.
+import filebrowse  # noqa: E402
 
 # Fixed ${...} tokens offered as palette chips in BOTH the builder and runner
 # (unioned with each folder's discovered.* keys). Sourced from the resolver so
@@ -504,77 +507,21 @@ def api_recipes_dir():
     })
 
 
-# Names that are never an ingest target and only clutter the browser.
-_BROWSE_HIDE = {"system volume information", "$recycle.bin", "$recycle.bin"}
-
-# Cap the entries returned for one folder (a huge data dir would bloat the page).
-_BROWSE_LIMIT = 3000
-
-
-def _list_drives():
-    """Available drive roots (Windows) or '/' (POSIX), for the browser's jump bar."""
-    if os.name == "nt":
-        import string
-        return [f"{c}:\\" for c in string.ascii_uppercase if os.path.exists(f"{c}:\\")]
-    return ["/"]
-
-
 @app.route("/api/listdir", methods=["POST"])
 def api_listdir():
     """List one local folder for the in-page folder browser.
 
-    The tkinter directory chooser shows ONLY folders (so every folder looks
-    empty, which confused operators). Instead we render our own browser: this
-    returns the folder's subfolders AND files (files are shown greyed, for
-    context only), plus the parent + drive list to navigate. Local app, so
-    listing the local filesystem is fine.
-
-    `desc` flips the name order (Z->A). Instrument source folders are named by
-    date (…/AxioScan/20260522), so reverse-name IS newest-first — the same
-    reasoning as the SFTP exam list below. The sort is done HERE, before the
-    _BROWSE_LIMIT cap, so a reversed view of a huge folder shows its true LAST
-    entries; reversing the truncated list in the browser would silently show the
-    wrong end.
+    The listing itself lives in `tools/filebrowse.py` — the backend counterpart
+    of the shared `static/folder_browser.js`, so this app and the Project
+    Manager cannot drift on sort order or the entry cap (the same reason the JS
+    component was unified). See that module for why the sort happens
+    server-side, before the cap.
     """
     data = request.get_json(silent=True) or {}
-    raw = (data.get("path") or "").strip()
-    desc = bool(data.get("desc"))
-    path = os.path.abspath(raw) if raw else os.path.expanduser("~")
-
-    out = {"path": path, "parent": None, "entries": [], "desc": desc,
-           "drives": _list_drives(), "error": None, "truncated": False}
-
-    if not os.path.isdir(path):
-        out["error"] = f"Not a folder: {path}"
-        path = os.path.expanduser("~")
-        out["path"] = path
-
-    parent = os.path.dirname(path)
-    out["parent"] = parent if parent and os.path.normpath(parent) != os.path.normpath(path) else None
-
-    try:
-        entries = []
-        with os.scandir(path) as it:
-            for e in it:
-                if e.name.lower() in _BROWSE_HIDE:
-                    continue
-                try:
-                    is_dir = e.is_dir()
-                except OSError:
-                    is_dir = False
-                entries.append({"name": e.name, "is_dir": is_dir})
-        # Case-insensitive name order (flipped by `desc`), then a STABLE pass
-        # that lifts folders above files — so the grouping never flips, only the
-        # name order does.
-        entries.sort(key=lambda x: x["name"].lower(), reverse=desc)
-        entries.sort(key=lambda x: not x["is_dir"])
-        if len(entries) > _BROWSE_LIMIT:
-            out["truncated"] = True
-            entries = entries[:_BROWSE_LIMIT]
-        out["entries"] = entries
-    except OSError as ex:
-        out["error"] = str(ex)
-    return jsonify(out)
+    return jsonify(filebrowse.list_folder(
+        data.get("path"), desc=bool(data.get("desc")),
+        with_size=bool(data.get("with_size")),
+    ))
 
 
 @app.route("/api/value_fields")

@@ -52,6 +52,9 @@ if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
 from ingest import registry  # noqa: E402  (after sys.path tweak)
+# Aliased: the local variable `project_ids` in check_registry_raw is the SET of
+# known ids, and would shadow the module.
+from ingest import project_ids as proj_id_cell  # noqa: E402
 
 
 def log(msg, level="INFO"):
@@ -286,13 +289,17 @@ def validate(nas_root, check_enrich=True):
                         f"(from canonical_path '{canonical}')", label)
                     folder = None  # don't chase a sidecar we can't reach
 
-        # 7. project_id existence (only PROJ-XXXX form, only if we have a set)
-        proj = (row.get("project_id") or "").strip()
-        if proj and PROJ_ID_RE.match(proj) and project_ids is not None:
-            if proj not in project_ids:
-                issues.error(
-                    f"project_id '{proj}' not found in "
-                    f"registry_projects.csv", label)
+        # 7. project_id existence (only PROJ-XXXX form, only if we have a set).
+        # `project_id` is a `;`-separated LIST (2026-08-11), so each id is
+        # checked on its own. Testing the whole cell made PROJ_ID_RE fail on a
+        # two-project value, which SKIPPED the existence check rather than
+        # failing it — a dangling id in a multi-project row went unreported.
+        for proj in proj_id_cell.split_project_ids(row.get("project_id")):
+            if PROJ_ID_RE.match(proj) and project_ids is not None:
+                if proj not in project_ids:
+                    issues.error(
+                        f"project_id '{proj}' not found in "
+                        f"registry_projects.csv", label)
 
         # 8. Phase 3 enrichment (WARN) — needs a resolvable folder
         if (check_enrich and sample_type in ENRICH_SAMPLE_TYPES

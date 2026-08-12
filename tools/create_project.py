@@ -10,7 +10,6 @@ See 05_PROJECTS.md and 10_TOOLS.md for full specification.
 """
 
 import argparse
-import csv
 import os
 import sys
 from datetime import datetime, timezone
@@ -20,8 +19,14 @@ from pathlib import Path
 # (this script, ingest_raw.py Step 12, future Excel-importer, close-out
 # tool) shares one source of truth.
 from ingest import provenance as provenance_mod
-from ingest import csv_safe
+from ingest import locking
 from ingest import resources
+# The projects-registry schema + its locked/atomic write paths, and the
+# recommended project subfolders. Both were inlined here when this script was
+# the only thing that created a project; the Project Manager GUI is now a second
+# front-end over the same act, so they live where both can call them.
+from ingest import projects_registry
+from ingest import project_layout
 # The name -> folder rule has ONE home (2026-08-02); this script is the only
 # thing that CREATES a project, and it derives the folder from there rather
 # than building a path string of its own. See 05_PROJECTS "Project reference
@@ -36,18 +41,13 @@ from ingest.project_naming import (
 
 # --- Constants ---
 
-PROJECT_REGISTRY_FIELDS = [
-    "project_id",
-    "name",              # RENAMED from "short_name" 2026-08-02 — the project's
-                         # human key, case-preserved, and the folder verbatim.
-    "description",
-    "owner",
-    "start_date",
-    "status",
-    "last_activity",
-    "folder_location",
-    "notes",
-]
+# The schema + the id/uniqueness rules moved to ingest/projects_registry.py so
+# the GUI shares them. Re-exported here because this module's names are the
+# ones existing callers and docs refer to.
+PROJECT_REGISTRY_FIELDS = projects_registry.PROJECT_REGISTRY_FIELDS
+read_project_registry = projects_registry.read_projects
+next_project_id = projects_registry.next_project_id
+check_name_unique = projects_registry.check_name_unique
 
 
 def log(msg, level="INFO"):
@@ -56,51 +56,14 @@ def log(msg, level="INFO"):
     print(f"[{ts}] {level}: {msg}")
 
 
-def read_project_registry(registry_path):
-    """Read project registry and return list of row dicts."""
-    if not os.path.exists(registry_path):
-        return []
-    # utf-8-sig: tolerate an Excel BOM so the first column key stays
-    # "project_id" for uniqueness / next-id checks.
-    with open(registry_path, "r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        return list(reader)
-
-
-def next_project_id(rows):
-    """Determine the next PROJ-NNNN ID from existing registry rows."""
-    max_num = 0
-    for row in rows:
-        pid = row.get("project_id", "")
-        if pid.startswith("PROJ-"):
-            try:
-                num = int(pid.split("-")[1])
-                if num > max_num:
-                    max_num = num
-            except (ValueError, IndexError):
-                continue
-    return f"PROJ-{max_num + 1:04d}"
-
-
-def check_name_unique(rows, name):
-    """Check that `name` is not already in the registry.
-
-    Case-INSENSITIVE: the NAS filesystem is case-insensitive, so two names
-    differing only in case would fight over one folder.
-    """
-    for row in rows:
-        if row.get("name", "").lower() == name.lower():
-            return False
-    return True
-
-
 def load_template(template_path):
     """Load the project.yaml template."""
     with open(template_path, "r") as f:
         return f.read()
 
 
-def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
+def create_project(name, description, owner, nas_root, dry_run=False, notes="",
+                   _hold_lock=True):
     """Create a new project workspace.
 
     Args:
@@ -111,6 +74,22 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
         nas_root: Path to NAS root (e.g., /mnt/gjesus3).
         dry_run: If True, preview without making changes.
         notes: Optional notes.
+        _hold_lock: take the registry lock ourselves (the default). Pass False
+            ONLY from a caller that already holds it — `registry_lock` is not
+            reentrant.
+
+    CONCURRENCY. "Read the registry, pick the next PROJ id and check the name is
+    free" and "append the row that claims them" are ONE critical section: two
+    students creating a project at the same moment would otherwise both read the
+    same maximum and both mint `PROJ-0053`, or both pass the uniqueness check on
+    the same name. The whole read-decide-write therefore runs under
+    ``locking.registry_lock`` — the same mutex every other registry writer uses.
+    The folder and `_project.yaml` are written inside it too, so a project can
+    never exist in the registry without its folder or vice versa. It is a
+    handful of small local writes; the lock is not held across anything slow.
+
+    Ingest's auto-create call site (Step 9.5) runs between the two ingest
+    registry locks and holds neither, so it uses the default.
 
     Returns:
         Tuple of (project_id, success).
@@ -123,9 +102,45 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
             log(e, "ERROR")
         return None, False
 
+    registries_dir = os.path.join(nas_root, "registries")
+    registry_path = projects_registry.projects_registry_path(nas_root)
+
+    if dry_run:
+        # Read-only preview: no lock needed, and the reported id is a
+        # best-effort snapshot (another creation could take it first).
+        rows = projects_registry.read_projects(registry_path)
+        if not check_name_unique(rows, name):
+            log(f"Project name '{name}' already exists in registry", "ERROR")
+            return None, False
+        project_id = next_project_id(rows)
+        log(f"Generated project ID: {project_id}")
+        _log_summary(name, description, owner, project_id,
+                     os.path.join(nas_root, "projects", project_folder_name(name)),
+                     datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+        log("[DRY RUN] Would create folder and registry entry. Skipping.")
+        return project_id, True
+
+    if _hold_lock:
+        with locking.registry_lock(registries_dir):
+            return _create_locked(name, description, owner, nas_root,
+                                  registry_path, notes)
+    return _create_locked(name, description, owner, nas_root, registry_path,
+                          notes)
+
+
+def _log_summary(name, description, owner, project_id, project_dir, today):
+    log(f"  Name:        {name}")
+    log(f"  Description: {description}")
+    log(f"  Owner:       {owner}")
+    log(f"  Project ID:  {project_id}")
+    log(f"  Folder:      {project_dir}")
+    log(f"  Start Date:  {today}")
+
+
+def _create_locked(name, description, owner, nas_root, registry_path, notes):
+    """The critical section of `create_project` — caller holds the lock."""
     # --- Check registry ---
-    registry_path = os.path.join(nas_root, "registries", "registry_projects.csv")
-    rows = read_project_registry(registry_path)
+    rows = projects_registry.read_projects(registry_path)
 
     if not check_name_unique(rows, name):
         log(f"Project name '{name}' already exists in registry", "ERROR")
@@ -140,22 +155,16 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
     canonical_path = project_folder_location(name)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # --- Summary ---
-    log(f"  Name:        {name}")
-    log(f"  Description: {description}")
-    log(f"  Owner:       {owner}")
-    log(f"  Project ID:  {project_id}")
-    log(f"  Folder:      {project_dir}")
-    log(f"  Start Date:  {today}")
-
-    if dry_run:
-        log("[DRY RUN] Would create folder and registry entry. Skipping.")
-        return project_id, True
+    _log_summary(name, description, owner, project_id, project_dir, today)
 
     # --- Create directory structure ---
+    # The recommended subfolders (05_PROJECTS §3): raw_linked/ working/
+    # outputs/ metadata/. One definition, in ingest/project_layout.py, shared
+    # with the GUI and the backfill script. `metadata/` is created EMPTY — the
+    # study-metadata layer that fills it stays deferred.
     os.makedirs(project_dir, exist_ok=True)
-    os.makedirs(os.path.join(project_dir, "raw_linked"), exist_ok=True)
-    log("Created directory structure")
+    made = project_layout.ensure_subfolders(project_dir)
+    log(f"Created directory structure ({', '.join(made) if made else 'already present'})")
 
     # --- Write _project.yaml ---
     # Resolve the template so it works from a source checkout AND the frozen exe
@@ -204,10 +213,10 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
     log("Wrote provenance.csv (empty with headers)")
 
     # --- Append to registry ---
-    os.makedirs(os.path.dirname(registry_path), exist_ok=True)
-    file_exists = os.path.exists(registry_path)
-
-    row = {
+    # Header-checked + trailing-newline-guarded by projects_registry.append_row;
+    # the lock around this whole function is what makes the id and the name
+    # actually exclusive.
+    projects_registry.append_row(registry_path, {
         "project_id": project_id,
         "name": name,
         "description": description,
@@ -217,14 +226,7 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes=""):
         "last_activity": today,
         "folder_location": canonical_path,
         "notes": notes,
-    }
-
-    csv_safe.ensure_trailing_newline(registry_path)
-    with open(registry_path, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=PROJECT_REGISTRY_FIELDS)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(row)
+    })
     log(f"Appended to registry: {registry_path}")
 
     log(f"DONE: {project_id} - {canonical_path}")

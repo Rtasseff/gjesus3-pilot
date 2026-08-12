@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-08-02
+**Last Updated:** 2026-08-12
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -88,6 +88,63 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **Project Manager GUI — ✅ BUILT + VERIFIED against a scratch NAS (2026-08-12); 🕗 exe not
+  built, nothing deployed. Branch `feat/project-manager-gui`, worktree
+  `gjesus3-dev\project-manager-gui` — NOT merged to `main`.** A researcher-facing
+  counterpart to the operator ingest tools, `tools/manager/gui/` on port 5001: list
+  projects and edit `description` / `owner` / `status` / `notes`, create a project, and
+  **add data to a project** — from `/raw/` (search with the Finder's filters, tick, →
+  hard links + provenance through the existing linker, no parallel path) or from
+  local/mounted storage (tick files → copy → provenance). Spec:
+  [`../mfb-rdm-docs/10_TOOLS.md`](../mfb-rdm-docs/10_TOOLS.md) §5.3; narrative in
+  [`../CHANGELOG.md`](../CHANGELOG.md) (2026-08-12). It **answers** the *"Select-in-Finder
+  → assemble a project"* backlog item (marked done there) — a served page can do what a
+  `file://` page can't. **The four Data Office calls of 2026-08-11 are all implemented:**
+  **(1) `registry_raw.project_id` is now a semicolon list** (`PROJ-0001;PROJ-0007`) —
+  owning section [`06_REGISTRIES §2.3b`](../mfb-rdm-docs/06_REGISTRIES.md), one definition
+  in `ingest/project_ids.py`. **Eight** silently-failing reader sites were fixed, not the
+  five originally listed (a sweep found `ingest_raw._touched_project_ids`,
+  `relink_projects` and `metadata_completeness` too); `tools/test_project_ids.py` pins that
+  an acquisition in two projects appears in **both** per-project indexes.
+  **(2) The deferred-link queue was adopted, not rebuilt** (cherry-pick, see the row
+  below), and its missing `registry_lock` + pid temp are now in place.
+  **(3) Separate exe, maximum similarity** — shared `style.css`, `folder_browser.js`
+  (extended with a *file* multi-select mode in the shared copy), completion modal, `/api/*`
+  shape and SSE stream; `/api/listdir`'s body moved to a shared `tools/filebrowse.py`.
+  **(4) Anyone with access may create a project — through the system**;
+  [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md) §4 rewritten.
+  Also landed: the **subfolder convention** `raw_linked/` · `working/` · `outputs/` ·
+  `metadata/` (created on every new project; `tools/backfill_project_subfolders.py` for the
+  existing ones — **not yet run against the live NAS**), and a **locked/atomic writer for
+  `registry_projects.csv`** (`ingest/projects_registry.py`; `create_project.py` now holds
+  the lock across its whole read-decide-write).
+  **✅ DEPLOYED 2026-08-12.** `gjesus3_manager.exe` (**13,113,252 bytes, sha256
+  `d060d566…`**) is live at `\\GJESUS3\gjesus3\gjesus3-data\tools\` with a
+  `Project Manager.lnk`, verified by hand by Ryan first. Built off-OneDrive
+  (`D:\_build_mgr` / `D:\_dist_mgr`), staged as `.exe.new` and atomically renamed, then
+  checksum-verified. **`gjesus3_ingest.exe` is provably untouched** (sha256 `cde997ba…`) —
+  the point of a second exe. `tools\README.txt` now covers both apps (mirrored from
+  `tools/operator/gui/nas_tools_README.txt`). Pre-deploy backup + a checksum manifest of
+  the whole `tools\` folder at `C:\Users\rtasseff\temp\gjesus3_manager_deploy_20260812\`;
+  **rollback = delete the two new files, restore `README.txt`.**
+  **✅ Subfolder backfill run live:** **147 directories** created across all 49 project
+  folders (49 × 3 — `raw_linked/` already existed everywhere); the 3 folderless closed rows
+  skipped and listed, the 5 `_project.yaml`-less folders reported. Every registry CSV kept
+  its previous mtime; a re-run reports `created: 0 · already complete: 49`.
+  **⚠️ One production cleanup, done:** verifying the exe was done against the **live**
+  system, which created `PROJ-0054` / `99_test` and imported 6 acquisitions into it (the
+  first real two-project cells). Removed backup-first by byte-exact line editing
+  (`C:\Users\rtasseff\temp\gjesus3_99test_removal_20260812\`): 0 occurrences of PROJ-0054
+  anywhere, only the two intended files changed, 13,737 raw rows and 52 project rows, all 6
+  acquisitions back to their original single project, **0 multi-project rows**, id retired
+  not reused. Cause: the manager falls back to the ingest GUI's saved RDM-System root when
+  it has none of its own, so its first launch on a configured machine points at production.
+  **Deliberately left as-is** (Ryan's call) — the convenience is worth it; just point it at
+  a scratch root when testing.
+  **What is left:** **merge this branch to `main`** — it is not merged, and that is the
+  only outstanding step. Deferred by decision to [`BACKLOG.md`](BACKLOG.md): project
+  **rename** (low), **`status = closed`** semantics (medium), and **server-era identity**
+  (owner-on-create + per-project edit rights).
 - **Operator-GUI: reversible browse order + one obvious "read the folder" — ✅ DONE
   (2026-08-10); exe rebuilt + REDEPLOYED to the NAS + validated through the deployed
   exe. Merged to `main` (`a679e6a`, `--no-ff`) and pushed; branch + worktree deleted.**

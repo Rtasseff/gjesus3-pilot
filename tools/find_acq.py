@@ -22,6 +22,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ingest import registry  # noqa: E402  (BOM-tolerant read_registry)
+from ingest import project_ids as pids  # noqa: E402  (the ;-separated project cell)
 
 # Free-text search is matched against the lower-cased concatenation of these.
 SEARCH_FIELDS = [
@@ -58,11 +59,22 @@ def build_records(nas):
     """Return (records, projects_index).
 
     Each record is the full registry row plus a few derived helpers:
+      _project_ids     LIST of the row's project ids (see ingest/project_ids.py)
       _raw_path        share-relative canonical path (e.g. /raw/.../ACQ.../)
-      _project_folder  share-relative project folder (or "")
-      _project_name    the project's name == its folder basename (or "")
+      _project_folder  share-relative folder of the FIRST project (or "")
+      _project_name    the project names, `;`-joined (== their folder basenames)
       _search          lower-cased blob for free-text matching
     Keeping the full row means the detail view / CLI can show any field.
+
+    MULTI-PROJECT (2026-08-11): `project_id` is a `;`-separated LIST, so the
+    lookup is per id — a bare `proj_idx.get(cell)` missed entirely on a
+    two-project row and the record silently lost its folder / name / owner. The
+    short display fields (`name`, `owner`) carry the full `;`-joined list; the
+    path-shaped and decision-shaped ones (`_project_folder`, `_project_desc`,
+    `_project_status`) resolve to the FIRST project — the original association —
+    because a path or a status is not a thing you can join. Callers that must be
+    right per-project (generate_index's per-project grouping) iterate
+    `_project_ids` against `proj_idx` instead of reading these.
     """
     nas = os.path.normpath(nas)
     proj_idx = _projects_index(nas)
@@ -71,12 +83,15 @@ def build_records(nas):
     for r in rows:
         rec = dict(r)
         rec["_raw_path"] = (r.get("canonical_path") or "").strip()
-        p = proj_idx.get((r.get("project_id") or "").strip()) or {}
-        rec["_project_folder"] = p.get("folder", "")
-        rec["_project_name"] = p.get("name", "")
-        rec["_project_owner"] = p.get("owner", "")
-        rec["_project_desc"] = p.get("desc", "")
-        rec["_project_status"] = p.get("status", "")
+        ids = pids.split_project_ids(r.get("project_id"))
+        rec["_project_ids"] = ids
+        hits = [proj_idx[i] for i in ids if i in proj_idx]
+        first = hits[0] if hits else {}
+        rec["_project_folder"] = first.get("folder", "")
+        rec["_project_name"] = ";".join(h.get("name", "") for h in hits) if hits else ""
+        rec["_project_owner"] = ";".join(h.get("owner", "") for h in hits) if hits else ""
+        rec["_project_desc"] = first.get("desc", "")
+        rec["_project_status"] = first.get("status", "")
         rec["_search"] = " ".join(str(r.get(f, "")) for f in SEARCH_FIELDS).lower()
         records.append(rec)
     return records, proj_idx
@@ -99,9 +114,15 @@ def matches(rec, *, query="", instrument="", researcher="", subject="",
     if project:
         # Match the PROJ-id OR the project's name — nobody remembers PROJ-0037,
         # and under the folder-==-name rule the name is what researchers see.
+        # Tested PER ENTRY of the `;`-separated list, not against the joined
+        # cell: the old whole-cell substring test still matched a two-project row
+        # by accident, and could also match across the separator. Deliberate now.
         p = project.lower()
-        if p not in (rec.get("project_id") or "").lower() \
-                and p not in (rec.get("_project_name") or "").lower():
+        ids = rec.get("_project_ids")
+        if ids is None:
+            ids = pids.split_project_ids(rec.get("project_id"))
+        names = [n for n in (rec.get("_project_name") or "").split(";") if n]
+        if not any(p in v.lower() for v in list(ids) + names):
             return False
     day = (rec.get("acquisition_datetime") or "")[:10]  # YYYY-MM-DD
     if since and day and day < since:

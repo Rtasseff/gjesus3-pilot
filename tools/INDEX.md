@@ -8,10 +8,11 @@ and where its full docs live. New to the system? Pick your role in
 > Instrument **operators** don't run these directly — they use the GUI or the
 > two Linux scripts (see [the operator GUI + scripts](#operator-front-ends-no-yaml)).
 > **Researchers** don't run anything here — they use the
-> [Finder](#researcher-facing) (`registries/index.html`, double-click over SMB).
+> [Finder](#researcher-facing) (`registries/index.html`, double-click over SMB)
+> and the **Project Manager** GUI.
 > A term you don't recognise → [`GLOSSARY.md`](../GLOSSARY.md).
 
-*Last Updated: 2026-06-26*
+*Last Updated: 2026-08-12*
 
 ---
 
@@ -29,6 +30,9 @@ and where its full docs live. New to the system? Pick your role in
   open the **Finder**: double-click `registries\index.html` on the share
   (or your project's own `index.html`). Guide: [`FINDER.md`](FINDER.md),
   [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md), [`FAQ.md`](FAQ.md).
+- **I'm a researcher and want to manage a project** — create one, edit its
+  description/owner/status, put acquisitions or my own files into it → the
+  **Project Manager** GUI (see [Researcher-facing](#researcher-facing)).
 - **I'm the data office / a superuser** running an ingest from YAML, creating a
   project, checking registry health, or doing a one-time back-fill / migration →
   the [top-level CLIs](#top-level-clis) below.
@@ -46,7 +50,7 @@ resolves.
 | Tool | What it does | Start it | Docs |
 |------|--------------|----------|------|
 | **`ingest_raw.py`** | The core pipeline: copy raw data from staging into `/raw/`, register one row per acquisition, write the `metadata.json` sidecar, hard-link it into a project, and auto-refresh the Finder. Idempotent; **always dry-run first**. | `python tools/ingest_raw.py -c <config>.yaml -n` (preview) then drop `-n`; `-i` for a single interactive case | [`INGEST_CLI.md`](INGEST_CLI.md), specs [`10_TOOLS.md`](../mfb-rdm-docs/10_TOOLS.md) · [`03_RAW_STORAGE.md`](../mfb-rdm-docs/03_RAW_STORAGE.md) |
-| **`create_project.py`** | Create a new project workspace under `projects/` (folder skeleton + `provenance.csv` + a `registry_projects.csv` row). Called automatically by `ingest_raw.py` when a config opts into auto-create. | `python tools/create_project.py --name "<short>" --description "…" --owner <code>` (or `--interactive`) | spec [`05_PROJECTS.md`](../mfb-rdm-docs/05_PROJECTS.md), [`10_TOOLS.md`](../mfb-rdm-docs/10_TOOLS.md) |
+| **`create_project.py`** | Create a new project workspace under `projects/` — the folder + the recommended subfolders (`raw_linked/` `working/` `outputs/` `metadata/`) + `_project.yaml` + `provenance.csv` + a `registry_projects.csv` row, all under one registry-lock hold. Called automatically by `ingest_raw.py` when a config opts into auto-create, and by the Project Manager GUI. | `python tools/create_project.py --name "<short>" --description "…" --owner <code>` (or `--interactive`) | spec [`05_PROJECTS.md`](../mfb-rdm-docs/05_PROJECTS.md), [`10_TOOLS.md`](../mfb-rdm-docs/10_TOOLS.md) |
 | **`generate_index.py`** | Write the self-contained searchable HTML **Finder** — the global `registries/index.html` and (with `--per-project`) one `index.html` per project folder. You rarely run it by hand: a scheduled job rebuilds the global index daily, and an ingest into a project refreshes that project's `index.html`. | `PYTHONPATH=tools python tools/generate_index.py --nas-root J:/gjesus3-data [--per-project]` | [`FINDER.md`](FINDER.md) |
 | **`find_acq.py`** | The search/join engine behind the Finder, plus a read-only CLI: free-text + filters (`--instrument --researcher --subject --anatomy --project --since --until`) over `registry_raw.csv` joined to `registry_projects.csv`, printing the resolved data path. | `PYTHONPATH=tools python tools/find_acq.py <query> [filters]` | [`FINDER.md`](FINDER.md) |
 | **`relink_projects.py`** | One-time, idempotent migration of legacy project links to **hard links** (the [decided method](../mfb-rdm-docs/10_TOOLS.md)); also `--create-missing` to add an absent link for an already-ingested acquisition. Historical migration is done; kept for repair. | `python tools/relink_projects.py --nas-root "J:/gjesus3-data" --dry-run` | spec [`10_TOOLS.md`](../mfb-rdm-docs/10_TOOLS.md) |
@@ -78,7 +82,9 @@ Overview: [`operator/README.md`](operator/README.md). Operator questions:
 
 ## Researcher-facing
 
-Researchers do not run scripts. They use the **Finder** — the generated
+Researchers do not run scripts — they use two double-click apps on the share.
+
+**Finding data — the Finder.** The generated
 `registries/index.html` on the share (plus a per-project `index.html` in each
 project folder): double-click over SMB, search by id / instrument / date /
 subject / region, and **Copy path** straight to the data. See
@@ -86,6 +92,13 @@ subject / region, and **Copy path** straight to the data. See
 the researcher [`FAQ.md`](FAQ.md). (The Finder is produced by
 `generate_index.py` / `find_acq.py` above, but that is the data office's
 concern, not the researcher's.)
+
+**Managing a project — the Project Manager GUI** (`gjesus3_manager.exe`, source
+[`manager/gui/`](manager/gui/)): list and edit projects, create one, add existing
+`/raw/` acquisitions into a project as hard links, and copy local files in — each
+with provenance. A thin front-end over [`manager/`](manager/) + [`ingest/`](ingest/);
+it never reimplements a rule. Spec: [`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md).
+**Deployed to the NAS 2026-08-12** (`gjesus3_manager.exe` + `Project Manager.lnk`).
 
 ---
 
@@ -101,6 +114,7 @@ Read-only checks, recovery, and one-off helpers. Run `python tools/<name>.py …
 | **`recover_subject_metadata.py`** | Superuser deferred-recovery: re-resolve subject metadata for acquisitions ingested while the animal-facility DB was unreachable. |
 | **`migrate_registry_columns.py`** | Schema-evolution helper (back up → migrate → register the `.bak`). The pattern for any future registry column change. |
 | **`migrate_project_naming.py`** | One-shot, already-executed (2026-08-02) migration to the [project reference model](../mfb-rdm-docs/05_PROJECTS.md) §2a: `registry_raw` header → `project_id`, `registry_projects` `short_name` → `name`, project folders renamed to their name, saved NAS recipes deleted. Kept as the paper trail — and as the worked example of a live-data migration (dry-run default, resumable, `--verify`, `--reverse --from-backup`). |
+| **`backfill_project_subfolders.py`** | One-time (idempotent, `--dry-run` first) back-fill of the recommended project subfolders `working/` · `outputs/` · `metadata/` onto projects that predate the convention. Skips + lists closed projects whose folders were deleted; reports rather than repairs folders with no `_project.yaml`. See [`10_TOOLS §3.1a`](../mfb-rdm-docs/10_TOOLS.md). |
 | **`backfill_microscopy_anatomy.py`**, **`backfill_mri_anatomy.py`**, **`backfill_microscopy_bestguess.py`** | One-time anatomy back-fills for historical acquisitions. See [`ANATOMY_BACKFILL.md`](ANATOMY_BACKFILL.md). |
 | **`extract_ni_archives.py`**, **`extract_xmri_archives.py`** | Unpack archived source data into staging ahead of an ingest. |
 
@@ -114,6 +128,13 @@ Read-only checks, recovery, and one-off helpers. Run `python tools/<name>.py …
   write paths.
 - [`operator/`](operator/) — the shared operator core + the GUI
   ([`operator/gui/`](operator/gui/)) and Linux scripts above.
+- [`manager/`](manager/) — the Project Manager core (`projects`, `raw_import`,
+  `local_import`, `acq_search`) + its GUI ([`manager/gui/`](manager/gui/)). Same
+  rule as `operator/`: the front-end is thin, the logic is here.
+- `filebrowse.py` — the folder-listing backend behind the in-page browser,
+  shared by both GUIs (its front-end half is
+  `operator/gui/static/folder_browser.js`, which the Project Manager serves from
+  the same directory rather than copying).
 - [`templates/`](templates/) — ingest config templates: the universal
   `ingest_template.yaml` + per-instrument templates under
   `templates/instruments/`. Copy and edit; never edit in place.

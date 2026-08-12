@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
 
 ---
 
@@ -713,15 +713,17 @@ log_activity \
 - Description
 - Owner (initials)
 
-**Actions:**
-1. Validate short name is unique (scan `registry_projects.csv`)
-2. Generate PROJ-ID (`PROJ-NNNN`, next available)
-3. Create folder: `/projects/<name>/` (the name, verbatim — [05_PROJECTS §2a](05_PROJECTS.md))
-4. Write `_project.yaml` from template
-5. Create empty `provenance.csv` with headers
-6. Create `raw_linked/` directory
-7. Append entry to `registries/registry_projects.csv`
+**Actions** — steps 1–7 run inside ONE `locking.registry_lock` hold (see below):
+1. Normalize + validate the name (`ingest/project_naming.py`; spaces → hyphens)
+2. Check the name is free — **case-insensitively** (scan `registry_projects.csv`)
+3. Generate PROJ-ID (`PROJ-NNNN`, next available; ids are never reused)
+4. Create folder: `/projects/<name>/` (the name, verbatim — [05_PROJECTS §2a](05_PROJECTS.md))
+5. Create the recommended subfolders — `raw_linked/`, `working/`, `outputs/`, `metadata/` (one definition, `ingest/project_layout.py`; [05_PROJECTS §3](05_PROJECTS.md))
+6. Write `_project.yaml` from the bundled template (resolved via `ingest/resources.py`, so it works in the frozen exe too)
+7. Create empty `provenance.csv` with headers, and append the row to `registries/registry_projects.csv` (`ingest/projects_registry.py` — header-checked)
 8. Print summary
+
+**Concurrency (2026-08-12).** "Read the registry, pick the next id, check the name is free" and "append the row that claims them" are one critical section — two simultaneous creations would otherwise both mint `PROJ-0053` or both pass the uniqueness check on one name. The folder and `_project.yaml` are written inside the same hold, so a project can never exist in the registry without its folder. `--dry-run` is read-only and takes no lock (its reported id is a snapshot, not a reservation). Callers that already hold the lock pass `_hold_lock=False`; ingest's auto-create site holds neither ingest lock, so it uses the default.
 
 **Usage:**
 ```bash
@@ -732,6 +734,24 @@ python tools/create_project.py \
 
 python tools/create_project.py --interactive
 python tools/create_project.py --name test --description "test" --owner RT --dry-run
+```
+
+**Front-end:** the **Project Manager GUI** (§5.3) is a thin front-end over this function — it does not reimplement any of the above.
+
+### 3.1a `backfill_project_subfolders` — the subfolder convention, retrofitted
+
+**Purpose:** give the projects that predate the convention their `working/`, `outputs/` and `metadata/` folders ([05_PROJECTS §3](05_PROJECTS.md)). As of 2026-08-11, **0 of 49** live project folders had them.
+
+**Location:** `tools/backfill_project_subfolders.py` · **Idempotent** · `--dry-run` first.
+
+Creates only what is missing and touches nothing else. It writes **no provenance rows** — provenance tracks files (07_PROVENANCE), and an empty directory is not one. Two categories are reported rather than "fixed":
+
+- **Registry rows with no folder** are SKIPPED and listed. Eight projects were closed on 2026-07-14/15 and their folders deleted while the rows stayed, so the acquisitions remain findable. Recreating those folders would undo a deliberate close-out.
+- **Project folders with no `_project.yaml`** (five, all predating `create_project.py`) are LISTED, not written. Writing one means inventing an owner and a start date — a Data Office call, not a backfill.
+
+```bash
+python tools/backfill_project_subfolders.py --nas-root J:/gjesus3-data --dry-run
+python tools/backfill_project_subfolders.py --nas-root J:/gjesus3-data
 ```
 
 ### 3.2 `validate_registries`
@@ -965,6 +985,73 @@ import — lazy-loaded — and `ftp_mirror.py` is bundled as data). **Build OUTS
 `--mri`) + `docs\{mri,microscopy}_guide.html` (novice HTML guides, also reachable via the
 in-app "? Help" link) + `README.txt`. One exe serves both pages; operators run it from the
 NAS (≈3-5 s self-extract on first launch). Build/deploy reference: `tools/operator/gui/README.md`.
+
+### 5.3 Project Manager GUI — `gjesus3_manager` (DECIDED, shipped 2026-08-12)
+
+The **researcher**-facing counterpart to the operator ingest GUI: a local Flask app
+(`tools/manager/gui/app.py`, port **5001** so it can run alongside the ingest GUI) over the
+same NAS. Four things, one page:
+
+| Pane | What it does |
+|------|--------------|
+| **My projects** | Every row of `registry_projects.csv`; select one to see all nine columns and edit `description` / `owner` / `status` / `notes`. |
+| **New project** | A front-end over `create_project.py` (§3.1) — live name normalization + uniqueness before submit. |
+| **Add data from the RDM System** | Search `/raw/` with the Finder's filters, tick acquisitions, add them to a project as hard links + provenance. |
+| **Add files from my computer** | Browse local/mounted storage, tick FILES, copy them into a chosen subfolder (default `working/`) + provenance. |
+
+It is a **thin front-end**: all logic lives in `tools/manager/` (`projects` · `raw_import` ·
+`local_import` · `acq_search`) and `tools/ingest/`, so the same operations can be scripted
+and will move to the server unchanged.
+
+**Design decisions:**
+
+- **A separate app and a separate exe (✅ DECIDED 2026-08-11).** Different audience and,
+  decisively, a different release cadence — folding it into `gjesus3_ingest.exe` would make
+  every project-manager tweak force a redeploy of the production ingest exe. **But built for
+  the merge that is coming:** a dedicated RDM server is expected ~Oct 2026, after which the
+  tools are redesigned as one web app and the exes retire. So the goal is *maximum
+  similarity*, not clever integration — the same `style.css`, the same
+  `folder_browser.js`, the same completion modal, the same `/api/*` JSON shape, the same SSE
+  commit stream, the same saved-state mechanism. The shared assets are **served from the
+  ingest GUI's directory** (`/shared/<path>`), not copied.
+- **Importing from raw drives the EXISTING pieces** — `linker.create_hardlink`,
+  `provenance.append_entry`, `registry.update_row`, `pending_links` — rather than a parallel
+  path, so a link added here is indistinguishable from one made at ingest (same inode, same
+  provenance shape, same recovery route). The raw-primary dispatch (`primary_kind` +
+  `primary_file_name`, three branches incl. the legacy MRI layout where
+  `primary_file_name == acq_id`) is carried over verbatim.
+- **Membership, not movement.** Adding an acquisition to a project appends the project id to
+  `registry_raw.project_id` ([06_REGISTRIES §2.3b](06_REGISTRIES.md)); it never removes an
+  earlier association and never touches `/raw/`. One locked pass per batch, not one full
+  registry rewrite per acquisition.
+- **A mount that cannot hard-link does not fail the import.** On `OSError` the acquisition is
+  queued to `registries/pending_links.csv`, a visible `<link>.PENDING-LINK.txt` stand-in is
+  written, the batch continues, and the UI says in plain words that the data **is** registered
+  and that a data-office pass (`tools/relink_pending.py`) completes the links.
+- **Copying from local checks free space before the first byte** and refuses to overwrite an
+  existing destination without an explicit per-file confirm (the 409-style pattern the recipe
+  overwrite flow established). `raw_linked/` is not an allowed destination — it is tool-managed.
+- **Never stamps `last_activity`.** That column means the newest *acquisition*
+  ([06_REGISTRIES §4.2](06_REGISTRIES.md)); an edit must not move it.
+- **A registry row with no folder is a normal state**, not corruption — the GUI shows it,
+  allows the row to be edited, and refuses to import into it.
+
+**Freeze:** `tools/manager/gui/gjesus3_manager.spec` (PyInstaller, one-file, modelled on the
+ingest spec). Build **OUTSIDE OneDrive**. Bundles the shared static assets and
+`tools/templates/project.yaml`; excludes paramiko/numpy/czifile, which it never touches.
+Pinned end-to-end by `tools/test_manager.py` (drives the real app against a scratch NAS).
+
+**Deployed 2026-08-12** to `\\gjesus3\gjesus3\gjesus3-data\tools\` as
+`gjesus3_manager.exe` (13,113,252 bytes, sha256 `d060d566…`) + a `Project Manager.lnk`,
+alongside `gjesus3_ingest.exe` (which the deploy left byte-identical — the point of a
+second exe). `tools\README.txt` on the share covers both apps.
+
+> **When testing, point it at a scratch RDM-System root.** With no saved root of its own
+> the app falls back to the ingest GUI's, so on a machine that already runs the ingest
+> tools its **first launch opens against live production**. That default is deliberate
+> (one less setup step on an operator machine), but it means a "just trying it out"
+> session writes real registry rows — which is exactly what happened during the
+> 2026-08-12 verification (see the CHANGELOG entry and its clean-up).
 
 ---
 

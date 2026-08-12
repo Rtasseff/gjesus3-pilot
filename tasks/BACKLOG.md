@@ -363,7 +363,20 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   Prep is already in place: keep the flat registry clean and keep DICOM UIDs
   captured (done) — that's what makes the eventual platform import frictionless.
 
-## Finder — "Select-in-Finder → assemble a project" (2026-06-23)
+## ✅ Finder — "Select-in-Finder → assemble a project" (2026-06-23) — **DONE 2026-08-12, differently**
+
+> **Delivered by the Project Manager GUI** ([`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)),
+> not by the Finder page. This item named its own blocker exactly right — a static page over
+> `file://` cannot touch the filesystem, so this "requires a helper / CLI / back-end beyond
+> the browser page". The Project Manager **is** that back-end: it has a server, so it reads
+> `registry_raw.csv` server-side, offers the same filters (through `find_acq`, the same join
+> engine this item pointed at), takes a tick-list, and creates the links. Its design rule is
+> the one written here — it drives the **existing** `linker.create_hardlink` + the ingest
+> provenance step rather than a parallel path, so the links and provenance rows are identical
+> to ingest-time ones (same inode, same shape). What differs from the sketch below: the
+> selection happens in the tool's own served page rather than in the generated
+> `index.html`, and no selection-manifest hand-off was needed. The original text is kept
+> below for the reasoning.
 
 Context: the registry **Finder** ([`tools/FINDER.md`](../tools/FINDER.md)) today is a
 read-only locator — a generated, self-contained `registries/index.html` a researcher
@@ -403,6 +416,15 @@ This item explores a **different, possibly better** way to build the project-lev
 it from the **project's own provenance file** instead of the registry. Raised by the data office
 2026-06-23 — **shape still open, discuss before building.**
 
+> **Still open after 2026-08-12, and partly vindicated.** This item predicted precisely the
+> problem the Project Manager had to solve — `project_id` *"stamped once at ingest"* while
+> researchers *"later reorganize / re-home acqs"*. Making `project_id` a semicolon list
+> ([`06_REGISTRIES §2.3b`](../mfb-rdm-docs/06_REGISTRIES.md)) fixes the **recording**: an
+> acquisition can now honestly belong to two projects. This item is about the **view**, and
+> nothing above is superseded. The Project Manager keeps provenance complete and accurate on
+> every import — a row per link, a row per copied file — precisely so it stays the credible
+> source of truth if this lands.
+
 - [ ] **Build the project `index.html` from the project's provenance file, not from `project_id`.**
   At ingest, every raw acquisition hard-linked into a project is recorded in that project's
   **provenance** (see [`07_PROVENANCE`](../mfb-rdm-docs/07_PROVENANCE.md) + the ingest
@@ -430,6 +452,83 @@ it from the **project's own provenance file** instead of the registry. Raised by
     partial-only; performance (per-project provenance reads vs one registry pass); and whether the
     "select-in-Finder → assemble a project" item above should *write* into this same
     provenance-driven model.
+
+## Server-era identity — logged-in user drives ownership + edit rights (2026-08-11)
+
+Context: a **dedicated RDM server for gjesus3 is expected in ~2 months (≈ Oct 2026)**. All
+the tool code goes live there and the current per-tool `.exe`s are **redesigned as one web
+app** — the ingest front-ends and the Project Manager GUI stop being separate downloads.
+Until then, tools are built to be *as similar as possible* so combining them later is
+cheap (see [`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)).
+
+The single capability the exe era cannot have: **an exe on a shared workstation does not
+know who is sitting at it.** A server does.
+
+- [ ] **Use the logged-in user for project ownership and edit rights.** Once there is a
+  server with real sessions:
+  - **`owner` on create becomes automatic** — stamped from the logged-in user instead of
+    typed by hand. (Today it is free text, and the live registry shows the cost: `jguser`
+    and `Jguser` are the same person recorded two ways, alongside `NMR-platform`,
+    `NI-platform`, `MBC`, `AUA`, `zeiss` — a mix of people, platforms and accounts in one
+    column.) Keep `owner` an ordinary editable field until then, so this needs no
+    migration — just a better default.
+  - **Who may edit which project** becomes checkable: owner (and the Data Office) can edit;
+    others read. Today the Project Manager GUI can only offer *"anyone with access may
+    edit anything"*, which is acceptable for a small trusted group and will not scale.
+  - **Provenance `creator` stops being a prompt.** Every import currently has to *ask* who
+    is doing it (handoff §4.3); with a session it is known. This is the field most likely
+    to be filled in carelessly, so it is the one that benefits most.
+  - Consider whether the same identity should feed the registry `researcher` / `operator`
+    columns at ingest, rather than the config's `operator:` key.
+  - *Depends on:* the server actually landing, and a decision on the auth source (AD /
+    institute SSO / local accounts). Related: the internal-web-serving capability already
+    proven on this workstation, and `02_INFRASTRUCTURE` for where the server sits.
+
+## Project Manager GUI — deferred scope (2026-08-11)
+
+Context: the **Project Manager GUI** (built 2026-08-12; see
+[`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)) gives researchers a front-end to edit
+project fields, create projects, and import data into them. Two capabilities were
+**deliberately left out** of that tool and parked here.
+
+- [ ] **🔽 LOW — Rename a project.** The GUI can edit `description` / `owner` / `status` /
+  `notes`, but **not `name`**, because since 2026-08-02 the project's `name` **is its
+  folder name, verbatim** (see [`05_PROJECTS §2a`](../mfb-rdm-docs/05_PROJECTS.md) —
+  ✅ DECIDED). A rename is therefore not a cell edit; it is a migration touching at least:
+  the folder on the NAS; `registry_projects.csv` (`name` **and** `folder_location`);
+  every `registry_raw.csv` row whose `project_id` points at it (the id is stable, so this
+  may be zero work — confirm); the project's `provenance.csv` (`output_path` values are
+  project-relative, so probably safe — confirm); the per-project `index.html`; and any
+  `.lnk` / documentation referencing the old path. Hard links themselves survive a parent
+  rename (they are directory entries, not paths), so `raw_linked/` should be fine — but
+  that must be **verified on the live SMB share**, not assumed. There is a precedent to
+  copy: `tools/migrate_project_naming.py` renamed 48 folders during the 2026-08-02 cut.
+  *Why low:* renames are rare, the Data Office can do one by hand with that script, and a
+  half-correct self-service rename is far worse than no rename.
+
+- [ ] **🔸 MEDIUM — Define what `status = closed` actually does.** The GUI exposes a status
+  dropdown (`active` / `paused` / `closed` per the
+  [`05_PROJECTS §4`](../mfb-rdm-docs/05_PROJECTS.md) lifecycle), but today setting
+  `closed` **only changes a string in the registry** — nothing else happens. That is a gap
+  with real consequences, because §4.x and §5 already say deletion is **blocked** until
+  close-out preserves study-level metadata into `/raw/`, and §5 is ✅ DECIDED. Open
+  questions, all needing a Data Office answer before anything is built:
+  - Does closing **freeze** the project (read-only ACLs, no further imports), or is it
+    just a label? A student flipping a dropdown should probably not be able to freeze a
+    shared folder.
+  - What does closing do about the **close-out preservation step** (§4.x) — block the
+    status change until it has run, warn, or queue the project for the Data Mgmt Lead?
+    The close-out tool itself does not exist yet.
+  - Is `closed` reversible in the GUI, or one-way once close-out has run?
+  - Should closing set a `closed_date` / `outcome`? `_project.yaml` already has both
+    fields (`closed_date`, `outcome`, `promoted_to`); `registry_projects.csv` has
+    **neither** — so recording them means either a projects-registry schema change or
+    accepting that the YAML is the only home.
+  - **Live precedent to respect:** 8 projects are already `closed`, and 3 of them
+    (`PROJ-0003`, `PROJ-0008`, `PROJ-0009`) have had their folders **deleted** — closed
+    with no folder is a normal end state, and any tooling must not treat it as corruption.
+  *Why medium:* the dropdown ships before this is answered, so the gap is live the moment
+  the tool is in researchers' hands.
 
 ## True-production restart — subsystem review (correction pass 2026-06-11)
 

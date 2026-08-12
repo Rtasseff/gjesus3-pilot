@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** ✅ DECIDED — the `registry_raw.csv` schema (28 columns) is finalized and live in true production; subjects/projects registries are live. (Some forward-looking refinements remain 🔶 Draft, flagged inline and in the Open Questions table.)
-**Last Updated:** 2026-08-02 (project reference model — `registry_raw.project_hint` → **`project_id`** (header-only rename; the column always held resolved ids) and `registry_projects.short_name` → **`name`** (case-preserved, == the folder). Model in [05_PROJECTS §2a](05_PROJECTS.md); mirror kept exact with `resolver.py`/`registry.py`.) Prior: 2026-06-26 (doc refactor: corrected the §2.5 example to the real 28-column schema — every example row had been short an `operator` value plus the three enrichment columns; documented `registry_subjects.csv` (§2.8); moved the Publications registry to 🕗 Planned/empty; promoted the settled schema to ✅ DECIDED). Prior: 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
+**Last Updated:** 2026-08-12 (**`registry_raw.project_id` is now a semicolon-separated LIST** — an acquisition may belong to more than one project (new **§2.3b**, ✅ DECIDED 2026-08-11), following the `modalities_in_study` / `subject_ids` convention; a mapping table was rejected as over-engineering. Mirror: `tools/ingest/project_ids.py` + every reader listed there. Also: `registry_projects.csv` gained a locked/atomic writer (`ingest/projects_registry.py`, §4).) Prior: 2026-08-02 (project reference model — `registry_raw.project_hint` → **`project_id`** (header-only rename; the column always held resolved ids) and `registry_projects.short_name` → **`name`** (case-preserved, == the folder). Model in [05_PROJECTS §2a](05_PROJECTS.md); mirror kept exact with `resolver.py`/`registry.py`.) Prior: 2026-06-26 (doc refactor: corrected the §2.5 example to the real 28-column schema — every example row had been short an `operator` value plus the three enrichment columns; documented `registry_subjects.csv` (§2.8); moved the Publications registry to 🕗 Planned/empty; promoted the settled schema to ✅ DECIDED). Prior: 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
 
 ---
 
@@ -94,7 +94,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `canonical_path` | String | ✅ Yes | Auto | Full path to acquisition folder. |
 | `checksum_present` | String (Y/N) | ✅ Yes | Auto | `Y` or `N` — is checksums.json present? |
 | `extended_metadata_present` | String (Y/N) | ✅ Yes | Auto | `Y` (full mode) or `N` (lightweight mode). |
-| `project_id` | String | Optional | Derived | The project this acquisition belongs to, as the canonical `PROJ-XXXX` id. **The operator supplies a project *name* (`registry.project_name`); ingest Step 9.5 resolves it and stores the id here** — see [05_PROJECTS §2a](05_PROJECTS.md). Blank when no project was set or the name could not be resolved. Triggers **hard-link** creation into the project folder when set (the hard-link method — DECIDED + APPLIED 2026-06-02 — superseded the legacy `.lnk` shortcut; see [10_TOOLS §2.1.1](10_TOOLS.md)). **RENAMED from `project_hint` 2026-08-02** — the column always held resolved ids, so the old name was wrong; header-only migration, values unchanged. |
+| `project_id` | String | Optional | Derived | The project(s) this acquisition belongs to: **semicolon-separated canonical `PROJ-XXXX` ids** (e.g. `PROJ-0001;PROJ-0007`), in the same style as `modalities_in_study`. A single-project acquisition is a length-1 list (the bare id, no `;`) — which is nearly every row. **The operator supplies a project *name* (`registry.project_name`); ingest Step 9.5 resolves it and stores the id here** — see [05_PROJECTS §2a](05_PROJECTS.md). Blank when no project was set or the name could not be resolved. Triggers **hard-link** creation into the project folder when set (the hard-link method — DECIDED + APPLIED 2026-06-02 — superseded the legacy `.lnk` shortcut; see [10_TOOLS §2.1.1](10_TOOLS.md)). **MULTI-VALUED since 2026-08-11** (§2.3b). **RENAMED from `project_hint` 2026-08-02** — the column always held resolved ids, so the old name was wrong; header-only migration, values unchanged. |
 | `ingest_config` | String | 🔶 Recommended | Auto | Path (relative to repo root) of the YAML config that produced this row. Empty for interactive ingests or pre-2026-05-06 rows. Used for auditability and reproducibility. |
 | `notes` | String | Optional | User | Free-text notes. Supports `${discovered.<field>}` interpolation. |
 
@@ -135,6 +135,28 @@ Authoritative record of all raw acquisitions deposited in the system.
 - For microscopy: typically session and assay collapse (one `.czi` = one slide = one session = one assay). `session_id` may be empty/NA; sample_id carries the grouping.
 
 **Implementation:** `session_id` is User-populated via the YAML `registry:` block (literal, `discovered.<field>`, or NA). Existing rows are not backfilled; pre-cutover acquisitions hold empty `session_id`.
+
+### 2.3b Project membership — `project_id` is a list (DECIDED 2026-08-11)
+
+> **✅ DECIDED 2026-08-11 (Data Office).** An acquisition can belong to **more than one project**. That is recorded as a **semicolon-separated list in the existing `project_id` column** — `PROJ-0001;PROJ-0007`. Not a mapping table, not the `notes` column.
+
+This follows the house convention rather than inventing one: the registry already packs multi-valued columns this way.
+
+| Column | Packed value | Where defined |
+|---|---|---|
+| `modalities_in_study` | `PT;CT` | §2 schema |
+| `subject_ids` | the 1–4 `;`-joined facility ids | §2.3.2 |
+| `project_id` | `PROJ-0001;PROJ-0007` | this section |
+
+**A single-project acquisition is a length-1 list** — the bare id, no `;`. That is nearly every row, and it means readers have ONE code path for 1..N projects, exactly as `subject_ids` does.
+
+**Ordering is meaningful.** The FIRST id is the original association (the one ingest stamped); anything added later appends after it. Tools that must pick one project — a folder path, a study-metadata directory — use the first.
+
+**Why not a mapping table.** A separate many-to-one table was considered and **rejected as over-engineering**: this is a simple registry read by researchers in Excel, and converting it to a real DB schema is a future endeavour, not this column's job.
+
+**Implementation — integrity mirror.** [`tools/ingest/project_ids.py`](../tools/ingest/project_ids.py) is the single definition of the cell (`split` / `join` / `has` / `add` / `remove`); `add` is idempotent and preserves the existing id first, so a re-import can never produce `PROJ-0001;PROJ-0001`. Every reader that joins, groups or filters on this column goes through it — `find_acq.py`, `generate_index.py` (per-project grouping), `validate_registries.py`, `ingest_raw._touched_project_ids`, `relink_projects.py`, `gather_metadata.py`, `metadata_completeness.py`. Pinned by `tools/test_project_ids.py`, including that an acquisition in two projects appears in **both** per-project `index.html` files. **A new reader of `project_id` must split it** — the failure mode is silent (a whole-cell lookup simply misses), not an error.
+
+**Writers.** Ingest Step 9.5 (one project, from `registry.project_name`) and the **Project Manager GUI**'s import (adds a project to an existing row, under the registry lock).
 
 ### 2.3 Subject and Sample Identity (DECIDED 2026-06-11 — refines REG-01)
 
@@ -359,10 +381,10 @@ Index of project workspaces with ownership and status tracking.
 | `name` | String | ✅ Yes | The project's human key — **and its folder name, verbatim** (no prefix, casing preserved, unique case-insensitively). See [05_PROJECTS §2a](05_PROJECTS.md) for the model and [§9](05_PROJECTS.md) for the open question on naming *conventions*. **RENAMED from `short_name` 2026-08-02.** |
 | `description` | String | ✅ Yes | Brief description of project scope. May be auto-populated at ingest-time creation; see `owner` note. |
 | `owner` | String | ✅ Yes | Primary owner/SPOC. When the project is auto-created by `ingest_raw.py` (via `auto_create_projects: true` and the `auto_create_project:` block — see [10_TOOLS §2.1.4](10_TOOLS.md)), the initial value can be supplied by literal or `${discovered.<field>}` interpolation. **First-write-wins:** subsequent ingests touching the same project never update this column. The source of truth after creation is `_project.yaml` (manually editable). |
-| `start_date` | Date | ✅ Yes | When project started |
-| `status` | Enum | ✅ Yes | `active`, `paused`, `closed` |
-| `last_activity` | Date | 🔶 Recommended | Last modification (for retention tracking) |
-| `folder_location` | String | ✅ Yes | Path to folder |
+| `start_date` | Date | ✅ Yes | The project's **first acquisition** date — not the date the row was created. Corrected across all rows 2026-07-14/15. |
+| `status` | Enum | ✅ Yes | `active`, `paused`, `closed` — the lifecycle in [05_PROJECTS §4](05_PROJECTS.md), and the whole vocabulary (a fourth value is a Data Office decision). |
+| `last_activity` | Date | 🔶 Recommended | The project's **newest acquisition** date — **not** the last time anyone edited the row (corrected 2026-07-14/15; retention close-out keys off it). **No editing tool may write this field**; stamping it on a description edit would silently redefine the column across every project. |
+| `folder_location` | String | ✅ Yes | Path to folder. The STORED value is what every consumer reads — never rebuild it from `name` ([05_PROJECTS §2a](05_PROJECTS.md)). A `closed` project's row survives with its `folder_location` intact after the folder is deleted; that is a normal state, not a dangling reference. |
 | `notes` | String | Optional | Free-text notes. Like `description`, can be auto-populated at first creation. |
 
 ### 4.3 Example
@@ -371,6 +393,15 @@ Index of project workspaces with ownership and status tracking.
 project_id,name,description,owner,start_date,status,last_activity,folder_location,notes
 PROJ-0001,ipf-biomarkers,IPF biomarker quantification study,MBC,2026-01-15,active,2026-02-10,/projects/ipf-biomarkers/,May lead to PUB-0001
 ```
+
+### 4.4 Writers, locking & the editable subset (2026-08-12)
+
+This registry has two writers — `create_project.py` (which the Project Manager GUI and ingest's auto-create both go through) and the GUI's project edit — and both route through **[`tools/ingest/projects_registry.py`](../tools/ingest/projects_registry.py)**, the sibling of `registry.py`. Until 2026-08-12 the only writer did a bare trailing-newline guard + `open(..., "a")`: no header check, no lock, no atomic rewrite. That was survivable while one Data Office person ran it from a shell and is not once a GUI puts it in front of several researchers.
+
+- **Creation is one critical section.** "Read the registry, pick the next `PROJ-NNNN`, check the name is free" and "append the row that claims them" run under one `locking.registry_lock` hold (§2.7) — otherwise two simultaneous creations both mint `PROJ-0053`, or both pass the uniqueness check on the same name. The folder and `_project.yaml` are written inside the same hold, so a project can never exist in the registry without its folder.
+- **Edits are read-all / rewrite-all, atomically** (`update_row`, pid-suffixed temp + `os.replace`), under the same lock. Same contract as `registry.update_row`: the **caller** holds the lock.
+- **Only four columns are editable after creation:** `description`, `owner`, `status`, `notes` (`EDITABLE_FIELDS`). `project_id`, `name` and `folder_location` are identity; `start_date` and `last_activity` are acquisition dates. The writer **refuses** anything outside the whitelist rather than trusting the caller — a renamed project is a different, unbuilt operation ([`tasks/BACKLOG.md`](../tasks/BACKLOG.md)).
+- **Name uniqueness is case-INSENSITIVE**, because the share's filesystem is and `name` *is* the folder name.
 
 ---
 
