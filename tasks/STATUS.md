@@ -29,9 +29,9 @@ production care.
 
 | | |
 |---|---|
-| Acquisitions in `/raw/` | **13,557** (all checksummed + `metadata.json` sidecar'd) |
-| Projects | **51 registered** — 43 with folders + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
-| Subjects (`registry_subjects.csv`) | **~715** (one row per subject) |
+| Acquisitions in `/raw/` | **13,759** (all checksummed + `metadata.json` sidecar'd) |
+| Projects | **52 registered** — 44 active (all with folders) + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present) = **49 folders**, every one carrying the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
+| Subjects (`registry_subjects.csv`) | **754** (one row per subject) |
 | Publications | empty — deferred (PLANNED) |
 
 **Two registry facts changed on 2026-07-14** (see [`../CHANGELOG.md`](../CHANGELOG.md)):
@@ -88,9 +88,9 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **Project Manager GUI — ✅ BUILT + VERIFIED against a scratch NAS (2026-08-12); 🕗 exe not
-  built, nothing deployed. Branch `feat/project-manager-gui`, worktree
-  `gjesus3-dev\project-manager-gui` — NOT merged to `main`.** A researcher-facing
+- **Project Manager GUI — ✅ DONE (2026-08-12): built, verified by hand, exe DEPLOYED to
+  the NAS, subfolder backfill run live. Merged to `main` (`253ac0d`, `--no-ff`); branch +
+  worktree retired.** A researcher-facing
   counterpart to the operator ingest tools, `tools/manager/gui/` on port 5001: list
   projects and edit `description` / `owner` / `status` / `notes`, create a project, and
   **add data to a project** — from `/raw/` (search with the Finder's filters, tick, →
@@ -115,7 +115,7 @@ The genuinely in-flight items (kept tight — everything else is in
   [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md) §4 rewritten.
   Also landed: the **subfolder convention** `raw_linked/` · `working/` · `outputs/` ·
   `metadata/` (created on every new project; `tools/backfill_project_subfolders.py` for the
-  existing ones — **not yet run against the live NAS**), and a **locked/atomic writer for
+  existing ones — **run live, see below**), and a **locked/atomic writer for
   `registry_projects.csv`** (`ingest/projects_registry.py`; `create_project.py` now holds
   the lock across its whole read-decide-write).
   **✅ DEPLOYED 2026-08-12.** `gjesus3_manager.exe` (**13,113,252 bytes, sha256
