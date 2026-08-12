@@ -453,6 +453,39 @@ it from the **project's own provenance file** instead of the registry. Raised by
     "select-in-Finder → assemble a project" item above should *write* into this same
     provenance-driven model.
 
+## Multi-value cell hygiene in `validate_registries` (2026-08-12)
+
+Small and self-contained — roughly an afternoon inside
+[`tools/validate_registries.py`](../tools/validate_registries.py), not a branch.
+
+- [ ] **Validate the shape of the semicolon-packed columns.** Three columns are
+  `;`-separated lists: **`subject_ids`**, **`modalities_in_study`**, and (legacy /
+  hand-edited only) **`project_id`**. Check for empty segments (`A;;B`), a trailing
+  separator, and duplicates (`A;A`). `ingest/project_ids.py` and `ingest/registry.py`
+  normalize on write, so a violation means a hand edit in Excel — which does happen.
+  The `project_id` *existence* half is already implemented (`validate_registries.py` §7,
+  correctly split-based); this is the hygiene half, generalized to the other two columns.
+
+**Why this is all that's left of a bigger idea.** A larger set of registry↔derived-state
+checks was scoped on 2026-08-12 (branch `feat/registry-consistency-checks`, retired unstarted
+— its handoff is in that branch's history if ever wanted) and most of it was invalidated the
+same day:
+
+- A check comparing the registry against `raw_linked/` + `provenance.csv` coverage was
+  **wrong, not mis-tuned**. Project folders are researcher-owned
+  ([05_PROJECTS §3a](../mfb-rdm-docs/05_PROJECTS.md)) and pruning links is allowed, so a
+  missing link is not an integrity finding. It measured 12,975 associations with 11,036
+  provenance rows — which reads as "1,939 defects" only under a compliance assumption the
+  system never made.
+- A check comparing the registry against each per-project `index.html` was **feasible and
+  clean** (44/44 projects matched exactly; the page embeds its rows as inline JSON, so it
+  parses). But the silent-split bug class that motivated it went away when `project_id`
+  became write-once, so it no longer earns the work. Worth revisiting **if** the metadata
+  database lands and project↔acquisition becomes a real table.
+- A static lint for unguarded `project_id` reads was already marginal — 75 direct reads
+  across 27 files, most of them legitimate, since `project_id` in `registry_projects.csv`
+  and `pending_links.csv` is genuinely single-valued.
+
 ## Metadata database — retire the CSV registries (2026-08-12)
 
 Context: all of this is **metadata** — CSV rows pointing at acquisition data and at more
