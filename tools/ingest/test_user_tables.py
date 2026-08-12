@@ -181,6 +181,38 @@ def test_skip_columns_and_validation():
               "validation rejects duplicate labels")
 
 
+def test_parse_cache_keys_on_every_parse_setting():
+    print("test_parse_cache_keys_on_every_parse_setting")
+    # Regression: the cache key was hand-listed and omitted description_column,
+    # so two entries over the SAME file+sheet differing only in a parse setting
+    # got the first one's parse back. Now the key is derived from the schema.
+    with tempfile.TemporaryDirectory() as td:
+        path = _sheet(td, "c.xlsx", [
+            ["Field", "Description", "Value"],
+            ["ProjectID", "the grant code", "PI17/01569"],
+        ])
+        base = {"file": path, "sheet": "Sheet1", "orientation": "vertical",
+                "header_row": 1, "field_column": 1, "value_column": 3}
+        out = user_tables.build_user_metadata(
+            [dict(base, label="without_desc"),
+             dict(base, label="with_desc", description_column=2)], {})
+        check("field_descriptions" not in out["without_desc"]["_source"],
+              "entry without description_column has no descriptions")
+        check(out["with_desc"]["_source"].get("field_descriptions", {}).get("ProjectID")
+              == "the grant code",
+              "entry with description_column is parsed separately (not cache-hit)")
+
+        # Two row-tables over one sheet differing only by skip_columns.
+        path2 = _sheet(td, "c2.xlsx", [["ID", "a", "b"], ["x", "1", "2"]])
+        rbase = {"file": path2, "sheet": "Sheet1", "header_row": 1,
+                 "key_column": "ID", "match": "x"}
+        out = user_tables.build_user_metadata(
+            [dict(rbase, label="keep_all"),
+             dict(rbase, label="drop_b", skip_columns=["b"])], {})
+        check("b" in out["keep_all"] and "b" not in out["drop_b"],
+              "skip_columns variants do not share a cache entry")
+
+
 def test_absent_block_is_noop():
     print("test_absent_block_is_noop")
     check(user_tables.build_user_metadata(None, {}) is None,
@@ -196,6 +228,7 @@ def main():
     test_first_token_and_missing()
     test_vertical_and_skip()
     test_skip_columns_and_validation()
+    test_parse_cache_keys_on_every_parse_setting()
     test_absent_block_is_noop()
     print()
     if FAILS:

@@ -65,6 +65,10 @@ _VALID_KEYS = {
     "split_descriptions", "on_missing",
 }
 
+# Keys that select a ROW / control reporting rather than shaping the parsed
+# table. Everything else in _VALID_KEYS feeds the parse cache key.
+_NON_PARSE_KEYS = {"label", "match", "match_transform", "on_missing"}
+
 
 # --------------------------------------------------------------------------
 # value / key normalization
@@ -272,12 +276,15 @@ def _parse_table(entry):
     path = entry["file"]
     sheet = entry.get("sheet")
     orientation = (entry.get("orientation") or "row").lower()
-    cache_key = (os.path.abspath(path), sheet, os.path.getmtime(path),
-                 orientation, entry.get("header_row", 1),
-                 entry.get("key_column"), entry.get("key_transform"),
-                 tuple(entry.get("skip_columns") or ()),
-                 bool(entry.get("split_descriptions")),
-                 entry.get("field_column"), entry.get("value_column"))
+    # Keyed on every setting that changes the PARSE, derived from the schema
+    # rather than hand-listed, so adding a parse-affecting key to _VALID_KEYS
+    # can't silently start returning a stale table. `match` / `match_transform`
+    # / `on_missing` / `label` are per-case, not per-parse, so they're excluded.
+    parse_keys = sorted(_VALID_KEYS - _NON_PARSE_KEYS)
+    cache_key = (os.path.abspath(path), os.path.getmtime(path)) + tuple(
+        (k, tuple(entry[k]) if isinstance(entry.get(k), list) else entry.get(k))
+        for k in parse_keys
+    )
     if cache_key in _TABLE_CACHE:
         return _TABLE_CACHE[cache_key]
 
