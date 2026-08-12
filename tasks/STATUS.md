@@ -88,11 +88,10 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **One project per acquisition + the project-folder ownership boundary — ✅ CODE + DOCS
-  DONE (2026-08-12); 🕗 exe NOT rebuilt, nothing redeployed. Branch
-  `fix/project-id-single-valued`, worktree `gjesus3-dev\project-id-single-valued`.**
-  Reverses the one-day-old semicolon-list decision and, more importantly, writes down the
-  boundary that reversal exposed.
+- **One project per acquisition + the project-folder ownership boundary — ✅ DONE +
+  DEPLOYED (2026-08-12). Merged to `main` (`be932b9`, `--no-ff`); branch + worktree
+  retired.** Reverses the one-day-old semicolon-list decision and, more importantly, writes
+  down the boundary that reversal exposed.
   **(1) `registry_raw.project_id` is write-once** — one project, the one ingest established
   ([`06_REGISTRIES §2.3b`](../mfb-rdm-docs/06_REGISTRIES.md)). Sharing an acquisition across
   projects still works: the link is made and the destination project's `provenance.csv`
@@ -113,10 +112,22 @@ The genuinely in-flight items (kept tight — everything else is in
   deleted**. Small, but permission is the argument, not the number.) §3a also warns off the
   bulk "repair" that nearly followed, which for one project would have dumped **635**
   unwanted links into a folder its owner had been pruning.
-  Full suite green (20 files); **no NAS state written.** Also backlogged: the **metadata
-  database** that models project↔acquisition properly. **Next: rebuild + redeploy
-  `gjesus3_manager.exe`** — the researcher-visible wording changed (the completion modal now
-  says how many stay registered elsewhere). The ingest exe is unaffected.
+  Full suite green (20 files). Also backlogged: the **metadata database** that models
+  project↔acquisition properly.
+  **✅ REDEPLOYED 2026-08-12.** `gjesus3_manager.exe` rebuilt and pushed to the NAS —
+  **13,004,103 bytes, sha256 `fb5d6f3b…`** (was `d060d566…`), plus the researcher-facing
+  `tools\README.txt` (`cf05692d…`). Built off-OneDrive, staged as `.exe.new` and atomically
+  renamed, checksum-verified at every hop. **Verified the frozen bundle actually carries the
+  change** rather than trusting the build: a raw string search fails (PyInstaller compresses
+  the archive), so the exe was *run* and its served `/static/manager.js` checked for the new
+  modal wording, and the extracted bundle checked for `set_project_id_if_blank` /
+  `_record_project_when_unassigned` with **no** surviving `add_project_id` call. Then
+  smoke-tested **from the share**, read-only, against live data: 52 projects, 49 with
+  folders, 3 without — matching reality. **`gjesus3_ingest.exe` provably untouched**
+  (`cde997ba…`); exactly two files on the share changed. Pre-deploy backup + a full checksum
+  manifest at `C:\Users\rtasseff\temp\gjesus3_manager_redeploy_20260812b\`; **rollback =
+  restore those two files.** No registry was written (last registry write 15:17 predates the
+  deploy — that was the ongoing data load, see below).
 - **Project Manager GUI — ✅ DONE (2026-08-12): built, verified by hand, exe DEPLOYED to
   the NAS, subfolder backfill run live. Merged to `main` (`253ac0d`, `--no-ff`); branch +
   worktree retired.** A researcher-facing
