@@ -1,0 +1,129 @@
+# PRODUCTION config — project DTS24, HPIC cohort (external collaborator MRI).
+#
+# Supersedes tools/configs/hpic_cardiac_mri_TEST.yaml (quasi-production, purged
+# 2026-06-10). HPIC half of the DTS24 re-ingest; see
+# dts24_lions_cardiac_mri.yaml for the full rationale — the human-subject
+# handling, the local-staging / no-re-zip notes, and the discovered.* reference
+# card are identical here and are not repeated.
+#
+# SAME PROJECT, DIFFERENT ORIGINAL GRANT. Both cohorts land in MFB project
+# DTS24, but this one was collected under PI17/01569 ("Evaluacion no invasiva
+# de la vasculopatia pulmonar en insuficiencia cardiaca", PI Juan Delgado),
+# where LIONS was PI20/01389. That is not a contradiction: DTS24 is why the
+# data is in gjesus3, the grant is why it was collected. Each acquisition
+# carries its own `user_provided_metadata.source_project` block, so the two
+# provenances stay distinct inside one project.
+#
+# Differences from the LIONS config: data_source, the staging/archive dirs, the
+# spreadsheet, and the join. HPIC case ids are TEXT ("HPIC02") so no decimal2
+# transform is needed — but 10 of the 33 case folders carry an extra accession
+# suffix ("HPIC37 S63090"), so the MATCH side takes first_token instead.
+# Sources are mostly .rar with three .zip; the stored primary keeps the source
+# extension. Verify by acquisition count (33), not byte-parity.
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+  acquisition_layout: archive
+  archive_primary_from: "C:/Users/rtasseff/temp/HPIC_33cases"
+
+auto_discover:
+  # LOCAL disk — never the NAS. Already populated (33/33 cases verified
+  # 2026-08-12); do not re-extract.
+  staging_dir: "D:/projects/gjesus3/xmri_staging/HPIC_33cases_extracted"
+  pattern: "*/"
+  dicom_headers: true
+
+registry:
+  instrument:           XMRI
+  data_ecosystem:       DICOM
+  instrument_model:     "${discovered.dicom_model}"
+  modalities_in_study:  "${discovered.dicom_modality}"
+  researcher:           JRC
+  data_source:          collaborator:HPIC
+  sample_id:            "${discovered.folder_name}"
+  sample_type:          organism
+  # Taken from the curated DICOM header, NOT left to the summarizer.
+  #
+  # `NA` here means "let ingest_raw derive it from the DICOM StudyDate", but
+  # that path uses dicom_utils.extract_study_date, which reads only the FIRST
+  # 20 DICOM instances it walks. HPIC archives nest one level deeper than
+  # LIONS (HPIC02/HPIC02/S#####/S00/I##) and their leading instances carry no
+  # StudyDate, so the lookup returns nothing and the ingest silently falls back
+  # to TODAY's date — producing ACQ-20260812-… for a 2019 exam, a blank
+  # acquisition_datetime and no age_at_acquisition. It hit HPIC11 and HPIC12
+  # live on 2026-08-12 (0 of 42 LIONS cases, 2 of the first 4 HPIC).
+  #
+  # ingest/dicom_headers.py parses more instances and prefers a real image
+  # series over presentation-state frames, so it recovers a StudyDate for
+  # 33/33 HPIC cases. Sourcing the date from it is deterministic and matches
+  # the header the rest of the `dicom:` block came from. The resolver
+  # normalizes YYYYMMDD -> ISO (verified: "20190109" -> 2019-01-09T00:00:00Z).
+  acquisition_datetime: "${discovered.dicom_study_date}"
+  project_name:         DTS24
+  notes:                "External collaborator cardiac MRI (HPIC cohort), reused by MFB for project DTS24. Originally collected under grant PI17/01569 (PI Juan Delgado); see the sidecar user_provided_metadata.source_project block."
+
+subject:
+  facility_animal_id:  "${discovered.dicom_patient_id}"
+  species:             "Homo sapiens"
+  sex:                 "${discovered.dicom_patient_sex}"
+  age_at_acquisition:  "${discovered.dicom_patient_age}"
+  source:              "dicom-header"
+
+anatomy:
+  is_whole_body: false
+  region:
+    label:    heart
+    ontology: UBERON
+    id:       UBERON:0000948
+
+# Disease context, quoted from the collaborator's OWN study definition
+# (Foglio2 "Short name") — not derived by us.
+#
+# `disease_state: heart failure` is the POPULATION fact and is safe to assert:
+# the study is explicitly "...en insuficiencia cardiaca". Pulmonary vasculopathy
+# is what the study set out to EVALUATE in that population, so it belongs in
+# `disease_model`, not `disease_state`.
+#
+# ⚠️ These 33 are NOT labelled as pulmonary hypertension, despite the cohort
+# name reading as "Hipertension Pulmonar en Insuficiencia Cardiaca". Unlike
+# LIONS there is NO hemodynamic data for this cohort — no right-heart cath, no
+# mean PAP — so per-subject PH status is neither recorded nor derivable, and
+# the collaborator's sheets carry no diagnosis or group column. Ryan's call
+# 2026-08-12: without confirmation, do not assert it. Equally, they must NOT
+# be labelled control. Hence disease_state = the confirmed population fact and
+# is_control = null. If the collaborators later confirm per-case PH status,
+# add it via the recovery-tool pattern rather than re-ingesting.
+condition:
+  is_control:    null
+  disease_state: "heart failure"
+  disease_model: "pulmonary vasculopathy in heart failure"
+  source:        "collaborator study definition (grant PI17/01569)"
+
+auto_create_project:
+  owner:       "JRC"
+  description: "MFB project DTS24. Reuse of external collaborator cardiac MRI datasets (LIONS + HPIC cohorts) obtained from clinical partners. The originating grants differ per cohort and are recorded per-acquisition in the metadata sidecars."
+  notes:       "Created on the DTS24 LIONS re-ingest 2026-08-12. External data reused internally; original funding/provenance is per-acquisition, not project-level."
+
+user_metadata:
+  - label: dataset_information
+    file: "C:/Users/rtasseff/temp/dataset_information_HPIC.xlsx"
+    sheet: "Foglio1"
+    header_row: 2
+    split_descriptions: true
+    key_column: "AcquisitionID"
+    match: "${discovered.folder_name}"
+    match_transform: "first_token"   # "HPIC37 S63090" -> "HPIC37"
+    on_missing: error
+
+  - label: source_project
+    file: "C:/Users/rtasseff/temp/dataset_information_HPIC.xlsx"
+    sheet: "Foglio2"
+    orientation: vertical
+    header_row: 1
+    field_column: 1
+    value_column: 3
+    description_column: 2
+
+# Example resolved value: XMRI_HPIC02_20180425
+link_filename: "XMRI_${sample_id}_${acq_date}"

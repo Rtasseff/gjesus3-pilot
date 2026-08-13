@@ -78,6 +78,8 @@ tools/
 │   ├── config.py            # YAML loading + validation; expand_batch (file/dir glob, filename_parse, filter, idempotency); FORMAT_SUMMARIZERS dispatch
 │   ├── resolver.py          # Resolves the YAML registry: block — literal | discovered.<x> | ${...} interp | NA; also validate/resolve condition: / anatomy: / subject: + subject_lookup + to_tristate/to_number coercers (§2.1.6)
 │   ├── enrichment.py        # Phase 3 orchestrator: builds subject/condition/anatomy blocks (non-blocking) for sample_type ∈ {organism,tissue} at Step 8.4 (§2.1.6)
+│   ├── user_tables.py       # Attaches operator-supplied .xlsx/.csv tables as the sidecar's user_provided_metadata block at Step 8.45 (§2.1.7, 08_METADATA §4.9)
+│   ├── dicom_headers.py     # Curated plain-DICOM header extractor, OPT-IN via auto_discover.dicom_headers. Privacy ALLOW-LIST: no raw dump, no PatientName/BirthDate (§2.1.8, 08_METADATA §4.10)
 │   ├── subject_id.py        # Short-code subject parser (m13→13, ID13B→13+organ) + project_alias_from_hint
 │   ├── pending.py           # Deferred-recovery pending list (registries/pending_subject_metadata.csv) read/append/update (§2.1.6, 08_METADATA §4.4.6)
 │   ├── acq_id.py            # ACQ-ID generation (date + inst + seq)
@@ -393,9 +395,71 @@ anatomy:                         # organism only
 
 **Validation vs data.** Structural config errors (unknown keys, wrong types) fail fast at config-load time via `resolver.validate_condition_block` / `validate_anatomy_block` / `validate_subject_block` / `validate_subject_lookup` / `validate_subject_from_db`. Missing or empty *data* never raises — `resolver.resolve_condition_block` / `resolve_anatomy_block` (with the `to_tristate` / `to_number` coercers) emit the sentinels above and the orchestrator WARNs. This is the [§4.7](08_METADATA.md) non-blocking model in code.
 
-**Sidecar nesting.** `metadata_sidecar.build_sidecar` nests the resolved blocks in this key order: `acq_id`, `generated`, `generator`, `user_supplied`, `discovered`, `subject`, `condition`, `anatomy`, `<ecosystem_section>` (e.g. `mri:` / `microscopy:` / `ni:`).
+**Sidecar nesting.** `metadata_sidecar.build_sidecar` nests the resolved blocks in this key order: `acq_id`, `generated`, `generator`, `user_supplied`, `discovered`, `subject`, `condition`, `anatomy`, `user_provided_metadata` (§2.1.7), `<ecosystem_section>` (e.g. `mri:` / `microscopy:` / `ni:` / `dicom:`).
 
 **Worked example:** [`tools/templates/instruments/mri_bruker.yaml`](../tools/templates/instruments/mri_bruker.yaml) ships all three blocks live (with `subject_from_db: true` + `subject_lookup`); `molecubes_ni.yaml` likewise; `axioscan7.yaml` carries `subject` + `condition` only (ex-vivo — no `anatomy`); `cell_observer_cells.yaml` + `lsm900.yaml` carry none (cells); the universal `ingest_template.yaml` carries commented examples.
+
+### 2.1.7 `user_metadata:` block — attach an operator-supplied table (2026-08-12)
+
+> **✅ IMPLEMENTED.** Attaches a collaborator's own spreadsheet (`.xlsx` / `.xlsm` / `.csv`) to each acquisition's `metadata.json` under `user_provided_metadata`. Field contract + the rationale for where the block sits are in [08_METADATA §4.9](08_METADATA.md); this section documents the YAML surface. Implemented in `tools/ingest/user_tables.py`, invoked at **Step 8.45** of full-mode ingest. **Non-blocking** by default, and validated structurally at config-load time.
+
+```yaml
+user_metadata:
+  # One row per acquisition, joined on a key column.
+  - label: dataset_information          # REQUIRED. The sidecar key. NOT the
+                                        # filename — two cohorts shipping the
+                                        # same logical table under different
+                                        # filenames must share one key.
+    file:  "C:/path/dataset_information_HPIC.xlsx"   # REQUIRED
+    sheet: "Foglio1"                    # default: first sheet
+    header_row: 2                       # 1-based; default 1
+    split_descriptions: true            # header cells like
+                                        # `operator "who collected it"` split
+                                        # into name + _source.field_descriptions
+    key_column: "AcquisitionID"         # REQUIRED for orientation: row
+    key_transform: "decimal2"           # applied to the TABLE's key values
+    match: "${discovered.folder_name}"  # REQUIRED; resolver-evaluated
+    match_transform: "first_token"      # applied to the MATCH value
+    skip_columns: ["canonical path"]    # optional; default keeps every column
+    on_missing: warn                    # warn (default) | error | skip
+
+  # A Field/Value table describing the WHOLE batch — same block on every
+  # acquisition in it (e.g. the grant the data was originally collected under).
+  - label: source_project
+    file:  "C:/path/dataset_information_HPIC.xlsx"
+    sheet: "Foglio2"
+    orientation: vertical               # row (default) | vertical
+    header_row: 1
+    field_column: 1                     # 1-based index, or a header name
+    value_column: 3
+    description_column: 2               # optional
+```
+
+**Key transforms** (`key_transform` / `match_transform`) exist because the join key rarely matches verbatim on both sides:
+
+| Transform | Effect | Why it exists |
+|---|---|---|
+| `decimal2` | number `1.1` → `"1.10"` | Excel stores an id like `1.10` as a **number**, so it stringifies to `"1.1"` and silently misses the `LEONE_1.10` case folder. 3 of 42 real LIONS cases depend on this. Text keys pass through untouched. |
+| `first_token` | `"HPIC37 S63090"` → `"HPIC37"` | The case folder carries an accession suffix the table does not. |
+| `strip_prefix:<p>` | `"LEONE_1.01"` → `"1.01"` | The case folder carries a cohort prefix. |
+| `lower` / `upper` / `strip` | — | Ordinary normalization. |
+
+**Failure behaviour.** An unmatched case is the dangerous silent failure (no block, nobody notices until the data is in `/raw/`), so: `on_missing: warn` (default) logs and omits; `on_missing: error` aborts the acquisition. When a sheet holds numeric keys and no `key_transform` is set, the WARN says so explicitly. Duplicate keys keep the first row and record the rest in `_source.duplicate_keys_ignored`. Workbooks are memoized per `(path, sheet, mtime)`, so a 42-case batch reads each sheet once.
+
+**Worked example:** [`tools/configs/dts24_lions_cardiac_mri.yaml`](../tools/configs/dts24_lions_cardiac_mri.yaml) (three tables — two row-joined, one vertical) and `dts24_hpic_cardiac_mri.yaml`.
+
+### 2.1.8 `auto_discover.dicom_headers:` — curated plain-DICOM extraction (2026-08-12)
+
+> **✅ IMPLEMENTED, opt-in (default off).** `tools/ingest/dicom_headers.py` fills the `dicom:` ecosystem section for DICOM sources that are neither ParaVision exams nor Molecubes acquisitions (collaborator batches, general clinical DICOM). Surfaces 13 `discovered.dicom_*` fields — scanner model, field strength, institution, body part, modality set, patient sex / weight / age — that were previously blank, so `registry.instrument_model` and `modalities_in_study` can resolve per case.
+
+```yaml
+auto_discover:
+  dicom_headers: true      # default false — no existing config changes behaviour
+```
+
+Every allow-listed key is always emitted (`""` when the tag is absent), so a strict `${discovered.dicom_*}` reference in the `registry:` block cannot hard-fail on the one case whose header lacks it.
+
+> ⚠️ **This extractor is a privacy allow-list, not a header dump.** It has no `_raw_metadata` bucket, and `PatientName` / `PatientBirthDate` are deliberately never extracted — age is kept, coarsened to whole years. **Adding a tag is a privacy decision.** Read [08_METADATA §4.10](08_METADATA.md) before extending `_SAFE_TAGS`.
 
 ---
 
@@ -406,7 +470,7 @@ anatomy:                         # organism only
 **Full Mode (default) — per acquisition:**
 1. Load + validate config (YAML or interactive)
 2. Analyze source data (DICOM headers: modality, StudyDate, file count, size)
-3. Extract embedded metadata → `metadata.json` sidecar (Step 8.4: for `sample_type ∈ {organism, tissue}`, the enrichment writer nests `subject:` + `condition:` (+ `anatomy:` for organism) blocks — non-blocking, see §2.1.6)
+3. Extract embedded metadata → `metadata.json` sidecar (Step 8.4: for `sample_type ∈ {organism, tissue}`, the enrichment writer nests `subject:` + `condition:` (+ `anatomy:` for organism) blocks — non-blocking, see §2.1.6. Step 8.45: any `user_metadata:` tables are attached as `user_provided_metadata` — see §2.1.7)
 4. Compress DICOM (if applicable) → `.zip` or `.tar.gz` archive
 5. Generate ACQ-ID (read registry for next sequence number)
 6. Create folder: `raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/`
@@ -464,6 +528,7 @@ Three required top-level blocks plus one optional. `defaults:` is gone — non-r
 | `auto_create_project:`  | Optional  | Project-creation metadata used only when `ingest.auto_create_projects: true` and a new project is being created. Resolver-evaluated like `registry:`. First-write-wins (see §2.1.4). |
 | `condition:`            | Optional  | Preclinical disease-state / study-role block (Phase 3). Resolver-evaluated, set-once-per-batch, non-blocking. Written to `metadata.json` for `sample_type ∈ {organism, tissue}`. See §2.1.6 + [08_METADATA §4.5](08_METADATA.md). |
 | `anatomy:`              | Optional  | Anatomical-coverage block (Phase 3, organism-only). Resolver-evaluated, set-once-per-batch, non-blocking. See §2.1.6 + [08_METADATA §4.6](08_METADATA.md). |
+| `user_metadata:`        | Optional  | List of operator-supplied tables (`.xlsx`/`.csv`) to attach per acquisition under the sidecar's `user_provided_metadata` block. Structurally validated at config load; non-blocking at match time. See §2.1.7 + [08_METADATA §4.9](08_METADATA.md). |
 | `subject:`              | Optional  | Subject-metadata override (Phase 3) — supplied only to override the `auto_discover.subject_from_db` lookup or when the animal isn't in the DB. See §2.1.6 + [08_METADATA §4.4](08_METADATA.md). |
 
 `ingest:` flags currently honored:

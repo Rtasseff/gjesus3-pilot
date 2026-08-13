@@ -88,6 +88,41 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **DTS24 collaborator re-ingest — ✅ DONE IN PRODUCTION 2026-08-13; merged to
+  `main` (`{MERGE}`, `--no-ff`), branch + worktree retired.** **The data went live
+  independently of the branch: the branch held the code/config/doc changes, not the
+  acquisitions.**
+  - **75 acquisitions in `PROJ-0054` / `DTS24`** (LIONS 42 + HPIC 33), the external
+    cardiac-MRI cohorts that the 2026-06-10 purge removed. Verified after the run:
+    75 unique ACQ-IDs, every source archive accounted for, 75 sidecars, 75 hard
+    links, `sample_organism: Homo sapiens` ×75, `anatomical_entity: heart` ×75,
+    checksums `Y` ×75, acquisition dates spanning 2018–2025, **0 sidecars carrying a
+    date of birth**, 75/75 carrying a derived age.
+  - Two capabilities shipped for it, both default-off so nothing else changed: the
+    `user_provided_metadata` sidecar block
+    ([`08_METADATA §4.9`](../mfb-rdm-docs/08_METADATA.md) ·
+    [`10_TOOLS §2.1.7`](../mfb-rdm-docs/10_TOOLS.md)) and opt-in curated DICOM-header
+    extraction ([`§4.10`](../mfb-rdm-docs/08_METADATA.md) ·
+    [`§2.1.8`](../mfb-rdm-docs/10_TOOLS.md)).
+  - ⚠️ **First human clinical data in the system.** The ingest-side privacy line is
+    decided and held in production ([`§4.10`](../mfb-rdm-docs/08_METADATA.md)); the
+    wider policy — de-identifying the archived sources, access control for human
+    data, retention, legal basis — is **open** as backlog **META-12**. Also open:
+    **META-10** (ISA study level) and **META-11** (a clinical measurement is its own
+    data type, not metadata — the attached hemodynamics table is a stand-in).
+  - `condition.is_control` is `null` on all 75 **by decision**, not by omission:
+    neither cohort has a healthy-control arm. `disease_state` / `disease_model` are
+    quoted from each collaborator's own study title. Pulmonary-hypertension status
+    is deliberately **not** recorded — it is derivable from the attached
+    hemodynamics, but the count swings 12 vs 4 of 38 between the 2022 and 2015
+    ESC/ERS thresholds, so it stays as data rather than a frozen label.
+  - **A silent-date bug was found and fixed mid-run** — see backlog, and
+    [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-13. Two HPIC acquisitions were
+    committed with *today's* date and had to be deleted and re-ingested. **17
+    pre-existing orphan `ACQ-20260710-MRI-0xx` folders** under
+    `raw/DICOM/2026/2026-07/` (on disk, absent from the registry) were noticed
+    during that cleanup — unrelated to DTS24, left untouched, worth a look.
+
 - **One project per acquisition + the project-folder ownership boundary — ✅ DONE +
   DEPLOYED (2026-08-12). Merged to `main` (`be932b9`, `--no-ff`); branch + worktree
   retired.** Reverses the one-day-old semicolon-list decision and, more importantly, writes

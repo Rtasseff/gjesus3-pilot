@@ -1,0 +1,167 @@
+# PRODUCTION config — project DTS24, LIONS cohort (external collaborator MRI).
+#
+# Supersedes tools/configs/lions_cardiac_mri_TEST.yaml, which was written for
+# the 2026-06-01 quasi-production rebuild and is now historical: those 42
+# acquisitions were removed by the 2026-06-10 whole-system purge and are absent
+# from the live registry. This config re-ingests them into TRUE PRODUCTION.
+#
+# WHAT DTS24 IS. These data were NOT collected for DTS24. They were collected
+# by external clinical groups under their own grants (this cohort: PI20/01389,
+# "Evaluacion multimodal del dano mediado por anticuerpos en trasplante
+# cardiaco", PI Juan Delgado). MFB obtained them and is REUSING them for a new
+# internal project, DTS24 — that reuse is why they are in gjesus3 at all. The
+# original funded project is preserved per-acquisition in the sidecar's
+# `user_provided_metadata.source_project` block, read straight from the
+# collaborator's own spreadsheet, so the provenance is never lost.
+# The HPIC cohort (dts24_hpic_cardiac_mri.yaml) is the same project DTS24 but
+# a DIFFERENT original grant — hence one project, two source_project blocks.
+#
+# HUMAN SUBJECT DATA. This is the first human clinical data in a system built
+# for preclinical animal work. Two consequences:
+#   * `dicom_headers: true` (below) reads a CURATED ALLOW-LIST of DICOM tags.
+#     PatientName and PatientBirthDate are deliberately NOT extracted — a full
+#     DOB is a direct identifier. Age is kept, coarsened to whole years.
+#     See ingest/dicom_headers.py and 08_METADATA §4.10.
+#   * The `subject:` block below is an OPERATOR OVERRIDE, which suppresses the
+#     animal-facility DB lookup entirely. `facility_animal_id` is the schema's
+#     canonical subject-id field; here it holds the collaborator's already-
+#     pseudonymous case id (e.g. LEONE_1.01), never a patient identifier.
+#
+# STAGING IS LOCAL, AND NOTHING IS RE-ZIPPED. Both historical slowdowns are
+# gone from this config:
+#   * `staging_dir` is on local D:, never the NAS. Extracting ~21k tiny DICOM
+#     files per case over SMB is what made the original round take hours.
+#     The extracted trees are ALREADY PRESENT at the path below (42/42 cases
+#     verified 2026-08-12), so no re-extraction is needed at all.
+#   * `acquisition_layout: archive` stores the ORIGINAL .zip per case, renamed
+#     to <ACQ-ID>.zip — one fast SMB transfer each, no re-zip step. Metadata is
+#     read from the extracted staging tree; only the archive is copied to /raw/.
+# Verify by acquisition count (42), not byte-parity: ACQ-IDs are freshly minted.
+#
+# discovered.* available to this config:
+#   discovered.folder_name          extracted case dir (= sample_id, "LEONE_1.01")
+#   discovered.dicom_*              13 curated header fields (always present,
+#                                   "" when the tag is absent) — see dicom_headers.py
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: true
+  # Store the original .zip per case rather than ~21k extracted DICOM files.
+  acquisition_layout: archive
+  archive_primary_from: "C:/Users/rtasseff/temp/LIONS_42cases"
+
+auto_discover:
+  # LOCAL disk — never the NAS. Already populated; do not re-extract.
+  staging_dir: "D:/projects/gjesus3/xmri_staging/LIONS_42cases_extracted"
+  pattern: "*/"
+  # Opt in to curated DICOM-header extraction (off by default everywhere else).
+  dicom_headers: true
+
+registry:
+  instrument:           XMRI
+  data_ecosystem:       DICOM
+  # Per-case, from the DICOM header. The old config had to leave these blank.
+  instrument_model:     "${discovered.dicom_model}"
+  modalities_in_study:  "${discovered.dicom_modality}"
+  researcher:           JRC          # Jesus Ruiz-Cabello — DTS24 is his group's project
+  data_source:          collaborator:LIONS
+  sample_id:            "${discovered.folder_name}"
+  sample_type:          organism     # humans are organisms; drives the subject block
+  acquisition_datetime: NA           # derived from the DICOM StudyDate
+  project_name:         DTS24
+  notes:                "External collaborator cardiac MRI (LIONS cohort), reused by MFB for project DTS24. Originally collected under grant PI20/01389 (PI Juan Delgado); see the sidecar user_provided_metadata.source_project block."
+
+# Operator-override subject block: wins over the animal-facility DB, so no DB
+# lookup is attempted and nothing is queued to pending_subject_metadata.csv.
+# date_of_birth is deliberately NOT set — see the header note. age_at_acquisition
+# comes pre-derived (whole years) from the DICOM header instead.
+subject:
+  facility_animal_id:  "${discovered.dicom_patient_id}"
+  species:             "Homo sapiens"
+  sex:                 "${discovered.dicom_patient_sex}"
+  age_at_acquisition:  "${discovered.dicom_patient_age}"
+  source:              "dicom-header"
+
+# Cardiac MRI: a targeted study, not whole-body. LIONS headers carry
+# BodyPartExamined = HEART; the cohort title confirms it for the rest.
+anatomy:
+  is_whole_body: false
+  region:
+    label:    heart
+    ontology: UBERON
+    id:       UBERON:0000948
+
+# Disease context, quoted from the collaborator's OWN study definition
+# (Foglio2 "Short name") — not derived by us. The population fact is what goes
+# in `disease_state`: every subject here is a cardiac transplant recipient.
+# `disease_model` names what the study set out to evaluate in them.
+#
+# `is_control: null` is deliberate and correct, NOT a gap to be filled later.
+# There is no healthy-control arm — all 42 are transplant patients — so
+# "control vs case" does not apply, and asserting either value would be false.
+# The ingest WARNs once per acquisition about the null; that is expected here.
+#
+# ⚠️ DO NOT record pulmonary-hypertension status in this block. Right-heart
+# catheterisation for these subjects IS present, as data, in the attached
+# `hemodynamics` table (mean PAP, wedge, cardiac index). PH status is therefore
+# derivable per case — but the count swings 12 vs 4 of 38 depending on whether
+# you apply the 2022 (mPAP > 20) or 2015 (mPAP >= 25) ESC/ERS threshold, so
+# freezing one classification into the registry would bake in OUR choice of
+# definition and misrepresent it as the collaborator's. Ryan's call 2026-08-12:
+# let it live as data. PH here is a secondary finding, not the cohort label.
+condition:
+  is_control:    null
+  disease_state: "cardiac transplant recipient"
+  disease_model: "antibody-mediated damage in cardiac transplant"
+  source:        "collaborator study definition (grant PI20/01389)"
+
+auto_create_project:
+  owner:       "JRC"
+  description: "MFB project DTS24. Reuse of external collaborator cardiac MRI datasets (LIONS + HPIC cohorts) obtained from clinical partners. The originating grants differ per cohort and are recorded per-acquisition in the metadata sidecars."
+  notes:       "Created on the DTS24 LIONS re-ingest 2026-08-12. External data reused internally; original funding/provenance is per-acquisition, not project-level."
+
+# Operator-supplied tables attached to each acquisition's sidecar under
+# `user_provided_metadata` (08_METADATA §4.9).
+#
+# key_transform: decimal2 is REQUIRED here and is not cosmetic. The sheet
+# stores case ids as NUMBERS, so `1.10` is held as 1.1 and would silently fail
+# to match the LEONE_1.10 case folder. Three of the 42 cases (1.10 / 2.10 /
+# 2.20) depend on it. `on_missing: error` makes any future drift loud.
+user_metadata:
+  - label: dataset_information
+    file: "C:/Users/rtasseff/temp/dataset_information_lions.xlsx"
+    sheet: "Foglio1"
+    header_row: 2                 # row 1 is a title; row 2 holds field + description
+    split_descriptions: true      # header cells embed their own documentation
+    key_column: "AcquisitionID"
+    key_transform: "decimal2"
+    match: "${discovered.folder_name}"
+    match_transform: "strip_prefix:LEONE_"
+    on_missing: error
+
+  - label: source_project
+    file: "C:/Users/rtasseff/temp/dataset_information_lions.xlsx"
+    sheet: "Foglio2"
+    orientation: vertical         # batch-constant Field/Value table
+    header_row: 1
+    field_column: 1
+    value_column: 3
+    description_column: 2
+
+  # Clinical hemodynamics measured alongside the imaging. Attached here as
+  # accompanying metadata because that is what the system can express today —
+  # but see BACKLOG META-11: this is really a separate measurement/assay
+  # linked by subject, not metadata about an MRI acquisition.
+  - label: hemodynamics
+    file: "C:/Users/rtasseff/temp/LIONS_42cases/PACIENTES LEONE FINAL - ESTUDIO HD.xlsx"
+    sheet: "DATOS HD TOTALES"
+    header_row: 1
+    key_column: "ID estudio (CENTRO.IDLOCAL, Ejemplo 1.01)"
+    key_transform: "decimal2"
+    match: "${discovered.folder_name}"
+    match_transform: "strip_prefix:LEONE_"
+    on_missing: error
+
+# Project hard-link name (resolved at link-creation time; no extension).
+# Example resolved value: XMRI_LEONE_1.01_20211022
+link_filename: "XMRI_${sample_id}_${acq_date}"

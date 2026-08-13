@@ -15,7 +15,9 @@ from . import (
     paravision_metadata,
     registry,
     resolver,
+    user_tables,
 )
+from . import dicom_headers as dicom_headers_mod
 
 
 # Maps a data_ecosystem to the summarize_source(path) -> dict callable
@@ -38,7 +40,7 @@ def _is_paravision_exam(path):
     return p.is_dir() and (p / "acqp").is_file() and (p / "method").is_file()
 
 
-def _extract_dicom_embedded(path):
+def _extract_dicom_embedded(path, dicom_headers=False):
     """Embedded-metadata dispatcher for the DICOM ecosystem.
 
     Detects source shape by content and dispatches to the right
@@ -48,8 +50,14 @@ def _extract_dicom_embedded(path):
       - Molecubes NI acquisition folder (`protocol.txt` + `recon_<idx>/`
         present) → `ni_metadata.extract` → section name "ni".
       - Everything else under DICOM (collaborator XMRI zips, future
-        general DICOM) → empty; pure-DICOM-header extraction is queued
-        as deferred work.
+        general DICOM) → `dicom_headers.extract` when the config opts in
+        with `auto_discover.dicom_headers: true`, otherwise empty.
+
+    `dicom_headers` is OFF by default so no existing config changes
+    behaviour. It is a curated allow-list, not a raw header dump — the
+    first data to use it is human clinical MRI, so what it may and may
+    not surface is a privacy decision documented in ingest/dicom_headers.py
+    and 08_METADATA §4.10.
 
     Returns either a 2-tuple `(discovered, section_dict)` or a 3-tuple
     `(discovered, section_dict, section_name)`. The 3-tuple form lets
@@ -68,6 +76,8 @@ def _extract_dicom_embedded(path):
         return paravision_metadata.extract(path)
     if ni_metadata.is_ni_acquisition(path):
         return ni_metadata.extract(path)
+    if dicom_headers:
+        return dicom_headers_mod.extract(path)
     return ({}, {})
 
 
@@ -85,9 +95,16 @@ def get_summarizer(ecosystem):
     return FORMAT_SUMMARIZERS.get(ecosystem)
 
 
-def get_embedded_extractor(ecosystem):
-    """Return the extract_embedded callable for an ecosystem, or None."""
-    return FORMAT_EMBEDDED_EXTRACTORS.get(ecosystem)
+def get_embedded_extractor(ecosystem, disco=None):
+    """Return the extract_embedded callable for an ecosystem, or None.
+
+    `disco` is the `auto_discover:` block. The DICOM dispatcher reads its
+    opt-in `dicom_headers:` flag from there; every other ecosystem ignores it.
+    """
+    fn = FORMAT_EMBEDDED_EXTRACTORS.get(ecosystem)
+    if fn is _extract_dicom_embedded and (disco or {}).get("dicom_headers"):
+        return lambda path: _extract_dicom_embedded(path, dicom_headers=True)
+    return fn
 
 
 # Valid instrument codes (internal + collaborator X-prefix)
@@ -231,12 +248,14 @@ def _apply_operator(case, operator_expr):
 
 
 def _validate_enrichment_blocks(cfg, disco):
-    """Validate the Phase 3 enrichment config and return the raw blocks.
+    """Validate the top-level sidecar metadata blocks and return them raw.
 
-    Reads the top-level `subject:` / `condition:` / `anatomy:` blocks and the
-    `auto_discover.subject_from_db` flag + `auto_discover.subject_lookup` map.
-    Raises ValueError on a structurally invalid config (fail-fast); the field
-    VALUES are resolved non-blockingly later by ingest/enrichment.py.
+    Covers the Phase 3 enrichment config — the `subject:` / `condition:` /
+    `anatomy:` blocks plus the `auto_discover.subject_from_db` flag and
+    `auto_discover.subject_lookup` map — and the `user_metadata:` table list
+    (08_METADATA §4.9). Raises ValueError on a structurally invalid config
+    (fail-fast); the field VALUES are resolved non-blockingly later by
+    ingest/enrichment.py and ingest/user_tables.py.
 
     `disco` is cfg["auto_discover"] (or {} for single-case configs).
     """
@@ -246,6 +265,7 @@ def _validate_enrichment_blocks(cfg, disco):
     anatomy = cfg.get("anatomy")
     subject_from_db = disco.get("subject_from_db")
     subject_lookup = disco.get("subject_lookup")
+    user_metadata = cfg.get("user_metadata")
 
     errors = []
     errors += resolver.validate_subject_block(subject)
@@ -253,6 +273,7 @@ def _validate_enrichment_blocks(cfg, disco):
     errors += resolver.validate_anatomy_block(anatomy)
     errors += resolver.validate_subject_from_db(subject_from_db)
     errors += resolver.validate_subject_lookup(subject_lookup)
+    errors += user_tables.validate_user_metadata_block(user_metadata)
     if errors:
         raise ValueError(
             "Invalid enrichment config:\n  - " + "\n  - ".join(errors)
@@ -263,6 +284,7 @@ def _validate_enrichment_blocks(cfg, disco):
         "anatomy": anatomy,
         "subject_from_db": bool(subject_from_db),
         "subject_lookup": subject_lookup or {},
+        "user_metadata": user_metadata or [],
     }
 
 
@@ -398,6 +420,7 @@ def expand_batch(cfg, nas_root=None):
             "anatomy": enrich_block["anatomy"],
             "subject_from_db": enrich_block["subject_from_db"],
             "subject_lookup": enrich_block["subject_lookup"],
+            "user_metadata": enrich_block["user_metadata"],
         }
         discovered = {}
 
@@ -532,7 +555,7 @@ def expand_batch(cfg, nas_root=None):
         embedded_attempted = False
         embedded_yielded = False
         if embed_metadata and (is_file or is_dir):
-            extractor = get_embedded_extractor(eco_for_extract)
+            extractor = get_embedded_extractor(eco_for_extract, disco)
             if extractor:
                 embedded_attempted = True
                 try:
@@ -671,6 +694,7 @@ def prep_single_case(cfg):
     enrich_block = _validate_enrichment_blocks(cfg, cfg.get("auto_discover"))
     cfg["subject_from_db"] = enrich_block["subject_from_db"]
     cfg["subject_lookup"] = enrich_block["subject_lookup"]
+    cfg["user_metadata"] = enrich_block["user_metadata"]
     cfg.setdefault("discovered", {})
     src = cfg.get("source_path", "")
     if src:
@@ -686,7 +710,7 @@ def prep_single_case(cfg):
     embed = (cfg.get("auto_discover") or {}).get("embedded_metadata", True)
     eco = (registry_block or {}).get("data_ecosystem", "")
     if embed and src and os.path.exists(src):
-        extractor = get_embedded_extractor(eco)
+        extractor = get_embedded_extractor(eco, cfg.get("auto_discover"))
         if extractor:
             try:
                 result = extractor(src)

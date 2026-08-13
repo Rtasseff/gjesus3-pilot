@@ -9,24 +9,36 @@ without extension (e.g. `LEONE_1.01.zip` -> `LEONE_1.01/`, `HPIC02.rar` ->
 `HPIC02/`). That case-dir name becomes `discovered.folder_name` -> `sample_id`.
 
 `.zip` is handled by the stdlib `zipfile`; `.rar` is shelled out to 7-Zip
-(`7z.exe`). Run this from **native Windows Python** when `--dest` is on the NAS
-so the created folders inherit correct Windows ACLs (the whole point of the
-container rebuild). Idempotent: a case whose dest dir carries the `.extracted`
+(`7z.exe`). Idempotent: a case whose dest dir carries the `.extracted`
 sentinel (written only after a fully-successful extraction) is skipped, so the
 run can be resumed after an interruption. A non-empty dir WITHOUT the sentinel
 is treated as a partial/interrupted extraction and re-extracted from clean —
 a truncated DICOM tree is never accepted as complete. Use `--force` to
 re-extract a case that is already marked complete.
 
+⚠️ **KEEP `--dest` ON A LOCAL DISK. Never point it at the NAS.** Each case is
+~20,000 small DICOM files; writing them over SMB turns a ~1-minute local
+extraction into a very long one, and it was the single biggest time sink in the
+original collaborator round. There is no reason to stage on the NAS: the
+ingest reads metadata from this extracted tree but copies only the ORIGINAL
+archive into `/raw/` (`acquisition_layout: archive`), so nothing here needs NAS
+ACLs and nothing is ever re-zipped. The earlier `J:/gjesus3-data/staging/...`
+examples in this docstring were the mistake; they are corrected below.
+
 Usage (from the repo root, Windows):
 
     python tools/extract_xmri_archives.py ^
         --src  "C:/Users/rtasseff/temp/LIONS_42cases" ^
-        --dest "J:/gjesus3-data/staging/LIONS_42cases_extracted"
+        --dest "D:/projects/gjesus3/xmri_staging/LIONS_42cases_extracted"
 
     python tools/extract_xmri_archives.py ^
         --src  "C:/Users/rtasseff/temp/HPIC_33cases" ^
-        --dest "J:/gjesus3-data/staging/HPIC_33cases_extracted"
+        --dest "D:/projects/gjesus3/xmri_staging/HPIC_33cases_extracted"
+
+(Both of the above are ALREADY EXTRACTED as of 2026-08-12 — 42/42 and 33/33
+cases present — so the DTS24 re-ingest needs no extraction step at all. They
+predate the `.extracted` sentinel, so a re-run would redo them; the ingest
+reads the directories directly and does not care.)
 
 Add `--limit N` to extract only the first N archives (cheap validation), and
 `--dry-run` to list what would be extracted without writing anything.

@@ -339,6 +339,45 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)
   and NI `--user` (override the parsed user), once the person-home above exists.
+- [ ] **⚠️ `extract_study_date` reads only the first 20 instances and fails
+  SILENTLY into today's date (hit live 2026-08-12).** `dicom_utils.extract_study_date`
+  calls `find_dicom_files(limit=20)` and returns the first `StudyDate` it finds.
+  When the leading instances of a nested DICOM tree carry no `StudyDate`, it
+  returns `None`, and `ingest_raw` falls back to **today** for the ACQ-ID prefix
+  and the registry `acquisition_datetime`. The result is a silently wrong
+  identity: a 2019 exam committed as `ACQ-20260812-…` under
+  `/raw/DICOM/2026/2026-08/`, with a blank `acquisition_datetime`, no
+  `age_at_acquisition`, and the wrong date baked into the project hard-link name.
+  It is only a WARN, so a batch run completes "successfully".
+  **Observed:** 2 of the first 4 DTS24 HPIC cases (whose archives nest one level
+  deeper — `HPIC02/HPIC02/S#####/S00/I##`); 0 of 42 LIONS, whose flatter layout
+  happens to put a dated instance in the first 20. Cleaned up by deleting and
+  re-ingesting the two acquisitions.
+  **Fix options**, in preference order: (a) have the DICOM summarizer defer to
+  `ingest/dicom_headers.py`, which parses more instances and prefers a real image
+  series over presentation-state frames — it recovered a date for 33/33 HPIC
+  cases; (b) raise/remove the `limit=20`; (c) at minimum, make the today-fallback
+  an **ERROR that skips the case** rather than a WARN that commits it — a wrong
+  acquisition date is worse than a deferred one. Note the same 20-instance limit
+  applies to `detect_modality`, which is why the batch log reported
+  `DICOM Mod: PR` (a presentation state) for some cases.
+- [ ] **`dicom_utils.summarize_source` opens every file in the source tree
+  (measured 2026-08-12).** `find_dicom_files` has no limit in the `file_count`
+  path, and for extensionless DICOM it must open each file to check the `DICM`
+  magic at byte 128 — so a collaborator case of ~21,000 instances costs ~21,000
+  opens, plus a second `os.walk` doing `getsize` on each for the total. Measured
+  **29–75 s per case** on local disk; the DTS24 batch of 75 cases is ~880,000
+  file opens and dominates its ingest wall-clock entirely (the actual archive
+  copy is one file per acquisition). Tolerable only because staging is local —
+  the same walk over SMB is the exact "thousands of tiny files" cost that made
+  the original collaborator round painful, and is why
+  `extract_xmri_archives.py` now warns against a NAS `--dest`.
+  The fix is already sketched in a TODO in that function: for
+  `acquisition_layout: archive`, count entries in the produced archive's central
+  directory instead of walking the source. That is both faster and *more*
+  correct — `file_count` is meant to describe the acquisition as stored. Cheap
+  win: `detect_modality` / `extract_study_date` already pass `limit=20`; only
+  the `file_count` call is unbounded.
 
 ## Metadata vocabularies & search (correction pass 2026-06-11)
 
@@ -362,6 +401,66 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   (microscopy) remain the lead destinations** ([13_GJESUS3_ROLE](../mfb-rdm-docs/13_GJESUS3_ROLE.md)).
   Prep is already in place: keep the flat registry clean and keep DICOM UIDs
   captured (done) — that's what makes the eventual platform import frictionless.
+
+## Metadata model — what `user_provided_metadata` is standing in for (2026-08-12)
+
+> Raised by Ryan at the moment the block was designed, and deliberately **not**
+> solved then: DTS24 needed the collaborator tables captured, and over-fitting
+> the schema to one dataset would have been worse than a recorded stand-in.
+> The block that shipped ([08_METADATA §4.9](../mfb-rdm-docs/08_METADATA.md)) is
+> flat and per-acquisition; both items below are cases where that is the wrong
+> shape and we know it. **Priority: medium** — revisit before a second or third
+> dataset makes the stand-in load-bearing.
+
+- [ ] **META-10 — Study-level metadata and the ISA hierarchy (investigation /
+  study / assay).** Study data describes *what is being done*, one level above
+  an acquisition, so copying it into every acquisition's sidecar is duplication
+  with no join. We have already leaned this way twice: the animal-facility
+  `procedures` block ([§4.4.7](../mfb-rdm-docs/08_METADATA.md)) and the
+  `session_id` registry column (already annotated "ISA study grouping" in
+  `resolver.USER_CONTROLLABLE_COLUMNS`). DTS24's `source_project` block —
+  the originating grant, identical on all 42/33 acquisitions of a cohort — is a
+  third. Design question: does gjesus3 adopt an explicit ISA-style layer
+  (investigation → study → assay), and if so does it live in
+  `/projects/<proj>/metadata/` (the study-level location already specified in
+  §1.1 but built on 0 of 52 projects) rather than in the per-acquisition
+  sidecar? Ties to the deferred study-level metadata work and to the
+  metadata-only search DB item above.
+- [ ] **META-11 — A clinical/derived *measurement* is a new data type, not
+  metadata.** DTS24's cardiac hemodynamics (28 columns of pressures, cardiac
+  index, Fick) is currently attached to the MRI acquisition as
+  `user_provided_metadata.hemodynamics`. That is expedient and wrong in
+  principle: it is its **own measurement**, of its **own data type**, related to
+  the MRI only because it came from the **same subject**. The model that
+  captures it properly is subject-linked acquisitions of differing types — which
+  is also what would let a non-imaging assay (bloods, histology scores, clinical
+  scores) enter the system at all. Today `raw/` is organized by imaging
+  ecosystem (MICROSCOPY / DICOM / EM) with no home for a tabular clinical
+  measurement. Design question: a new ecosystem/data-type for non-image
+  measurements, keyed by `subject_ids`, versus keeping such tables as
+  acquisition metadata. **Do not add more measurement tables via `user_metadata:`
+  before deciding** — that is how the stand-in becomes permanent.
+
+## Human-subject data — policy beyond the ingest (2026-08-12)
+
+- [ ] **META-12 — Human/clinical data policy.** DTS24 is the first human data in
+  a system designed end to end for preclinical animal work. The ingest side is
+  settled ([08_METADATA §4.10](../mfb-rdm-docs/08_METADATA.md)): the DICOM
+  extractor is a privacy allow-list, no date of birth is propagated into the
+  sidecars or `registry_subjects.csv`, and human cohorts use an operator
+  `subject:` block with a pseudonymous id so the animal-facility DB is never
+  consulted. **What is NOT settled:** (a) the archived source `.zip`/`.rar`
+  files still contain full DICOM headers with DOB and patient name — should
+  sources be de-identified on ingest, or is "identifiers stay in the immutable
+  archive, never in the searchable layer" the standing rule? (b) access control
+  for human data on the share — the current model is a single `GJesus` group
+  with Read baseline ([permission model](../mfb-rdm-docs/02_INFRASTRUCTURE.md)),
+  which does not distinguish human from animal data; (c) retention, and the
+  legal basis / data-sharing agreement covering reuse of collaborator clinical
+  data for DTS24; (d) whether `subject:`'s animal-facility field names
+  (`facility_animal_id`, `strain`, `cohort_id`) should gain a human-appropriate
+  alias. Also note the `subject:` block schema currently has no way to say
+  "this subject is human" other than `species: Homo sapiens`.
 
 ## ✅ Finder — "Select-in-Finder → assemble a project" (2026-06-23) — **DONE 2026-08-12, differently**
 
