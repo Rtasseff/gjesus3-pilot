@@ -15,6 +15,36 @@ slice already in production (132 acqs).
 
 ---
 
+## ⚠️ SUPERSEDED BY REVIEW, 2026-08-13 — read `REVIEW_FINDINGS_2026-08-13.md` first
+
+Ryan's review found the blocking defect below. **Two figures in this document are now wrong:**
+
+- **The 1,657 / 655 split in §0.6 and the "72% resolved a project code" figure measure PATH
+  PARSING, NOT CORRECTNESS.** They counted how often a 3–4 digit code was *found*, not whether it
+  was a real animal-ethics protocol. **21 of the 25 projects that split would have created in
+  production were fabricated** — `2302` is the date folder `230217`; `245`, `100`, `241` are animal
+  numbers. Each would have become a project folder, registry rows, and `subject_ids` like
+  `r1-AE-biomaGUNE-230`.
+- **That contradicted this plan's own rule** (§0.6 D-G: "an AE code is a regulatory identifier and
+  must not be invented") — 655 acquisitions were held back for exactly the reason 114 others were
+  waved through with a guessed code.
+
+**Fixed 2026-08-13.** Codes are now validated against the animal-facility DB, and a wrong one is
+repaired by walking up whole path segments to the first valid code. **Current true numbers:**
+
+| | |
+|---|---|
+| ingest | **1,508** (1,409 already valid + **99 recovered**) |
+| held back | **673** (658 + **15 rejected** as not real protocols) |
+| already in production | 131 |
+| **new projects created** | **4** — `0324`, `0421`, `1024`, `1122`, all DB-verified (was 25, of which 21 fabricated) |
+
+Independent confirmation: **93 of 93 recovered `(project, animal)` pairs resolve in the facility
+DB.** Batches `211217`, `Kepa` and `Alba` vanish entirely — every one of their acquisitions was
+under a fabricated code.
+
+---
+
 ## §-2. WHERE IT ACTUALLY STANDS (2026-08-12 evening) — read this first
 
 **The data is staged and the ingest is built and tested. Nothing has been written to
@@ -23,7 +53,7 @@ production.**
 | | |
 |---|---|
 | **Snapshot** | `J:\gjesus3-data\staging\ni_gnuclear_20260812\` — **2,485 files / 286.3 GB**, pulled read-only off `S:\gnuclear`, **0 failures**, per-file sha256 in `_manifest.jsonl`, `--verify` re-read in progress |
-| **Ready to ingest** | **1,526** acquisitions (2,312 total − 131 already in production − 655 held back) |
+| **Ready to ingest** | **1,508** acquisitions (2,312 total − 131 already in production − **673** held back) — see the ⚠️ below; the 1,526/655 split is SUPERSEDED |
 | **Proven** | full ingest end-to-end on a throwaway NAS: 3 acquisitions incl. a 4-frame dynamic PET → correct `.data/`, registry rows, packed multi-animal `subject_ids`, **live animal-DB hits**, project auto-create, hard links, provenance |
 | **Idempotency** | re-run = 0 cases, exit 0, registry unchanged |
 | **Tests** | `tools/test_ni_flat.py` **20/20**, plus all **19** pre-existing suites green |
@@ -331,9 +361,13 @@ of its structural claims.
 
 `tools/ni_gnuclear_discover.py` (read-only) over all 2,312:
 
+> ⚠️ **The two rows below are SUPERSEDED — they measure path parsing, not correctness.**
+> A "resolved" code was often a date or an animal number. True figures after DB validation:
+> **1,508 ingest / 673 held back / 4 new projects.** See the banner at the top of this file.
+
 | Outcome | Count | Read |
 |---|---|---|
-| **project code resolved automatically** | **1,657 (72%)** | ready to ingest |
+| ~~project code resolved automatically~~ | ~~1,657 (72%)~~ | **found a 3–4 digit code — 114 of them fabricated** |
 | no project code in the path | **655 (28%)** | needs input — see below |
 | `species-unknown` | 1,802 | **benign** — folder says `15`, not `m15`; the facility DB carries species |
 | `project<-parent` | 1,140 | **benign** — this is the designed recovery path, not a defect |

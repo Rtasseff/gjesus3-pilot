@@ -29,9 +29,18 @@ Of **2,312** acquisitions in the snapshot:
 
 | | Count | Why |
 |---|---|---|
-| **Ingest now** | **1,523** | protocol code resolved from the path |
+| **Ingest now** | **1,508** | protocol code present in the path **and validated against the animal-facility DB** |
 | Skipped automatically | **131** | that scan is already in production (archive round 8) — cross-source dedup on `(timestamp, modality)` |
-| **Held back** | **658** | no animal-protocol code anywhere in the path (filed by study/tracer name). **D-G** — an AE code is a regulatory identifier and I will not invent one. Ingesting them later costs nothing; dedup is on the machine timestamp. |
+| **Held back** | **673** | no *valid* protocol code anywhere in the path. **D-G** — an AE code is a regulatory identifier and I will not invent one. Ingesting them later costs nothing; dedup is on the machine timestamp. |
+
+**Protocol codes are validated, not trusted** (`REVIEW_FINDINGS_2026-08-13.md` §1). The first
+version of this run would have created **25 new projects, 21 of them fabricated** — `2302` is the
+date folder `230217`, `245` and `100` are animal numbers. That contradicted this pull's own rule.
+Now the path-derived code is checked against the facility DB and, when wrong, the real code is
+recovered by walking up whole path segments: **99 recovered, 15 rejected outright** (they join the
+held-back set). **New projects created drops from 25 to 4** — `0324`, `0421`, `1024`, `1122`, all
+DB-verified. Independent confirmation: 93 of 93 recovered `(project, animal)` pairs resolve in the
+facility DB.
 
 **Unit = one acquisition per *reconstruction*** — `(timestamp, modality, algo, recon_idx)` — matching
 what `feat/ni-live-hardening` landed, so rows from both sources have the same shape.
@@ -72,8 +81,11 @@ python - <<'PY'
 src = "tools/templates/instruments/molecubes_ni_gnuclear.yaml"
 out = "tools/configs/ni_gnuclear_prod_<WHO>.yaml"
 t = open(src, encoding="utf-8").read()
-t = t.replace('  # researchers: [Irene, Itziar]', '  researchers: [<WHO>]')
-open(out, "w", encoding="utf-8").write(t)
+n = t.replace('  # researchers: [Irene, Itziar]', '  researchers: [<WHO>]')
+# A non-matching str.replace returns the original SILENTLY, and a config with no
+# researchers: key ingests ALL 1,508 in one go. Make that structural, not advisory.
+assert n != t, "researchers: substitution did not match — refusing to write a config that would ingest EVERYTHING"
+open(out, "w", encoding="utf-8").write(n)
 PY
 
 # ⚠️ CONFIRM THE TARGET BEFORE EVERY SINGLE RUN — there is still no test-vs-prod guard,
@@ -94,19 +106,31 @@ porting seam, unused by the hard-link linker.
 Escalating, so a surprise shows up on 1 acquisition rather than 503. **Itziar is the cohort
 already proven end-to-end in the sandbox**, which is why it sits mid-list rather than first.
 
+Batches `211217`, `Kepa` and `Alba` **disappear entirely** — every one of their acquisitions was
+under a fabricated code, so all 15 join the held-back set. Ten batches become seven.
+
 | # | `researchers:` | Acqs | GB | ~min | Note |
 |---|---|---:|---:|---:|---|
-| 1 | `[211217]` | 1 | 0.0 | <1 | production smoke test |
-| 2 | `[Kepa]` | 8 | 0.2 | <1 | |
-| 3 | `[Alba]` | 6 | 3.3 | 3 | |
-| 4 | `[CarlottaS]` | 20 | 8.9 | 8 | |
-| 5 | `[Ermal]` | 25 | 15.2 | 14 | |
-| 6 | `[IAZ_MJ]` | 133 | 4.5 | 4 | 2022 `MOLECUBES\` extra level |
-| 7 | `[MJ]` | 216 | 9.0 | 8 | |
-| 8 | `[Itziar]` | 227 | 19.9 | 18 | sandbox-proven |
-| 9 | `[Irene]` | 384 | 22.9 | 21 | **case-insensitive → `Irene` + `irene`, 2024/2025/2026 together** |
-| 10 | `[Marina]` | 503 | 111.7 | 102 | biggest; run last, ideally off-hours |
-| | **TOTAL** | **1,523** | **195.5** | **~3 h** | |
+| 1 | `[CarlottaS]` | 20 | 8.9 | 8 | new smoke test — see below |
+| 2 | `[Ermal]` | 25 | 15.2 | 14 | |
+| 3 | `[IAZ_MJ]` | 133 | 4.5 | 4 | 2022 `MOLECUBES\` extra level |
+| 4 | `[MJ]` | 216 | 9.0 | 8 | **66 recovered → `0522`**; sandbox-proven |
+| 5 | `[Itziar]` | 227 | 19.9 | 18 | sandbox-proven |
+| 6 | `[Irene]` | 384 | 22.9 | 21 | 12 recovered → `0324`. **Case-insensitive → `Irene` + `irene`, 2024/2025/2026 together** |
+| 7 | `[Marina]` | 503 | 111.7 | 102 | 6 recovered → `1321`; biggest, run last |
+| | **TOTAL** | **1,508** | **192.0** | **~3 h** | |
+
+> **⚠️ These rows are re-derived from the code, and they differ from the table in
+> `REVIEW_FINDINGS_2026-08-13.md` §4** (which gave MJ 282, Irene 396, Marina 509). Those rows sum
+> to **1,592** against the review's own stated total of 1,508 — the recovered acquisitions were
+> *already inside* those researchers' counts, since a bogus code still passed `require_project`.
+> Recovery changes **which project** they land in, not **whether** they are ingested. The review
+> anticipated exactly this and said to re-derive rather than copy; §3.3's batch-size pass
+> condition depends on these being right.
+
+**On the smoke test.** The 1-acquisition batch (`211217`) was itself one of the fabricated codes,
+so it is gone. `CarlottaS` (20 acqs, 8.9 GB, ~8 min) is the new batch 1 and the smoke step is
+**not** skipped: after it, everything in §3.3 is checked before batch 2 starts.
 
 `~min` assumes 3× bytes over SMB per acquisition (read source, write dest, read back to verify)
 at the 55–65 MB/s this link actually sustained during the pull.
@@ -138,6 +162,21 @@ PYTHONPATH=tools python tools/ingest_raw.py --config tools/configs/ni_gnuclear_p
 **Pass conditions:** `0 failed`, **0 validator errors**, `dup acq_id = 0`, `dup orig = 0`,
 `blank adt = 0`, NI row count up by exactly the batch size, and the re-run adds nothing.
 
+**A shortfall in the NI count is the check that matters most.** Cross-source dedup is on
+`(timestamp, modality)` while the ingest unit is per-reconstruction, and **142 scans in this set
+have more than one reconstruction (290 acqs)**. If a batch dies between two reconstructions of the
+same scan, the re-run skips the surviving sibling *silently* — it looks like a clean resume. A
+count below the batch size is how that shows up. If it happens, find the gap with:
+
+```bash
+PYTHONPATH=tools python -c "
+import sys; sys.path.insert(0,'tools')
+from ingest import ni_flat
+m,idx,n = ni_flat.discover(r'J:\gjesus3-data\staging\ni_gnuclear_20260812',
+    registry_path=r'J:\gjesus3-data\registries\registry_raw.csv')
+print(len(m),'still outstanding')"
+```
+
 **I stop and report — I do not continue to the next batch — if any of those fail.**
 
 ### 3.4 After the last batch
@@ -156,8 +195,12 @@ and commit.
 ## 4. If something goes wrong
 
 - **A batch fails partway.** Acquisitions already committed stay; the failed one rolls back its
-  own folder (`_rollback_uncommitted`). Fix, then **re-run the same command** — dedup makes it
-  resume, not duplicate. This was verified in the sandbox.
+  own folder (`_rollback_uncommitted`). Fix, then **re-run the same command** — dedup prevents
+  duplicates, verified in the sandbox. **But the resume is only complete for single-reconstruction
+  scans.** Cross-source dedup keys on `(timestamp, modality)`, so once *any* reconstruction of a
+  scan is registered, the re-run skips its siblings too — for the **142 multi-recon scans (290
+  acqs)** an interrupted batch can leave a sibling permanently unignested and look clean doing it.
+  §3.3's NI-count check is what catches it; the outstanding-count command there names the gap.
 - **Wrong rows land.** They are removable: `tasks/ni_prod_testdata_removal.md` documents the
   exact procedure used in August to pull 2 synthetic acquisitions out of production (registry
   rows across 5 CSVs, raw folders, auto-created project + subject).
@@ -185,9 +228,19 @@ and commit.
 
 1. **Go / no-go on §3**, and whether to run all ten batches or stop after a specific one for review.
 2. **Off-hours?** Batch 10 (Marina, 112 GB, ~1.7 h) is the only one heavy enough to care.
-3. **D-G, whenever convenient** — protocol codes for the 658. The top 12 `(researcher, series)`
-   groups cover 55%. Full list: `tools/ni_gnuclear_discover.py --from-plan <snapshot>/_plan.csv --csv review.csv`,
-   then filter to rows with an empty `project` column.
+3. **D-G, whenever convenient** — protocol codes for the **673**. Full list:
+
+   ```bash
+   PYTHONPATH=tools python tools/ni_gnuclear_discover.py \
+     --root J:/gjesus3-data/staging/ni_gnuclear_20260812 --csv review.csv
+   ```
+   then filter to rows with an empty `project` column. (`--root`, not `--from-plan` — `_plan.csv`
+   is only written by `pull_ni_gnuclear.py --plan` and is not in the snapshot.)
+
+   Note the 673 now include 15 acquisitions whose path-derived code was **rejected** as not a real
+   protocol, flagged `project-rejected:<code>`. The same walk-up recovery would likely rescue some
+   of the original 658 too; that was deliberately left alone so the measured numbers here stay
+   valid, and it belongs with the researcher mapping.
 
 ---
 
