@@ -244,10 +244,20 @@ def _query_subject(conn, project_alias, animal_code):
         )
         proj = cur.fetchone()
         if not proj:
+            # ANCHORED on the AE-biomaGUNE- segment. The old form was
+            # `LIKE '%<alias>'`, which matches any project_code ENDING in those
+            # digits: a lookup for protocol 101 resolved to project 1317 via
+            # `AE-biomaGUNE-1317/PRO-AE-SS-101`, and then returned THAT project's
+            # animal — wrong species/strain/sex/DOB/procedures, reported as a
+            # success. Wrong data with no error is the DTS24 failure shape.
+            # The fallback itself is still needed: 0219 and 1521 have a NULL
+            # projectAlias and resolve only through project_code.
+            like = f"AE-biomaGUNE-{project_alias}"
             cur.execute(
                 "SELECT id, project_code, projectAlias FROM projects "
-                "WHERE project_code LIKE %s LIMIT 1",
-                (f"%{project_alias}",),
+                "WHERE project_code = %s OR project_code LIKE %s "
+                "   OR project_code LIKE %s LIMIT 1",
+                (like, like + "-%", like + "/%"),
             )
             proj = cur.fetchone()
         if not proj:

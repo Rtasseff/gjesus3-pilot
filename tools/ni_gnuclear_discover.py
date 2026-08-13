@@ -85,6 +85,68 @@ TIMEPOINT_RE = re.compile(r"^(\d+\s*h(\s*\d+\s*min)?|\d+\s*min|d\d+|day\s*\d+)$"
 DATE6_RE = re.compile(r"^\d{6}$")
 BARE_NUM_RE = re.compile(r"^\d+$")
 
+# --- animal-protocol code validation (tasks/REVIEW_FINDINGS_2026-08-13.md) ---
+# An AE code is a regulatory identifier, so it is validated against the facility
+# DB rather than trusted from the path. Without this, 114 acquisitions filed
+# themselves under an INVENTED code: `2302` is the date folder `230217`, `245`
+# and `100` are animal numbers. That contradicted this pull's own rule — 673
+# acquisitions are held back precisely because a protocol code must never be
+# guessed.
+#
+# AE_CODE_RE is ANCHORED on the `AE-biomaGUNE-` segment: the project_code
+# `AE-biomaGUNE-1317/PRO-AE-SS-101` must yield 1317 and NOT 101. An unanchored
+# suffix match is exactly the animal_db bug in §5.4 of the review.
+AE_CODE_RE = re.compile(r"AE-biomaGUNE-(\d{3,4})(?![0-9])")
+# A candidate must be the WHOLE segment (or its `<code>_…` / `<code>-…` head).
+# Matching any digit run inside a segment re-introduces the guessing: it pulls
+# `1217` out of the date folder `211217`.
+SEG_CODE_RE = re.compile(r"^(\d{3,4})(?:[_-]|$)")
+
+_VALID_CODES = None
+
+
+def valid_protocol_codes(conn=None):
+    """The authoritative set of animal-protocol codes, from the facility DB.
+
+    One query, cached for the process. Raises rather than returning an empty
+    set: for a one-time bulk write, refusing to run beats silently reverting to
+    guessing codes from the path.
+    """
+    global _VALID_CODES
+    if _VALID_CODES is not None:
+        return _VALID_CODES
+    import animal_db
+    own = conn is None
+    conn = conn or animal_db.get_connection()
+    codes = set()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT project_code, projectAlias FROM projects")
+            for r in cur.fetchall():
+                alias = (r.get("projectAlias") or "").strip()
+                if re.fullmatch(r"\d{3,4}", alias):
+                    codes.add(alias)
+                codes.update(AE_CODE_RE.findall(r.get("project_code") or ""))
+    finally:
+        if own:
+            conn.close()
+    if not codes:
+        raise RuntimeError(
+            "the facility DB returned no protocol codes — refusing to run rather "
+            "than fall back to guessing codes from the path"
+        )
+    _VALID_CODES = codes
+    return codes
+
+
+def recover_project(segs, valid):
+    """First DB-valid protocol code walking UP whole path segments."""
+    for seg in reversed(segs):
+        m = SEG_CODE_RE.match(seg)
+        if m and m.group(1) in valid:
+            return m.group(1)
+    return None
+
 
 def find_subject(segs_below_researcher):
     """Given the directory names between the researcher folder and the DICOM
@@ -179,8 +241,13 @@ def date_flag(machine_ymd, folder_six):
     return "" if best <= 1 else f"date-off-{best}d"
 
 
-def analyse(rel, size=0):
-    """One relative path (`<year>/<group>/<researcher>/.../file.dcm`) -> a row dict."""
+def analyse(rel, size=0, valid_codes=None):
+    """One relative path (`<year>/<group>/<researcher>/.../file.dcm`) -> a row dict.
+
+    `valid_codes` is the facility DB's protocol-code set. Pass it for any path
+    that writes: without it the project code is whatever the walk-up happened to
+    stop on, which on this source is frequently a date or an animal number.
+    """
     segs = rel.split("/")
     fn = segs[-1]
     m = DCM_RE.match(fn)
@@ -218,7 +285,21 @@ def analyse(rel, size=0):
     df = date_flag(ts[:8], folder_date)
     if df:
         flags.append(df)
-    keys = [ni_live_discover.facility_id(a["number"], p["project"]) for a in p["animals"]]
+    # The parser stops at the first non-noise level walking up, which on this
+    # source is often an animal number or a date rather than the protocol. Check
+    # it, and if it is wrong look further up — the real code is usually already
+    # in the path, one or two levels above.
+    project = p["project"] or ""
+    if valid_codes is not None and project and project not in valid_codes:
+        rec = recover_project(segs[:-1], valid_codes)
+        if rec:
+            flags.append(f"project-recovered:{project}->{rec}")
+            project = rec
+        else:
+            flags.append(f"project-rejected:{project}")
+            project = ""
+
+    keys = [ni_live_discover.facility_id(a["number"], project) for a in p["animals"]]
     keys = [k for k in keys if k]
     return {
         "acq_key": f"{ts}_{g['modality'].upper()}_{g['algo'].upper()}_{int(g['recon'])}",
@@ -230,7 +311,7 @@ def analyse(rel, size=0):
         "recon": int(g["recon"]),
         "subject_folder": subject,
         "series": series or "",
-        "project": p["project"] or "",
+        "project": project,
         "n_animals": len(p["animals"]),
         "animals": ",".join(a["raw"] for a in p["animals"]),
         "facility_keys": ";".join(keys),
@@ -251,7 +332,13 @@ def main(argv=None):
     src.add_argument("--root", help="a staged snapshot directory to walk")
     ap.add_argument("--csv", help="write the full review table here")
     ap.add_argument("--researcher", help="restrict to one researcher folder")
+    ap.add_argument("--no-db", action="store_true",
+                    help="skip facility-DB validation of protocol codes (offline "
+                         "use only — the table then shows PATH-DERIVED codes, "
+                         "some of which are dates or animal numbers)")
     args = ap.parse_args(argv)
+
+    valid = None if args.no_db else valid_protocol_codes()
 
     files = []
     if args.from_plan:
@@ -271,7 +358,7 @@ def main(argv=None):
     # One row per ACQUISITION (a reconstruction), not per file.
     acqs = {}
     for rel, size in files:
-        row = analyse(rel, size)
+        row = analyse(rel, size, valid_codes=valid)
         if not row:
             continue
         if args.researcher and row["researcher"].lower() != args.researcher.lower():

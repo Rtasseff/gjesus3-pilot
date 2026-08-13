@@ -85,7 +85,7 @@ def dst_basename(filename, recon_idx):
 
 
 def discover(staging_dir, registry_path=None, researchers=None,
-             require_project=True):
+             require_project=True, validate_projects=True):
     """Walk `staging_dir` and return (matches, index, n_files_seen).
 
     `matches` is one representative source FILE per acquisition (so the existing
@@ -97,6 +97,11 @@ def discover(staging_dir, registry_path=None, researchers=None,
     An idempotent re-run is the NORMAL case for a bulk pull — it must not look
     like a failure.
     """
+    # Protocol codes are validated against the facility DB, not trusted from the
+    # path — see tasks/REVIEW_FINDINGS_2026-08-13.md §1. Loaded once, up front,
+    # so a DB outage fails the run rather than quietly ingesting invented codes.
+    valid = nd.valid_protocol_codes() if validate_projects else None
+
     by_key = {}
     for dirpath, _dirs, filenames in os.walk(staging_dir):
         for fn in filenames:
@@ -106,7 +111,7 @@ def discover(staging_dir, registry_path=None, researchers=None,
                 continue
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, staging_dir).replace(os.sep, "/")
-            row = nd.analyse(rel)
+            row = nd.analyse(rel, valid_codes=valid)
             if not row:
                 continue
             by_key.setdefault(row["acq_key"], []).append((full, rel, row))
@@ -156,6 +161,17 @@ def discover(staging_dir, registry_path=None, researchers=None,
             "acq_key": key,
             "members": members,
             "discovered": {
+                # THE VALIDATED protocol code — must be published here, not left
+                # for expand_batch's `subject_parse` block to recompute. That
+                # block calls the RAW ni_live_discover.parse_subject and would
+                # re-derive the unvalidated code, so `2302` (a date folder) and
+                # `245` (an animal number) reached the registry as real AE codes
+                # even with validation switched on. It uses `setdefault`, so
+                # publishing the value here is what makes it win.
+                # Caught by the sandbox MJ run, NOT by the unit tests: analyse()
+                # decides what is held back, subject_parse decided what was
+                # WRITTEN — so the counts verified while the data was wrong.
+                "project": row["project"],
                 "acq_datetime_full": ts14,
                 "acq_date8": ts14[:8],
                 "modality": row["modality"],
@@ -179,6 +195,14 @@ def discover(staging_dir, registry_path=None, researchers=None,
         print(f"[ni_flat] {n_skip_noproject} acquisition(s) HELD BACK — no animal-"
               f"protocol code in the path. These need a (researcher, series) -> "
               f"code mapping; run tools/ni_gnuclear_discover.py to list them.")
+    # A silent repair is not much better than a silent guess — say how many.
+    n_recovered = sum(1 for e in index.values()
+                      if any(f.startswith("project-recovered")
+                             for f in (e["discovered"]["parse_flags"] or "").split(",")))
+    if n_recovered:
+        print(f"[ni_flat] {n_recovered} acquisition(s) had a path-derived project "
+              f"code that is NOT a real protocol; the real code was recovered from "
+              f"higher in the path (see the parse_flags column).")
     n_files = sum(len(v) for v in by_key.values())
     print(f"[ni_flat] {len(matches)} acquisition(s) discovered from "
           f"{n_files} DICOM file(s).")

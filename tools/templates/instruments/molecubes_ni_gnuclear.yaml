@@ -47,6 +47,12 @@ auto_discover:
   # (researcher, series) -> code mapping. Set false ONLY once that mapping is
   # applied, or every one of them lands in a project named "AE-biomaGUNE-".
   require_project: true
+  # Validate the path-derived protocol code against the animal-facility DB, and
+  # walk up to the real code when it is wrong. Leave TRUE — with it off, 114 of
+  # these acquisitions file themselves under an INVENTED AE code (`2302` is the
+  # date folder 230217; `245` and `100` are animal numbers), each becoming a
+  # project folder and a subject_id. See tasks/REVIEW_FINDINGS_2026-08-13.md §1.
+  validate_projects: true
   subject_parse:                           # subject folder -> project + 1-4 animals
     field: subject                         #   (the SAME grammar the live box uses)
   subject_from_db: true                    # a DB miss queues to pending, never blocks
@@ -64,6 +70,13 @@ registry:
   session_id:           "${discovered.subject}_${discovered.acq_date8}"
   project_name:         "AE-biomaGUNE-${discovered.project}"
   notes:                "Historical NI pull. Read source = S:\\gnuclear (researcher working space), staged snapshot. Reconstruction ${discovered.ni_algo}_${discovered.ni_recon_idx}. Source path: ${discovered.source_relpath}"
+
+# operator: DELIBERATELY UNSET (REVIEW_FINDINGS_2026-08-13 §5.3). The existing 132
+# archive rows carry `operator: irene` because that batch was known to be hers.
+# Here the person who ran the EQUIPMENT is not recoverable from the path — the
+# researcher folder names who owns the data, which is a different role. Filling it
+# from the folder would be the same class of error as inventing a protocol code, so
+# it stays blank and this comment is the record of that decision.
 
 auto_create_project:
   owner:       "NI-platform"

@@ -136,6 +136,81 @@ def main():
                         "20240214090459_CT_ISRA_0.dcm")
         check("date-off" not in r3["flags"],
               "DDMMYY folder dates are not flagged as decades off")
+
+        # --- protocol-code validation (REVIEW_FINDINGS_2026-08-13 §1) ---------
+        # Fixed fake code set; the real one comes from the facility DB.
+        print("\nprotocol-code validation + walk-up recovery")
+        VALID = {"0522", "1321", "0421", "0324", "1024", "1122"}
+
+        a = nd.analyse("2023/Jesus/MJ/0522/230217-FDG/16/"
+                       "20230217122714_PET_OSEM_0.dcm", valid_codes=VALID)
+        check(a["project"] == "0522", "a DATE read as a code (2302) recovers to 0522")
+        check("project-recovered:2302->0522" in a["flags"], "the repair is flagged, not silent")
+
+        b = nd.analyse("2023/Jesus/Marina/1321/231120/100/Respiratory gated/"
+                       "20231120090000_CT_ISRA_0.dcm", valid_codes=VALID)
+        check(b["project"] == "1321", "an ANIMAL number read as a code (100) recovers to 1321")
+
+        c = nd.analyse("2023/Jesus/Kepa/cancer/241/1 week/"
+                       "20230711124726_SPECT_MLEM_0_iter50.dcm", valid_codes=VALID)
+        check(c["project"] == "" and "project-rejected:241" in c["flags"],
+              "no valid code anywhere -> rejected, not invented")
+
+        # THE regression guard for the whole-segment rule: a looser prototype
+        # rescued 245 -> 1217 by finding a 4-digit run INSIDE the date folder
+        # 211217. That is the same guessing problem in a new place.
+        d = nd.analyse("2022/Jesus/MOLECUBES/211217/245_2h30min/"
+                       "20211217132857_CT_ISRA_0.dcm", valid_codes=VALID)
+        check(d["project"] == "",
+              "the date folder 211217 must NOT yield 1217 (whole segments only)")
+
+        e = nd.analyse("2025/Jesus/Irene/250117_Ermal/0324_19/"
+                       "20250117141509_PET_OSEM_0.dcm", valid_codes=VALID)
+        check(e["project"] == "0324" and not any(
+            f.startswith("project-") for f in e["flags"].split(",")),
+            "an already-valid code passes through untouched and unflagged")
+
+        # The AE_CODE_RE anchor: `AE-biomaGUNE-1317/PRO-AE-SS-101` yields 1317,
+        # never 101. An unanchored match is the animal_db bug this run also fixes.
+        check(nd.AE_CODE_RE.findall("AE-biomaGUNE-1317/PRO-AE-SS-101") == ["1317"],
+              "AE_CODE_RE is anchored: 1317, not 101")
+
+        # require_project must drop a rejected code the same as a missing one.
+        src2 = os.path.join(tmp, "snap2")
+        touch(src2, "2023/Jesus/Kepa/cancer/241/1 week/"
+                    "20230711124726_SPECT_MLEM_0_iter50.dcm")
+        touch(src2, "2025/Jesus/Irene/250117_Ermal/0324_19/"
+                    "20250117141509_PET_OSEM_0.dcm")
+        _real = nd.valid_protocol_codes
+        nd.valid_protocol_codes = lambda conn=None: VALID
+        try:
+            m5, idx5, _n5 = ni_flat.discover(src2, require_project=True)
+        finally:
+            nd.valid_protocol_codes = _real
+        check(len(m5) == 1, "a rejected code is held back like a missing one")
+        check(list(idx5.values())[0]["discovered"]["source_relpath"].startswith("2025/"),
+              "the surviving acquisition is the one with a real protocol code")
+
+        # REGRESSION: the validated code must be PUBLISHED in discovered, because
+        # expand_batch's subject_parse block re-derives `project` from the raw
+        # grammar unless the key is already present (it uses setdefault). Missing
+        # this wrote AE-biomaGUNE-2302 into a sandbox registry while every count
+        # still verified — analyse() decides what is HELD BACK, subject_parse
+        # decided what got WRITTEN. Assert on the value the registry actually sees.
+        print("\ndiscovered.project is the validated code (the ingest seam)")
+        src3 = os.path.join(tmp, "snap3")
+        touch(src3, "2023/Jesus/MJ/0522/2302-PAH male/230217-FDG/21/"
+                    "20230220093623_PET_OSEM_0.dcm")
+        nd.valid_protocol_codes = lambda conn=None: VALID
+        try:
+            _m6, idx6, _n6 = ni_flat.discover(src3, require_project=True)
+        finally:
+            nd.valid_protocol_codes = _real
+        d6 = list(idx6.values())[0]["discovered"]
+        check(d6.get("project") == "0522",
+              f"discovered.project is the RECOVERED 0522, not 2302 (got {d6.get('project')!r})")
+        check("project" in d6,
+              "the project key exists so subject_parse's setdefault cannot override it")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

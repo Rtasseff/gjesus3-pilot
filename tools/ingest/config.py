@@ -384,6 +384,8 @@ def expand_batch(cfg, nas_root=None):
         matches, ni_flat_index, n_files_seen = ni_flat.discover(
             staging_dir, registry_path=registry_path, researchers=researchers,
             require_project=bool(disco.get("require_project", True)),
+            # Defaults ON so it cannot be forgotten by omitting a key.
+            validate_projects=bool(disco.get("validate_projects", True)),
         )
         # Only a source with NO reconstructed DICOMs at all is an error (wrong
         # path / empty snapshot). Finding files but selecting none is the
