@@ -339,8 +339,13 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)
   and NI `--user` (override the parsed user), once the person-home above exists.
-- [ ] **⚠️ `extract_study_date` reads only the first 20 instances and fails
-  SILENTLY into today's date (hit live 2026-08-12).** `dicom_utils.extract_study_date`
+- [ ] **🔺 HIGH — ⚠️ `extract_study_date` reads only the first 20 instances and fails
+  SILENTLY into today's date (hit live 2026-08-12).** *Priority set 2026-08-13: this is
+  the highest-priority open item in this file. It has already corrupted production once,
+  it is not instrument-specific — any nested DICOM source can hit it — and it fails
+  **upward** into a successful-looking run, so the next occurrence is as likely to be
+  noticed by luck as by process. LIONS escaped 0-of-42 purely because its layout is
+  flatter than HPIC's.* `dicom_utils.extract_study_date`
   calls `find_dicom_files(limit=20)` and returns the first `StudyDate` it finds.
   When the leading instances of a nested DICOM tree carry no `StudyDate`, it
   returns `None`, and `ingest_raw` falls back to **today** for the ACQ-ID prefix
@@ -584,6 +589,50 @@ same day:
 - A static lint for unguarded `project_id` reads was already marginal — 75 direct reads
   across 27 files, most of them legitimate, since `project_id` in `registry_projects.csv`
   and `pending_links.csv` is genuinely single-valued.
+
+## 🔸 MODERATE — 17 orphan acquisition folders in `/raw/`, registered nowhere (2026-08-13)
+
+Noticed during the DTS24 cleanup; **unrelated to DTS24 and left untouched**. Priority set
+2026-08-13.
+
+**What is there.** `raw/DICOM/2026/2026-07/ACQ-20260710-MRI-001` … `-017` — 17 folders on
+disk, **none of them in `registry_raw.csv`**. Characterised 2026-08-13:
+
+| | |
+|---|---|
+| Content | ParaVision MRI, 2026-07-10, animal **m12**, protocol **AE-biomaGUNE-1125**, "recons kept: 1,2" |
+| Sidecars | **17/17** have a full `metadata.json` — subject resolved from the animal-facility DB (species, strain, sex, DOB, derived age), plus `condition` and `anatomy` operator-entered |
+| `checksums.json` | present |
+| `<ACQ-ID>.data/` | **empty** — the no-DICOM placeholder shape |
+| Size | ~0.2 MB each, **~3.4 MB total** — negligible |
+| mtime | all **2026-07-16 11:16**, identical — one batch |
+| ACQ-ID counter | `.acq_id_seq.json` holds `ACQ-20260710-MRI- = 17` — **the ids are reserved** |
+
+**What it means.** This is a **partial-ingest signature**, not a mystery: ids were
+allocated, `/raw/` folders and sidecars were written, and the registry commit never
+landed. The counter says 17 while the registry says 0 — the two disagree, which is the
+tell. It sits squarely in the concurrent-write / partial-failure class the 2026-07-08
+architecture review flagged as HIGH.
+
+**Why moderate rather than urgent.** Nothing is at risk: the ids are reserved so a future
+2026-07-10 MRI ingest starts at `-018` and cannot collide, the space is trivial, and rows
+absent from the registry are invisible to the Finder — no researcher can be misled by
+them. But they are **unaccounted-for data in an immutable area**, and `/raw/` is the one
+place the system promises to be authoritative.
+
+- [ ] **Work out what happened**, then either register them or delete them. The mtime
+  (2026-07-16) coincides with the no-DICOM DICOM-regen backfill drain, so start with that
+  session's records and `pending_dicom_regen.csv`. The empty `.data/` says these are the
+  no-DICOM placeholder path.
+- [ ] **Decide the rule, not just this case**: should `/raw/` folders without a registry
+  row be (a) reported by `validate_registries` as an ERROR, (b) auto-cleaned by a drain
+  tool, or (c) tolerated? Today nothing looks for them, which is why these sat unnoticed
+  for a month. A **`/raw/`-vs-registry orphan check is the natural companion** to the
+  multi-value hygiene item above, and unlike the checks that were dropped on 2026-08-12 it
+  is a genuine integrity question — `/raw/` is system-owned, so nothing here depends on
+  researcher behaviour (contrast [05_PROJECTS §3a](../mfb-rdm-docs/05_PROJECTS.md)).
+- [ ] If they are deleted, **do not release the reserved ids** — retire them, as
+  `PROJ-0054`/`99_test` was on 2026-08-12.
 
 ## Metadata database — retire the CSV registries (2026-08-12)
 
