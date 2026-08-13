@@ -339,6 +339,28 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)
   and NI `--user` (override the parsed user), once the person-home above exists.
+- [ ] **⚠️ `extract_study_date` reads only the first 20 instances and fails
+  SILENTLY into today's date (hit live 2026-08-12).** `dicom_utils.extract_study_date`
+  calls `find_dicom_files(limit=20)` and returns the first `StudyDate` it finds.
+  When the leading instances of a nested DICOM tree carry no `StudyDate`, it
+  returns `None`, and `ingest_raw` falls back to **today** for the ACQ-ID prefix
+  and the registry `acquisition_datetime`. The result is a silently wrong
+  identity: a 2019 exam committed as `ACQ-20260812-…` under
+  `/raw/DICOM/2026/2026-08/`, with a blank `acquisition_datetime`, no
+  `age_at_acquisition`, and the wrong date baked into the project hard-link name.
+  It is only a WARN, so a batch run completes "successfully".
+  **Observed:** 2 of the first 4 DTS24 HPIC cases (whose archives nest one level
+  deeper — `HPIC02/HPIC02/S#####/S00/I##`); 0 of 42 LIONS, whose flatter layout
+  happens to put a dated instance in the first 20. Cleaned up by deleting and
+  re-ingesting the two acquisitions.
+  **Fix options**, in preference order: (a) have the DICOM summarizer defer to
+  `ingest/dicom_headers.py`, which parses more instances and prefers a real image
+  series over presentation-state frames — it recovered a date for 33/33 HPIC
+  cases; (b) raise/remove the `limit=20`; (c) at minimum, make the today-fallback
+  an **ERROR that skips the case** rather than a WARN that commits it — a wrong
+  acquisition date is worse than a deferred one. Note the same 20-instance limit
+  applies to `detect_modality`, which is why the batch log reported
+  `DICOM Mod: PR` (a presentation state) for some cases.
 - [ ] **`dicom_utils.summarize_source` opens every file in the source tree
   (measured 2026-08-12).** `find_dicom_files` has no limit in the `file_count`
   path, and for extensionless DICOM it must open each file to check the `DICM`
