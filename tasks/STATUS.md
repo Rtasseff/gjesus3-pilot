@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-08-12
+**Last Updated:** 2026-08-13
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -29,9 +29,9 @@ production care.
 
 | | |
 |---|---|
-| Acquisitions in `/raw/` | **13,759** (all checksummed + `metadata.json` sidecar'd) |
-| Projects | **52 registered** — 44 active (all with folders) + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present) = **49 folders**, every one carrying the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
-| Subjects (`registry_subjects.csv`) | **754** (one row per subject) |
+| Acquisitions in `/raw/` | **13,966** (all checksummed + `metadata.json` sidecar'd) — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) |
+| Projects | **53 registered** — 45 active + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). Every live folder carries the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
+| Subjects (`registry_subjects.csv`) | **843** (one row per subject) |
 | Publications | empty — deferred (PLANNED) |
 
 **Two registry facts changed on 2026-07-14** (see [`../CHANGELOG.md`](../CHANGELOG.md)):
@@ -89,7 +89,7 @@ The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
 - **DTS24 collaborator re-ingest — ✅ DONE IN PRODUCTION 2026-08-13; merged to
-  `main` (`{MERGE}`, `--no-ff`), branch + worktree retired.** **The data went live
+  `main` (`def282c`, `--no-ff`), branch + worktree retired.** **The data went live
   independently of the branch: the branch held the code/config/doc changes, not the
   acquisitions.**
   - **75 acquisitions in `PROJ-0054` / `DTS24`** (LIONS 42 + HPIC 33), the external
