@@ -1,6 +1,28 @@
 # Runbook — ingesting the `S:\gnuclear` historical NI into TRUE PRODUCTION
 
-**Status:** 📋 **PROPOSED — FOR RYAN'S REVIEW. Nothing in §3 has been run.**
+**Status:** ✅ **EXECUTED AND COMPLETE — 2026-08-13. All 7 batches, 1,508 acquisitions, 192.0 GB
+in true production. 0 failed, 0 validator errors.**
+
+| | |
+|---|---|
+| NI rows | **132 → 1,640** (+1,508, exactly as planned) |
+| instruments | 1,083 CT · 425 PET |
+| projects touched | **14**, of which **4 newly created** — `0324`, `0421`, `1024`, `1122`, all DB-verified |
+| subjects registry | 1,146 rows |
+| duplicates | `acq_id` **0** · `original_name` **0** |
+| blank `acquisition_datetime` | **0** · `checksum_present=Y` on all 1,508 |
+| `validate_registries` | **0 errors** across all 15,474 production rows |
+| still outstanding | **0** ready-to-ingest · 673 held back (D-G) |
+| **fabricated protocol codes** | **NONE** — swept across every NI row |
+
+Every batch met all §3.3 pass conditions before the next began. Batch log:
+`C:\Users\rtasseff\temp\ni_gnuclear_test\prod_*.log`. Pre-run registry backup:
+`C:\Users\rtasseff\temp\gjesus3_pre_ni_gnuclear_20260813\`.
+
+Both NULL-`projectAlias` codes the review flagged — `0219` and `1521` — resolved correctly through
+the anchored `LIKE`, which is the fallback §5.4 warned must not break.
+
+*(Original proposal below, kept as the record of what was approved.)*
 **Written:** 2026-08-13 · **Branch:** `feat/ni-gnuclear-historical` (8 commits, not pushed)
 **Plan + measured evidence:** [`ni_gnuclear_active_space_plan.md`](ni_gnuclear_active_space_plan.md) (start at §-2)
 
