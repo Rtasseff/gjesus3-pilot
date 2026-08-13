@@ -1,29 +1,34 @@
-"""The `registry_raw.project_id` cell — ONE definition of the semicolon list.
+"""The `registry_raw.project_id` cell — ONE definition of how it is read and written.
 
-An acquisition can belong to more than one project (a researcher re-homes a scan
-into a second study). ✅ DECIDED 2026-08-11: that is recorded as a
-**semicolon-separated list in the existing `project_id` column** —
-``PROJ-0001;PROJ-0007`` — following the house convention already used by
-`modalities_in_study` (``PT;CT``) and `subject_ids` (the packed facility ids). A
-separate many-to-one mapping table was considered and rejected as
-over-engineering: this is a simple registry, and turning it into a real DB schema
-is a future endeavour, not this column's job.
+**✅ DECIDED 2026-08-12: an acquisition is registered to exactly ONE project.**
+`project_id` is **write-once** — set at ingest when a project resolves, or by the
+first Project Manager assignment if it was blank — and thereafter **never appended
+to and never overwritten** by a tool. Sharing an acquisition between projects is
+fully supported at the *filesystem* level (the Project Manager creates the hard
+link and writes the destination project's provenance row); it is simply **not
+registered**. See 06_REGISTRIES §2.3b for the reasoning, and 05_PROJECTS §3a for
+the ownership boundary that motivates it.
 
-Why a module rather than a `.split(";")` at each site: before this existed, five
-readers joined or grouped on the WHOLE cell and every one of them failed
-**silently** on a two-project value — `generate_index.py` formed a bogus
-``"PROJ-0001;PROJ-0007"`` group so the acquisition appeared in NEITHER project's
-index, `find_acq.py`'s `proj_idx.get()` missed so the record lost its project
-folder/name/owner, and `validate_registries.py`'s `PROJ_ID_RE.match` failed so
-the existence check was **skipped, not failed**. One definition here means adding
-a second project can never quietly delete an acquisition from the index of the
-project it was already in.
+Why the reversal: the multi-project list shipped 2026-08-11 and was reconsidered a
+day later against how the system is actually used. Searching the registry by project
+is rare, and when it happens it means *the project the acquisition was ingested for*.
+Against that, a growing list cost eight reader sites which each failed **silently**
+when they forgot to split — no error, just fewer rows. The honest boundary is that the
+registry records what the SYSTEM knows (the ingest-time association) and does not try
+to track what researchers do afterwards in space they own and may reorganise freely. A
+real many-to-many belongs in the metadata database that eventually replaces these
+CSVs, not in a CSV column.
 
-Ordering is meaningful and preserved: the FIRST id is the original association
-(the one ingest stamped), and `add` appends after it. Nothing downstream depends
-on that beyond display, but a stable order keeps diffs of the registry readable.
+**The readers stay list-tolerant on purpose — this is not dead code.** Every function
+here still handles a `;`-separated cell, and a single value is simply a length-1 list.
+So: the eight readers written for the list keep working unchanged; a hand-edited or
+legacy multi-value cell degrades gracefully instead of silently missing rows; and the
+seam the future database will need is already in place. Nothing in the system *writes*
+a second id — see `set_project_id_if_blank`, which is the only writer policy.
 
-Spec: 06_REGISTRIES §2 (`project_id`) — this module is its integrity mirror.
+Ordering is meaningful and preserved: the FIRST id is the original association.
+
+Spec: 06_REGISTRIES §2 + §2.3b — this module is its integrity mirror.
 Kept dependency-free (stdlib only) so every reader, the GUI and the pure
 no-I/O modules can import it cheaply.
 """
@@ -67,13 +72,40 @@ def has_project_id(cell, project_id):
     return (project_id or "").strip() in split_project_ids(cell)
 
 
+def set_project_id_if_blank(cell, project_id):
+    """**The writer policy.** Return ``(new_cell, changed)`` — set only if unset.
+
+    Write-once semantics (✅ DECIDED 2026-08-12, module docstring): an acquisition
+    is registered to exactly one project.
+
+    - blank cell            -> set to `project_id`, ``changed=True``
+    - already ANY id        -> **untouched**, ``changed=False`` — including when
+      the existing id is a *different* project. That is the shared-acquisition
+      case: the link and the provenance row are still written by the caller, but
+      the registry keeps the original association.
+
+    Callers must not report ``changed=False`` as a failure — nothing went wrong.
+    """
+    project_id = (project_id or "").strip()
+    ids = split_project_ids(cell)
+    if ids or not project_id:
+        return join_project_ids(ids), False
+    return project_id, True
+
+
 def add_project_id(cell, project_id):
-    """Return ``(new_cell, changed)`` with `project_id` added to the cell.
+    """Return ``(new_cell, changed)`` with `project_id` APPENDED to the cell.
+
+    ⚠️ **NOT the writer policy — nothing in the system calls this.** Registering a
+    second project was retired on 2026-08-12 in favour of write-once
+    `set_project_id_if_blank`; see the module docstring. Kept (with `remove_project_id`)
+    as the tested mechanics for a deliberate future migration — the metadata database
+    that models project↔acquisition properly will need exactly this. **Do not wire it
+    into a tool without changing the decision in 06_REGISTRIES §2.3b first.**
 
     Idempotent: adding an id the cell already carries is a no-op returning
-    ``changed=False`` (a re-import must never produce ``PROJ-0001;PROJ-0001``).
-    A blank cell becomes the bare id. An existing DIFFERENT id is preserved
-    **first**, so the original association stays the primary one.
+    ``changed=False``. A blank cell becomes the bare id. An existing DIFFERENT id
+    is preserved **first**, so the original association stays primary.
     """
     project_id = (project_id or "").strip()
     ids = split_project_ids(cell)

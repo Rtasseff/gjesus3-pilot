@@ -357,22 +357,40 @@ def test_import_raw(client, nas):
         "link_names": {"ACQ-20260103-ZWSI-002": "slide-a-second.czi"}})
     check(d["n_new"] == 1, "renaming the link resolves the collision")
 
-    # The acquisition now goes into a SECOND project.
+    # The acquisition now goes into a SECOND project. Sharing works at the
+    # FILESYSTEM level; the registry keeps the original association (write-once,
+    # 06_REGISTRIES §2.3b — DECIDED 2026-08-12, superseding the one-day-old
+    # semicolon-list decision).
     lines, done = stream(client, "/api/import_raw", {
         "nas_root": nas, "project": "PROJ-0002",
         "acq_ids": ["ACQ-20260101-ZWSI-001"], "creator": "Tester"})
     check(done.get("linked") == 1, "the same acquisition adds to a second project")
+
     reg = read_raw_registry(nas)
     cell = reg["ACQ-20260101-ZWSI-001"]["project_id"]
-    check(cell == "PROJ-0001;PROJ-0002",
-          "recorded as a semicolon list, original association FIRST")
+    check(cell == "PROJ-0001",
+          "the registry still names ONLY the original project (write-once)")
+    check(done.get("registered") == 0 and done.get("shared") == 1,
+          "the summary reports it as shared, not newly registered")
 
-    # The regression that made this whole change necessary.
-    for pid, folder in (("PROJ-0001", "alpha"), ("PROJ-0002", "beta")):
-        idx = os.path.join(nas, "projects", folder, "index.html")
-        html = open(idx, encoding="utf-8").read() if os.path.isfile(idx) else ""
-        check("ACQ-20260101-ZWSI-001" in html,
-              f"the shared acquisition is in {pid}'s index.html")
+    # The link and the provenance row ARE written — sharing is real, it is just
+    # not registered. This is the half that must keep working.
+    check(os.path.exists(os.path.join(nas, "projects", "beta", "raw_linked",
+                                      "slide-a.czi")),
+          "the second project gets a real hard link")
+    prov = open(os.path.join(nas, "projects", "beta", "provenance.csv"),
+                encoding="utf-8").read()
+    check("ACQ-20260101-ZWSI-001" in prov,
+          "the second project's provenance records the acquisition — the only "
+          "place the sharing is recorded")
+
+    # The per-project index follows the registry, so the shared acquisition shows
+    # in its ORIGINAL project only. Deliberate: 05_PROJECTS §3a — what a project
+    # holds now is answered from the project folder, not the registry.
+    idx_a = os.path.join(nas, "projects", "alpha", "index.html")
+    html_a = open(idx_a, encoding="utf-8").read() if os.path.isfile(idx_a) else ""
+    check("ACQ-20260101-ZWSI-001" in html_a,
+          "the acquisition stays in its original project's index.html")
 
     code, d = post(client, "/api/search_acqs",
                    {"nas_root": nas, "exclude_project": "PROJ-0001"})
@@ -398,8 +416,8 @@ def test_link_failure(client, nas, monkey):
 
     check(done.get("queued") == 1 and done.get("failed") == 0,
           "an unsupported-link mount QUEUES rather than failing")
-    check("safely recorded" in (done.get("summary") or ""),
-          "the summary tells the researcher their data IS registered")
+    check("your data is safe" in (done.get("summary") or ""),
+          "the summary reassures the researcher nothing was lost")
 
     q = os.path.join(nas, "registries", "pending_links.csv")
     check(os.path.isfile(q), "the deferred-link worklist is written")
@@ -417,9 +435,12 @@ def test_link_failure(client, nas, monkey):
     check(os.path.isfile(standin),
           "a visible stand-in marks the spot so the folder isn't silently empty")
 
+    # This acquisition was already registered to PROJ-0001 earlier in the run, so
+    # write-once leaves it there. The queue — not the registry — is what carries
+    # PROJ-0002 through to the relink pass (asserted above).
     reg = read_raw_registry(nas)
-    check(pids.has_project_id(reg["ACQ-20260102-MRI-001"]["project_id"], "PROJ-0002"),
-          "the project association is recorded even though the link is deferred")
+    check(reg["ACQ-20260102-MRI-001"]["project_id"] == "PROJ-0001",
+          "a deferred link does not re-register the acquisition either")
 
 
 def test_import_local(client, nas, tmp):

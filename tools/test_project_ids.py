@@ -50,6 +50,20 @@ def test_cell():
     check(pids.split_project_ids("PROJ-0001;PROJ-0001") == ["PROJ-0001"],
           "duplicates collapse")
 
+    # --- THE WRITER POLICY: write-once (06_REGISTRIES §2.3b, DECIDED 2026-08-12) ---
+    cell, changed = pids.set_project_id_if_blank("", "PROJ-0001")
+    check((cell, changed) == ("PROJ-0001", True), "blank -> set to the id")
+    cell, changed = pids.set_project_id_if_blank("PROJ-0001", "PROJ-0007")
+    check((cell, changed) == ("PROJ-0001", False),
+          "a DIFFERENT project leaves it untouched — sharing is not registered")
+    cell, changed = pids.set_project_id_if_blank("PROJ-0001", "PROJ-0001")
+    check((cell, changed) == ("PROJ-0001", False), "the same project is a no-op")
+    cell, changed = pids.set_project_id_if_blank("   ", "PROJ-0001")
+    check((cell, changed) == ("PROJ-0001", True), "whitespace counts as blank")
+    cell, changed = pids.set_project_id_if_blank("", "")
+    check((cell, changed) == ("", False), "nothing to set is not a change")
+
+    # --- the append mechanics survive, unused, for the future metadata DB ---
     cell, changed = pids.add_project_id("", "PROJ-0001")
     check((cell, changed) == ("PROJ-0001", True), "blank + id -> bare id")
     cell, changed = pids.add_project_id("PROJ-0001", "PROJ-0007")
@@ -58,6 +72,20 @@ def test_cell():
     cell, changed = pids.add_project_id("PROJ-0001;PROJ-0007", "PROJ-0001")
     check((cell, changed) == ("PROJ-0001;PROJ-0007", False),
           "re-adding is idempotent — never PROJ-0001;PROJ-0001")
+
+    # No tool may call the appender — that is the decision, enforced here so a
+    # future edit has to change this test on purpose rather than by accident.
+    import subprocess
+    hits = subprocess.run(
+        ["git", "grep", "-n", "add_project_id", "--", "tools/"],
+        capture_output=True, text=True,
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    ).stdout.splitlines()
+    callers = [h for h in hits
+               if "project_ids.py" not in h and "test_project_ids.py" not in h]
+    check(not callers,
+          "no tool calls add_project_id (write-once policy)"
+          + (f" — found {callers}" if callers else ""))
 
     check(pids.has_project_id("PROJ-0001;PROJ-0007", "PROJ-0007"),
           "membership finds the second id")

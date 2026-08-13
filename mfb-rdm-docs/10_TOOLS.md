@@ -1068,6 +1068,8 @@ It is a **thin front-end**: all logic lives in `tools/manager/` (`projects` · `
 `local_import` · `acq_search`) and `tools/ingest/`, so the same operations can be scripted
 and will move to the server unchanged.
 
+> **Adding an acquisition to a project does NOT re-register it** (✅ DECIDED 2026-08-12 — [06_REGISTRIES §2.3b](06_REGISTRIES.md)). An acquisition is registered to exactly one project: the one ingest established. An import builds the *filesystem* association — the hard link plus the destination project's `provenance.csv` row — and leaves `registry_raw.project_id` alone. The registry only gains a value where it had none (`project_ids.set_project_id_if_blank`), which in practice is almost never, since ingest resolves or auto-creates a project for every acquisition. The completion modal states this in the researcher's words rather than leaving it to be discovered: *"N of these stay registered to the project they were acquired for."*
+
 **Design decisions:**
 
 - **A separate app and a separate exe (✅ DECIDED 2026-08-11).** Different audience and,

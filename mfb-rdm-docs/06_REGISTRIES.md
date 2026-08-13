@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** ✅ DECIDED — the `registry_raw.csv` schema (28 columns) is finalized and live in true production; subjects/projects registries are live. (Some forward-looking refinements remain 🔶 Draft, flagged inline and in the Open Questions table.)
-**Last Updated:** 2026-08-12 (**`registry_raw.project_id` is now a semicolon-separated LIST** — an acquisition may belong to more than one project (new **§2.3b**, ✅ DECIDED 2026-08-11), following the `modalities_in_study` / `subject_ids` convention; a mapping table was rejected as over-engineering. Mirror: `tools/ingest/project_ids.py` + every reader listed there. Also: `registry_projects.csv` gained a locked/atomic writer (`ingest/projects_registry.py`, §4).) Prior: 2026-08-02 (project reference model — `registry_raw.project_hint` → **`project_id`** (header-only rename; the column always held resolved ids) and `registry_projects.short_name` → **`name`** (case-preserved, == the folder). Model in [05_PROJECTS §2a](05_PROJECTS.md); mirror kept exact with `resolver.py`/`registry.py`.) Prior: 2026-06-26 (doc refactor: corrected the §2.5 example to the real 28-column schema — every example row had been short an `operator` value plus the three enrichment columns; documented `registry_subjects.csv` (§2.8); moved the Publications registry to 🕗 Planned/empty; promoted the settled schema to ✅ DECIDED). Prior: 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
+**Last Updated:** 2026-08-12 (**`registry_raw.project_id` records exactly ONE project and is write-once** — **§2.3b**, ✅ DECIDED 2026-08-12, superseding the one-day-old 2026-08-11 decision that made it a semicolon list. Sharing an acquisition across projects is supported at the filesystem level (link + the destination project's provenance) but is **not registered**; the registry records what ingest established. The multi-value *readers* were kept — a single value is a length-1 list — so only the writer policy changed. Mirror: `tools/ingest/project_ids.py`. Also: `registry_projects.csv` gained a locked/atomic writer (`ingest/projects_registry.py`, §4).) Prior: 2026-08-02 (project reference model — `registry_raw.project_hint` → **`project_id`** (header-only rename; the column always held resolved ids) and `registry_projects.short_name` → **`name`** (case-preserved, == the folder). Model in [05_PROJECTS §2a](05_PROJECTS.md); mirror kept exact with `resolver.py`/`registry.py`.) Prior: 2026-06-26 (doc refactor: corrected the §2.5 example to the real 28-column schema — every example row had been short an `operator` value plus the three enrichment columns; documented `registry_subjects.csv` (§2.8); moved the Publications registry to 🕗 Planned/empty; promoted the settled schema to ✅ DECIDED). Prior: 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
 
 ---
 
@@ -94,7 +94,7 @@ Authoritative record of all raw acquisitions deposited in the system.
 | `canonical_path` | String | ✅ Yes | Auto | Full path to acquisition folder. |
 | `checksum_present` | String (Y/N) | ✅ Yes | Auto | `Y` or `N` — is checksums.json present? |
 | `extended_metadata_present` | String (Y/N) | ✅ Yes | Auto | `Y` (full mode) or `N` (lightweight mode). |
-| `project_id` | String | Optional | Derived | The project(s) this acquisition belongs to: **semicolon-separated canonical `PROJ-XXXX` ids** (e.g. `PROJ-0001;PROJ-0007`), in the same style as `modalities_in_study`. A single-project acquisition is a length-1 list (the bare id, no `;`) — which is nearly every row. **The operator supplies a project *name* (`registry.project_name`); ingest Step 9.5 resolves it and stores the id here** — see [05_PROJECTS §2a](05_PROJECTS.md). Blank when no project was set or the name could not be resolved. Triggers **hard-link** creation into the project folder when set (the hard-link method — DECIDED + APPLIED 2026-06-02 — superseded the legacy `.lnk` shortcut; see [10_TOOLS §2.1.1](10_TOOLS.md)). **MULTI-VALUED since 2026-08-11** (§2.3b). **RENAMED from `project_hint` 2026-08-02** — the column always held resolved ids, so the old name was wrong; header-only migration, values unchanged. |
+| `project_id` | String | Optional | Derived | The **one** project this acquisition was acquired for: a canonical `PROJ-XXXX` id. **Write-once** — set at ingest, or by the first Project Manager assignment if blank, and never appended to or overwritten afterwards (**§2.3b**, ✅ DECIDED 2026-08-12). An acquisition shared into a second project is linked and recorded in *that project's* provenance, **not** here. **The operator supplies a project *name* (`registry.project_name`); ingest Step 9.5 resolves it and stores the id here** — see [05_PROJECTS §2a](05_PROJECTS.md). Blank when no project was set or the name could not be resolved. Triggers **hard-link** creation into the project folder when set (the hard-link method — DECIDED + APPLIED 2026-06-02 — superseded the legacy `.lnk` shortcut; see [10_TOOLS §2.1.1](10_TOOLS.md)). Readers remain tolerant of a `;`-separated cell (§2.3b) though no tool writes one. **RENAMED from `project_hint` 2026-08-02** — the column always held resolved ids, so the old name was wrong; header-only migration, values unchanged. |
 | `ingest_config` | String | 🔶 Recommended | Auto | Path (relative to repo root) of the YAML config that produced this row. Empty for interactive ingests or pre-2026-05-06 rows. Used for auditability and reproducibility. |
 | `notes` | String | Optional | User | Free-text notes. Supports `${discovered.<field>}` interpolation. |
 
@@ -136,27 +136,36 @@ Authoritative record of all raw acquisitions deposited in the system.
 
 **Implementation:** `session_id` is User-populated via the YAML `registry:` block (literal, `discovered.<field>`, or NA). Existing rows are not backfilled; pre-cutover acquisitions hold empty `session_id`.
 
-### 2.3b Project membership — `project_id` is a list (DECIDED 2026-08-11)
+### 2.3b Project membership — one project per acquisition (DECIDED 2026-08-12)
 
-> **✅ DECIDED 2026-08-11 (Data Office).** An acquisition can belong to **more than one project**. That is recorded as a **semicolon-separated list in the existing `project_id` column** — `PROJ-0001;PROJ-0007`. Not a mapping table, not the `notes` column.
+> **✅ DECIDED 2026-08-12 (Data Office).** An acquisition is **registered to exactly ONE project**. `project_id` is **write-once**: set at ingest when a project resolves, or by the first Project Manager assignment if it was blank, and thereafter **never appended to and never overwritten** by a tool.
+>
+> **Sharing an acquisition between projects is supported — it is simply not registered.** The Project Manager creates the hard link in the second project and writes that project's `provenance.csv` row. The registry keeps the original association.
 
-This follows the house convention rather than inventing one: the registry already packs multi-valued columns this way.
+**This supersedes the 2026-08-11 decision** (one day old) that made `project_id` a semicolon-separated list. What changed is not the data model but an honest reading of how the system is used. The multi-value *readers* were kept; only the writer policy changed.
 
-| Column | Packed value | Where defined |
+#### What is recorded where
+
+| Question | Answer | Source of truth |
 |---|---|---|
-| `modalities_in_study` | `PT;CT` | §2 schema |
-| `subject_ids` | the 1–4 `;`-joined facility ids | §2.3.2 |
-| `project_id` | `PROJ-0001;PROJ-0007` | this section |
+| Which project was this acquired for? | exactly one | `registry_raw.project_id` |
+| Which acquisitions does this project contain *now*? | whatever the researcher has kept | that project's `provenance.csv` + `raw_linked/` — **not** the registry |
 
-**A single-project acquisition is a length-1 list** — the bare id, no `;`. That is nearly every row, and it means readers have ONE code path for 1..N projects, exactly as `subject_ids` does.
+**Why not track every relationship.** Searching the registry by project is **rare**, and when it is done it means *the project the acquisition was ingested for* — which write-once preserves exactly. Against that, a growing list cost eight reader sites that each failed **silently** when they forgot to split: no error, just fewer rows. Machinery for a many-to-many is worth it when the use case is real; here it is not. Both alternatives were rejected — a mapping table as over-engineering, the semicolon list as a silent-failure surface bought for a use case that does not come up.
 
-**Ordering is meaningful.** The FIRST id is the original association (the one ingest stamped); anything added later appends after it. Tools that must pick one project — a folder path, a study-metadata directory — use the first.
+**This is a deliberate limitation, not an oversight.** If an acquisition is shared into a second project, the registry will not tell you so. That fact lives in the destination project's provenance. Accept it, or wait for the metadata database ([`tasks/BACKLOG.md`](../tasks/BACKLOG.md)) that models project↔acquisition properly — the right home for a real many-to-many, not a CSV column.
 
-**Why not a mapping table.** A separate many-to-one table was considered and **rejected as over-engineering**: this is a simple registry read by researchers in Excel, and converting it to a real DB schema is a future endeavour, not this column's job.
+#### Implementation — integrity mirror
 
-**Implementation — integrity mirror.** [`tools/ingest/project_ids.py`](../tools/ingest/project_ids.py) is the single definition of the cell (`split` / `join` / `has` / `add` / `remove`); `add` is idempotent and preserves the existing id first, so a re-import can never produce `PROJ-0001;PROJ-0001`. Every reader that joins, groups or filters on this column goes through it — `find_acq.py`, `generate_index.py` (per-project grouping), `validate_registries.py`, `ingest_raw._touched_project_ids`, `relink_projects.py`, `gather_metadata.py`, `metadata_completeness.py`. Pinned by `tools/test_project_ids.py`, including that an acquisition in two projects appears in **both** per-project `index.html` files. **A new reader of `project_id` must split it** — the failure mode is silent (a whole-cell lookup simply misses), not an error.
+[`tools/ingest/project_ids.py`](../tools/ingest/project_ids.py) is the single definition of the cell.
 
-**Writers.** Ingest Step 9.5 (one project, from `registry.project_name`) and the **Project Manager GUI**'s import (adds a project to an existing row, under the registry lock).
+- **Writer policy — `set_project_id_if_blank`.** Blank → set. Already any id (the same project *or a different one*) → **untouched**, and that is a success, not a failure.
+- **Readers stay list-tolerant on purpose.** `split` / `join` / `has` still parse a `;`-cell, and a single value is a length-1 list. So the eight readers written for the list keep working unchanged; a hand-edited or legacy multi-value cell degrades gracefully instead of silently missing rows; and the seam the future database needs is already in place. Readers: `find_acq.py`, `generate_index.py`, `validate_registries.py`, `ingest_raw._touched_project_ids`, `relink_projects.py`, `gather_metadata.py`, `metadata_completeness.py`, `manager/acq_search.py`.
+- **`add_project_id` / `remove_project_id` remain, called by no tool** — the tested mechanics for a deliberate future migration. Wiring either into a tool means changing this decision first.
+
+Pinned by `tools/test_project_ids.py`.
+
+**Writers.** Ingest Step 9.5 (from `registry.project_name`) and the **Project Manager GUI**'s import (blank rows only, under the registry lock). Correcting a wrong `project_id` is a Data Office edit, not a tool behaviour.
 
 ### 2.3 Subject and Sample Identity (DECIDED 2026-06-11 — refines REG-01)
 

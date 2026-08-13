@@ -91,8 +91,15 @@ a new project**; **adds scans that are already on gjesus3 into a project**; and
   what makes the Finder, the links and the retention rules work.
 - **Adding a scan makes a link, not a copy** — no extra space, and `raw/` is never
   touched (see the hard-link question). **Copying your own files does use space.**
-- **A scan can belong to more than one project.** Adding it to a second project does
-  not take it out of the first.
+- **Add a scan to as many projects as you like.** Adding it to a second project does not
+  take it out of the first — each gets its own link to the same data. But the **registry
+  keeps listing the one project the scan was acquired for**, so searching the registry by
+  project finds where data was *acquired*, not everywhere it is *used*. To see what a
+  project holds now, look in the project folder or at its `provenance.csv`.
+- **Your project folder is yours.** Organise it however you like, and **delete links in
+  `raw_linked\` you don't want** — a folder listing hundreds of scans isn't useful.
+  Deleting a link never touches the data: the scan, its checksums and its registry entry
+  are all still there and still in the Finder, and the link can be put back.
 - It asks for **your name**, because everything it writes into your project is recorded
   in the project's `provenance.csv` — the record of where each file came from.
 

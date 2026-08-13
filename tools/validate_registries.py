@@ -290,10 +290,13 @@ def validate(nas_root, check_enrich=True):
                     folder = None  # don't chase a sidecar we can't reach
 
         # 7. project_id existence (only PROJ-XXXX form, only if we have a set).
-        # `project_id` is a `;`-separated LIST (2026-08-11), so each id is
-        # checked on its own. Testing the whole cell made PROJ_ID_RE fail on a
-        # two-project value, which SKIPPED the existence check rather than
-        # failing it — a dangling id in a multi-project row went unreported.
+        # Since 2026-08-12 no tool writes more than one id (write-once —
+        # 06_REGISTRIES §2.3b), but this stays split-based on purpose: a legacy
+        # or hand-edited `;` cell is then still checked id-by-id. Testing the
+        # whole cell would make PROJ_ID_RE fail on such a value, which SKIPS the
+        # existence check rather than failing it — a dangling id would go
+        # unreported, which is the silent-failure mode this whole area exists
+        # to avoid.
         for proj in proj_id_cell.split_project_ids(row.get("project_id")):
             if PROJ_ID_RE.match(proj) and project_ids is not None:
                 if proj not in project_ids:
