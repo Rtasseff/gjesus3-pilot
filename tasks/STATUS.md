@@ -29,17 +29,20 @@ production care.
 
 | | |
 |---|---|
-| Acquisitions in `/raw/` | **13,966** (all checksummed + `metadata.json` sidecar'd) — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) |
-| Projects | **53 registered** — 45 active + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). Every live folder carries the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
-| Subjects (`registry_subjects.csv`) | **843** (one row per subject) |
+| Acquisitions in `/raw/` | **15,474** (all checksummed + `metadata.json` sidecar'd) — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) and the **1,508** from the `S:\gnuclear` NI backfill (§3) |
+| Projects | **57 registered** — 49 active + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). Every live folder carries the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
+| Subjects (`registry_subjects.csv`) | **1,146** (one row per subject) |
 | Publications | empty — deferred (PLANNED) |
 
 **Two registry facts changed on 2026-07-14** (see [`../CHANGELOG.md`](../CHANGELOG.md)):
 
-- **`researcher` is populated on 2,049 of 13,557 acquisitions** (backfilled from the
-  project name where it named a person; lowercase first name). The other **11,508 are
-  blank** — their project names name no person, so there is nothing to recover from.
-  Anything better needs a new source, not another pass over the same data.
+- **`researcher` was backfilled onto 2,049 of the 13,557 acquisitions then in `/raw/`**
+  (from the project name where it named a person; lowercase first name). The rest were
+  left blank — their project names name no person, so there was nothing to recover from,
+  and anything better needs a new source rather than another pass over the same data.
+  The count is now **3,966 of 15,474**, the difference being later ingests that carry a
+  researcher of their own (the `S:\gnuclear` NI backfill takes it from the researcher's
+  own folder name).
 - **`registry_projects.csv` `start_date` / `last_activity` mean *acquisition* dates**,
   not ingest dates (they were previously a uniform 2026-06-1x ingest stamp). Projects
   are closed — folder deleted, row kept with `status=closed` — once the newest linked
@@ -52,9 +55,9 @@ production care.
 - **MRI** — Bruker ParaVision (`MRI`)
 - **Nuclear Imaging** — Molecubes / MILabs PET / SPECT / CT (`PET`, `SPECT`, `CT`)
 
-All on-network historical imaging is ingested. Approximate per-instrument counts:
-MRI ~10,314, Cell Observer ~1,739, LSM 900 ~805, AxioScan 7 ~565, Nuclear Imaging
-~132. (Durable per-instrument record:
+All on-network historical imaging is ingested. Per-instrument counts (live, 2026-08-13):
+MRI 10,330 + 75 `XMRI` (external), Cell Observer 1,739, **Nuclear Imaging 1,640**
+(CT 1,149 + PET 491), AxioScan 7 885, LSM 900 805. (Durable per-instrument record:
 [`../equipment/historical_data_archives.md`](../equipment/historical_data_archives.md).)
 
 **Tooling deployed:**
@@ -357,6 +360,29 @@ The genuinely in-flight items (kept tight — everything else is in
   box half installed at the next access window. See
   [`../equipment/nuclear-imaging/live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md).
   Gate-0 is the first real task for that tunnel (NI-RA-05).
+- ✅ **NI historical pull from `S:\gnuclear` — DONE IN TRUE PRODUCTION 2026-08-13.**
+  Branch `feat/ni-gnuclear-historical` (not pushed). **NI went from 132 to 1,640 rows** —
+  **1,508 acquisitions / 192.0 GB** ingested in 7 researcher batches, **0 failed, 0 validator
+  errors** across all 15,474 production rows, 0 duplicates, 0 blank timestamps.
+  - **Source snapshot** (kept): `staging/ni_gnuclear_20260812/` — 2,485 files / 286.3 GB pulled
+    read-only off `S:\gnuclear`, verified **2,485 ok / 0 corrupt / 0 missing**. `S:\gnuclear`
+    itself was never written to.
+  - **Unit = one acquisition per *reconstruction*** — `(timestamp, modality, algo, recon_idx)`,
+    matching the live-box model so the sources reconcile.
+  - **14 projects touched, 4 newly created** (`0324`, `0421`, `1024`, `1122`) — all verified
+    against the animal-facility DB. 1,146 subject rows.
+  - ⚠️ **673 acquisitions HELD BACK (D-G)** — no *valid* protocol code in their path; those
+    researchers filed by study/tracer name. **They need a `(researcher, series)` → AE-code
+    mapping before they can be ingested**; the snapshot is kept for exactly that. Dedup is on the
+    machine timestamp, so adding them later is safe.
+  - **The review that made this safe:** [`REVIEW_FINDINGS_2026-08-13.md`](REVIEW_FINDINGS_2026-08-13.md).
+    Without it the run would have created **25 projects, 21 fabricated** from date folders and
+    animal numbers. Protocol codes are now DB-validated with walk-up recovery (99 recovered,
+    15 rejected). Runbook + evidence: [`ni_gnuclear_production_runbook.md`](ni_gnuclear_production_runbook.md).
+  - ⚠️ **The shared `J:\gjesus3-sandbox` registry is STALE** — header still has `project_hint`
+    where the code expects `project_id` (renamed 2026-08-02), so `assert_header_compatible`
+    refuses to append. **Migrate it before anyone uses that sandbox again.**
+  - Not to be confused with the NI *live-box* sync above — this was a one-time backfill.
 - ✅ **No-DICOM MRI regeneration — DRAINED 2026-07-16** (branch
   `feat/dicom-regen-backfill`; full narrative in [`../CHANGELOG.md`](../CHANGELOG.md)).
   The worklist (`registries/pending_dicom_regen.csv`, 612 rows) is at **0 `pending`**:

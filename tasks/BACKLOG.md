@@ -900,6 +900,45 @@ records. The gap **recurs for any future ingest** touching null-alias projects.
   `1521` / `0619` / `0618` (and audit for other null-alias projects) in the facility DB.
 - [ ] **Detector:** a quick `validate_registries` check for any `subject_ids`
   containing `-None` (catch future occurrences automatically).
+- [ ] **Re-run the back-fill** — the one recorded above no longer holds (see the audit).
+
+### 🔸 MODERATE — re-audited live 2026-08-13, and it has grown
+
+Measured against production: **444 rows in `registry_raw.csv`** carry a `subject_ids` of
+the form `<n>-AE-biomaGUNE-None`, plus **65 rows in `registry_subjects.csv`** with
+`project_alias = 'None'` (the literal string). By project — **exactly the four null-alias
+codes this item already named**, so the defect class is unchanged, only its reach:
+
+| Project | rows | by instrument |
+|---|---:|---|
+| `AE-biomaGUNE-0219` | 330 | MRI 260 · CT 70 |
+| `AE-biomaGUNE-0618` | 67 | MRI 67 |
+| `AE-biomaGUNE-1521` | 45 | PET 23 · CT 21 · MRI 1 |
+| `AE-biomaGUNE-0619` | 2 | ZWSI 2 |
+
+Two things worth reading off that table:
+
+- **The prediction in this item came true.** It warned that `0219` had 0 ingested
+  acquisitions and *"will surface during the no-DICOM regeneration pass unless fixed
+  first."* It was not fixed first, and `0219` is now the largest group at 330.
+- **The 452-row back-fill recorded above no longer holds** — 328 MRI rows carry `-None`
+  today. Either it was undone by the later regeneration/backfill passes or it never
+  covered these rows. Re-measure before re-running rather than trusting the earlier count.
+
+The **`S:\gnuclear` NI backfill (2026-08-13) added 114** of the 444 — `0219` ×70 and
+`1521` ×44, i.e. exactly the two null-alias codes that appear in that source. Not a
+regression from that work: the anchored-`LIKE` fix it shipped changed *which project*
+resolves, not *how the identity is composed*, and the old unanchored form resolved these
+same two codes just as well. This is `animal_db._query_subject` composing
+`facility_animal_id` from `proj["projectAlias"]` when the project was resolved through
+`project_code` — the one field that is null.
+
+**Severity: the row is not wrong, the identifier is malformed.** `project_id` is correct,
+the animal is correctly identified, and species/sex/DOB are right — it is the composed
+subject-id string that is unusable, so this is a cosmetic-but-corrosive defect rather than
+wrong data. It is safe to fix in place with the deferred-recovery pattern
+(`recover_subject_metadata.py`), and the correct value is recoverable without touching the
+DB at all: `project_id` → project name → the `NNNN` after `AE-biomaGUNE-`.
 
 ---
 

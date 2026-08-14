@@ -1,0 +1,94 @@
+# Molecubes NI — HISTORICAL pull from the researcher working space `S:\gnuclear`.
+# Third sibling of molecubes_ni.yaml (platform archive) and molecubes_ni_live.yaml
+# (the acquisition box). Same downstream pipeline; the difference is DISCOVERY.
+#
+# The archive and the box both give one FOLDER per acquisition
+# (<14digit>_<MODALITY>/recon_<idx>/). This source does not: DICOMs sit loose at a
+# depth that varies from 0 to 8 levels, one reconstruction is frequently copied
+# into several analysis folders (48 in the worst case), and dynamic PET is often
+# split into one file per frame. So `ni_gnuclear_flat: true` replaces the glob with
+# a fan-in discovery that GROUPS files on the machine-issued filename:
+#
+#     acquisition = (timestamp, modality, algo, recon_idx)
+#
+# — one acquisition per reconstruction, the same unit the live-box sync produces,
+# so rows from the two sources have the same shape and reconcile on the same key.
+#
+# READ THE STAGED SNAPSHOT, NOT `S:\` DIRECTLY. tools/pull_ni_gnuclear.py copies the
+# DICOMs to gjesus3 staging first (read-only on the source, checksummed, resumable).
+# Ingesting from the snapshot means a re-run costs no network, and the bytes cannot
+# shift underneath us — S:\gnuclear is a live working space that changes daily.
+#
+# Per batch: copy to tools/configs/, edit staging_dir + researchers, then
+#   python tools/ingest_raw.py --config tools/configs/<this>.yaml --nas-root J:/gjesus3-sandbox
+# ⚠️ VERIFY --nas-root BEFORE EVERY RUN. There is still no test-vs-prod guard, and a
+# dev run once pointed it at J:\gjesus3-data and left synthetic acqs in production.
+#
+# Eyeball the parse FIRST with the read-only review table:
+#   python tools/ni_gnuclear_discover.py --root <staged dir> --csv review.csv
+
+ingest:
+  acquisition_layout: folder
+  copy_strategy: ni_molecubes_flat
+  auto_create_projects: true
+  delete_source_after_ingest: false        # NEVER delete — this is a snapshot
+
+auto_discover:
+  # The staged snapshot written by tools/pull_ni_gnuclear.py --go
+  staging_dir: "J:/gjesus3-data/staging/ni_gnuclear_20260812"
+  ni_gnuclear_flat: true                   # fan-in discovery (see header)
+  # Restrict a batch to specific researcher folders. Omit for everything.
+  researchers: [Irene]
+  #
+  # Hold back acquisitions with no animal-protocol code in their path. 28% of
+  # this source is filed by study/tracer name ("FDG", "Starget", "ionp",
+  # "Flurpiridaz") rather than by AE code. Those are not malformed — but an AE
+  # code is a regulatory identifier and must never be guessed, so they wait for a
+  # (researcher, series) -> code mapping. Set false ONLY once that mapping is
+  # applied, or every one of them lands in a project named "AE-biomaGUNE-".
+  require_project: true
+  # Validate the path-derived protocol code against the animal-facility DB, and
+  # walk up to the real code when it is wrong. Leave TRUE — with it off, 114 of
+  # these acquisitions file themselves under an INVENTED AE code (`2302` is the
+  # date folder 230217; `245` and `100` are animal numbers), each becoming a
+  # project folder and a subject_id. See tasks/REVIEW_FINDINGS_2026-08-13.md §1.
+  validate_projects: true
+  subject_parse:                           # subject folder -> project + 1-4 animals
+    field: subject                         #   (the SAME grammar the live box uses)
+  subject_from_db: true                    # a DB miss queues to pending, never blocks
+
+registry:
+  instrument:           discovered.modality
+  data_ecosystem:       DICOM
+  instrument_model:     "Molecubes (PET/SPECT/CT)"
+  researcher:           "${discovered.researcher_folder}"
+  data_source:          internal
+  sample_id:            "${discovered.subject}"
+  sample_type:          organism
+  acquisition_datetime: discovered.acq_datetime_full
+  # group the PET + CT of one animal-visit into one ISA "study":
+  session_id:           "${discovered.subject}_${discovered.acq_date8}"
+  project_name:         "AE-biomaGUNE-${discovered.project}"
+  notes:                "Historical NI pull. Read source = S:\\gnuclear (researcher working space), staged snapshot. Reconstruction ${discovered.ni_algo}_${discovered.ni_recon_idx}. Source path: ${discovered.source_relpath}"
+
+# operator: DELIBERATELY UNSET (REVIEW_FINDINGS_2026-08-13 §5.3). The existing 132
+# archive rows carry `operator: irene` because that batch was known to be hers.
+# Here the person who ran the EQUIPMENT is not recoverable from the path — the
+# researcher folder names who owns the data, which is a different role. Filling it
+# from the folder would be the same class of error as inventing a protocol code, so
+# it stays blank and this comment is the record of that decision.
+
+auto_create_project:
+  owner:       "NI-platform"
+  description: "Auto-created during the S:\\gnuclear historical NI pull; animal protocol ${discovered.project}. PROVISIONAL."
+  notes:       "Auto-created on first historical NI ingest. Edit owner via _project.yaml."
+
+# Unique per reconstruction — timestamp + modality is globally unique on the box,
+# and the recon index separates two reconstructions of the same scan.
+link_filename: "${discovered.modality}_${discovered.subject}_${acq_date}_${discovered.acq_datetime_full}_recon${discovered.ni_recon_idx}"
+
+# anatomy: Molecubes scans the whole animal every time — the same fact the live
+# template locks. condition: is deliberately NOT defaulted (it is a per-study fact
+# nobody can infer from a path), so it writes the non-blocking null sentinel.
+anatomy:
+  is_whole_body: true
