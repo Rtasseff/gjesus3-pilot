@@ -166,7 +166,12 @@ code fix in 4.1 means we no longer depend on it.
 ## 5. Verification before calling it done
 
 - `validate_registries` → **0** `-None` findings across all rows.
-- `registry_subjects.csv` → **1,149** rows (was 1,146: 65 → 68), no `project_alias` of `None`.
+- `registry_subjects.csv` → **1,124** rows, no `project_alias` of `None`.
+  ⚠️ **Corrected 2026-08-14 — this line previously said 1,149 and was wrong.** It
+  assumed all 68 corrected ids are new. **25 of them already have rows** (animals whose
+  other acquisitions resolved correctly — the partial 2026-06 back-fill), so the upsert
+  merges those instead of inserting. The arithmetic is 1,146 − 65 stale + 43 genuinely
+  new = **1,124**, i.e. the table gets *smaller*. Measured against live data, not estimated.
 - The 3 previously-collided animals resolve to 6 distinct ids, each matching the facility DB.
 - Spot-check both sides of a collision: `ACQ-20220124-MRI-001` → `23-AE-biomaGUNE-0219`;
   `ACQ-20220118-PET-010` → `23-AE-biomaGUNE-1521`.

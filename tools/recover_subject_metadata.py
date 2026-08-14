@@ -227,9 +227,18 @@ def _write_sidecar(path, sidecar):
 
     Atomic: write to a sibling .tmp then os.replace, so a crash mid-write can't
     truncate / corrupt this IMMUTABLE raw artifact. (verify-after-write +
-    rollback in the caller stay as-is.)"""
+    rollback in the caller stay as-is.)
+
+    newline="\\n" is NOT cosmetic. Production sidecars are LF (the ingest that
+    wrote them ran in WSL). Text mode on Windows translates every \\n to \\r\\n,
+    so running a recovery tool from Windows rewrote EVERY line of an immutable
+    /raw/ artifact and grew it ~5% just to change one field. Pinning LF makes
+    the rewrite byte-identical apart from the fields actually being repaired,
+    whichever OS it runs from. (`ingest/metadata_sidecar.py` has the same
+    platform dependence at creation time; it writes NEW files so nothing is
+    disturbed, but it is worth a look.)"""
     tmp_path = path + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
+    with open(tmp_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(sidecar, f, indent=2, ensure_ascii=False)
         f.write("\n")
     os.replace(tmp_path, path)
