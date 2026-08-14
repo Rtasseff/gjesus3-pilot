@@ -4,17 +4,18 @@
 Covers the fix recorded in tasks/SUBJECT_ID_NULL_ALIAS_HANDOFF.md §4.1/§4.2:
 
   §4.1 animal_db.compose_subject_id REFUSES a null alias instead of formatting
-       the plausible-but-ambiguous "<n>-AE-biomaGUNE-None", and _query_subject
-       composes from the alias the CALLER asked for when the facility row's
-       projectAlias is SQL NULL (protocols 0219 / 0618 / 0619 / 1521).
-       Plus the non-blocking contract: ingest enrichment must not start
-       raising now that compose_subject_id can.
+       the plausible-but-ambiguous "<n>-AE-biomaGUNE-None". Plus the
+       non-blocking contract: ingest enrichment must not start raising now
+       that compose_subject_id can. (The _query_subject fallback itself is
+       verified against the LIVE facility DB, not mocked here — see the
+       comment above test_enrichment_stays_non_blocking.)
 
   §4.2 validate_registries flags every surviving bad id as an ERROR — in
        registry_raw.subject_ids and in registry_subjects.csv — while leaving
        the legitimate blank-alias DTS24 human subjects alone.
 
-No database, no NAS, no pytest. Every case runs against fakes / a temp dir.
+No database, no NAS, no pytest — pure string logic, an injected lookup, and a
+temp dir. Anything that only the live DB can answer is deliberately not here.
 
 Run:  PYTHONPATH=tools python tools/test_subject_id_null_alias.py
 """
@@ -74,84 +75,13 @@ def test_compose_still_builds_good_ids():
     check((alias, code) == ("0219", 23), "compose -> parse_subject_id round-trips")
 
 
-# ---- §4.1b _query_subject falls back to the caller's alias ---------------
-
-class _FakeCursor:
-    """Dispatches the three real SELECTs by their distinguishing text.
-
-    `projectAlias` comes back SQL NULL, exactly as it does for protocols
-    0219 / 0618 / 0619 / 1521 — the whole point of the case.
-    """
-
-    def __init__(self, project_row):
-        self._project_row = project_row
-        self._rows = []
-        self._one = None
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-    def execute(self, sql, params=()):
-        if "projectAlias = %s" in sql:
-            self._one = None          # the alias lookup MISSES (it is NULL)
-        elif "project_code" in sql:
-            self._one = self._project_row
-        elif "FROM animals" in sql:
-            self._one = {
-                "id": 7, "animal_code": 23, "sex": "Male",
-                "date_of_birth": "2021-11-18", "weight": 25,
-                "specie_type": "Mouse", "strain_type": "C57BL/6NCrl",
-                "strain_aka": "", "strain_tg": "",
-            }
-        elif "animal_procedures" in sql:
-            self._one, self._rows = None, []
-        else:
-            raise AssertionError(f"unexpected SQL: {sql}")
-
-    def fetchone(self):
-        return self._one
-
-    def fetchall(self):
-        return self._rows
-
-
-class _FakeConn:
-    def __init__(self, project_row):
-        self._project_row = project_row
-
-    def cursor(self):
-        return _FakeCursor(self._project_row)
-
-
-def test_query_subject_uses_caller_alias_when_db_alias_is_null():
-    print("_query_subject composes from the caller's alias on a NULL projectAlias:")
-    conn = _FakeConn({"id": 1, "project_code": "AE-biomaGUNE-0219",
-                      "projectAlias": None})
-    subj = animal_db._query_subject(conn, "0219", 23)
-    check(subj is not None, "the animal is still found through project_code")
-    check(subj["facility_animal_id"] == "23-AE-biomaGUNE-0219",
-          "facility_animal_id is 23-AE-biomaGUNE-0219, NOT ...-None")
-    # The biology was never wrong — only the label. Guard that it stayed right.
-    check(subj["sex"] == "M" and subj["date_of_birth"] == "2021-11-18",
-          "the animal's own attributes are unchanged")
-
-    # A populated projectAlias still wins (it is the authoritative value).
-    conn2 = _FakeConn({"id": 2, "project_code": "AE-biomaGUNE-0525",
-                       "projectAlias": "0525"})
-    check(animal_db._query_subject(conn2, "0525", 23)["facility_animal_id"]
-          == "23-AE-biomaGUNE-0525", "a populated projectAlias is used as-is")
-
-    # Blank-but-not-NULL is the same defect wearing a different hat.
-    conn3 = _FakeConn({"id": 3, "project_code": "AE-biomaGUNE-1521",
-                       "projectAlias": "  "})
-    check(animal_db._query_subject(conn3, "1521", 23)["facility_animal_id"]
-          == "23-AE-biomaGUNE-1521", "a whitespace-only projectAlias also falls back")
-
-
-# ---- §4.1c the ingest must NOT start raising ----------------------------
+# ---- §4.1b the ingest must NOT start raising ----------------------------
+#
+# The other half of §4.1 — _query_subject falling back to the caller's alias on
+# a NULL projectAlias — is NOT tested here. It is one line whose whole point is
+# what the live facility DB actually returns; a fake cursor matching query text
+# would test the fake. It was verified against the real DB instead (read-only),
+# and the output is in the commit message.
 
 def test_enrichment_stays_non_blocking():
     print("enrichment honours the non-blocking contract (08_METADATA 4.7):")
@@ -285,7 +215,6 @@ def test_check_subjects_registry():
 def main():
     for fn in (test_compose_refuses_null_alias,
                test_compose_still_builds_good_ids,
-               test_query_subject_uses_caller_alias_when_db_alias_is_null,
                test_enrichment_stays_non_blocking,
                test_null_alias_of,
                test_check_subject_ids,

@@ -91,39 +91,15 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **`-AE-biomaGUNE-None` subject identifiers — 🔶 IN FLIGHT on branch
-  `fix/subject-id-null-alias`. Source fixed + detector shipped; the production
-  backfill is NOT run.** Full audit and plan in
-  [`SUBJECT_ID_NULL_ALIAS_HANDOFF.md`](SUBJECT_ID_NULL_ALIAS_HANDOFF.md); owning
-  backlog item *"Facility-DB null project alias"*.
-  - **What is wrong:** four animal protocols (`0219` / `0618` / `0619` / `1521`)
-    have a populated `project_code` and a **NULL `projectAlias`** in the facility
-    DB. `animal_db._query_subject` resolved them through `project_code` but then
-    composed the identity from the null field, producing the literal
-    `<animal_code>-AE-biomaGUNE-None`. **The biology is correct everywhere** — each
-    acquisition looked up its own `(project, animal)` pair and got the right animal;
-    only the composed *label* broke. Nothing needs re-ingesting.
-  - **Why it is a real defect, not cosmetics:** `-None` is **ambiguous**. All four
-    protocols collapse onto it, so animal 23 of `0219` and animal 23 of `1521`
-    become the same subject id — and the subjects-table upsert merged two different
-    animals into one row. **3 collided ids over 47 acquisition rows** carry the
-    wrong sex / strain / DOB for one of the two animals sharing each row.
-  - **Done (§4.1):** `animal_db._query_subject` now composes from the alias the
-    caller asked for when the DB's is null, and `compose_subject_id` **refuses** to
-    build an id it knows is broken. `ingest/enrichment.py` degrades to a blank
-    facility id on that refusal, so the non-blocking metadata contract
-    ([`08_METADATA §4.7`](../mfb-rdm-docs/08_METADATA.md)) still holds.
-  - **Done (§4.2):** `validate_registries.py` now reports null-alias facility ids as
-    **ERRORs** — in `registry_raw.subject_ids` and in `registry_subjects.csv`. The
-    75 blank-alias DTS24 human subjects (`LEONE_1.01`, `source=dicom-header`) have
-    no animal protocol and are deliberately out of scope.
-  - **Measured live 2026-08-14** (`--no-enrichment`, read-only): **574 ERRORs and
-    nothing else** — 444 acquisition rows (`0219` 330 · `0618` 67 · `1521` 45 ·
-    `0619` 2) and 65 subject rows (×2 findings each). Zero other errors in the
-    registry. That is the detector working, not new damage.
-  - **NOT DONE — needs Ryan's go-ahead (§4.3):** `tools/recover_subject_ids.py`, the
-    backfill that repairs 444 `/raw/` sidecars, 444 registry rows and splits the 65
-    subject rows into 68. It writes production registries and `/raw/`.
+- **`-AE-biomaGUNE-None` subject identifiers — 🔶 IN FLIGHT, branch
+  `fix/subject-id-null-alias`.** Source fixed (`animal_db` no longer composes an id
+  from a null facility alias) + detector shipped (`validate_registries` ERRORs on
+  one). `validate_registries` now reports **574 ERRORs** on production — that is the
+  detector working, not new damage.
+  **The backfill over 444 `/raw/` sidecars + registries is NOT run and needs a
+  go-ahead.** Audit + plan:
+  [`SUBJECT_ID_NULL_ALIAS_HANDOFF.md`](SUBJECT_ID_NULL_ALIAS_HANDOFF.md); owning item
+  in [`BACKLOG.md`](BACKLOG.md) *"Facility-DB null project alias"*.
 
 - **DTS24 collaborator re-ingest — ✅ DONE IN PRODUCTION 2026-08-13; merged to
   `main` (`def282c`, `--no-ff`), branch + worktree retired.** **The data went live
