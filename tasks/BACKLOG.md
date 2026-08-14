@@ -508,6 +508,38 @@ these 75 rows until it is fixed.
 - [ ] Re-check `extract_study_date` exposure on the re-ingest — the nested HPIC layout is what
   triggered the wrong-date bug the first time (see the 🔺 HIGH item on it above).
 
+**⚠️ "Unpack" may be the wrong verb — measure before assuming it (2026-08-14).** The registry
+records **409,935 files across the other 15,399 acquisitions**, and **1,546,599 files inside these
+75 archives**. So **79% of every file this system knows about is inside 0.5% of its acquisitions**,
+and unpacking them flat would take `/raw/` from ~410k to ~1.96M on-disk files — a **4.8×
+increase in total file count, all inside one project**. That is a NAS/SMB question at a scale
+nothing else here approaches, not a matter of taste.
+
+What is actually being asked for is that **a series be addressable** and that `file_count` mean
+one thing — which is not the same as loose files on disk. Three options for the discussion, no
+recommendation yet:
+
+1. **Unpack flat** — matches internal convention exactly; 4.8× file count.
+2. **One archive per series** (~2,000 rows, one archive each) — one row per series, honest
+   `file_count`, a series retrievable without touching its 40 neighbours, and file counts stay
+   in the thousands. Still not byte-identical to the internal convention.
+3. **Status quo** — rejected by everything above, but it is the baseline to beat.
+
+**One-off vs durable — be explicit about which is which** (Ryan, 2026-08-14). Most of the *work*
+here is a one-time quirk of how one collaborator handed us data; only part of it is a lasting
+capability, and conflating them produces a "general external importer" generalised from a single
+sample.
+
+- **One-off — the extraction/reordering script for LIONS' and HPIC's two layouts.** Commit it and
+  document what it did, as the record. Do **not** harden it, abstract it, or promote it to
+  `tools/` as reusable infrastructure. The next collaborator's layout is unknowable, and there is
+  no evidence — current or historical — of this recurring.
+- **Durable — the policy.** What an external acquisition *is*, the container rule, provenance,
+  retention, human-subject handling. This is the real deliverable and it belongs in the specs.
+- **Possibly durable — small code.** Header/`DICOMDIR`-driven series splitting and
+  `data_source collaborator:*` handling. **The line: anything that reads DICOM headers can live
+  on; anything that knows where LIONS put `S1010/` cannot.**
+
 **Sequencing note:** this is a large production write over the same registries as the
 `fix/subject-id-null-alias` work. **Do not run the two concurrently** — finish that one first.
 Related: the human-subject policy item above (META-12), which this does not resolve.
