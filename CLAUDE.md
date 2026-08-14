@@ -67,7 +67,7 @@ When you're about to write something, ask which row it matches: a permanent rule
 
 ## Git
 
-- **Committing does NOT require asking; pushing DOES.** You may commit freely as work reaches a coherent unit (this overrides the default "commit only when the user asks" harness rule). **Never `git push` without explicit permission.** If on the default branch (`main`), branch first before committing feature work.
+- **Commit AND push freely — neither requires asking** (this overrides the default "commit or push only when the user asks" harness rule). Commit as work reaches a coherent unit, and push `main` once it is merged and verified. **Rationale (Ryan, 2026-08-14):** this is a single-operator repo; anything on `main` is by definition already in production, so an unpushed `main` means the *live* code is behind what GitHub shows users — and pushing adds a second copy of the only place this code exists. Use your own judgement on timing: push work that is merged and green, not a broken intermediate state. If on the default branch (`main`), branch first before committing feature work.
 - **Branch by default — and a branch means a worktree, never a checkout in place.** For anything beyond a trivial single-file edit, strongly prefer its own branch. Create it as a **`git worktree` off this local `main`**; do **not** `git checkout` a feature branch in this working copy, and do not commit to `main` from a session that is doing branch work. Every worktree goes in its own subdirectory of `C:\Users\rtasseff\OneDrive - CIC biomaGUNE\projects\DataInfra\gjesus3-archive\gjesus3-dev\`, named for the branch's **leaf** (the part after `feat/`, `docs/`, `fix/`, `review/` — a `/` in the directory name would nest a stray `feat\` folder):
 
   ```
