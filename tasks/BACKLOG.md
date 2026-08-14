@@ -467,6 +467,85 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   alias. Also note the `subject:` block schema currently has no way to say
   "this subject is human" other than `species: Homo sapiens`.
 
+## 🔺 HIGH — external collaborator archives are one row per EXAM, not per series (2026-08-14)
+
+The 75 external cardiac-MRI acquisitions in `DTS24` (`XMRI`; LIONS ×42, HPIC ×33) are each
+stored as **one archive standing for a whole exam**. Every internal dataset is separated by
+series. Source: the XNAT-trial write-up at
+`gjesus3-tools/gjesus3_external_archives_reingest_draft.md` (2026-08-14).
+
+**Both halves of that report were verified here before filing:**
+
+- **Internal MRI really is one row per series** — `original_name` is `<exam>/<series>`, and the
+  exam is the `session_id`: **869 sessions → 10,330 rows**, ~12 series each, 866 sessions
+  carrying more than one row. So this is a genuine break with our own convention, not a
+  difference of opinion.
+- **One archive really is a whole exam.** Listing `ACQ-20211022-XMRI-001.zip` (1,080.8 MB) from
+  the NAS: **21,103 entries, 27 `S`-numbered series folders.** The report's totals across the 45
+  readable zips — 928,782 files, 1,800+ series folders, ~41 series per archive — are consistent
+  with that.
+
+**Consequences.** 75 rows stand in for ~2,000 real series; `file_count` means "files inside an
+archive" on these rows and "DICOM files on disk" on every other row in the same column; no one
+can look at a single sequence without unpacking ~1 GB / ~20k files; and the XNAT trial holds all
+75 (`HELD_EXTERNAL`) because archive-per-acquisition maps onto nothing.
+
+**Not urgent, and worth saying why:** the bytes are safe and checksummed, the as-received
+archives are intact provenance, and the XNAT pilot proceeds without them. What it costs is
+retrieval and registry honesty, and that cost grows — every downstream tool has to special-case
+these 75 rows until it is fixed.
+
+- [ ] **Decide the unit.** Match internal MRI: one acquisition per series, grouped by
+  `session_id` = exam. Confirm how reconstructions are treated so external matches internal.
+- [ ] **Drive the split from DICOM headers / `DICOMDIR`, never folder position** — LIONS zips put
+  `S1010/…` at the top level, some HPIC zips nest under patient+study (`HPIC25/S60110/S00/…`).
+  Both carry a Philips `DICOMDIR`.
+- [ ] **Preserve provenance:** keep `data_source collaborator:LIONS/HPIC`, keep the original
+  archives retrievable as the as-received record, and retire the 75 old rows rather than
+  reusing their ACQ-IDs.
+- [ ] **RAR dependency** — 30 archives (the 2018–19 Ingenuity-era ones) need `unrar`/`7z` and
+  have not been opened yet. Uncompressed size is unknown; 54 GB compressed today.
+- [ ] Re-check `extract_study_date` exposure on the re-ingest — the nested HPIC layout is what
+  triggered the wrong-date bug the first time (see the 🔺 HIGH item on it above).
+
+**Sequencing note:** this is a large production write over the same registries as the
+`fix/subject-id-null-alias` work. **Do not run the two concurrently** — finish that one first.
+Related: the human-subject policy item above (META-12), which this does not resolve.
+
+**Already answered, do not re-investigate:** the report's item 5 (7 acquisitions with blank
+`subject_ids`) is not an external-data issue at all. They are the 7 no-animal-parsed cases from
+the `S:\gnuclear` NI backfill — Marina ×6 (`Respiratory gated`, `AE-biomaGUNE-1321`) and Itziar
+×1 (`39 copy`, `AE-biomaGUNE-1123`) — where the subject folder held a description instead of an
+animal number and the parser flagged rather than guessed. They belong with the 673 held-back
+acquisitions (**D-G**), and the fix is a subject mapping, not a re-ingest.
+
+## 🔸 MODERATE — pick ONE archive container for stored external archives (2026-08-14)
+
+Production holds **45 `.zip` and 30 `.rar`** primaries for the same data type. `.rar` is
+proprietary and needs extra tooling, which is exactly why the 30 RAR archives above have still
+not been opened.
+
+**Correcting the premise this was raised under:** the ingest does **not** recompress anything.
+`ingest_raw._resolve_archive_primary` locates the **original collaborator archive** and copies it
+verbatim, renamed to `<ACQ-ID>.<ext>` — the config says so in as many words ("one fast SMB
+transfer each, no re-zip step"). The extraction to `D:\projects\gjesus3\xmri_staging\…` is
+local-disk and read-only, purely to read headers. So the mixed formats are **inherited from the
+collaborators**, not produced by us, and "pick one" is a new normalisation policy rather than a
+bug fix.
+
+**Therefore this is conditional on the item above, and should not be actioned first.** If we
+unpack and store series as folders, there is no archive primary at all and the question
+disappears. It only stands on its own if we decide to keep archive-as-primary.
+
+- [ ] If archive-as-primary survives: **normalise to `.zip`** on ingest — open format, native
+  `zipfile` support, no external binary — and re-container the 30 existing `.rar` primaries.
+- [ ] Weigh the cost honestly: re-containering ~1 GB / ~20k-file archives **over SMB is
+  genuinely painful**, and it rewrites `/raw/` primaries, so it needs the recovery-tool
+  treatment (backup, checksum re-verification, registry `file_format`/`file_size_mb`/
+  `primary_file_name` updates) rather than a quick loop.
+- [ ] Record the decision in [`08_METADATA`](../mfb-rdm-docs/08_METADATA.md) / the external-data
+  section so the next collaborator drop does not re-litigate it.
+
 ## ✅ Finder — "Select-in-Finder → assemble a project" (2026-06-23) — **DONE 2026-08-12, differently**
 
 > **Delivered by the Project Manager GUI** ([`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)),
