@@ -892,15 +892,25 @@ surface during the **no-DICOM regeneration pass** unless fixed first. Ryan is
 emailing the animal facility (2026-06-13) to populate the alias for those 4 project
 records. The gap **recurs for any future ingest** touching null-alias projects.
 
-- [ ] **Harden the ingest:** when the DB returns a project found but with a null
-  alias, fall back to the operator/parse project (`discovered.project_code` via
-  the project name) when composing `facility_animal_id`, instead of emitting `-None`.
-  One-line guard in `animal_db.compose_subject_id` callers / `enrichment.py`.
+- [x] **Harden the ingest — DONE 2026-08-14** (branch `fix/subject-id-null-alias`).
+  `animal_db._query_subject` composes from the alias the **caller** asked for when the
+  DB row's `projectAlias` is null, and `compose_subject_id` now **raises** rather than
+  return a plausible-looking `-None` string. `ingest/enrichment.py` catches that refusal
+  and degrades to a blank facility id, so the non-blocking contract
+  ([`08_METADATA §4.7`](../mfb-rdm-docs/08_METADATA.md)) still holds and no ingest can
+  break on it. Pinned by `tools/test_subject_id_null_alias.py`.
 - [ ] **Fix the source:** ask the data office to populate the project alias for
   `1521` / `0619` / `0618` (and audit for other null-alias projects) in the facility DB.
-- [ ] **Detector:** a quick `validate_registries` check for any `subject_ids`
-  containing `-None` (catch future occurrences automatically).
+  (Independent — the code fix above means we no longer depend on it.)
+- [x] **Detector — DONE 2026-08-14.** `validate_registries` now reports a null-alias
+  facility id as an **ERROR**, in both `registry_raw.subject_ids` and
+  `registry_subjects.csv` ([`10_TOOLS §3.2`](../mfb-rdm-docs/10_TOOLS.md)). Measured
+  live the same day: **574 ERRORs and nothing else** — 444 acquisition rows + 65 subject
+  rows (×2 findings each), matching the audit below exactly. The 75 blank-alias DTS24
+  human subjects are correctly out of scope.
 - [ ] **Re-run the back-fill** — the one recorded above no longer holds (see the audit).
+  **Blocked on Ryan's go-ahead:** it writes production registries and `/raw/` sidecars.
+  Plan: [`SUBJECT_ID_NULL_ALIAS_HANDOFF.md`](SUBJECT_ID_NULL_ALIAS_HANDOFF.md) §4.3.
 
 ### 🔸 MODERATE — re-audited live 2026-08-13, and it has grown
 

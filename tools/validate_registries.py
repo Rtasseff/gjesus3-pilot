@@ -21,6 +21,17 @@ WHAT IT CHECKS
       disk (canonical_path joined to nas_root).
     - project_id, when set and matching PROJ-XXXX, exists in
       registries/registry_projects.csv.
+    - subject_ids carries no null-alias facility id (`<n>-AE-biomaGUNE-None`,
+      or a bare `<n>-AE-biomaGUNE-` with nothing after the stem). ERROR, not
+      WARN: the alias is what makes the id UNIQUE, so a null one is ambiguous
+      — every null-alias protocol collapses onto the same id and the subjects
+      table then merges two different animals into one row.
+
+  registry_subjects.csv
+    - project_alias is never the literal "None"/"null", and never blank for a
+      facility_id that IS a canonical `<n>-AE-biomaGUNE-<NNNN>` id. A blank
+      alias on a NON-canonical id (the DTS24 human subjects, facility ids like
+      "LEONE_1.01" with source=dicom-header) is legitimate and not reported.
 
   Phase 3 enrichment (WARN-level, non-blocking model — 08_METADATA §4.3-4.7)
     For rows whose sample_type is organism or tissue, the sidecar
@@ -55,6 +66,10 @@ from ingest import registry  # noqa: E402  (after sys.path tweak)
 # Aliased: the local variable `project_ids` in check_registry_raw is the SET of
 # known ids, and would shadow the module.
 from ingest import project_ids as proj_id_cell  # noqa: E402
+# Imported for the ONE constant, not for the DB: the subject-id stem must be
+# read from the module that composes the ids, so the detector and the composer
+# can never drift apart. animal_db imports cleanly with no pymysql/credentials.
+from animal_db import PROJECT_CODE_STEM  # noqa: E402
 
 
 def log(msg, level="INFO"):
@@ -84,6 +99,22 @@ SAMPLE_TYPE_VOCAB = {"tissue", "organism", "cells", "material", "phantom"}
 
 # sample_types that require Phase 3 preclinical enrichment blocks.
 ENRICH_SAMPLE_TYPES = {"organism", "tissue"}
+
+# Canonical facility subject id: <animal_code>-AE-biomaGUNE-<NNNN>. Mirrors
+# animal_db.SUBJECT_ID_RE but is deliberately LOOSER on the alias — it must
+# also match the broken forms we are hunting, which the strict `\w+` version
+# would either reject (empty alias) or silently accept (the literal "None").
+SUBJECT_ID_STEM_RE = re.compile(
+    r"^(?P<animal_code>\d+)-" + re.escape(PROJECT_CODE_STEM) + r"-(?P<alias>.*)$",
+    re.IGNORECASE)
+
+# Alias values that carry no information. "none"/"null" are the SQL-NULL leak:
+# a facility project row with a populated project_code and a NULL projectAlias
+# used to format straight into the id string. See tasks/BACKLOG.md
+# "Facility-DB null project alias" and tasks/SUBJECT_ID_NULL_ALIAS_HANDOFF.md.
+NULL_ALIASES = {"", "none", "null"}
+
+SUBJECTS_REGISTRY = "registry_subjects.csv"
 
 
 # ---- Issue collection ----------------------------------------------------
@@ -155,6 +186,107 @@ def _load_project_ids(registries_dir, issues):
         )
         return None
     return {(r.get("project_id") or "").strip() for r in rows}
+
+
+# ---- Null-alias subject-id checks (ERROR-level) --------------------------
+
+def is_facility_id(subject_id):
+    """True when the id claims to name an animal under an AE-biomaGUNE protocol.
+
+    This is the line between IN scope and OUT: a DTS24 human subject id
+    ("LEONE_1.01", source=dicom-header) has no animal protocol, so a blank
+    alias on it is correct and must never be reported (handoff §7).
+    """
+    return PROJECT_CODE_STEM.lower() in (subject_id or "").lower()
+
+
+def null_alias_of(subject_id):
+    """The broken alias in a facility subject id, else None.
+
+    Returns the offending alias string ("" / "None" / "null") when `subject_id`
+    is a `<animal_code>-AE-biomaGUNE-<alias>` id whose alias carries no
+    information; returns None when the id is fine, or is not a facility id at
+    all.
+    """
+    s = (subject_id or "").strip()
+    m = SUBJECT_ID_STEM_RE.match(s)
+    if m:
+        alias = m.group("alias").strip()
+        return alias if alias.lower() in NULL_ALIASES else None
+
+    # Belt and braces. A malformed id that still ENDS in the broken stem (no
+    # animal code, a stray prefix) fails the grammar above and would slip past
+    # a grammar-only detector — which is precisely how a backfill declares
+    # victory over rows it never touched. Under-report nothing here.
+    low = s.lower()
+    for null in ("none", "null"):
+        if low.endswith(f"-{PROJECT_CODE_STEM.lower()}-{null}"):
+            return s[-len(null):]
+    if low.endswith(f"-{PROJECT_CODE_STEM.lower()}-"):
+        return ""
+    return None
+
+
+def check_subject_ids(cell, label, issues):
+    """ERROR for every null-alias id packed into one registry_raw.subject_ids cell.
+
+    The cell is a `;`-joined 1..N list (NI-LIVE-08); check it id-by-id so a
+    multi-animal scan reports the bad member, not the whole cell.
+    """
+    for part in (cell or "").split(";"):
+        sid = part.strip()
+        if not sid:
+            continue
+        alias = null_alias_of(sid)
+        if alias is not None:
+            issues.error(
+                f"subject_ids carries the null-alias facility id '{sid}' "
+                f"(alias {alias!r}) - ambiguous: every null-alias protocol "
+                f"collapses onto this id", label)
+
+
+def check_subjects_registry(registries_dir, issues):
+    """ERROR-level scan of registry_subjects.csv for null project aliases.
+
+    Two ways the same defect shows up: the alias column literally reading
+    "None"/"null", and a canonical facility_id whose own alias segment is
+    broken. A blank alias on a NON-canonical facility_id is legitimate (the
+    DTS24 human subjects have no animal protocol) and is NOT reported.
+
+    A missing table is a WARN, mirroring _load_project_ids — the file need not
+    exist on a fresh NAS.
+    """
+    path = os.path.join(registries_dir, SUBJECTS_REGISTRY)
+    header, rows = _read_csv_rows(path)
+    if header is None:
+        issues.warn(
+            f"{SUBJECTS_REGISTRY} not found; subject null-alias checks skipped.")
+        return 0
+
+    for i, row in enumerate(rows, start=2):  # +2: header is line 1
+        fid = (row.get("facility_id") or "").strip()
+        label = fid or f"<{SUBJECTS_REGISTRY} row {i}>"
+        alias = (row.get("project_alias") or "").strip()
+
+        bad_in_id = null_alias_of(fid)
+        if bad_in_id is not None:
+            issues.error(
+                f"{SUBJECTS_REGISTRY}: facility_id '{fid}' has a null project "
+                f"alias ({bad_in_id!r}) - two different animals can share it",
+                label)
+
+        if alias.lower() in ("none", "null"):
+            issues.error(
+                f"{SUBJECTS_REGISTRY}: project_alias is the literal "
+                f"{alias!r}", label)
+        elif not alias and is_facility_id(fid):
+            # Blank alias is only wrong when the id itself claims to be a
+            # facility animal id; blank on LEONE_1.01-style human ids is fine.
+            issues.error(
+                f"{SUBJECTS_REGISTRY}: project_alias is empty for the "
+                f"facility id '{fid}'", label)
+
+    return len(rows)
 
 
 # ---- Sidecar enrichment check (Phase 3, WARN-level) ----------------------
@@ -304,10 +436,18 @@ def validate(nas_root, check_enrich=True):
                         f"project_id '{proj}' not found in "
                         f"registry_projects.csv", label)
 
-        # 8. Phase 3 enrichment (WARN) — needs a resolvable folder
+        # 8. subject_ids null-alias detector (ERROR). Independent of the
+        # sidecar walk: it reads the registry cell only, so it still runs when
+        # --no-enrichment is set or the acquisition folder is unreachable.
+        check_subject_ids(row.get("subject_ids"), label, issues)
+
+        # 9. Phase 3 enrichment (WARN) — needs a resolvable folder
         if (check_enrich and sample_type in ENRICH_SAMPLE_TYPES
                 and folder is not None):
             check_enrichment(acq or label, sample_type, folder, issues)
+
+    # 10. registry_subjects.csv null-alias detector (ERROR).
+    check_subjects_registry(registries_dir, issues)
 
     return issues, len(rows)
 
