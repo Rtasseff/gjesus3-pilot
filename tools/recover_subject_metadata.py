@@ -222,23 +222,45 @@ def _read_sidecar(path):
         return json.load(f)
 
 
-def _write_sidecar(path, sidecar):
+def _existing_newline(path, default="\n"):
+    """The line terminator the file on disk already uses ("\\n" or "\\r\\n").
+
+    Reads the FIRST terminator rather than counting: production sidecars are
+    uniformly one or the other (measured over the 444 null-alias sidecars:
+    314 LF / 130 CRLF / 0 mixed). `default` is used when the file does not
+    exist yet or holds no newline at all.
+    """
+    try:
+        with open(path, "rb") as f:
+            head = f.read(65536)
+    except OSError:
+        return default
+    i = head.find(b"\n")
+    if i == -1:
+        return default
+    return "\r\n" if head[i - 1:i] == b"\r" else "\n"
+
+
+def _write_sidecar(path, sidecar, newline=None):
     """Write the sidecar back, preserving the 2-space indent + trailing \\n.
 
     Atomic: write to a sibling .tmp then os.replace, so a crash mid-write can't
     truncate / corrupt this IMMUTABLE raw artifact. (verify-after-write +
     rollback in the caller stay as-is.)
 
-    newline="\\n" is NOT cosmetic. Production sidecars are LF (the ingest that
-    wrote them ran in WSL). Text mode on Windows translates every \\n to \\r\\n,
-    so running a recovery tool from Windows rewrote EVERY line of an immutable
-    /raw/ artifact and grew it ~5% just to change one field. Pinning LF makes
-    the rewrite byte-identical apart from the fields actually being repaired,
-    whichever OS it runs from. (`ingest/metadata_sidecar.py` has the same
-    platform dependence at creation time; it writes NEW files so nothing is
-    disturbed, but it is worth a look.)"""
+    `newline=None` PRESERVES whatever terminator the file already uses; pass an
+    explicit "\\n"/"\\r\\n" only to override. This is not cosmetic. Text mode on
+    Windows translates every \\n to \\r\\n, so a recovery tool run from Windows
+    rewrote EVERY line of an immutable /raw/ artifact and grew it ~5% just to
+    change one field. Pinning a single terminator is no better: the archive is
+    NOT uniform — the same 444 sidecars split 314 LF / 130 CRLF depending on
+    whether the ingest that wrote them ran in WSL or on Windows — so any fixed
+    choice churns one class or the other. Preserving churns neither.
+    (`ingest/metadata_sidecar.py` has the same platform dependence at creation
+    time, which is what produced the split; see tasks/BACKLOG.md.)"""
     tmp_path = path + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8", newline="\n") as f:
+    with open(tmp_path, "w", encoding="utf-8",
+              newline=newline or _existing_newline(path)) as f:
         json.dump(sidecar, f, indent=2, ensure_ascii=False)
         f.write("\n")
     os.replace(tmp_path, path)

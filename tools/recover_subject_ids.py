@@ -112,10 +112,18 @@ def fix_sidecar(item, apply):
     subject = md.get("subject")
     if not isinstance(subject, dict):
         raise RuntimeError(f"{item['acq_id']}: sidecar has no subject: block")
-    if subject.get("facility_animal_id") != item["old_id"]:
+    current = subject.get("facility_animal_id")
+    # Already carrying the right id: an earlier run wrote the sidecars and then
+    # died before the registry (they are written outside the lock, the registry
+    # inside it). That is the RESUME case, not a mismatch - treating it as one
+    # would abort every retry at pre-flight and strand the repair half-done.
+    if current == item["new_id"]:
+        item["already"] = True
+        return subject
+    if current != item["old_id"]:
         raise RuntimeError(
-            f"{item['acq_id']}: sidecar id {subject.get('facility_animal_id')!r} "
-            f"!= registry id {item['old_id']!r} - refusing to guess")
+            f"{item['acq_id']}: sidecar id {current!r} != registry id "
+            f"{item['old_id']!r} - refusing to guess")
     subject["facility_animal_id"] = item["new_id"]
     if apply:
         _write_sidecar(item["sidecar"], md)
@@ -239,7 +247,10 @@ def main(argv=None):
     # Pre-flight: read every sidecar and cross-check its id against the
     # registry's. Raises BEFORE anything is written if the two ever disagree.
     blocks = [fix_sidecar(i, apply=False) for i in work]
-    log(f"{len(blocks)} sidecar(s) cross-checked against the registry")
+    resumed = sum(1 for i in work if i.get("already"))
+    log(f"{len(blocks)} sidecar(s) cross-checked against the registry"
+        + (f"; {resumed} already repaired by an earlier interrupted run "
+           f"(their registry rows are not)" if resumed else ""))
 
     if not args.apply:
         log("DRY RUN - nothing written. Re-run with --apply.")
@@ -251,7 +262,8 @@ def main(argv=None):
     # record. Outside the lock - these are 444 independent files, and the lock
     # must never be held across a long file walk.
     blocks = [fix_sidecar(i, apply=True) for i in work]
-    log(f"{len(blocks)} sidecar(s) rewritten + verified")
+    log(f"{len(blocks) - resumed} sidecar(s) rewritten + verified"
+        + (f", {resumed} already correct and left alone" if resumed else ""))
 
     with locking.registry_lock(registries, log=log):
         changed = fix_registry_raw(

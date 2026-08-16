@@ -2,13 +2,15 @@
 """test_recover_subject_ids.py — drive the one-shot repair against a scratch NAS.
 
 Builds a miniature `J:\\gjesus3-data` in a temp dir (real headers, real CRLF /
-no-BOM registry bytes, real LF sidecars) and runs recover_subject_ids end to
-end. Nothing here touches the NAS or the facility DB.
+no-BOM registry bytes, and sidecars in BOTH terminator classes the live archive
+actually holds) and runs recover_subject_ids end to end. Nothing here touches
+the NAS or the facility DB.
 
 The cases that matter are the ones that would be expensive to discover on 444
 production rows: the collision really splitting, a corrected id that ALREADY
-exists merging instead of duplicating, untouched lines staying byte-identical,
-and a second --apply being a true no-op.
+exists merging instead of duplicating, LF and CRLF sidecars each keeping their
+own endings, a half-done run resuming instead of aborting, and a second --apply
+being a true no-op.
 
 Delete alongside tools/recover_subject_ids.py once the repair is verified.
 
@@ -55,6 +57,15 @@ ACQS = [
 PROJECTS = {"PROJ-0001": "AE-biomaGUNE-0219", "PROJ-0002": "AE-biomaGUNE-1521",
             "PROJ-0003": "AE-biomaGUNE-0525", "PROJ-0004": "laura-tholt"}
 
+# Both terminator classes, so a writer that pins either is caught.
+NEWLINE_OF = {
+    "ACQ-20220124-MRI-001": "\n",      # WSL-era
+    "ACQ-20220118-PET-010": "\r\n",    # Windows/GUI-era
+    "ACQ-20220201-MRI-002": "\r\n",
+    "ACQ-20220301-MRI-003": "\n",
+    "ACQ-20220401-MRI-004": "\r\n",
+}
+
 
 def _sidecar(acq, sid, attrs):
     sex, dob, strain = attrs
@@ -94,12 +105,14 @@ def build_nas(root, cover_sidecar_in_checksums=True):
         for pid, name in PROJECTS.items():
             w.writerow({"project_id": pid, "name": name})
 
-    # Sidecars: LF, exactly like the ones the WSL ingest wrote.
+    # Sidecars. The live archive is NOT uniform: the 444 affected sidecars are
+    # 314 LF (WSL-era ingests) / 130 CRLF (Windows/GUI-era). Both classes are
+    # represented here, because a writer that pins either one churns the other.
     for acq, _pid, sids, attrs in ACQS:
         folder = os.path.join(root, "raw", "DICOM", acq)
         os.makedirs(folder)
         sc = os.path.join(folder, "metadata.json")
-        with open(sc, "w", encoding="utf-8", newline="\n") as f:
+        with open(sc, "w", encoding="utf-8", newline=NEWLINE_OF[acq]) as f:
             json.dump(_sidecar(acq, sids, attrs), f, indent=2)
             f.write("\n")
         files = {f"{acq}.data/img.dcm": "0" * 64}
@@ -156,6 +169,9 @@ def test_apply_repairs_everything():
     with tempfile.TemporaryDirectory() as root:
         reg = build_nas(root)
         before = _raw_bytes(reg).split(b"\r\n")
+        before_sc = {a: open(os.path.join(root, "raw", "DICOM", a,
+                                          "metadata.json"), "rb").read()
+                     for a, *_ in ACQS}
         rc = rsi.main(["--nas-root", root, "--apply",
                        "--backup-dir", os.path.join(root, "_backup")])
         check(rc == 0, "exits 0")
@@ -196,6 +212,20 @@ def test_apply_repairs_everything():
         check(len(table) == 3, f"3 subject rows: 2 split + 1 merged (got {len(table)})")
         check(table["9-AE-biomaGUNE-0219"]["sex"] == "F",
               "the corrected id MERGED into the pre-existing row, no duplicate")
+
+        # 4b. Every repaired sidecar - LF class AND CRLF class - is byte-for-byte
+        # its original with ONLY the id substring swapped. Pinning either
+        # terminator would rewrite every line of the other class; this is the
+        # assertion that catches that, and it is stated as bytes, not as a
+        # count of \r\n, so nothing else can drift either.
+        for acq, pid, sids, _ in ACQS[:3]:
+            new_id = f"{sids.split('-', 1)[0]}-{PROJECTS[pid]}"
+            expect = before_sc[acq].replace(sids.encode(), new_id.encode())
+            got = open(os.path.join(root, "raw", "DICOM", acq,
+                                    "metadata.json"), "rb").read()
+            cls = "CRLF" if NEWLINE_OF[acq] == "\r\n" else "LF"
+            check(got == expect,
+                  f"{acq} ({cls}) is byte-identical apart from the repaired field")
 
         # 5. checksums.json for the sidecar was recomputed, not left stale
         ck = json.load(open(os.path.join(root, "raw", "DICOM",
@@ -239,6 +269,34 @@ def test_unresolvable_project_is_reported_not_guessed():
               "and its registry row is left alone too")
 
 
+def test_resumes_after_a_partial_failure():
+    print("a half-done run (sidecars fixed, registry not) resumes:")
+    with tempfile.TemporaryDirectory() as root:
+        reg = build_nas(root)
+        # Simulate dying between the sidecar pass and the registry write: fix
+        # one sidecar by hand and leave every registry row untouched.
+        acq, sc_id = "ACQ-20220124-MRI-001", "23-AE-biomaGUNE-0219"
+        sc = os.path.join(root, "raw", "DICOM", acq, "metadata.json")
+        raw = open(sc, "rb").read().replace(b"23-AE-biomaGUNE-None", sc_id.encode())
+        with open(sc, "wb") as f:
+            f.write(raw)
+
+        rc = rsi.main(["--nas-root", root, "--apply",
+                       "--backup-dir", os.path.join(root, "_b")])
+        check(rc == 0, "the resume run completes instead of aborting")
+        check(open(sc, "rb").read() == raw,
+              "the already-correct sidecar is left byte-identical")
+        check(_subject_id_of(root, "ACQ-20220118-PET-010") == "23-AE-biomaGUNE-1521",
+              "the sidecar that still needed repair got it")
+        after = _raw_bytes(reg)
+        check(after.count(b"-AE-biomaGUNE-None") == 1,
+              "the registry rows left behind by the failed run are now repaired")
+        table = st.read_subjects(st.subjects_path(reg))
+        check("23-AE-biomaGUNE-0219" in table and "23-AE-biomaGUNE-1521" in table
+              and not [k for k in table if k.endswith("-None")],
+              "and the subjects table ends up in the same state as a clean run")
+
+
 def test_sidecar_registry_disagreement_aborts():
     print("a sidecar that disagrees with the registry stops the run:")
     with tempfile.TemporaryDirectory() as root:
@@ -263,6 +321,7 @@ def main():
     for fn in (test_dry_run_writes_nothing,
                test_apply_repairs_everything,
                test_unresolvable_project_is_reported_not_guessed,
+               test_resumes_after_a_partial_failure,
                test_sidecar_registry_disagreement_aborts):
         fn()
     print()

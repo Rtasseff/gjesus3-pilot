@@ -557,6 +557,54 @@ it from the **project's own provenance file** instead of the registry. Raised by
     "select-in-Finder → assemble a project" item above should *write* into this same
     provenance-driven model.
 
+## `metadata.json` sidecars carry platform-dependent line endings (2026-08-16)
+
+🔸 **MODERATE — already live in `/raw/`, not theoretical.** One-line cause in
+[`tools/ingest/metadata_sidecar.py`](../tools/ingest/metadata_sidecar.py) (~line 116):
+
+```python
+with open(path, "w") as f:          # no newline= -> the OS decides
+    json.dump(sidecar_dict, f, indent=2)
+```
+
+Python text mode translates `\n` to the platform terminator, so **a sidecar's line
+endings record which machine ran the ingest, not anything about the data.** Measured
+across the 444 null-alias sidecars on 2026-08-16: **314 LF / 130 CRLF** (0 mixed) —
+LF for the WSL-era bulk ingests, CRLF for the Windows/GUI-era ones, split cleanly by
+instrument (CT 91, PET 23, ZWSI 2 and 14 MRI are CRLF; the other 314 MRI are LF).
+It is reasonable to assume the same split runs across all 15,474.
+
+Nothing is *wrong* — JSON does not care and every reader parses both. The cost is that
+`/raw/` is byte-inconsistent for no reason, which matters for anything that diffs,
+checksums or rewrites a sidecar in place:
+
+- It was found because `recover_subject_metadata._write_sidecar` had the same defect.
+  Running that recovery tool from Windows rewrote **every line** of an LF sidecar (~5%
+  size growth) to change one field — whole-file churn on an artifact `/raw/` calls
+  immutable, and a needless full-file delta for any future backup or fixity diff.
+  **Fixed there 2026-08-16** by detecting and PRESERVING the existing terminator
+  (`_existing_newline`) — deliberately *preserve*, not pin, because the archive is not
+  uniform and pinning either class churns the other. This item is the *writer* half.
+- The same open() also has **no `encoding=`**, so it uses the locale codec. Harmless
+  only because `json.dump` defaults to `ensure_ascii=True`; the day someone passes
+  `ensure_ascii=False`, an accented procedure name becomes cp1252 on Windows and UTF-8
+  in WSL, in a file every reader opens as UTF-8.
+
+- [ ] Pin `newline="\n"` **and** `encoding="utf-8"` in `metadata_sidecar.py` so newly
+  written sidecars are platform-independent from here on.
+- [ ] Decide whether to normalise the ~130-per-444 existing CRLF sidecars. **Probably
+  not**: it is a whole-archive rewrite of immutable files to fix something no reader
+  notices. Recording *why not* is the useful outcome. If it is ever done, it must
+  recompute any `checksums.json` entry covering the sidecar.
+- [ ] Check the other in-place sidecar writers for the same defect before they are
+  next run.
+
+Context: found while building `tools/recover_subject_ids.py`
+([`SUBJECT_ID_NULL_ALIAS_HANDOFF.md`](SUBJECT_ID_NULL_ALIAS_HANDOFF.md)), branch
+`fix/subject-id-null-alias`.
+
+---
+
 ## Multi-value cell hygiene in `validate_registries` (2026-08-12)
 
 Small and self-contained — roughly an afternoon inside
