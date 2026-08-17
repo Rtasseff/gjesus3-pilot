@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
-**Last Updated:** 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
+**Last Updated:** 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
 
 ---
 
@@ -830,6 +830,8 @@ python tools/backfill_project_subfolders.py --nas-root J:/gjesus3-data
 - `sample_type`, when set, is in the controlled vocab `{tissue, organism, cells, material, phantom}`.
 - `canonical_path` starts with `/raw/` and the acquisition folder exists on disk.
 - `project_id`, when set and matching `PROJ-XXXX`, exists in `registries/registry_projects.csv`.
+- **`subject_ids` carries no null-alias facility id** — `<animal_code>-AE-biomaGUNE-None` (or `null`, or a bare stem with nothing after it). ERROR rather than WARN because the alias is what makes the id *unique*: every null-alias protocol collapses onto the same id, so two different animals share one subject and the `registry_subjects` upsert merges them into one row. The packed `;` cell is checked id-by-id, so a multi-animal NI scan reports the offending member.
+- **`registry_subjects.csv`** — `project_alias` is never the literal `"None"` / `"null"`, and never blank for a `facility_id` that names an animal protocol. A blank alias on a **non**-facility id is legitimate and is not reported: the DTS24 human subjects (`LEONE_1.01`, `source=dicom-header`) have no animal protocol. Root cause and the repair plan: `tasks/BACKLOG.md` *"Facility-DB null project alias"*.
 
 **Phase 3 enrichment checks (WARN-level — never affect exit code):** for `sample_type ∈ {organism, tissue}`, the sidecar must carry a `subject:` + `condition:` block (and `anatomy:` for organism); the explicit "unknown" sentinels (`subject.source == "pending-db"`, `condition.is_control == null`, `anatomy.is_whole_body == null`) are WARNs, legitimate under the non-blocking model ([08_METADATA §4.7](08_METADATA.md)). `--no-enrichment` skips these.
 

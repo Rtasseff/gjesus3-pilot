@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-08-13
+**Last Updated:** 2026-08-16
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -31,7 +31,7 @@ production care.
 |---|---|
 | Acquisitions in `/raw/` | **15,474** (all checksummed + `metadata.json` sidecar'd) — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) and the **1,508** from the `S:\gnuclear` NI backfill (§3) |
 | Projects | **57 registered** — 49 active + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). Every live folder carries the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
-| Subjects (`registry_subjects.csv`) | **1,146** (one row per subject) |
+| Subjects (`registry_subjects.csv`) | **1,124** (one row per subject) — was 1,146 until the 2026-08-16 `-None` subject-id repair, which dropped 65 ambiguous rows and added back 43 real ones (see 2). |
 | Publications | empty — deferred (PLANNED) |
 
 **Two registry facts changed on 2026-07-14** (see [`../CHANGELOG.md`](../CHANGELOG.md)):
@@ -90,6 +90,18 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
+
+- **`-AE-biomaGUNE-None` subject identifiers — ✅ DONE IN PRODUCTION 2026-08-16.** Four
+  animal protocols have a NULL alias in the facility DB, so 444 acquisitions carried an
+  **ambiguous** subject id that merged two different animals into one subjects row. Source
+  fixed (`animal_db` refuses to compose one), detector shipped (`validate_registries`
+  ERRORs on one), and the 444 sidecars + registry rows repaired; `registry_subjects.csv`
+  1,146 → **1,124**. `validate_registries` now reports **0 errors, 0 warnings** across all
+  15,474 rows. Narrative in [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-16.
+  **Still open (does not block):** ask the animal facility to populate the aliases for
+  `0219` / `0618` / `0619` / `1521` — the code no longer depends on it. Also raised:
+  `ingest/metadata_sidecar.py` writes platform-dependent line endings
+  ([`BACKLOG.md`](BACKLOG.md)).
 
 - **DTS24 collaborator re-ingest — ✅ DONE IN PRODUCTION 2026-08-13; merged to
   `main` (`def282c`, `--no-ff`), branch + worktree retired.** **The data went live

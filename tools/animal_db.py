@@ -134,8 +134,25 @@ def normalize_sex(value):
 
 
 def compose_subject_id(animal_code, project_alias):
-    """Build the canonical subject id `<animal_code>-AE-biomaGUNE-<NNNN>`."""
-    return f"{int(animal_code)}-{PROJECT_CODE_STEM}-{project_alias}"
+    """Build the canonical subject id `<animal_code>-AE-biomaGUNE-<NNNN>`.
+
+    Raises ValueError when the alias is missing or the literal string "None" /
+    "null". Refusing is the point: a null alias formats as the plausible-looking
+    `<n>-AE-biomaGUNE-None`, which is not merely ugly but AMBIGUOUS — every
+    null-alias protocol collapses onto the same id, and the subjects-table
+    upsert then merges two different animals into one row (444 acquisition rows
+    reached production that way before this guard existed).
+    """
+    # ASCII only in the message: it is logged by ingest_raw, whose stdout is a
+    # raw (often cp1252) Windows console — an em dash there would raise
+    # UnicodeEncodeError and break the very ingest this guard protects.
+    if project_alias is None or str(project_alias).strip().lower() in ("", "none", "null"):
+        raise ValueError(
+            f"refusing to compose a subject id with a null project alias "
+            f"(animal {animal_code!r}) - see tasks/BACKLOG.md "
+            f"'Facility-DB null project alias'"
+        )
+    return f"{int(animal_code)}-{PROJECT_CODE_STEM}-{str(project_alias).strip()}"
 
 
 def parse_subject_id(subject_id):
@@ -290,8 +307,16 @@ def _query_subject(conn, project_alias, animal_code):
             {"type": r["type"], "date": _iso(r["date"])} for r in cur.fetchall()
         ]
 
+    # The project may have resolved through project_code, whose projectAlias
+    # is NULL for some protocols (0219 / 0618 / 0619 / 1521). Composing the
+    # identity from that field yields "<n>-AE-biomaGUNE-None", which is not
+    # just ugly — it is AMBIGUOUS, because every null-alias protocol collapses
+    # onto the same id and the subjects-table upsert then merges two different
+    # animals into one row. Fall back to the alias the caller asked for.
+    alias = str(proj["projectAlias"] or "").strip() or str(project_alias).strip()
+
     return {
-        "facility_animal_id": compose_subject_id(animal["animal_code"], proj["projectAlias"]),
+        "facility_animal_id": compose_subject_id(animal["animal_code"], alias),
         "species": normalize_species(animal["specie_type"]),
         "strain": animal["strain_type"],
         "sex": normalize_sex(animal["sex"]),

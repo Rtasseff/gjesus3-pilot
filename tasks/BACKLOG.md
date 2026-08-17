@@ -668,6 +668,54 @@ it from the **project's own provenance file** instead of the registry. Raised by
     "select-in-Finder → assemble a project" item above should *write* into this same
     provenance-driven model.
 
+## `metadata.json` sidecars carry platform-dependent line endings (2026-08-16)
+
+🔸 **MODERATE — already live in `/raw/`, not theoretical.** One-line cause in
+[`tools/ingest/metadata_sidecar.py`](../tools/ingest/metadata_sidecar.py) (~line 116):
+
+```python
+with open(path, "w") as f:          # no newline= -> the OS decides
+    json.dump(sidecar_dict, f, indent=2)
+```
+
+Python text mode translates `\n` to the platform terminator, so **a sidecar's line
+endings record which machine ran the ingest, not anything about the data.** Measured
+across the 444 null-alias sidecars on 2026-08-16: **314 LF / 130 CRLF** (0 mixed) —
+LF for the WSL-era bulk ingests, CRLF for the Windows/GUI-era ones, split cleanly by
+instrument (CT 91, PET 23, ZWSI 2 and 14 MRI are CRLF; the other 314 MRI are LF).
+It is reasonable to assume the same split runs across all 15,474.
+
+Nothing is *wrong* — JSON does not care and every reader parses both. The cost is that
+`/raw/` is byte-inconsistent for no reason, which matters for anything that diffs,
+checksums or rewrites a sidecar in place:
+
+- It was found because `recover_subject_metadata._write_sidecar` had the same defect.
+  Running that recovery tool from Windows rewrote **every line** of an LF sidecar (~5%
+  size growth) to change one field — whole-file churn on an artifact `/raw/` calls
+  immutable, and a needless full-file delta for any future backup or fixity diff.
+  **Fixed there 2026-08-16** by detecting and PRESERVING the existing terminator
+  (`_existing_newline`) — deliberately *preserve*, not pin, because the archive is not
+  uniform and pinning either class churns the other. This item is the *writer* half.
+- The same open() also has **no `encoding=`**, so it uses the locale codec. Harmless
+  only because `json.dump` defaults to `ensure_ascii=True`; the day someone passes
+  `ensure_ascii=False`, an accented procedure name becomes cp1252 on Windows and UTF-8
+  in WSL, in a file every reader opens as UTF-8.
+
+- [ ] Pin `newline="\n"` **and** `encoding="utf-8"` in `metadata_sidecar.py` so newly
+  written sidecars are platform-independent from here on.
+- [ ] Decide whether to normalise the ~130-per-444 existing CRLF sidecars. **Probably
+  not**: it is a whole-archive rewrite of immutable files to fix something no reader
+  notices. Recording *why not* is the useful outcome. If it is ever done, it must
+  recompute any `checksums.json` entry covering the sidecar.
+- [ ] Check the other in-place sidecar writers for the same defect before they are
+  next run.
+
+Context: found while building `tools/recover_subject_ids.py`
+([`SUBJECT_ID_NULL_ALIAS_HANDOFF.md`](SUBJECT_ID_NULL_ALIAS_HANDOFF.md)), branch
+`fix/subject-id-null-alias`.
+
+---
+
 ## Multi-value cell hygiene in `validate_registries` (2026-08-12)
 
 Small and self-contained — roughly an afternoon inside
@@ -1003,15 +1051,31 @@ surface during the **no-DICOM regeneration pass** unless fixed first. Ryan is
 emailing the animal facility (2026-06-13) to populate the alias for those 4 project
 records. The gap **recurs for any future ingest** touching null-alias projects.
 
-- [ ] **Harden the ingest:** when the DB returns a project found but with a null
-  alias, fall back to the operator/parse project (`discovered.project_code` via
-  the project name) when composing `facility_animal_id`, instead of emitting `-None`.
-  One-line guard in `animal_db.compose_subject_id` callers / `enrichment.py`.
+- [x] **Harden the ingest — DONE 2026-08-14** (branch `fix/subject-id-null-alias`).
+  `animal_db._query_subject` composes from the alias the **caller** asked for when the
+  DB row's `projectAlias` is null, and `compose_subject_id` now **raises** rather than
+  return a plausible-looking `-None` string. `ingest/enrichment.py` catches that refusal
+  and degrades to a blank facility id, so the non-blocking contract
+  ([`08_METADATA §4.7`](../mfb-rdm-docs/08_METADATA.md)) still holds and no ingest can
+  break on it. Pinned by `tools/test_subject_id_null_alias.py`.
 - [ ] **Fix the source:** ask the data office to populate the project alias for
   `1521` / `0619` / `0618` (and audit for other null-alias projects) in the facility DB.
-- [ ] **Detector:** a quick `validate_registries` check for any `subject_ids`
-  containing `-None` (catch future occurrences automatically).
-- [ ] **Re-run the back-fill** — the one recorded above no longer holds (see the audit).
+  (Independent — the code fix above means we no longer depend on it.)
+- [x] **Detector — DONE 2026-08-14.** `validate_registries` now reports a null-alias
+  facility id as an **ERROR**, in both `registry_raw.subject_ids` and
+  `registry_subjects.csv` ([`10_TOOLS §3.2`](../mfb-rdm-docs/10_TOOLS.md)). Measured
+  live the same day: **574 ERRORs and nothing else** — 444 acquisition rows + 65 subject
+  rows (×2 findings each), matching the audit below exactly. The 75 blank-alias DTS24
+  human subjects are correctly out of scope.
+- [x] **Back-fill — DONE IN PRODUCTION 2026-08-16.** One-shot `tools/recover_subject_ids.py`:
+  444 sidecars + 444 registry rows repaired, 43 subject rows inserted, the 65 stale `-None`
+  rows dropped → `registry_subjects.csv` 1,146 → **1,124** (25 corrected ids already had
+  rows, so the upsert merged them — the handoff's predicted 1,149 was wrong). All gates
+  passed: `validate_registries` **0 errors**, both sides of the `23-` collision distinct and
+  matching the facility DB, a second `--apply` changing 0 bytes, sidecars byte-identical
+  apart from the repaired field in **both** line-ending classes. Registries backed up
+  off-NAS and verified byte-identical first. Narrative:
+  [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-16.
 
 ### 🔸 MODERATE — re-audited live 2026-08-13, and it has grown
 
