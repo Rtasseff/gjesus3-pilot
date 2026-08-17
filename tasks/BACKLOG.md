@@ -1036,6 +1036,12 @@ no subject by design). Three deferred items:
 
 ## Facility-DB null project alias → `-None` subject ids (2026-06-13)
 
+> **Status 2026-08-17: the gjesus3 side is CLOSED** — ingest hardened, detector shipped,
+> and all 444 production rows repaired (see the ticked boxes). **One box remains open and
+> it is not ours to close:** the facility DB itself still has four projects with a null
+> `projectAlias`. Nothing depends on it any more — it is a data-quality ask, kept here so
+> it is not forgotten.
+
 Found during the MRI ingest: `animal_db.lookup` returns `facility_animal_id =
 "<animal>-AE-biomaGUNE-None"` for **projects whose facility-DB record has a null
 project alias** (animals resolve fine — `status=found`, species/sex correct; only
@@ -1058,9 +1064,20 @@ records. The gap **recurs for any future ingest** touching null-alias projects.
   and degrades to a blank facility id, so the non-blocking contract
   ([`08_METADATA §4.7`](../mfb-rdm-docs/08_METADATA.md)) still holds and no ingest can
   break on it. Pinned by `tools/test_subject_id_null_alias.py`.
-- [ ] **Fix the source:** ask the data office to populate the project alias for
-  `1521` / `0619` / `0618` (and audit for other null-alias projects) in the facility DB.
-  (Independent — the code fix above means we no longer depend on it.)
+- [ ] **Fix the source — THE ONE OPEN ACTION, and it is external to this repo.** Ask the
+  animal facility to populate `projectAlias` on the four project records that carry a
+  populated `project_code` and a **NULL alias** — **`0219` / `0618` / `0619` / `1521`** —
+  and to audit for any others. (Ryan first emailed them 2026-06-13; it has not happened.
+  `0219` was missing from this list until 2026-08-17 and is the **largest** of the four:
+  330 of the 444 repaired rows.)
+  - **Nothing is blocked on it.** `animal_db` composes from the alias the *caller* asked
+    for, so a null DB alias can no longer produce a bad id, and `validate_registries`
+    would ERROR if one ever reappeared.
+  - **What changes if they do it:** the fallback stops being exercised for these four and
+    the DB becomes self-consistent — useful for anyone querying the facility DB directly,
+    which our code no longer is. **No re-ingest or backfill would be needed.**
+  - **If they decline or it stalls:** close this box as *won't-fix*. That is a legitimate
+    outcome — the code defends itself either way.
 - [x] **Detector — DONE 2026-08-14.** `validate_registries` now reports a null-alias
   facility id as an **ERROR**, in both `registry_raw.subject_ids` and
   `registry_subjects.csv` ([`10_TOOLS §3.2`](../mfb-rdm-docs/10_TOOLS.md)). Measured
