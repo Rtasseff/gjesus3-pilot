@@ -12,7 +12,8 @@ exists merging instead of duplicating, LF and CRLF sidecars each keeping their
 own endings, a half-done run resuming instead of aborting, and a second --apply
 being a true no-op.
 
-Delete alongside tools/recover_subject_ids.py once the repair is verified.
+Kept alongside tools/recover_subject_ids.py as the record of what was
+verified before that script touched 444 production rows.
 
 Run:  PYTHONPATH=tools python tools/test_recover_subject_ids.py
 """

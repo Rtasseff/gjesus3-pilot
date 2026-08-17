@@ -6,7 +6,10 @@ acquisitions whose subject id was composed from a NULL facility project alias
 (protocols 0219 / 0618 / 0619 / 1521). Audit:
 tasks/SUBJECT_ID_NULL_ALIAS_HANDOFF.md. The composer is already fixed.
 
-ONE-SHOT SCRIPT, NOT A TOOL — delete it once the repair is verified. It is
+ONE-SHOT SCRIPT, NOT A TOOL. RUN AGAINST PRODUCTION 2026-08-16: 444 sidecars
++ 444 registry rows repaired, registry_subjects.csv 1,146 -> 1,124, all gates
+passed. Kept as the executable record of that change, not as machinery to
+reuse — the composer is fixed, so it can never have work to do again. It is
 deliberately NOT modelled on recover_subject_metadata.py: there is no DB call
 (the correct alias is `registry_raw.project_id` -> `registry_projects.name`,
 already right on all 444 rows) and nothing to re-derive (each sidecar's
