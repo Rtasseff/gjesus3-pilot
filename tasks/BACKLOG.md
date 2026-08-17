@@ -956,9 +956,15 @@ records. The gap **recurs for any future ingest** touching null-alias projects.
   live the same day: **574 ERRORs and nothing else** — 444 acquisition rows + 65 subject
   rows (×2 findings each), matching the audit below exactly. The 75 blank-alias DTS24
   human subjects are correctly out of scope.
-- [ ] **Re-run the back-fill** — the one recorded above no longer holds (see the audit).
-  **Blocked on Ryan's go-ahead:** it writes production registries and `/raw/` sidecars.
-  Plan: [`SUBJECT_ID_NULL_ALIAS_HANDOFF.md`](SUBJECT_ID_NULL_ALIAS_HANDOFF.md) §4.3.
+- [x] **Back-fill — DONE IN PRODUCTION 2026-08-16.** One-shot `tools/recover_subject_ids.py`:
+  444 sidecars + 444 registry rows repaired, 43 subject rows inserted, the 65 stale `-None`
+  rows dropped → `registry_subjects.csv` 1,146 → **1,124** (25 corrected ids already had
+  rows, so the upsert merged them — the handoff's predicted 1,149 was wrong). All gates
+  passed: `validate_registries` **0 errors**, both sides of the `23-` collision distinct and
+  matching the facility DB, a second `--apply` changing 0 bytes, sidecars byte-identical
+  apart from the repaired field in **both** line-ending classes. Registries backed up
+  off-NAS and verified byte-identical first. Narrative:
+  [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-16.
 
 ### 🔸 MODERATE — re-audited live 2026-08-13, and it has grown
 
