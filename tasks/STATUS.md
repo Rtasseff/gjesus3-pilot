@@ -31,7 +31,7 @@ production care.
 |---|---|
 | Acquisitions in `/raw/` | **15,474** (all checksummed + `metadata.json` sidecar'd) — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) and the **1,508** from the `S:\gnuclear` NI backfill (§3) |
 | Projects | **57 registered** — 49 active + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). Every live folder carries the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
-| Subjects (`registry_subjects.csv`) | **1,124** (one row per subject) — was 1,146 until the 2026-08-16 `-None` subject-id repair, which dropped 65 ambiguous rows and added back 43 real ones (see 2). |
+| Subjects (`registry_subjects.csv`) | **1,124** (one row per subject) — was 1,146 until the 2026-08-16 `-None` subject-id repair, which dropped 65 ambiguous rows and added back 43 real ones (see 2). The 2026-08-19 PROJ-0056 repair left the total unchanged (3 rows dropped, 3 added). |
 | Publications | empty — deferred (PLANNED) |
 
 **Two registry facts changed on 2026-07-14** (see [`../CHANGELOG.md`](../CHANGELOG.md)):
@@ -102,6 +102,25 @@ The genuinely in-flight items (kept tight — everything else is in
   `0219` / `0618` / `0619` / `1521` — the code no longer depends on it. Also raised:
   `ingest/metadata_sidecar.py` writes platform-dependent line endings
   ([`BACKLOG.md`](BACKLOG.md)).
+
+- **PROJ-0056 `rN` subject identifiers — ✅ DONE IN PRODUCTION 2026-08-19.** 15 acquisitions
+  from the 2023-10-26/27 rat sessions were attributed to **three uninvolved rats**: the
+  researcher's tree is `<protocol>/<yymmdd>/<animal_code>/r<N>/` where `rN` is a
+  *reconstruction*, and the recipe read that level as the subject (`r1` → animal `1` →
+  `1-AE-biomaGUNE-0421`). **Unlike the `-None` defect above, these ids were well formed and
+  they resolved** — animals 1/2/3 of `0421` are real rats born two years earlier — so the
+  sidecars carried the wrong `date_of_birth`, `procedures` and an age of ~120 weeks for a
+  4-month cohort. **Found by the XNAT image-server trial**, not by our own checks. Corrected
+  attribution rests on three independent sources agreeing (researcher folder, facility-DB
+  procedure dates, DICOM `PatientID`); repaired with `tools/recover_subject_ids_proj0056.py`
+  after an end-to-end scratch rehearsal. `registry_subjects.csv` **unchanged at 1,124** (3 `rN`
+  rows dropped, 3 real animals added). Narrative in [`../CHANGELOG.md`](../CHANGELOG.md)
+  2026-08-19. **Still open (does not block):** the root cause — subject-id derivation trusts
+  any leading integer with no plausibility gate (HIGH) — plus plausibility checks for
+  `validate_registries`, **4 PET acquisitions whose DICOM `PatientID` names the adjacent
+  animal** (genuinely unresolvable from the data; needs a researcher who was there), and 5
+  acquisitions dated before their subject's date of birth. All four in
+  [`BACKLOG.md`](BACKLOG.md).
 
 - **DTS24 collaborator re-ingest — ✅ DONE IN PRODUCTION 2026-08-13; merged to
   `main` (`def282c`, `--no-ff`), branch + worktree retired.** **The data went live
