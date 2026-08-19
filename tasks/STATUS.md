@@ -96,8 +96,12 @@ The genuinely in-flight items (kept tight — everything else is in
   **ambiguous** subject id that merged two different animals into one subjects row. Source
   fixed (`animal_db` refuses to compose one), detector shipped (`validate_registries`
   ERRORs on one), and the 444 sidecars + registry rows repaired; `registry_subjects.csv`
-  1,146 → **1,124**. `validate_registries` now reports **0 errors, 0 warnings** across all
-  15,474 rows. Narrative in [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-16.
+  1,146 → **1,124**. `validate_registries --no-enrichment` reports **0 errors, 0 warnings**
+  across all 15,474 rows. The full run (which adds the Phase 3 sidecar checks) is
+  also **0 errors**, with 18,744 warnings that are all pre-existing `unknown
+  sentinel` classes and none of them from this repair — `condition.is_control`
+  (12,925), `anatomy.is_whole_body` (5,242), `pending-db` subjects (292), missing
+  `subject:` / `condition:` blocks (146 / 138). Re-measured 2026-08-19. Narrative in [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-16.
   **Still open (does not block):** ask the animal facility to populate the aliases for
   `0219` / `0618` / `0619` / `1521` — the code no longer depends on it. Also raised:
   `ingest/metadata_sidecar.py` writes platform-dependent line endings
@@ -115,7 +119,9 @@ The genuinely in-flight items (kept tight — everything else is in
   procedure dates, DICOM `PatientID`); repaired with `tools/recover_subject_ids_proj0056.py`
   after an end-to-end scratch rehearsal. `registry_subjects.csv` **unchanged at 1,124** (3 `rN`
   rows dropped, 3 real animals added). Narrative in [`../CHANGELOG.md`](../CHANGELOG.md)
-  2026-08-19. **Still open (does not block):** the root cause — subject-id derivation trusts
+  2026-08-19. `validate_registries` re-run against production afterwards: **0 errors**
+  across all 15,474 rows, warnings unchanged in kind and count from before the repair.
+  **Still open (does not block):** the root cause — subject-id derivation trusts
   any leading integer with no plausibility gate (HIGH) — plus plausibility checks for
   `validate_registries`, **4 PET acquisitions whose DICOM `PatientID` names the adjacent
   animal** (genuinely unresolvable from the data; needs a researcher who was there), and 5
