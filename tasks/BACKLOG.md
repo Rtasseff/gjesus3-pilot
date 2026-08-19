@@ -578,6 +578,125 @@ disappears. It only stands on its own if we decide to keep archive-as-primary.
 - [ ] Record the decision in [`08_METADATA`](../mfb-rdm-docs/08_METADATA.md) / the external-data
   section so the next collaborator drop does not re-litigate it.
 
+## 🔺 HIGH — subject-id derivation trusts any leading integer in the sample token (2026-08-19)
+
+`animal_code` is taken as the leading integer of the discovered subject token, and whatever
+comes out is composed into a facility id and looked up. There is **no plausibility gate**: if
+the token is not an animal at all, the lookup can still succeed and the ingest writes a
+confident, well-formed, wrong identity.
+
+**This is not hypothetical — it happened, and the repair is done** (PROJ-0056, 15
+acquisitions, fixed in production 2026-08-19; see [`CHANGELOG.md`](../CHANGELOG.md) and
+`tools/recover_subject_ids_proj0056.py`). The researcher's tree was
+`<protocol>/<yymmdd>/<animal_code>/r<N>/`, where `rN` is a **reconstruction**; the recipe read
+the `rN` level as the subject, so `r1` → animal `1` → `1-AE-biomaGUNE-0421`. Animals 1/2/3 of
+that protocol are **real rats born two years earlier**, so the lookup succeeded and the sidecars
+got the wrong strain-mates' `date_of_birth`, `age_at_acquisition` and `procedures`.
+
+**Why this is worse than the `-None` alias bug it rhymes with** (see the item below): that one
+produced a *malformed* id, so it was visible the moment anyone looked. This one produces a
+**well-formed id for the wrong animal** — indistinguishable from correct without an external
+cross-check. The `-None` fix hardened the composer against a null *alias*; nothing hardened it
+against a wrong *animal code*.
+
+- [ ] **Gate the derivation, not just the composition.** Decide what makes an animal code
+  credible: it exists in the facility DB for that protocol *and* the animal has a procedure
+  near the acquisition date. The second half is what actually separates "real animal" from
+  "real animal that was never in this scanner" — see the plausibility item below.
+- [ ] **Make the parse level explicit in the recipe** rather than inferred. The PROJ-0056 tree
+  had the animal one level *above* the token that was used; a recipe that had to name which
+  path level is the animal could not have silently picked the wrong one.
+- [ ] **Decide the failure mode.** A blank subject id queued for deferred recovery is strictly
+  better than a confident wrong one — the recovery machinery already exists
+  (`recover_subject_metadata.py`, [`08_METADATA §4.4.6`](../mfb-rdm-docs/08_METADATA.md)).
+- [ ] Scope check when this is picked up: the `rN` shape is currently **15 rows, all repaired**
+  (registry-wide `sample_id` scan, 2026-08-19). The defect class is what is open, not a backlog
+  of bad rows.
+
+## 🔸 MODERATE — plausibility checks in `validate_registries` (age sanity + facility cross-check) (2026-08-19)
+
+Everything we have today checks that identifiers are **well formed** and that files exist.
+Nothing checks whether an identity is **believable**. Both 2026-08 identity defects would have
+been caught cheaply by two checks that need no image server and no new data source.
+
+**Already demonstrated on the live registry (2026-08-19, ad-hoc):**
+
+- an age-at-acquisition pass over all 12,509 subject/acquisition pairs found **5 acquisitions
+  dated before their subject's date of birth** (see the LOW item below) — one pass, no DB calls,
+  real signal;
+- the PROJ-0056 rows showed as ~120 *weeks* old in a 4-month cohort, which the same pass would
+  have flagged had anyone been running it.
+
+- [ ] **Age sanity (cheap, local).** `acquisition_datetime` vs `subject.date_of_birth`: ERROR on
+  negative, WARN on implausible-for-species. Note the tuning trap found on 2026-08-19 — a naive
+  ">550 days is suspicious" rule flags **1,332 rows**, nearly all of them legitimate 18-month
+  ageing studies in `PROJ-0002` / `PROJ-0006`. Age alone is a weak signal; pair it with the
+  cohort or it will be ignored as noise.
+- [ ] **Facility procedure cross-check (needs the DB, so operator-optional).** Does the animal
+  have *any* logged procedure near the acquisition date? This is the check that actually
+  separates the two PROJ-0056 candidates: animals 230/231/236/237 each have a PET **and** a CT
+  logged on the exact scan date, while animals 1/2/3 have nothing after 2021. Must degrade
+  quietly with no credentials / off-network, like every other DB path.
+- [ ] Keep it **read-only and non-blocking** — a validator finding, never an ingest failure.
+
+## 🔸 MODERATE — 4 PET acquisitions where the DICOM PatientID contradicts the registry (2026-08-19)
+
+Found by the XNAT trial's header sweep (`gjesus3-tools` B10) and **verified here against
+production**. Each of these is registered to one animal while its DICOM header names another:
+
+| Acquisition | Registry | DICOM header | The header's animal is… | Project / researcher |
+|---|---|---|---|---|
+| `ACQ-20221121-PET-006` | 20 | 21 | `PET-007`, the **next** row that day | PROJ-0057 / IAZ_MJ |
+| `ACQ-20241008-PET-002` | 22 | 21 | `PET-001`, the **previous** row | PROJ-0014 / MJ |
+| `ACQ-20250220-PET-005` | 35 | 34 | `PET-004`, the **previous** row | PROJ-0055 / CarlottaS |
+| `ACQ-20260302-PET-014` | m46 | m47 | `PET-015`, the **next** row | PROJ-0001 / irene |
+
+**Every conflict is ±1 from an animal scanned in the adjacent slot of the same session** — a
+neighbour swap inside one session, not a random misattribution. Both candidates are the same
+protocol, same day, same cohort, so the blast radius is two animals' time series, not one.
+
+**Why this cannot be settled from the data, unlike PROJ-0056.** The registry's animal comes from
+the researcher's folder/session naming (`session_id` is literally `21_20241008`); the header's
+comes from what was typed at the console. Two human entries minutes apart, neither independent.
+And the facility DB **cannot** break the tie here the way it did for PROJ-0056, because in all
+four cases *both* candidate animals were genuinely scanned that day — the procedure log has
+date granularity, not time. This one needs a human who was there.
+
+**Also worth carrying:** `acquisition_datetime` on Molecubes rows is parsed from the
+reconstruction folder name (`20241008094816_PET_OSEM_0` → 09:48:16), i.e. **export time, not
+scan time**. Do not read inter-row gaps as a scan clock — the 56-second gap between
+`ACQ-20241008-PET-001` and `-002` is two reconstructions being written, not two scans.
+
+- [ ] **Ask the researchers named above** while the sessions are still in living memory. The
+  question is narrow: *did the console ID lag or lead by one animal in this session?*
+- [ ] **Ask the XNAT trial for evidence only it has** (`gjesus3-tools` B10): `StudyInstanceUID`,
+  `SeriesInstanceUID`, `PatientWeight` and radiopharmaceutical dose/time for each conflict
+  **and its adjacent neighbours**. If weight or dose differs across the pair, demographics were
+  being updated per animal and only the ID lagged — that would settle it without memory.
+- [ ] **Get the denominator.** How many DICOM acquisitions had no parseable `PatientID` at all?
+  Until that is known, "4 conflicts" is a floor, not a count — the check only fires where a
+  header exists *and* disagrees.
+- [ ] Leave the rows untouched until ruled. **Won't-fix is a legitimate close** — but record the
+  ruling (or the decision not to rule) rather than letting it lapse silently.
+- [ ] Consider a console-time norm for NI — PatientID set per animal, fresh study per animal.
+  These four span **four projects, four researchers, 2022→2026**, so this is a standing
+  platform habit, not one bad session. Overlaps the NI live-mode work in this file.
+
+## 🔽 LOW — 5 acquisitions dated 3 days before their subject's date of birth (2026-08-19)
+
+`ACQ-20230807-CT-006` … `-010` (PROJ-0018) carry subjects `73`/`74`/`75`/`76`/`77-AE-biomaGUNE-1321`
+whose `date_of_birth` is **three days after** the acquisition. Found by the ad-hoc age pass
+described in the plausibility item above; not previously known.
+
+Almost certainly a facility-DB date-entry error rather than a gjesus3 defect — the offset is
+uniform, small, and hits five consecutive animals in one protocol, which is what a mistyped
+cohort DOB looks like. Nothing depends on it and nothing is blocked.
+
+- [ ] Confirm against the facility DB, then raise it on the **same external channel** as the
+  null-alias ask below (it is their record to correct, not ours to overwrite).
+- [ ] If the DOB is corrected upstream, re-derive `age_at_acquisition` on those 5 sidecars via
+  `recover_subject_metadata.py` — no re-ingest needed.
+
 ## ✅ Finder — "Select-in-Finder → assemble a project" (2026-06-23) — **DONE 2026-08-12, differently**
 
 > **Delivered by the Project Manager GUI** ([`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)),
