@@ -723,6 +723,61 @@ cohort DOB looks like. Nothing depends on it and nothing is blocked.
 - [ ] If the DOB is corrected upstream, re-derive `age_at_acquisition` on those 5 sidecars via
   `recover_subject_metadata.py` — no re-ingest needed.
 
+## 🔸 MODERATE — the validator's warning channel is saturated and therefore unread (2026-08-19)
+
+A full `validate_registries` run against production reports **0 errors and 18,744 warnings**.
+Measured 2026-08-19 (the first full run in a while — the "0 errors, 0 warnings" claim that had
+been in `STATUS.md` was the `--no-enrichment` run, now corrected there):
+
+| Warning | Count | What it actually means |
+|---|---|---|
+| `condition.is_control is null` | 12,925 | optional field never filled in |
+| `anatomy.is_whole_body is null` | 5,242 | optional field never filled in |
+| `subject.source == 'pending-db'` | 292 | deferred-recovery queue, working as designed |
+| missing `subject:` block | 146 | sidecars predating the Phase 3 enrichment writer |
+| missing `condition:` block | 138 | same |
+
+**97% of the total is two optional fields nobody ever supplied**, emitted once per acquisition
+across 15,474 acquisitions. That is one design choice multiplied by the archive, not 18,167
+problems.
+
+**Why it matters more than the number suggests.** A check that always prints 18,744 warnings is a
+check nobody reads, so the ~580 lines that *are* actionable are invisible. This is the same
+failure shape as the PROJ-0056 misattribution itself: the signal existed somewhere, and nothing
+made it visible. **Filling the 18,167 blanks is not the fix.**
+
+- [ ] Stop emitting a per-acquisition WARN when an optional field holds its documented "unknown"
+  sentinel. Report it **once as coverage** instead — e.g. "`is_control` known on 2,549 of 15,474".
+- [ ] Leave the remaining classes as real warnings; ~580 is a list someone will actually read.
+- [ ] Decide whether `pending-db` (292) belongs in the warning stream at all, given it is a queue
+  with its own drain tool (`recover_subject_metadata.py`) and its own registry.
+- [ ] Re-check the 146 + 138 missing blocks: these are pre-Phase-3 sidecars, so the question is
+  whether to backfill them or accept them as historical.
+
+## 🔽 LOW — what we owe the XNAT trial in reply (gjesus3-tools B10) (2026-08-19)
+
+The identity-conflict report came **inbound to us** from the XNAT image-server trial (it is a
+straight-import consumer, not a system we are asking to change). Three corrections and one
+release are owed back, none urgent, all cheap to send.
+
+- [ ] **Their pattern (b) is not a ruling we owe them — it was our bug and it is fixed.** The 15
+  PROJ-0056 rows are corrected in production (2026-08-19); they can release the hold and
+  re-import. The facility DB already answered it; no researcher adjudication was needed.
+- [ ] **Their hold under-covers, and they should know why.** Production carried **15** rows with
+  that defect; they held **8**. The hold keys on header-vs-registry *disagreement*, so rows whose
+  header did not parse carried the identical bad identity and passed. Their ledger is a
+  disagreement log, not a completeness statement — worth saying so *in* the ledger.
+- [ ] **The "April `0522_13x` sessions registered twice (…0407 and …0408)" is a misread.** Those
+  are distinct longitudinal timepoints — different days, different source folders, different data.
+  Registry-wide there are **zero** duplicate rows (0 duplicate `canonical_path`, 0 duplicate
+  `(original_name, project_id)` across 15,474, checked 2026-08-19). They should not leave a "known
+  duplication" note in the ledger. Their instinct on the multi-animal-bed split was right, though
+  — that *is* a real convention.
+- [ ] **Ask for the two things only they have** (also listed on the 4-PET item above): per-conflict
+  `StudyInstanceUID` / `SeriesInstanceUID` / `PatientWeight` / radiopharmaceutical dose+time for
+  each conflict **and its adjacent neighbours**, and the `PatientID` **coverage** figure — how many
+  DICOM acquisitions had no parseable ID at all. Without the latter, "4 conflicts" is a floor.
+
 ## ✅ Finder — "Select-in-Finder → assemble a project" (2026-06-23) — **DONE 2026-08-12, differently**
 
 > **Delivered by the Project Manager GUI** ([`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)),
