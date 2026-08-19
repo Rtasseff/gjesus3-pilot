@@ -578,40 +578,66 @@ disappears. It only stands on its own if we decide to keep archive-as-primary.
 - [ ] Record the decision in [`08_METADATA`](../mfb-rdm-docs/08_METADATA.md) / the external-data
   section so the next collaborator drop does not re-litigate it.
 
-## 🔺 HIGH — subject-id derivation trusts any leading integer in the sample token (2026-08-19)
+## 🔺 HIGH — the NI subject label has no specified format, so the parser has to guess (2026-08-19)
 
-`animal_code` is taken as the leading integer of the discovered subject token, and whatever
-comes out is composed into a facility id and looked up. There is **no plausibility gate**: if
-the token is not an animal at all, the lookup can still succeed and the ingest writes a
-confident, well-formed, wrong identity.
+**Reframed 2026-08-19 (Ryan).** This item first read "add a plausibility gate to the
+derivation". That is building a better guesser. The actual root cause is upstream: **the
+platform fixed the folder *structure* but never specified the *values*,** so the parser was
+written to accept whatever researchers happened to type — and one of the things they type is
+ambiguous.
 
-**This is not hypothetical — it happened, and the repair is done** (PROJ-0056, 15
-acquisitions, fixed in production 2026-08-19; see [`CHANGELOG.md`](../CHANGELOG.md) and
-`tools/recover_subject_ids_proj0056.py`). The researcher's tree was
-`<protocol>/<yymmdd>/<animal_code>/r<N>/`, where `rN` is a **reconstruction**; the recipe read
-the `rN` level as the subject, so `r1` → animal `1` → `1-AE-biomaGUNE-0421`. Animals 1/2/3 of
-that protocol are **real rats born two years earlier**, so the lookup succeeded and the sidecars
-got the wrong strain-mates' `date_of_birth`, `age_at_acquisition` and `procedures`.
+**What happened** (PROJ-0056, 15 acquisitions, repaired in production 2026-08-19 — see
+[`CHANGELOG.md`](../CHANGELOG.md) and `tools/recover_subject_ids_proj0056.py`): the researcher's
+tree nested a per-reconstruction folder below the animal, and the subject parser read that level
+as the animal, so `r1` → animal `1` → `1-AE-biomaGUNE-0421`.
 
-**Why this is worse than the `-None` alias bug it rhymes with** (see the item below): that one
-produced a *malformed* id, so it was visible the moment anyone looked. This one produces a
-**well-formed id for the wrong animal** — indistinguishable from correct without an external
-cross-check. The `-None` fix hardened the composer against a null *alias*; nothing hardened it
-against a wrong *animal code*.
+**The parser was following the spec.** §3A of
+[`equipment/nuclear-imaging/live_machine_data_layout_and_sync_rules.md`](../equipment/nuclear-imaging/live_machine_data_layout_and_sync_rules.md)
+documents the species prefix as `m` (mouse) | **`r` (rat)** | none, with the explicit instruction
+*"the parser MUST NOT require `m`"*. `r` means *rat* to one researcher and *recon* to another;
+no grammar can separate them.
 
-- [ ] **Gate the derivation, not just the composition.** Decide what makes an animal code
-  credible: it exists in the facility DB for that protocol *and* the animal has a procedure
-  near the acquisition date. The second half is what actually separates "real animal" from
-  "real animal that was never in this scanner" — see the plausibility item below.
-- [ ] **Make the parse level explicit in the recipe** rather than inferred. The PROJ-0056 tree
-  had the animal one level *above* the token that was used; a recipe that had to name which
-  path level is the animal could not have silently picked the wrong one.
-- [ ] **Decide the failure mode.** A blank subject id queued for deferred recovery is strictly
-  better than a confident wrong one — the recovery machinery already exists
-  (`recover_subject_metadata.py`, [`08_METADATA §4.4.6`](../mfb-rdm-docs/08_METADATA.md)).
-- [ ] Scope check when this is picked up: the `rN` shape is currently **15 rows, all repaired**
-  (registry-wide `sample_id` scan, 2026-08-19). The defect class is what is open, not a backlog
-  of bad rows.
+**And the documented safety net cannot catch it.** §3A's rule is *"the facility DB is the
+validator, not the folder"* — resolve the `(project, animal)` pair, accept on a hit, queue on a
+miss. But `(0421, 1)` **hits**: animal 1 of that protocol is a real rat born two years earlier.
+The DB answers *"does this animal exist?"*, never *"was it in the scanner that day?"* **Every
+check we had was an existence check.** That is why this was worse than the `-None` alias bug it
+rhymes with: that one produced a *malformed* id, visible on sight; this one produces a
+**well-formed id for the wrong animal**.
+
+**The direction, decided by Ryan 2026-08-19:** stop inferring intent from free text. We cannot
+change which fields the platform collects, but the **values** in them were never specified and
+we can specify them. A strict format makes `r1` fail to parse instead of resolving to the wrong
+rat — no plausibility engine, no DB cross-check, no guessing.
+
+**Explicitly NOT in scope: the `S:\gnuclear` historical archive.** It was researcher-run with no
+platform policy, rescued on a best-guess basis because the alternative was losing it, and cleaned
+up as far as evidence allows. This item must not become a reason to re-ingest or re-interpret it.
+Where it stays ambiguous, the answer is a human who was there, or nothing.
+
+**Proposal drafted, awaiting Ryan:**
+[`equipment/nuclear-imaging/subject_naming_standard.md`](../equipment/nuclear-imaging/subject_naming_standard.md)
+(❓ EVALUATING). It carries the per-level format, the enforcement point, and 5 open questions —
+the load-bearing one being whether the animal token is digits-only (recommended), `rat230`, or
+always-prefixed.
+
+- [ ] **Ryan: rule on the standard**, starting with the animal-token question. Everything else
+  follows from it.
+- [ ] **Land it with the live-mode NI ingest, not before.** That ingest is still unbuilt
+  (deferred, this file), so the standard ships with it and retrofits nothing — this is the
+  cheapest moment it will ever have.
+- [ ] **Enforce by refusing, not by falling back.** The live ingest already plans an operator
+  dry-run review table; a non-conforming label should stop the batch and name the folder. A
+  lenient fallback re-creates today's behaviour and wastes the whole exercise.
+- [ ] **Reconcile the two documents once ruled.** §3A of the layout doc describes the permissive
+  archive grammar and states as a "hard truth" that *"the animal prefix can't be required"* —
+  true of the archive, not of new data. Mark it historical rather than deleting it; it is the
+  record of what the rescue faced.
+- [ ] Scope check: the `rN` shape is **15 rows, all repaired** (registry-wide `sample_id` scan,
+  2026-08-19). The defect class is what is open, not a backlog of bad rows. Note also that in the
+  **live** layout reconstructions sit *inside* the machine-issued acquisition folder, so this
+  exact collision cannot recur there — the standard targets the ambiguities that do survive
+  (missing protocol code, separator drift, `m`/`r`/bare prefix).
 
 ## 🔸 MODERATE — plausibility checks in `validate_registries` (age sanity + facility cross-check) (2026-08-19)
 
