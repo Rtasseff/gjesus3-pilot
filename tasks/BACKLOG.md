@@ -778,6 +778,130 @@ release are owed back, none urgent, all cheap to send.
   each conflict **and its adjacent neighbours**, and the `PatientID` **coverage** figure — how many
   DICOM acquisitions had no parseable ID at all. Without the latter, "4 conflicts" is a floor.
 
+## 🔸 OPTIONAL — move (or mirror) `projects/` off the QNAP onto IT-managed `gjesus` (2026-08-20)
+
+**Context.** IT declined to back up the gjesus3 QNAP and instead offered active-project backup on
+their own NAS, `gjesus` (`K:\gjesus` from the Data Office workstation) — the same share the group
+already works on, and the same one that kept running out of space, which is part of why the QNAP
+exists. They have **0.4 TB free today** and say they can grow it. Everything below is assessment;
+nothing is decided and nothing has been built.
+
+### The measurements (2026-08-19/20, live NAS)
+
+| | Value |
+|---|---|
+| `raw/` on disk | **0.747 TB** (registry sum 0.78 TB — two independent methods agree) |
+| `projects/raw_linked/` | **711.8 GB apparent, 0 real bytes**, **343,830 files** |
+| `projects/` everything else (`outputs`, `working`, `metadata`, yaml, index) | **0.02 GB, 153 files** |
+| Acquisitions in >1 project | **0** — so a copy costs exactly 1× raw, no multiplication |
+
+Two consequences. **The projects tree is ~100% derived today** — there is almost no original
+researcher work in it, so moving it moves nothing irreplaceable. And **the cost is file-count
+dominated**: 15,474 acquisitions expand to 343,830 files because folder primaries (`<ACQ-ID>.data`)
+become a folder of per-file links. Over SMB, per-file overhead will dominate any copy job.
+
+### Growth model — why 712 GB is NOT the number to give IT
+
+**The current 712 GB is a snapshot, not a steady state.** The instrument generating ~90% of the
+bytes, **AxioScan 7 (`ZWSI`), only came online 2026-02-05** — so 712 GB represents about *six
+months* of the dominant source, not five years of everything.
+
+Measured annual generation, from **acquisition** dates (not ingest dates):
+
+| Source | GB/yr | Basis / confidence |
+|---|---|---|
+| `ZWSI` AxioScan 7 | **638** | 295.6 GB over 169 days, near-complete coverage. **But 17–112 GB/month — an ~8× spread.** |
+| DICOM (`MRI`+`CT`+`PET`) | **55** | mean of complete years 2023-25 (37) + 18 for the **673 NI acqs held back** pending AE codes |
+| `LSM9` confocal | 5 measured | Known undercount (lives on external drives). Even at **5×** it moves the total <4%. |
+| `CELL` Cell Observer | — | Being replaced by AxioScan; counted there, **not** double-counted |
+| **Total** | **~700 GB/yr** | |
+
+**Assume projects stay open 5 years**, so active project data reaches steady state at 5× the
+annual rate:
+
+> ### `raw_linked/` at steady state: **~3.5 TB floor, ~7 TB ceiling** (2×, per the agreed convention)
+
+**Why the floor is genuinely a floor** — three independent reasons it understates:
+1. Cell Observer and confocal history is largely **not uploaded yet** (external drives).
+2. **673 NI acquisitions** are still held back pending AE protocol codes.
+3. **There has been essentially no researcher adoption yet.** The September onboarding is
+   explicitly designed to increase usage, so past rates understate future ones by design.
+
+**The single biggest weakness:** this estimate is a bet on **one instrument with six months of
+data and 8× month-to-month variance**. If AxioScan usage doubles post-launch, the number doubles.
+It should be revisited after ~6 months of real adoption rather than treated as settled.
+
+### The part that cannot be estimated
+
+`outputs/` / `working/` / `metadata/` hold **0.02 GB across all 57 projects** because nobody is
+using the system yet. There is **no trend to extrapolate** and any number would be invention.
+
+The defensible argument is Ryan's: that content largely **already exists on `gjesus`** and moving
+it into project folders **relocates rather than adds**. Sizing that argument needs a measurement
+of the current `K:\gjesus` working share — see the first checkbox.
+
+### What to tell IT
+
+- **0.4 TB does not fit today.** The tree is already 712 GB — the current offer is ~56% of
+  present need, before any growth.
+- Ask for the **5-year steady state with headroom**, or better, a **growth commitment**
+  (~0.7 TB/yr, reviewed) rather than a fixed cap — a fixed cap is what caused deletions before.
+- **A cap on derived data is an annoyance; a cap on `outputs/` is data loss.** That is the line
+  worth holding.
+
+### Code assessment — easier than expected
+
+Three reasons the change is contained:
+
+1. **The location is already data, not code.** `registry_projects.csv:folder_location` stores each
+   project's path and the ingest reads the *stored* value — there is an explicit rule against
+   rebuilding it from the name (05_PROJECTS, "one construction site"). Today it is joined to
+   `nas_root`; the indirection point already exists.
+2. **The mechanism is already decoupled.** `linker.create_hardlink(project_folder_abs, link_name,
+   raw_primary_abs)` takes the destination as an argument — a copy strategy is a sibling function
+   plus a dispatch, not surgery.
+3. **"Linking failed, commit anyway, fix later" already exists and is proven in production.**
+   `pending_links.csv` + `relink_pending.py` were built because macOS-over-SMB returns `ENOTSUP` on
+   `os.link`. Cross-device is the same failure with the same handling.
+
+19 files reference the projects path; roughly half are one-shot historical migration tools. The
+real change is **~8 files** (`ingest_raw`, `ingest/linker`, `manager/raw_import`, `create_project`,
+`manager/projects`, `generate_index`, `ingest/projects_registry`, `relink_pending`) plus one shared
+resolver.
+
+### The recommendation — mirror the derived half, single-home the original half
+
+`raw_linked/` is a **projection** of `registry_raw` + `registry_projects`;
+`relink_projects.py --create-missing` already rebuilds it from those two registries with no
+re-ingest (that is how the 178 missing microscopy links were created). `outputs/` / `working/` /
+`metadata/` are **original** — the only copy of researcher work.
+
+So: **for the derived half, drift is not a thing** — you regenerate, you do not sync, and there is
+no two-master problem. **For the original half, drift is data loss**, so it gets exactly one home.
+
+That makes the dual-location experiment cheap: point a generator at `gjesus`, write copies instead
+of links, run it on a schedule. **Additive — no change to the ingest write path.** If IT caps or
+purges it, nothing is lost, because it is regenerable.
+
+**Incidental DR benefit worth naming:** ~0.75 TB of raw primaries on an IT-managed, IT-backed-up
+device is a second physical copy, against DR being the #1 unmitigated risk in this file. It is not
+real DR — primaries only, no checksums, no sidecars, a mirror not a versioned backup — but it is
+strictly better than one copy and may change how the real DR case is argued.
+
+- [ ] **Measure `K:\gjesus`** (total and per-person) to size the "relocation not growth" argument
+  for `outputs/`/`working/`. This is the missing input for the IT conversation.
+- [ ] **Settle the ACL question BEFORE data lands.** The permission model was applied by hand on
+  `J:\gjesus3-data\` (operators write-but-not-modify on raw, group Modify on projects, grant-only
+  never DENY) and the record notes IT will not create groups for us. On their device the ACLs are
+  theirs. "IT capped us and people deleted data" is partly a permissions story.
+- [ ] Get IT's cap **in writing**, with the growth path, before committing anything.
+- [ ] **Only then** decide: mirror-only (recommended first step), or a real move with a
+  configurable projects root.
+- [ ] Revisit the growth model after ~6 months of post-launch adoption. It rests on one instrument
+  with six months of data.
+- [ ] Do **not** put `outputs/`/`working/` on a capped share until the cap is agreed and the
+  permission model is settled.
+
 ## ✅ Finder — "Select-in-Finder → assemble a project" (2026-06-23) — **DONE 2026-08-12, differently**
 
 > **Delivered by the Project Manager GUI** ([`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)),
