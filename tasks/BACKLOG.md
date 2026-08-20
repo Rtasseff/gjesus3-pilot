@@ -578,6 +578,50 @@ disappears. It only stands on its own if we decide to keep archive-as-primary.
 - [ ] Record the decision in [`08_METADATA`](../mfb-rdm-docs/08_METADATA.md) / the external-data
   section so the next collaborator drop does not re-litigate it.
 
+## 🔺 HIGH — the `operator` column carries a template instruction on 10,314 rows (2026-08-20)
+
+Found while repairing the `instrument_model` placeholder the same day (CHANGELOG 2026-08-20).
+**The identical 10,314 rows** carry, in the **`operator`** column, the literal string:
+
+```
+<REQUIRED - set via mri-ingest --operator, or replace here>
+```
+
+Same root cause, same five `tools/configs/mri_jrc_*.yaml` bulk configs, same never-performed
+`# EDIT:` step. It is an instruction to a human sitting in a production person-attribution field,
+and every downstream consumer — the Finder, the XNAT trial, `gjesus3-tools` — reads it as a value.
+
+**Why this one was NOT fixed alongside `instrument_model`.** The model was *recoverable*:
+`acqp.ACQ_station` says `Biospec 70/30` on all 10,314, unanimously. The operator is **not**.
+ParaVision offers only `acqp.ACQ_operator` / `OWNER` = `nmr`, the **shared facility login**, not a
+person. Writing `nmr` here would manufacture a false attribution — the same class of error as the
+PROJ-0056 `rN` misattribution repaired the day before — and it would blend in beside the real
+messy values already in the column (`Jguser`, `jguser`, `MBC`, `AUA`, `irene`, …), making it
+*harder* to spot than the placeholder it replaced. **Do not derive it. It is a Data Office call.**
+
+**Recommended:** set the 10,314 cells to **empty** — the documented "unknown" state, already
+carried by 1,583 other rows — and keep the "needs an operator" signal in a pending queue rather
+than smeared across 10,314 production cells. This is the same reasoning applied to the NI
+`S:\gnuclear` pull, where `operator` was deliberately left blank because it was not recoverable
+from the paths.
+
+**It now blocks the validator.** The new `check_template_residue` (shipped 2026-08-20, ERROR-level)
+correctly flags every one, so `validate_registries` currently exits **FAILED with 10,314 errors**
+on production, emitting 10,315 lines. Verified: the check has **zero false positives** — across
+all six registry CSVs it fires on nothing but this column. So the check is right and the data is
+wrong, but until this is settled the validator cannot serve as a gate for anything else.
+
+- [ ] **Decide the representation** (recommend: blank). It is the only decision here — the write
+  itself is the same byte-level, delimited, no-BOM/CRLF-preserving edit already done twice.
+- [ ] **Collapse repeated identical findings in the validator regardless.** 10,315 lines for one
+  defect class is the saturated-warning-channel item below, reproduced in the error channel — report
+  a class once with a count and a few example rows. A future recurrence on 10k rows would be just
+  as unreadable, whatever is decided about this instance.
+- [ ] `tools/operator/mri_ingest.py` has four stale docstring/`--help` spots (≈ lines 29-32, 78-79,
+  306, 374) still describing the pre-auto-derivation behaviour ("leave the template placeholder"),
+  contradicting its own correct runtime logic. Documentation-only; fix with whichever pass touches
+  this next.
+
 ## 🔺 HIGH — the NI subject label has no specified format, so the parser has to guess (2026-08-19)
 
 **Reframed 2026-08-19 (Ryan).** This item first read "add a plausibility gate to the
