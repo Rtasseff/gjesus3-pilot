@@ -837,8 +837,23 @@ It should be revisited after ~6 months of real adoption rather than treated as s
 using the system yet. There is **no trend to extrapolate** and any number would be invention.
 
 The defensible argument is Ryan's: that content largely **already exists on `gjesus`** and moving
-it into project folders **relocates rather than adds**. Sizing that argument needs a measurement
-of the current `K:\gjesus` working share — see the first checkbox.
+it into project folders **relocates rather than adds**. **Measured 2026-08-20 — it holds:**
+
+> **`K:\gjesus` = 1,186 GB (1.16 TB) across 404,406 files.**
+> Almost all per-person working folders — Ainhize 375 GB, Marina 103, `MRI` 99, Irene 96,
+> Laura 94, Claudia 71, Susana 69, Aitor 61, Elena 56, Itziar 43, Ermal 18.
+
+Three things follow, and they reframe the IT conversation:
+
+1. **IT already hosts 1.16 TB for this group.** Their 0.4 TB offer is about a third of what they
+   already carry — the offer is inconsistent with the footprint they already support.
+2. **Migration is not new demand.** If project folders become the working home, that ~1.16 TB
+   moves *within* IT's estate rather than adding to it.
+3. **Some of it is duplicate raw and could be retired.** Ainhize's 375 GB is Cell Observer +
+   confocal (the instruments whose gjesus3 total is 226 GB), and `MRI/` is 99 GB across 95,878
+   files. Once data is safely in gjesus3 `raw/` with checksums, those personal copies are
+   candidates for retirement — a **net reduction** on IT's system. **How much overlaps is
+   unmeasured** and must be verified per-folder before anything is deleted.
 
 ### What to tell IT
 
@@ -888,8 +903,12 @@ device is a second physical copy, against DR being the #1 unmitigated risk in th
 real DR — primaries only, no checksums, no sidecars, a mirror not a versioned backup — but it is
 strictly better than one copy and may change how the real DR case is argued.
 
-- [ ] **Measure `K:\gjesus`** (total and per-person) to size the "relocation not growth" argument
-  for `outputs/`/`working/`. This is the missing input for the IT conversation.
+- [x] **Measure `K:\gjesus`** — done 2026-08-20: **1.16 TB / 404,406 files**, per-person
+  working folders (see above). The relocation argument holds.
+- [ ] **Quantify how much of that 1.16 TB is raw already held in gjesus3** (Ainhize's 375 GB vs
+  the 226 GB of CELL+LSM9; the 99 GB `MRI/` folder). Retiring verified duplicates is a net
+  reduction for IT and the strongest card in the negotiation — but verify per folder against
+  checksums before deleting anything.
 - [ ] **Settle the ACL question BEFORE data lands.** The permission model was applied by hand on
   `J:\gjesus3-data\` (operators write-but-not-modify on raw, group Modify on projects, grant-only
   never DENY) and the record notes IT will not create groups for us. On their device the ACLs are
