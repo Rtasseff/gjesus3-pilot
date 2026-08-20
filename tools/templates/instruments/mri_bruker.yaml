@@ -104,7 +104,8 @@
 #     convention" section for the convention details.
 #   - `acquisition_layout: folder` — no zip; the acquisition folder is
 #     the unit. Registry's primary_kind = "folder". See 10_TOOLS.md.
-#   - `instrument_model` — set per per-batch config (7T vs 11.7T).
+#   - `instrument_model` — AUTO-DERIVED from ACQ_station metadata (see
+#     registry: block below); not a per-batch manual edit.
 #   - `sample_type: organism` — DRAFT REMBI vocab; in-vivo MRI.
 #   - `sample_id` = `m<animal_num>_<project_code>` ("m17_0424"), aligned
 #     with NI ("m13_0525"); `session_id` = the fuller JRC study id (groups

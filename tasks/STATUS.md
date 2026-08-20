@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-08-16
+**Last Updated:** 2026-08-20
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -90,6 +90,8 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
+
+- **MRI `instrument_model` template placeholder — ✅ REPAIRED IN PRODUCTION 2026-08-20; root cause fixed on `fix/mri-model-placeholder` (not yet merged).** 10,314 of 10,330 MRI acquisitions carried the literal unsubstituted `Bruker BioSpec <7T|11.7T>` in `registry_raw.instrument_model` — the five bulk historical configs (`tools/configs/mri_jrc_*.yaml`) hardcoded it behind an `# EDIT:` comment nobody ever actioned, while the operator template had already moved to auto-deriving the field for ingests since 2026-07. **Fully recoverable:** every affected sidecar's `mri._raw_metadata.acqp.ACQ_station` reads `"Biospec 70/30"` (0 exceptions, 0 missing) → `Bruker BioSpec 7T` per `paravision_metadata.py::_scanner_model`; no 11.7T anywhere in the set. Repaired at the byte level in `registry_raw.csv` (10,314 occurrences of `,Bruker BioSpec <7T|11.7T>,` → `,Bruker BioSpec 7T,`, size 8,182,709 → 8,100,197 bytes, BOM-free pure-CRLF preserved) and verified row-by-row against a pre-edit backup: exactly 10,314 rows changed, every one differing in `instrument_model` only. `instrument_model` is now `Bruker BioSpec 7T` × 10,330 for MRI, every non-MRI value unchanged. `validate_registries --no-enrichment`: **0 errors, 0 warnings**, same as baseline. **Root-cause fix (repo, not yet merged):** all five configs plus the `mri_bruker.yaml` template's own stale header bullet now read/describe `instrument_model: "${discovered.mri_scanner_model}"`; `validate_registries.py` gained a new ERROR-level, column-agnostic check for unsubstituted template residue (`${...}` / `{{...}}` / `<...>`), closing the detection gap. **That check also (correctly) flags a second, separate, NOT-fixed defect** — the same 10,314 rows carry `<REQUIRED - set via mri-ingest --operator, or replace here>` in the `operator` column, left alone pending a Data Office decision. Narrative in [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-20.
 
 - **`-AE-biomaGUNE-None` subject identifiers — ✅ DONE IN PRODUCTION 2026-08-16.** Four
   animal protocols have a NULL alias in the facility DB, so 444 acquisitions carried an
