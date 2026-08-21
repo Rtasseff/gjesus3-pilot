@@ -311,21 +311,45 @@ procedure is how the **RDM team** later fills those placeholders. Tool reference
 **How** (regeneration runs from **WSL** — Dicomifier is Linux/conda; everything else is
 cross-platform):
 
-1. **Stage the sources** (read-only against the platform host; resumable):
-   `PYTHONPATH=tools python tools/pull_pending_dicom_sources.py --dry-run` then `--apply`.
+1. **Make the sources reachable** in the layout the tool expects,
+   `<staging>/PV<version>/<study>/<exam>`.
+   - **Sources on the platform host (`kenia`)** — stage them read-only (resumable):
+     `PYTHONPATH=tools python tools/pull_pending_dicom_sources.py --dry-run` then `--apply`.
+   - **Sources already reachable from this machine** (a researcher share such as `K:`,
+     which WSL mounts at `/mnt/k`) — **do not copy anything.** Build the expected
+     shape out of symlinks; Dicomifier reads straight through them:
+     ```bash
+     S=/tmp/stage_<batch>/PV6.0.1 ; mkdir -p "$S"
+     ln -s "/mnt/k/<...>/<study-folder>" "$S/"
+     ```
+     Verified 2026-08-21 on the Proyecto-1019 backfill — 9 exams across 2 studies,
+     **0 bytes copied**. Confirm `<study>/<exam>/pdata/<idx>/2dseq` exists first: no
+     `2dseq` means the row is `no-source`, not regenerable (step 6).
 2. **Preview the drain** (safe anywhere, writes nothing):
    `PYTHONPATH=tools python tools/backfill_dicom_regen.py`
 3. **Activate the env and pilot one exam** (WSL):
    ```bash
+   # `conda` is NOT on PATH in a non-interactive WSL shell. Source its profile hook
+   # FIRST, or `conda activate` fails with "conda: command not found" -- after which
+   # `dicomifier` is absent and the backfill logs a soft SKIP rather than an error,
+   # so the run looks like it succeeded while regenerating nothing.
+   source ~/miniforge3/etc/profile.d/conda.sh
    conda activate dicomifier-pilot     # env spec: tools/dicomifier-pilot.environment.yml
    PYTHONPATH=tools python tools/backfill_dicom_regen.py --apply --limit 1 \
        --nas-root /mnt/gjesus3/gjesus3-data --staging <staging-root>
    ```
+   **On this production machine (Windows + WSL):** the env is
+   `~/miniforge3/envs/dicomifier-pilot` (Dicomifier 2.5.3, Python 3.12); the NAS
+   `J:` is `/mnt/gjesus3`; the researcher share `K:` is `/mnt/k`.
    Inspect the filled `.data/`, the registry row, and the worklist flip before continuing.
 4. **Drain** (same command without `--limit`), then re-run step 2 — every former `pending`
    row should now be terminal.
 5. **Rebuild project hard-links from Windows** (`os.link` is refused over the CIFS mount
    from WSL): `python tools/relink_mri_regen.py --nas-root J:/gjesus3-data --dry-run`, then live.
+   **Skip this step entirely when the acquisitions carry no project** — a blank
+   `project_id` means no link was ever created, so there is nothing to rebuild.
+   (First exercised 2026-08-21: the 854 Proyecto-1019 acquisitions were
+   deliberately ingested project-less.)
 6. **Record un-regenerable rows** — a **human decision**, never automatic: rows whose staged
    source has no `pdata/<idx>/2dseq` (header-only or fid-only) can never be regenerated;
    after confirming the staged mirror is complete, flip them to the terminal `no-source`

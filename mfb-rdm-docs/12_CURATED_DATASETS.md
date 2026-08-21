@@ -247,6 +247,8 @@ Before a dataset can be promoted to CURATED_DATASETS:
 | Role | Access |
 |------|--------|
 | Dataset curator (Data Mgmt Lead + designated backup) | Read + Write |
+
+> **🔶 As of 2026-08-21 there is no designated backup** — the curator set is the Data Management Lead (Ryan Tasseff) and the agents he delegates to. Promotions have exactly one approval gate. See `CDS-02`.
 | All other operators | Read only |
 
 ---
@@ -343,7 +345,7 @@ What is **not** in initial scope:
 | ID | Question | Owner | Status |
 |----|----------|-------|--------|
 | CDS-01 | Include curated datasets area in pilot or defer to Phase 2? | Data Mgmt Lead + PI | ✅ **DECIDED 2026-08-21 — include, as a pilot**, triggered by the SegBioMed segmentation harvest |
-| CDS-02 | Who are the designated curators beyond Data Mgmt Lead? | Data Mgmt Lead | 🔶 Draft |
+| CDS-02 | Who are the designated curators beyond Data Mgmt Lead? | Data Mgmt Lead | 🔶 Draft — **answered for now (2026-08-21): nobody.** The Data Office is the Data Management Lead (Ryan Tasseff) plus delegated agents; there is no second or backup curator. Revisit when someone outside the Data Office wants to promote a dataset. |
 | CDS-03 | Label format standardization: should we mandate specific formats per ecosystem? (e.g., OME-TIFF for microscopy, NIfTI for DICOM) | Data Mgmt Lead | 🔶 Draft |
 | CDS-04 | How to handle labels that span multiple acquisitions (e.g., a registered atlas built from many MRI scans)? | Data Mgmt Lead | 📋 Future |
 | CDS-05 | Integration with ML training pipelines — do we need a standard manifest format for data loaders? | Data Mgmt Lead | 📋 Future |
