@@ -28,7 +28,7 @@ Registries are **CSV files** that serve as indexes (manifests) for each storage 
 | Subjects Registry | `/gjesus3/registries/registry_subjects.csv` | One row per animal subject (the static per-animal record; §2.8) | ✅ Live (~715 rows) |
 | Projects Registry | `/gjesus3/registries/registry_projects.csv` | Indexes all project folders | ✅ Live (~50 rows) |
 | Publications Registry | `/gjesus3/registries/registry_publications.csv` | Indexes all publication folders | 🕗 Planned (empty — publications deferred) |
-| Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets (if used) | ❓ Evaluating |
+| Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets | 🔶 DRAFT — **deployed 2026-08-21** (header-only; pilot) |
 
 The `registries/` directory also holds a few **generated / bookkeeping artifacts** that are NOT registries and NOT hand-edited sources of truth:
 
@@ -418,7 +418,12 @@ This registry has two writers — `create_project.py` (which the Project Manager
 
 **File:** `/gjesus3/registries/registry_datasets.csv`
 
-> **❓ EVALUATING:** Curated datasets area is under evaluation. See [12_CURATED_DATASETS](12_CURATED_DATASETS.md) for full specification.
+> **🔶 DRAFT — DEPLOYED 2026-08-21 as a pilot** (CDS-01 decided). The file exists on the live
+> system carrying **only the header row** — no dataset has been promoted yet, so a row count of
+> zero is the correct current state, not a fault. The area scaffolding
+> (`curated_datasets/README_START_HERE.txt`, `segmentation/MICROSCOPY/`, `segmentation/DICOM/`)
+> was created in the same pass. See [12_CURATED_DATASETS](12_CURATED_DATASETS.md) for the full
+> specification and the open questions (`CDS-03` label formats is still unsettled).
 
 ### 5.1 Purpose
 
