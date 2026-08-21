@@ -1,8 +1,8 @@
 # 12 — Curated Datasets Area
 
 **Parent:** [Documentation Index](00_INDEX.md)
-**Status:** ❓ Under Evaluation
-**Last Updated:** 2026-06-26
+**Status:** 🔶 DRAFT — **approved for pilot deployment** (CDS-01 decided 2026-08-21)
+**Last Updated:** 2026-08-21
 
 ---
 
@@ -10,7 +10,7 @@
 
 This document specifies the *proposed* Curated Datasets storage area — a permanent, controlled space for high-value derived datasets (starting with segmentation ground truth) that accumulate across projects and support long-term reuse such as model training and benchmarking.
 
-> **❓ EVALUATING:** This area addresses a real need (permanent storage for derived assets that span projects), but represents a scope expansion beyond the original "archival storage for original imaging data" mandate. The specification is written here so the design is captured; it is **not deployed** — `curated_datasets/` exists on **none** of the live system today, and the `registry_datasets.csv` registry is not initialized. With the system now in true production (RAW carrying the full historical ingest; `publications/` deferred and empty), this remains a later-stage scope decision rather than a current work item — tracked in [tasks/BACKLOG.md](../tasks/BACKLOG.md). Nothing below is built; it is the design to reach for if and when the segmentation-ground-truth need becomes concrete.
+> **✅ CDS-01 DECIDED 2026-08-21 — include, as a pilot.** This area addresses a real need (permanent storage for derived assets that span projects) and was held at ❓ EVALUATING only because no concrete need had arrived. **One has:** the SegBioMed segmentation harvest has deposited ~370 MB / ~1,050 files of cardiac masks and PMOD VOIs at `curated_datasets/_incoming/seg-harvest-2026-08-20/` (pre-promotion, so no guardrail below is bypassed), and two datasets are proposed — `DS-SEG-0001` (cardiac cine masks) and `DS-SEG-0002` (PMOD VOIs). **So `_incoming/` now exists on the live system; the rest of the structure and `registry_datasets.csv` still do not.** The §10 deployment steps are the work to do, and this first promotion is deliberately a **pilot**: it is also the review of this spec, so gaps found while following it should be reported rather than papered over with an invented convention. Tracked in [tasks/BACKLOG.md](../tasks/BACKLOG.md).
 
 ---
 
@@ -342,7 +342,7 @@ What is **not** in initial scope:
 
 | ID | Question | Owner | Status |
 |----|----------|-------|--------|
-| CDS-01 | Include curated datasets area in pilot or defer to Phase 2? | Data Mgmt Lead + PI | ❓ Evaluating |
+| CDS-01 | Include curated datasets area in pilot or defer to Phase 2? | Data Mgmt Lead + PI | ✅ **DECIDED 2026-08-21 — include, as a pilot**, triggered by the SegBioMed segmentation harvest |
 | CDS-02 | Who are the designated curators beyond Data Mgmt Lead? | Data Mgmt Lead | 🔶 Draft |
 | CDS-03 | Label format standardization: should we mandate specific formats per ecosystem? (e.g., OME-TIFF for microscopy, NIfTI for DICOM) | Data Mgmt Lead | 🔶 Draft |
 | CDS-04 | How to handle labels that span multiple acquisitions (e.g., a registered atlas built from many MRI scans)? | Data Mgmt Lead | 📋 Future |
