@@ -620,6 +620,114 @@ What the parameter file already gives us, for free, whenever this is built:
 - [ ] Per the standing direction: **specify what operators enter; do not build a guesser** for the
   messy historical layout.
 
+## 🔺 HIGH — a ParaVision study whose folder token deviates is dropped SILENTLY by the ingest (2026-08-21)
+
+**Found by ingesting the one session the historical MRI pull missed** (SegBioMed census request
+G1). The cause is not a coverage gap — it is that **the ingest cannot report what it could not
+parse.**
+
+`K:\gjesus\Irene\0522\MRI\Female_Met\20250526_105636_jrc250526_145_0522_1_1` — the operator omitted
+the `m` before the animal number at the console, so the folder token reads `jrc250526_145_0522`.
+The two production regexes are:
+
+| Config family | Requires |
+|---|---|
+| `mri_jrc_animalfirst*.yaml` | `<initials>_?<date>_m<animal>_<proj>` |
+| `mri_jrc_projfirst*.yaml` | `<initials>_?<date>_<proj>_m<animal>` |
+
+**This token matches neither.** The study was globbed, produced no `discovered.*`, and was skipped
+with **no error, no WARN worth reading, and no worklist row** — the ingest exited 0 and the batch
+looked clean. Confirmed downstream: animal 145 of protocol 0522 had PET/CT (2025-05-27) and AxioScan
+histology in the registry but **no MRI at all**, and nobody noticed for two months.
+
+**Why this is HIGH and not cosmetic.** The failure is *silent and unbounded*. We know of exactly one
+instance only because SegBioMed censused a researcher share and diffed it against the registry. The
+kenia bulk pull ingested ~10,330 MRI acquisitions across 925 sessions; **we have no idea how many
+studies it globbed and dropped**, because nothing recorded them. Every other loss mode in this
+system leaves a trace (`pending_dicom_regen.csv`, `pending_subject_metadata.csv`, the
+`no-source` status). This one leaves none.
+
+- [ ] **Make unparsed matches loud.** When `expand_batch` globs a path and `filename_parse` yields
+  no match, it should end up somewhere durable — a skipped-items report per run at minimum, ideally
+  a `pending_unparsed.csv` in the same spirit as the other queues. **This is a code change to
+  `ingest/config.py` — needs Ryan.**
+- [ ] **Then quantify the historical damage**: re-glob the kenia tree (or the staged mirror) with
+  the ingest's own pattern, run each match through both regexes, and count the non-matchers. Until
+  that is done, "the historical MRI pull is complete" is an assumption, not a fact.
+- [ ] Do **not** fix this by relaxing the regex globally. `m?` was used for the single-study G1
+  config (`tools/configs/mri_0522_m145_irene.yaml`, scoped by `pattern` so it cannot misfire), but
+  a global relaxation is exactly the "better guesser" the standing direction rules out. The right
+  answer is to *report* the unparseable, not to *guess* it.
+
+**Related, same root:** `filename_parse.source` supports only `name` and `parent_name`. Irene's
+share nests exams as `<study>/Other data/<exam>`, so `parent_name` reads the literal `"Other data"`
+and the regex never matches — 24 cases became 0. Worked around by staging the study flattened
+(0.70 GB); a `grandparent_name` source would remove the need, but that too is a code change.
+
+## 🔺 HIGH — `jrc260224_m39_0525` is probably animal 37, not 39 (2026-08-21)
+
+**19 production acquisitions** (`ACQ-20260224-MRI-020` … `-038`) may carry the wrong subject.
+**Not changed — needs Ryan or Irene.** Raised by the SegBioMed census (G2), then investigated here.
+
+The **animal-facility DB** logs an `MRI 7T` procedure per animal per date. For protocol 0525:
+
+| Date | DB: MRI 7T logged for | Registry has |
+|---|---|---|
+| 2026-02-24 | `31, 32, `**`37`**`, 38, 43, 44` | `31, 32, `**`39`**`, 38, 43, 44` |
+| 2026-02-25 | `33, 34, `**`39`**`, 40, 45, 46` | `33, 34, `**`39`**`, 40, 45, 46` |
+
+**Five of six agree on 02-24; the sole mismatch is this session.** Animal 39's MRI is logged on
+02-25 — where the registry independently *already* has `jrc260225_m39_0525`. So under the DB,
+animal 39 was scanned once (02-25) and the 02-24 session belongs to animal 37, which currently
+holds only 2 PET/CT acquisitions and no MRI.
+
+**Irene's own copy of the same session is named `…m37_0525…`** — she renamed it deliberately.
+
+**The counter-evidence, stated fairly:** the scanner's `mri._raw_metadata.subject.SUBJECT_id` reads
+`jrc260224_m39_0525`. But that field is **typed by the operator at the console**, and the archive
+folder name is derived from it — so the scanner and the archive are **one source, not two**. It is
+also precisely the field that produced the `+21` offset error in the 2026 MILabs lung study.
+
+- [ ] **Ask Irene.** One sentence settles it; every other route is inference.
+- [ ] If confirmed: repair via the recovery-tool pattern (rebuild the `subject:` block from the DB,
+  keep the ACQ-IDs), as `recover_subject_ids_proj0056.py` did. 19 sidecars + 19 registry rows.
+- [ ] Whatever the answer, **the DB cross-check that found this should be a validator check** — see
+  the plausibility-checks item; "the facility DB logs no procedure for this subject on this
+  acquisition date" would have caught PROJ-0056 *and* this, automatically.
+
+## 🔸 MODERATE — the curated-datasets pilot returned 19 spec gaps (2026-08-21)
+
+The SegBioMed pilot promoted four datasets (`DS-SEG-0001`…`0004`, all four verified here at **100%
+provenance traceability**) and, as asked, reported where `12_CURATED_DATASETS.md` was thin rather
+than inventing conventions. **Consolidated in
+`projects\Imaging\SegBioMed\harvest\DS-SEG_definitions_draft.md` §C/§E/§F.**
+
+**Not applied — every item changes documented schema, which is Ryan's call.** Headline set:
+
+| Gap | Why it bit |
+|---|---|
+| `sample_count` has no unit | one dataset's "sample" is a file, another's is a 15-phase stack — a bare count is not comparable. Proposed `sample_unit` |
+| `label_format` is singular | `DS-SEG-0001` alone holds `.nii.gz` **and** `.mha` |
+| no `file_role` | 772 of `DS-SEG-0002`'s 916 files are auxiliary (stats/transforms/surfaces), not labels |
+| §5.3 filename rule assumes **one ACQ-ID per label** | a cine mask spans a *stack* of 10–12 acquisitions (CDS-04 is live, not future) |
+| no `label_origin` / `review_status` | manual vs predicted vs corrected is the difference between ground truth and model output |
+| no `recon_index` | the 1019 masks were drawn on **recon3**, not recon1 — joining to "the" DICOM gives subtly wrong images |
+| no `spatial_reference` | these masks carry an identity affine; the only honest join is a slice map |
+| `source_acq_ids` too long for one cell | 217 IDs; they wrote `see provenance.csv (N acquisitions)` |
+| verification is yes/no | needs an enum (`direct-ncc`, `inferred-patient-space-rule`, `none`) |
+| no `corrects` cross-reference | `DS-SEG-0004` found and documents a defect in `DS-SEG-0001` v1.0 |
+
+- [ ] Rule on the schema additions, then have the datasets re-emitted against the settled shape.
+- [ ] **`DS-SEG-0001` v1.1 is prepared and NOT applied** — `harvest\DS-SEG-0001_v1.1_proposed\`
+  (v1.0-vs-v1.1 diff + one-command apply). It corrects a slice-order swap on `jrc211209_m85_1019`
+  found by `DS-SEG-0004`'s pixel evidence. Overwriting an already-promoted dataset is a §7 revision;
+  both agents stopped at that gate. Mask files are unchanged either way; production v1.0 is
+  internally consistent with the defect documented in three places.
+- [ ] `CDS-03` (label formats) — their recommendation: `.nii.gz` labelmap + JSON sidecar as the
+  working format, DICOM-SEG for interchange, originals kept as the authoritative vendor record.
+  `.voi` → NIfTI is **convertible but not lossless as one file** (overlapping VOIs, contour
+  geometry, reference-grid binding). Mixed-now-converge-later stands.
+
 ## 🔺 HIGH — the 2026 NI lung study: 44 animal folders contradict their own contents (2026-08-21, RESOLVED 2026-08-21 pending confirmation)
 
 Found while answering the SegBioMed harvest memo. **Nothing has been ingested** — and it cannot be
