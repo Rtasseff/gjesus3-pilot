@@ -578,6 +578,120 @@ disappears. It only stands on its own if we decide to keep archive-as-primary.
 - [ ] Record the decision in [`08_METADATA`](../mfb-rdm-docs/08_METADATA.md) / the external-data
   section so the next collaborator drop does not re-litigate it.
 
+## 🔺 HIGH — the 2026 NI lung study: 44 animal folders contradict their own contents (2026-08-21)
+
+Found while answering a SegBioMed harvest memo (`projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`,
+reply appended 2026-08-21). **Nothing has been ingested and nothing should be** until the identity
+question below is settled by a human or the facility DB.
+
+**The data.** `S:\gnuclear\2026\Jesus\Itziar\1123\<YYMMDD>\<animal>\` — a respiratory-gated lung CT
+study with Imalytics functional-volume segmentations. 11 session dates (`260126` → `260629`),
+**233 animal folders, 2,614 files, ~4.4 GB** (size figure from the SegBioMed memo; not re-measured,
+to spare daytime SMB). Three cohorts: `204–243`, `256–263`, `271–304`.
+
+### Why the historical pull never saw it: it is NIfTI, not DICOM
+
+Not a missed folder. The 2026-08-12 pull **did scan `2026/Jesus`** (`_pull.log`: 226 matching
+DICOMs) — all of them `Jordi` and `irene`. It found nothing under `Itziar` because the scanner
+matches Molecubes DICOM (`<YYYYMMDDhhmmss>_<MODALITY>*.dcm`) and this study is reconstructed NIfTI:
+`CT_1123_<animal>_RespGated_d<NN>_C0.nii` + `FunctionalV.nii.gz` / `TotalV.nii.gz` / `*.segff`.
+
+This makes concrete a "TBC" already in the specs — [`03_RAW_STORAGE`](../mfb-rdm-docs/03_RAW_STORAGE.md)
+says the DICOM ecosystem is ".dcm, **possibly .nii (TBC)**". It is no longer hypothetical.
+
+### ⚠️ The blocker: folder identity and file identity disagree on 44 of 233 folders
+
+| Sessions | Conflict | Folders |
+|---|---|---|
+| `260126` + `260127` | folder says `204–243`, filenames inside say `225–264` — a constant **`+21` offset** | 40 |
+| `260205` | folders `236` / `237` **transposed** (folder `236` holds `1123_237_*` and vice versa) | 2 |
+| `260317` | folder `259`'s `0h\` subfolder holds files named for animal **260**; `30min`/`2h`/`5h` say `259` | 1 |
+| `260318` | folder named `Ex vivo`, not an animal — holds **three** animals (`256`, `260`, `263`); here only the *filename* identifies the animal | 1 |
+
+**For the +21 block the folders are right** — established three ways, and we consider it settled:
+the same cohort is rescanned at **d10** (`260204`+`260205`) and **d21** (`260216`+`260217`) where
+folder and filename agree, and that cohort is exactly `204–243`; the d0 *folder* set is the same
+`204–243` (`d0 == d10`, 40 animals) while the d0 *filename* set `225–264` matches nothing else; and
+animals `205`, `207–215`, `220–222` have **AxioScan histology already in the registry** and sit in
+the d21 survivor set, but are absent from the d0 filename set — under the filename reading, 13
+animals followed to day 21 and then sectioned would have no baseline scan.
+
+**The other four are NOT resolvable that way.** A transposed pair and a mixed folder have matching
+*sets*, so set logic cannot settle them, and the `Ex vivo` folder inverts the rule entirely.
+
+**So neither "trust the folder" nor "trust the filename" is a safe ingest rule here** — folder-only
+is wrong on 44 sessions, filename-only on 40. This is the PROJ-0056 failure class: there, ids
+composed from a *reconstruction* folder resolved cleanly to three real animals born two years
+earlier. A misattributed subject id does not look like an error; it looks like data.
+
+- [ ] **Ask Itziar** to adjudicate the 4 unresolved conflicts (`260205` 236/237, `260317` 259/260,
+  `260318` `Ex vivo`). Cross-check against the animal-facility DB procedure dates, which have ruled
+  on this class before.
+- [ ] Decide how **NIfTI-only sessions** enter the system at all — this shape is invisible to the
+  current NI scanner and will stay invisible.
+- [ ] **No instrument code exists for optical imaging.** `260317`/`260318` are DiR fluorescence
+  (`OI-data\`, Luminescence/Photo NIfTI + TIFF, CT co-registration, 0h/30min/2h/5h). The MILabs
+  VECTor is already documented as **PET/SPECT/CT/OI** in [`00_INDEX`](../mfb-rdm-docs/00_INDEX.md)
+  but only `PET`/`SPECT`/`CT` codes were ever assigned. Data Office call.
+- [ ] Do **not** generalise the one-time `S:\gnuclear` pull machinery to cover this. Per the
+  standing direction, specify what operators may enter rather than building a better guesser.
+
+**Upside once unblocked:** those animals are already known subjects — `1123` animals `205–301` have
+**187 AxioScan histology acquisitions** in `PROJ-0014` (2026-03-24 → 2026-07-24). Ingesting the CT
+would put in-vivo imaging, functional segmentation, and histology under one subject id.
+
+## 🔸 MODERATE — historical MRI ingest: `Proyecto 1019` (2021) closes a segmentation-GT link (2026-08-21)
+
+From the same SegBioMed memo. **`K:\gjesus\MRI\Proyecto 1019`** holds **95 ParaVision study
+folders**, of which:
+
+- **9 are already in `registry_raw`** (the 2022-02-07 / 02-09 sessions, `PROJ-0006`). The registry
+  was already fed from this exact tree — **the ingest path is proven on this data**, not theoretical.
+- **86 folders / 56 distinct sessions from 2021 are not ingested**: 2021-04-20 → 2021-12-15,
+  **40,811 files, 37.3 GB**. Longitudinal — `Mes 2 / 4 / 6 / 8 / 10` of `Procedimiento 2`.
+
+**Why it is worth doing:** 135 manual cardiac LV/RV cine masks (ITK-SNAP, 1=LV / 2=RV) are sitting
+in `curated_datasets\_incoming\seg-harvest-2026-08-20\`, and **0 of 135 trace to an ACQ-ID** because
+their 8 source sessions are the un-ingested 2021 ones. All 8 have their raw ParaVision study present
+on `K:`. Ingesting them is what lets that dataset satisfy the promotion checklist
+([`12_CURATED_DATASETS`](../mfb-rdm-docs/12_CURATED_DATASETS.md) §6.2, "every label traces to a valid
+RAW acquisition").
+
+Three of the mask animals (`62`, `65`, `67`) are **already registered subjects** in `PROJ-0006`; the
+masks are an earlier timepoint of animals already in the system. The other five (`66`, `82`, `83`,
+`84`, `85`) would be new.
+
+- [ ] Decide whether to run it — needs a go-ahead; this is a production ingest.
+- [ ] **`PROJ-0006` is `closed`.** Ingesting into it reopens a closed project — a deliberate
+  decision, not a side effect of the ingest.
+- [ ] Check for the same subject-identity trap as the NI item above before trusting any derived
+  `subject_ids`: here the ParaVision study name (`jrc211207_m62_1019`) carries date + animal +
+  protocol and is the instrument's own record, which is a stronger anchor than a folder name — but
+  verify, do not assume.
+
+## 🔸 MODERATE — CDS-01 (curated datasets) now has a concrete trigger, and the spec text is stale (2026-08-21)
+
+[`12_CURATED_DATASETS`](../mfb-rdm-docs/12_CURATED_DATASETS.md) is ❓ EVALUATING and says the area
+"is **not deployed** — `curated_datasets/` exists on **none** of the live system today". **That
+sentence is now stale**: the SegBioMed harvest deposited ~370 MB / ~1,050 files into
+`J:\gjesus3-data\curated_datasets\_incoming\seg-harvest-2026-08-20\` (deliberately pre-promotion, so
+no guardrail is violated — but the directory exists).
+
+CDS-01 asked "include curated datasets in the pilot or defer?" and was deferred for lack of a
+concrete need. **There is now a concrete need**, with the traceability criterion already measured:
+
+| Proposed dataset | §6.2 traceability | Verdict |
+|---|---|---|
+| `DS-SEG-0002` — 144 PMOD `.voi` + 23 `.voistat` + 360 stats `.xlsx` | **821 distinct ACQ-IDs, 821 of 821 resolve**, 0 rows without an id; spans 12 projects, PET+CT | **passes** the check we can run mechanically |
+| `DS-SEG-0001` — 135 cardiac cine masks | **0 of 135** carry an ACQ-ID | **blocked** by the 1019 ingest item above |
+
+- [ ] **Ryan/PI: rule on CDS-01.** Deploying the area is a scope decision, not a task — an agent
+  should not deploy it unasked.
+- [ ] Correct the "exists on none of the live system" sentence whichever way CDS-01 goes.
+- [ ] `DS-SEG-0001` provenance `creator` is **unknown** — the folder is `Analisis Unai`, which is
+  likely a login artifact. *Unai* is a real person here (NI Platform Manager), which makes guessing
+  more tempting and no more correct. **Leave it blank; ask.**
+
 ## 🔺 HIGH — the `operator` column carries a template instruction on 10,314 rows (2026-08-20)
 
 Found while repairing the `instrument_model` placeholder the same day (CHANGELOG 2026-08-20).
