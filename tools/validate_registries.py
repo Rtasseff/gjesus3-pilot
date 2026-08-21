@@ -15,6 +15,11 @@ WHAT IT CHECKS
     - acq_id matches ACQ-YYYYMMDD-<CODE>-NNN.
     - required columns non-empty per row: acq_id, registration_datetime,
       data_ecosystem, instrument, canonical_path.
+    - no registry cell (any column) contains unsubstituted template residue:
+      `${...}` / `{{...}}` resolver expressions, or a `<...>` angle-bracket
+      placeholder. ERROR — this is what let a literal "Bruker BioSpec
+      <7T|11.7T>" sit in 10,314 production instrument_model cells through
+      repeated clean validator runs (fixed 2026-08-20; see CHANGELOG).
     - sample_type, when set, is in the controlled vocab
       {tissue, organism, cells, material, phantom}.
     - canonical_path starts with /raw/ and the acquisition folder exists on
@@ -245,6 +250,39 @@ def check_subject_ids(cell, label, issues):
                 f"collapses onto this id", label)
 
 
+# ---- Unsubstituted template-residue checks (ERROR-level) -----------------
+
+# Unsubstituted template syntax left in a registry cell means an `# EDIT:`
+# manual step was described but never performed before a config was run.
+# This is the detection gap that let a literal "Bruker BioSpec <7T|11.7T>"
+# placeholder sit in 10,314 production instrument_model cells through
+# repeated clean validator runs (fixed 2026-08-20; see CHANGELOG). Three
+# forms recognized: `${...}` / `{{...}}` unresolved resolver expressions,
+# and a `<...>` angle-bracket placeholder (e.g. the example above, or
+# "<REQUIRED - set via mri-ingest --operator, or replace here>").
+TEMPLATE_RESIDUE_RE = re.compile(r"\$\{[^}]*\}|\{\{[^}]*\}\}|<[^<>\n]*>")
+
+
+def check_template_residue(row, label, issues):
+    """ERROR for any registry cell that still contains unsubstituted template
+    syntax.
+
+    Deliberately column-agnostic: it does not matter which column broke —
+    that is exactly what let the MRI instrument_model incident above go
+    undetected for as long as it did. Scans every cell in the row rather
+    than special-casing a known-risky column.
+    """
+    for col, value in row.items():
+        val = value or ""
+        if not val:
+            continue
+        m = TEMPLATE_RESIDUE_RE.search(val)
+        if m:
+            issues.error(
+                f"column '{col}' still contains unsubstituted template "
+                f"syntax {m.group()!r} (full value: {val!r})", label)
+
+
 def check_subjects_registry(registries_dir, issues):
     """ERROR-level scan of registry_subjects.csv for null project aliases.
 
@@ -398,14 +436,20 @@ def validate(nas_root, check_enrich=True):
             if not (row.get(col) or "").strip():
                 issues.error(f"required column '{col}' is empty", label)
 
-        # 5. sample_type controlled vocab (blank allowed)
+        # 5. no unsubstituted template residue in any cell (${...} / {{...}}
+        # / <...>) — independent of every other check: it does not need a
+        # resolvable folder or a known column, so it still runs when
+        # --no-enrichment is set.
+        check_template_residue(row, label, issues)
+
+        # 6. sample_type controlled vocab (blank allowed)
         sample_type = (row.get("sample_type") or "").strip()
         if sample_type and sample_type not in SAMPLE_TYPE_VOCAB:
             issues.error(
                 f"sample_type '{sample_type}' not in controlled vocab "
                 f"{sorted(SAMPLE_TYPE_VOCAB)}", label)
 
-        # 6. canonical_path /raw/-rooted + folder exists on disk
+        # 7. canonical_path /raw/-rooted + folder exists on disk
         canonical = (row.get("canonical_path") or "").strip()
         folder = None
         if canonical:
@@ -421,7 +465,7 @@ def validate(nas_root, check_enrich=True):
                         f"(from canonical_path '{canonical}')", label)
                     folder = None  # don't chase a sidecar we can't reach
 
-        # 7. project_id existence (only PROJ-XXXX form, only if we have a set).
+        # 8. project_id existence (only PROJ-XXXX form, only if we have a set).
         # Since 2026-08-12 no tool writes more than one id (write-once —
         # 06_REGISTRIES §2.3b), but this stays split-based on purpose: a legacy
         # or hand-edited `;` cell is then still checked id-by-id. Testing the
@@ -436,17 +480,17 @@ def validate(nas_root, check_enrich=True):
                         f"project_id '{proj}' not found in "
                         f"registry_projects.csv", label)
 
-        # 8. subject_ids null-alias detector (ERROR). Independent of the
+        # 9. subject_ids null-alias detector (ERROR). Independent of the
         # sidecar walk: it reads the registry cell only, so it still runs when
         # --no-enrichment is set or the acquisition folder is unreachable.
         check_subject_ids(row.get("subject_ids"), label, issues)
 
-        # 9. Phase 3 enrichment (WARN) — needs a resolvable folder
+        # 10. Phase 3 enrichment (WARN) — needs a resolvable folder
         if (check_enrich and sample_type in ENRICH_SAMPLE_TYPES
                 and folder is not None):
             check_enrichment(acq or label, sample_type, folder, issues)
 
-    # 10. registry_subjects.csv null-alias detector (ERROR).
+    # 11. registry_subjects.csv null-alias detector (ERROR).
     check_subjects_registry(registries_dir, issues)
 
     return issues, len(rows)
