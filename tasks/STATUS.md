@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-08-21
+**Last Updated:** 2026-09-02
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -13,6 +13,71 @@ things genuinely in flight. It deliberately stays short.
   [`00_INDEX.md`](../mfb-rdm-docs/00_INDEX.md)).
 - **Detailed historical work trails** (the old 749-line task list and the
   per-pass handoff/plan notes) are archived under [`archive/`](archive/).
+
+---
+
+## 0. ⚠️ DECISIONS WAITING ON RYAN — read this first after a break
+
+**Nothing below is blocked on work. Each item is blocked on a decision.** The evidence is gathered,
+written down, and linked; none of it needs re-deriving. Ordered by cost-of-getting-it-wrong, not by
+effort.
+
+**The one rule that covers all of them:** where a value is unknown, it has been left **blank or
+`pending`** rather than guessed. Every item below is safe to leave alone indefinitely — the system
+is internally consistent as it stands.
+
+| # | Decision | Cost of delay | Detail |
+|---|---|---|---|
+| **D1** | **`operator` on 10,314 MRI rows** still holds the literal `<REQUIRED - set via mri-ingest --operator, or replace here>`. **This makes `validate_registries` exit FAILED with 10,314 errors** — so the validator cannot gate anything until it is settled. **Recommendation: blank them** (the documented unknown sentinel, already on 1,583 rows). Do **not** derive from `acqp.ACQ_operator` — it reads `nmr`, a shared login, not a person. | The validator is red, so a *real* new error would hide in the noise | [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-20) |
+| **D2** | **`jrc260224_m39_0525` is probably animal 37, not 39** — 19 production acquisitions (`ACQ-20260224-MRI-020`…`-038`). The facility DB logs MRI 7T on 2026-02-24 for `31,32,`**`37`**`,38,43,44`; five of six match the registry and the sole mismatch is this session. Animal 39's MRI is logged 02-25, where a separate session already exists. Irene's own copy says `m37`. **Ask Irene — one sentence settles it.** | A wrong subject id resolves cleanly and looks like data (the PROJ-0056 lesson) | [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-21) |
+| **D3** | **Unparsed ParaVision studies are dropped silently.** A folder token that matches neither ingest regex is globbed, parsed to nothing, and skipped with **no error and no worklist row**. One instance found (recovered as G1); **how many the kenia pull dropped is unknown because nothing recorded them.** Needs (a) a code change to report unparseable matches, then (b) a re-glob to quantify the historical damage. | Until (b) runs, "the historical MRI pull is complete" is an assumption | [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-21) |
+| **D4** | **19 schema gaps from the curated-datasets pilot** — `sample_unit`, plural `label_formats`, `file_role`, `label_origin`/`review_status`, ordered multi-ACQ reference, `recon_index`, `spatial_reference`, a verification enum, a `corrects` cross-reference. All change documented schema, so none were applied. | The four promoted datasets encode workarounds that a settled schema would replace | [`BACKLOG.md`](BACKLOG.md) MODERATE + `projects\Imaging\SegBioMed\harvest\DS-SEG_definitions_draft.md` §C/§E/§F |
+| **D5** | **`DS-SEG-0001` v1.1 is prepared and NOT applied.** It corrects a slice-order swap on `jrc211209_m85_1019` found by `DS-SEG-0004`'s pixel evidence. Overwriting an already-promoted dataset is a §7 revision; both agents stopped at that gate. **Production v1.0 is internally consistent and the defect is documented in three places.** Mask files are unchanged either way. | Low — v1.0 is consistent, just known-imperfect | `projects\Imaging\SegBioMed\harvest\DS-SEG-0001_v1.1_proposed\` (v1.0-vs-v1.1 diff + one-command apply) |
+| **D6** | **Mint the `SegBioMed` project** and attach the **854** project-less 2021 acquisitions + the 5 Dec-2021 `1019` sessions the datasets cite. Deliberately not done — protocol→project is a convention, not a rule, and this is the call that decides where segmentation-supporting imaging lives. | None — ACQ-IDs are the durable identity; provenance already resolves 100% without a project | SegBioMed memo §G9 / D11 |
+| **D7** | **5 header-only G1 exams** (`ACQ-20260821-MRI-001…004` + `ACQ-20250526-MRI-094`) have **no `2dseq` and no `fid`** — un-regenerable. Flipping them to terminal `no-source` is human-gated in [`../mfb-rdm-docs/11_OPERATIONS.md`](../mfb-rdm-docs/11_OPERATIONS.md) §5.5 step 6. Left `pending`, which is the honest state. | None | [`BACKLOG.md`](BACKLOG.md) |
+| **D8** | **MILabs VECTor onboarding** — an in-service instrument with **zero acquisitions** in the registry. Blocks the 2026 Imalytics lung study. Real integration work (no instrument code, no ingest path, no extractor, no `OI` code). SegBioMed has been told to expect a long wait. | The instrument keeps generating unarchived data | [`BACKLOG.md`](BACKLOG.md) MODERATE (2026-08-21) |
+| **D9** | **`CDS-03` — label formats per ecosystem.** SegBioMed's recommendation: `.nii.gz` labelmap + JSON sidecar as the working format, DICOM-SEG for interchange, vendor originals kept authoritative. `.voi`→NIfTI is convertible but **not lossless as one file**. Working assumption is mixed-now-converge-later. | None — mixed is already the working assumption | [`../mfb-rdm-docs/12_CURATED_DATASETS.md`](../mfb-rdm-docs/12_CURATED_DATASETS.md) §CDS-03 |
+
+**Where the conversation lives:** the full exchange with the SegBioMed project — six replies each
+way, including every correction and its evidence — is appended to
+`projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`. Read it if any of D2/D4/D5/D6/D9
+needs context.
+
+### Re-verifying this page before you trust it
+
+Every number above is measured, not remembered — but production moves, so **check before acting**.
+All read-only, seconds to run:
+
+```bash
+# row count (compare against the §1 table)
+python -c "import csv,io;print(sum(1 for _ in csv.DictReader(io.open(r'J:\gjesus3-data\registries\registry_raw.csv',encoding='utf-8-sig',newline=''))))"
+
+# D1 -- is the validator still red, and red ONLY for `operator`?
+PYTHONPATH=tools python tools/validate_registries.py --nas-root "J:\gjesus3-data" --no-enrichment
+#   expected today: FAILED, exactly 10,314 errors, ALL of them the `operator` placeholder.
+#   A DIFFERENT count means something new happened -- do not wave it off as "the known red".
+
+# D7 -- what is still queued for DICOM regeneration
+python -c "import csv,io,collections;print(collections.Counter(r['status'] for r in csv.DictReader(io.open(r'J:\gjesus3-data\registries\pending_dicom_regen.csv',encoding='utf-8-sig',newline=''))))"
+#   expected: not-applicable 365, regenerated 162, no-source 94, pending 5 (the D7 header-only exams)
+
+# curated datasets -- should be 4 rows
+python -c "import csv,io;print(len(list(csv.DictReader(io.open(r'J:\gjesus3-data\registries\registry_datasets.csv',encoding='utf-8-sig',newline='')))))"
+```
+
+**Registry backups taken before the 2026-08-21 production writes** (sha256-verified byte-identical
+at the time, off-NAS):
+
+| Path | State captured |
+|---|---|
+| `C:\Users\rtasseff\temp\gjesus3_registry_backup_20260821_preG1\` | after the 854-acquisition 1019 ingest, **before** G1 |
+| `C:\Users\rtasseff\temp\gjesus3_registry_backup_20260821_1019_ingest\` | **name is misleading** — it was overwritten by a re-run and holds the *post*-1019 state, not the pre-1019 one |
+| `C:\Users\rtasseff\temp\gjesus3_registry_backup_20260820_mri_model\` | before the `instrument_model` repair |
+
+> ⚠️ **There is no off-NAS snapshot of the pre-1019 registry** — the directory named for it was
+> overwritten by a re-run of the backup script. Nothing is unrecoverable (all 854 rows carry
+> `ingest_config: tools/configs/mri_1019_kgjesus_2021_*.yaml`, so they are identifiable and
+> removable), but the tidy rollback artifact is gone. **Use a fresh, dated directory per write.**
 
 ---
 
@@ -29,9 +94,10 @@ production care.
 
 | | |
 |---|---|
-| Acquisitions in `/raw/` | **15,474** (all checksummed + `metadata.json` sidecar'd) — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) and the **1,508** from the `S:\gnuclear` NI backfill (§3) |
-| Projects | **57 registered** — 49 active + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). Every live folder carries the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
-| Subjects (`registry_subjects.csv`) | **1,124** (one row per subject) — was 1,146 until the 2026-08-16 `-None` subject-id repair, which dropped 65 ambiguous rows and added back 43 real ones (see 2). The 2026-08-19 PROJ-0056 repair left the total unchanged (3 rows dropped, 3 added). |
+| Acquisitions in `/raw/` | **16,375** (all checksummed + `metadata.json` sidecar'd) — 15,474 until 2026-08-21, then **+854** from the 2021 `Proyecto 1019` recovery, **+24** from the G1 session, and **+23** from a routine operator AxioScan ingest on 2026-08-26 (`PROJ-0059`). Also — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) and the **1,508** from the `S:\gnuclear` NI backfill (§3) |
+| Projects | **58 registered** — 50 active + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). Every live folder carries the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
+| Subjects (`registry_subjects.csv`) | **1,165** (one row per subject; 1,124 until the 2026-08-21 ingests added the 2021 animals) — was 1,146 until the 2026-08-16 `-None` subject-id repair, which dropped 65 ambiguous rows and added back 43 real ones (see 2). The 2026-08-19 PROJ-0056 repair left the total unchanged (3 rows dropped, 3 added). |
+| Curated datasets (`registry_datasets.csv`) | **4** — `DS-SEG-0001`…`0004`, segmentation, DICOM ecosystem. Area deployed 2026-08-21 as a pilot (`CDS-01` decided). Provenance traceability verified **100% on all four**. |
 | Publications | empty — deferred (PLANNED) |
 
 **Two registry facts changed on 2026-07-14** (see [`../CHANGELOG.md`](../CHANGELOG.md)):
@@ -91,11 +157,13 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **SegBioMed segmentation harvest — answered 2026-08-21; one ask green-lit, one unblocked, one blocked on a device we have never onboarded.** The SegBioMed project deposited ~370 MB / ~1,050 files of segmentation ground truth into `curated_datasets\_incoming\seg-harvest-2026-08-20\` (pre-promotion; sources read-only; sha256 manifest) and asked for four things. **Nothing was ingested, promoted, deployed or deleted.** Reply + a researcher-facing identity review are in `projects\Imaging\SegBioMed\harvest\`; findings in [`BACKLOG.md`](BACKLOG.md); narrative in [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-21 (two rows — the second corrects the first).
-  - **🔴 BLOCKED — the MILabs VECTor has never been onboarded.** The 2026 lung study (`S:\gnuclear\2026\Jesus\Itziar\1123`) runs on it, and **`registry_raw.csv` holds zero MILabs acquisitions** — all 1,640 NI rows are Molecubes. No instrument code, no ingest path, no extractor, no operator workflow, and **no code for `OI` (optical imaging)** although `00_INDEX` documents the VECTor as PET/SPECT/CT/**OI** and two of its sessions are DiR fluorescence. This is the root issue; the NIfTI-vs-DICOM blind spot is a symptom. Filed MODERATE — a real instrument integration, so expect it to take time. ⚠️ `AnimalID` in its parameter files holds the **operator's name**, not the animal.
-  - **✅ RESOLVED (pending Itziar's confirmation) — 44 animal folders that contradicted their own contents.** Each of the four cases resolves *differently* — 40 folders to the folder name, a transposed pair to the scan name, a mistyped scan name to the folder, and one `Ex vivo` folder where only the scan name identifies the animal. So **no single derivation rule is correct here**; the identities get set from the review, once. Written up non-blamingly for the researcher conversation as `1123_2026_scan_identity_review.md` — these are console naming slips that the person filing the data **already caught in 43 of 44 cases**.
-  - **✅ UNBLOCKED — historical MRI 1019, cause found.** The bulk MRI ingest read the **scanner host** (`kenia`), not researcher storage, with no configured cutoff; its earliest acquisition anywhere is **2022-01-10**, so that floor is the **scanner's own retention horizon**, not a decision. `K:\gjesus\MRI\Proyecto 1019` splits exactly on it — 9 studies from 2022 ingested, **86 from 2021 (40,811 files, 37.3 GB) not**. Empirically answers open question #10 in the MRI platform notes, and carries a bigger consequence: **any internal MRI older than ~2022-01 survives only on researcher shares**, unsurveyed. Goes to a **new `SegBioMed` project** — protocol → project is a convention, not a rule, so `PROJ-0006` being `closed` was never the blocker. Needs a go-ahead to run.
-  - **✅ CDS-01 DECIDED — include the curated-datasets area, as a pilot.** [`12_CURATED_DATASETS`](../mfb-rdm-docs/12_CURATED_DATASETS.md) is now 🔶 DRAFT, approved for pilot deployment. `DS-SEG-0002` passes §6.2 traceability (**821 of 821** ACQ-IDs resolve); `DS-SEG-0001` is sequenced behind the 1019 ingest. The pilot doubles as the review of that spec — SegBioMed asked to report gaps rather than invent conventions.
+- **SegBioMed segmentation harvest + the 2021 MRI recovery — ✅ DONE IN PRODUCTION 2026-08-21.** A long exchange with the SegBioMed project (full thread: `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`, six replies each way) that turned into four production changes. **Everything below is finished and verified; what remains are the decisions in §0.**
+  - **854 acquisitions recovered from 2021** (`Proyecto 1019`, `K:\gjesus\MRI`) — registry 15,474 → 16,328, 0 duplicates, 0 blank acquisition timestamps, `subject_ids` 854/854 from the facility DB, `checksum_present` Y on all, and the 9 DICOM-less exams regenerated to completion. **Ingested with NO project, deliberately** — the first end-to-end exercise of that path. **Cause of the gap, established not guessed:** the 2026-06 bulk pull read the *scanner host* (`kenia`) with no cutoff, and its earliest acquisition anywhere is 2022-01-10 — that floor is the **scanner's own retention horizon**. Consequence: **any internal MRI older than ~2022-01 survives only on researcher shares**, unsurveyed.
+  - **`curated_datasets/` deployed** (§10 steps 1–3; `CDS-01` decided → include, as a pilot): `README_START_HERE.txt`, `segmentation/{MICROSCOPY,DICOM}/`, and `registry_datasets.csv` initialised with its 14-column header. **`CDS-02` answered** — curator set is the Data Management Lead plus delegated agents; no backup; one approval gate.
+  - **Four datasets promoted by SegBioMed and independently verified here** — `DS-SEG-0001` (8 cardiac cine stacks), `DS-SEG-0002` (144 PMOD VOI sets), `DS-SEG-0003` (28 stacks), `DS-SEG-0004` (10 inter-observer stacks). All 14 registry columns match `06_REGISTRIES §5.2`; **provenance traceability is 100% on all four** (821/821, 89/89, 308/308, 111/111 ACQ-IDs resolve). The pilot also returned **19 spec gaps** — see §0 D4.
+  - **G1 — one session recovered that the pull had dropped silently** (`jrc250526_145_0522`, 24 acqs, registry → **16,352**). Its folder token omits the `m`, so it matched neither ingest regex and was skipped with no error and no worklist row. **That silent-skip class is §0 D3 and is the most important thing to come out of this work.**
+  - **A trap worth knowing before any similar ingest:** `staging_dir` sets `original_name`, which is *half the dedup key*. Pointed at a tree root instead of the level the existing rows used, 149 already-ingested exams re-entered as duplicate ACQ-IDs (caught in dry run: 0 skips vs 149). Always dry-run a batch you know is already ingested — it is the cheapest possible dedup test. The six `mri_1019_kgjesus_2021_*.yaml` configs carry the reasoning inline.
+  - **`11_OPERATIONS §5.5` corrected from actually running it:** `conda activate dicomifier-pilot` **fails silently** in a non-interactive WSL shell, after which the backfill logs a soft SKIP — a run that regenerated nothing looks like a success. Needs `source ~/miniforge3/etc/profile.d/conda.sh` first. Also: when sources are already reachable (`K:` = `/mnt/k`), build the expected layout from **symlinks and copy nothing**; and step 5 (relink) does not apply to project-less acquisitions.
 
 - **MRI `instrument_model` template placeholder — ✅ REPAIRED IN PRODUCTION 2026-08-20; root cause fixed and **merged to `main` 2026-08-20 (`18c788b`, pushed)**.** 10,314 of 10,330 MRI acquisitions carried the literal unsubstituted `Bruker BioSpec <7T|11.7T>` in `registry_raw.instrument_model` — the five bulk historical configs (`tools/configs/mri_jrc_*.yaml`) hardcoded it behind an `# EDIT:` comment nobody ever actioned, while the operator template had already moved to auto-deriving the field for ingests since 2026-07. **Fully recoverable:** every affected sidecar's `mri._raw_metadata.acqp.ACQ_station` reads `"Biospec 70/30"` (0 exceptions, 0 missing) → `Bruker BioSpec 7T` per `paravision_metadata.py::_scanner_model`; no 11.7T anywhere in the set. Repaired at the byte level in `registry_raw.csv` (10,314 occurrences of `,Bruker BioSpec <7T|11.7T>,` → `,Bruker BioSpec 7T,`, size 8,182,709 → 8,100,197 bytes, BOM-free pure-CRLF preserved) and verified row-by-row against a pre-edit backup: exactly 10,314 rows changed, every one differing in `instrument_model` only. `instrument_model` is now `Bruker BioSpec 7T` × 10,330 for MRI, every non-MRI value unchanged. `validate_registries --no-enrichment`: **0 errors, 0 warnings**, same as baseline. **Root-cause fix (merged):** all five configs plus the `mri_bruker.yaml` template's own stale header bullet now read/describe `instrument_model: "${discovered.mri_scanner_model}"`; `validate_registries.py` gained a new ERROR-level, column-agnostic check for unsubstituted template residue (`${...}` / `{{...}}` / `<...>`), closing the detection gap. **That check also (correctly) flags a second, separate, NOT-fixed defect** — the same 10,314 rows carry `<REQUIRED - set via mri-ingest --operator, or replace here>` in the `operator` column, left alone pending a Data Office decision. Narrative in [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-20.
 
