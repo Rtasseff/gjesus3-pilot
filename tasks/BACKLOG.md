@@ -467,6 +467,74 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   alias. Also note the `subject:` block schema currently has no way to say
   "this subject is human" other than `species: Homo sapiens`.
 
+## 🔺 HIGH — the MRI GUI can't use metadata labels for the *destination project*, only for the link name (2026-09-03)
+
+**Reported by Ryan, 2026-09-03.** On the MRI ingest page (`/mri`) the clickable / draggable
+`${discovered.*}` metadata chips work for **Project link name** but **not** for **Project name** —
+the field that decides *which project the acquisition is associated with*. That field is a plain
+free-text box, so its value is one static string for the whole run.
+
+**Why this is a real limit, not a cosmetic one.** An operator ingesting **several projects in one
+run** has no static project name to type. Today the options are all bad:
+
+| Option | Why it doesn't do |
+|---|---|
+| `auto` mode | hard-codes exactly **one** convention — `AE-biomaGUNE-${discovered.project_code}`. Any other basis (a study code, a different filename chunk, a per-folder code) is unreachable. |
+| `fixed` mode | one name for every scan in the run — wrong the moment the run spans two projects |
+| one run per project | the operator must know the split in advance and hand-partition the pull |
+| edit the YAML | exactly what the GUI exists to avoid |
+
+**Microscopy already does this.** `registry.project_name` is declared `"kind": "token"` in
+`tools/operator/value_fields.py:53`, so the microscopy runner renders it as a token field with the
+`discovered.*` palette — the GUI's own module docstring (`tools/operator/gui/app.py:20`) lists
+"`link_filename` + `project_name` + `auto_create_project` via clickable `discovered.*` token chips"
+as builder behaviour. **The MRI page is the sibling that never got it.**
+
+### The engine already supports this — the gap is UI-only
+
+Checked 2026-09-03; don't re-derive it:
+
+- **The MRI template itself already uses a token here.** `tools/templates/instruments/mri_bruker.yaml:337`
+  ships `project_name: "AE-biomaGUNE-${discovered.project_code}"` — a per-case token expression that
+  resolves at ingest. *That is the feature.* The GUI simply never exposes editing it.
+- **`project_name` is a token-resolvable, user-controllable registry column** —
+  `tools/ingest/resolver.py:83` (`USER_CONTROLLABLE_COLUMNS`).
+- **The preview already resolves it per case and displays it.** `preview.py::_preview_project`
+  replicates Step 9.5 read-only and returns `PROJ-XXXX` / `will auto-create: <name>` /
+  `not found: <name>`; `mri.js` already renders a per-row **Project** column from it.
+- **Collision checking stays correct** — `collisions.py` groups by `(project_name, link_filename)`,
+  so a run spanning several projects is already handled.
+
+**No schema change and no ingest change.** ✅ Nothing here touches a `DECIDED` item — it makes the
+MRI page consistent with the microscopy page and with the template's own existing behaviour.
+
+### What the change is
+
+- [ ] **Replace `#project-name`** (`tools/operator/gui/templates/mri.html:101`, a bare
+  `<input type="text">`) with a `TokenField` + `renderPalette` — both already loaded on that page
+  for the link name (`static/tokenfield.js:104` and `:234`). Give it the same live "e.g. …"
+  resolved example the link field has (`updateLinkExample()` in `static/mri.js`), so the operator
+  sees the real project name before ingesting.
+- [ ] **Keep the OS-safe-name handling.** `static/mri.js:141` converts whitespace → `-` as you type,
+  because a project's name **is** its folder name (05_PROJECTS "folder == name verbatim"). That
+  conversion must apply to the **literal text segments only**, never inside a `${...}` ref.
+- [ ] **Then reconsider the mode selector.** `auto` is just "the template's default expression" and
+  `fixed` is "a literal string" — once the field accepts tokens the two collapse into one editable
+  field, with `none` (no project, no links) staying as its own choice.
+  `app.py::_mri_overrides` (~line 1043) is where the three modes become `registry.project_name`.
+- [ ] **Show every distinct destination project in the preview, with counts, before ingest.** A
+  token-valued project name plus `ingest.auto_create_projects` means one run can mint *several*
+  projects. The per-row column already exists; what is missing is a summary line — e.g.
+  *"3 projects: X (12 scans), Y (4), Z (8) — 1 will be created"* — which is what makes a
+  multi-project run safe to approve.
+- [ ] **Rebuild and redeploy the frozen exe** to `\gjesus3\gjesus3\gjesus3-data\tools\`. A
+  source-only fix changes nothing for operators, and the exe has its own bundling failure mode
+  (`tools/operator/gui/README.md` + `gjesus3_ingest.spec`).
+
+**Test it against the case that motivated it:** one pull whose folders span two or more protocol
+codes, with the project name set to something *other* than the AE convention, and confirm the
+preview sends each scan to its own correct project.
+
 ## 🔺 HIGH — external collaborator archives are one row per EXAM, not per series (2026-08-14)
 
 The 75 external cardiac-MRI acquisitions in `DTS24` (`XMRI`; LIONS ×42, HPIC ×33) are each
