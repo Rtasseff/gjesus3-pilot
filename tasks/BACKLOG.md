@@ -503,9 +503,9 @@ Office when it has explicitly been left to the people whose names they are.
 data that names no person — that is *not* part of this item and must not be back-filled by guessing.
 This item covers only the ~4,000 rows that *do* carry a name.
 
-## 🔺 HIGH — the MRI GUI can't use metadata labels for the *destination project*, only for the link name (2026-09-03 — ✅ **BUILT + TESTED 2026-09-04**, ⚠ **NOT YET DEPLOYED**)
+## ✅ DONE IN PRODUCTION 2026-09-04 — the MRI GUI can now use metadata labels for the *destination project*, not just the link name (raised 2026-09-03)
 
-> **Status 2026-09-04.** Built on `feat/mri-gui-project-tokens` and verified end-to-end; > the resolution is at the bottom of this item. **The one thing left is the exe rebuild + > redeploy** — operators run the frozen `gjesus3_ingest.exe` from the NAS, so until that > happens nothing has changed for them. Per this project's rule, "done" means done in > production, and this is not there yet.
+> **Closed 2026-09-04.** Built, verified, merged (`4294c02`), and the rebuilt > `gjesus3_ingest.exe` is **deployed to `J:\gjesus3-data\tools\` and confirmed running > from the NAS**. Operators have it now. Kept here rather than deleted because the four > design decisions below are the reasoning a future change would otherwise have to > re-derive.
 
 **Reported by Ryan, 2026-09-03.** On the MRI ingest page (`/mri`) the clickable / draggable
 `${discovered.*}` metadata chips work for **Project link name** but **not** for **Project name** —
@@ -606,10 +606,14 @@ touching it again:
 - **Regression test:** `tools/operator/test_mri_project_name.py` (24 checks, self-contained —
   needs no test NAS or sample tree). Run it before any future edit to this page.
 
-- [ ] **Remaining: rebuild `gjesus3_ingest.exe` and redeploy it to
-  `\\gjesus3\gjesus3\gjesus3-data\tools\`.** Needs Ryan — it is a production NAS write, and
-  the frozen exe has its own bundling failure mode (see `tools/operator/gui/README.md` and the
-  2026-07-17 frozen-exe README crash). Nothing changes for operators until this is done.
+- [x] **Rebuilt and deployed 2026-09-04** (on Ryan's go-ahead). Built off OneDrive to
+  `D:\_gjbuild` / `D:\_gjdist`; the live exe went **95,724,318 → 95,897,468 bytes**, deployed
+  via a `.new` sidecar + atomic replace and SHA-256 verified against the source; the updated
+  `mri_guide.html` went to `tools\docs\` too. The **previous live exe is backed up** at
+  `C:\Users\rtasseff\temp\gjesus3_exe_backup_20260904\` (byte-verified; the two older
+  backups held *pre*-Aug-10 builds, so the Aug-10 build had never been saved).
+  **Verified in-frozen, not just rendered** — see the note below, which corrects the
+  verification instruction that would have missed the 2026-07-17 crash.
 
 ## 🔺 HIGH — external collaborator archives are one row per EXAM, not per series (2026-08-14)
 
