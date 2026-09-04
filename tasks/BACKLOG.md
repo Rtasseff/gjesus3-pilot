@@ -15,6 +15,38 @@ When a backlog item becomes a blocker for delivery, promote it to `STATUS.md`.
 
 ---
 
+## 🔺 HIGH — port gjesus3 RDM production onto Box A (2026-09-04)
+
+**The plan is written and awaiting review:
+[`box_a_production_migration_plan.md`](box_a_production_migration_plan.md).** Read that, not
+this stub — it carries the full inventory, the phase-by-phase steps, each phase's
+verification, and the four open decisions (B1–B4).
+
+Box A (HP Z2 G1i SFF) arrived 2026-09-03. It becomes the **production** machine for this
+system; this workstation becomes **dev**. All RDM operations move; backups and the two
+image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
+
+**Three things worth knowing without opening the plan:**
+
+- ⚠️ **Phase 0.1 is not gated on Box A and should not wait for it.** The 46 Claude
+  memory files (292 KB) sit at `C:\Users\rtasseff\.claude\projects\<slug>\memory\` —
+  **outside OneDrive and not in git, so there is exactly one copy and no backup.** The fix
+  (make that directory its own git working tree, pushed to a private repo) also solves
+  getting the memory onto Box A, because the directory name is keyed to the repo's absolute
+  path and changes when the repo moves.
+- ❌ **Junction is not the answer.** OneDrive silently stops syncing when it meets a
+  reparse point in a synced tree — observed first-hand, and the dev repo is in OneDrive.
+- 🔧 **WorkstationOps needs a gitignored per-instance config** declaring which
+  operations that machine runs. All six op configs are tracked with no override mechanism,
+  and the op sets now genuinely differ per box. Note the trap: dropping an op from the
+  enabled list does **not** unregister an already-scheduled Windows task — that needs an
+  explicit `.\ops unschedule`.
+
+⛔ **Timing:** `image-server\README.md` holds racking/provisioning/migration until after the
+**10 September 2026** leadership meeting. Phase 0 (dev-box only) is the stated exception.
+
+---
+
 ## Operator person/PI metadata (NI + MRI)
 
 Context: 2026-06-09 review of `ni_ingest` / `mri_ingest` output. The **correctness
