@@ -152,6 +152,16 @@ MRI_LINK_PALETTE_KEYS = [
 # so the MRI "Project link name" offers original_name / instrument / … too — not
 # just the four it used to hard-code. Sourced from the resolver (LINK_TOKEN_EXTRAS).
 MRI_LINK_PALETTE_EXTRAS = LINK_TOKEN_EXTRAS
+# discovered.* fields offered as PROJECT-NAME palette chips — deliberately a
+# SUBSET of the link-name palette, and with no resolver extras at all. A link
+# name wants per-scan uniqueness; a project name wants per-scan GROUPING, so the
+# exam / recon / sequence fields are withheld (they differ per acquisition and
+# would mint one project per scan), as are ${acq_id} / ${original_name} for the
+# same reason. ${project_name} / ${project_id} are excluded because they are
+# post-Step-9.5 values — referencing them here would be circular.
+MRI_PROJECT_PALETTE_KEYS = [
+    "project_code", "animal_num", "pi_initials", "jrc_id", "mri_study_name",
+]
 
 # --- MRI remote-pull (SFTP) source ------------------------------------------
 # Pull ParaVision study folders off the acquisition console over SFTP, then
@@ -1020,6 +1030,15 @@ def _dicomifier_status():
         return False, None
 
 
+def _mri_template_project_name():
+    """The MRI template's own `registry.project_name` expression ("" if unset)."""
+    try:
+        tpl = templates.load_template(MRI_KEY)
+    except Exception:  # noqa: BLE001 — a comparison must never break an ingest
+        return ""
+    return ((tpl.get("registry") or {}).get("project_name") or "").strip()
+
+
 def _mri_overrides(data):
     """Assemble the config_builder override dict from the MRI page inputs.
 
@@ -1028,7 +1047,9 @@ def _mri_overrides(data):
       model         -> registry.instrument_model ("7T" / "11.7T")
       project_mode  -> "auto" (template default, per animal-protocol code) |
                        "fixed" (one specific project) | "none" (no project/links)
-      project_name  -> the one project's name, when project_mode == "fixed"
+      project_name  -> the project-name template, when project_mode == "fixed";
+                       fixed text and/or ${discovered.*} refs, resolved PER SCAN
+                       (so one run can file scans into several projects)
       link_filename -> the project-link-name template, when project_mode != "none"
       regenerate    -> bool; False sets ingest.auto_regenerate_dicom: false
     """
@@ -1044,7 +1065,18 @@ def _mri_overrides(data):
     if mode == "none":
         ov["registry.project_name"] = ""              # -> no project, no links
     elif mode == "fixed":
-        ov["registry.project_name"] = (data.get("project_name") or "").strip()
+        name = (data.get("project_name") or "").strip()
+        ov["registry.project_name"] = name
+        # The template's auto-create description states the project came from an
+        # animal-protocol code. Once the operator names projects some other way
+        # that sentence is written into every project it creates, and it is no
+        # longer true — so say what actually happened instead. Only when the
+        # expression really differs from the template's own default.
+        if name and name != _mri_template_project_name():
+            ov["auto_create_project.description"] = (
+                "Auto-created from internal MRI ingest; project name set by the "
+                "operator at ingest. PROVISIONAL project_name — see 05_PROJECTS §9."
+            )
     # mode == "auto": leave the template's AE-biomaGUNE-${discovered.project_code}
     if mode != "none":
         link = (data.get("link_filename") or "").strip()
@@ -1067,6 +1099,7 @@ def mri_index():
         models=sorted(_MRI_MODEL_MAP),
         palette_keys=MRI_LINK_PALETTE_KEYS,
         palette_extras=MRI_LINK_PALETTE_EXTRAS,
+        project_palette_keys=MRI_PROJECT_PALETTE_KEYS,
     )
 
 

@@ -79,7 +79,7 @@ $("#nas-browse").addEventListener("click", () =>
 // ---------------------------------------------------------------- link field
 const MRI = window.MRI || {};
 // Bare names of the fixed resolver tokens offered as palette chips (instrument,
-// operator, …). Used by resolveLinkExample() so a valid token isn't flagged
+// operator, …). Used by resolveExample() so a valid token isn't flagged
 // "unresolved" just because this preview can't compute its value.
 const LINK_TOKEN_NAMES = new Set(
   (MRI.paletteExtras || []).map((t) => t.replace(/^\$\{|\}$/g, "")));
@@ -89,13 +89,14 @@ renderPalette($("#link-palette"),
   paletteEntries(MRI.paletteKeys || [], MRI.paletteExtras || []), linkField);
 $("#link-reset").addEventListener("click", () => { linkField.setValue(MRI.linkDefault || ""); updateLinkExample(); });
 
-// Live "this is what the link name will look like" example under the field,
-// mirroring the microscopy runner. Resolves ${discovered.*}/${synth} against the
-// first previewed scan (sampleCtx), set after each preview. Before a preview
-// runs there's no real scan to resolve against, so it stays blank.
-let linkSampleCtx = null;   // {ctx: {discovered...}, synth: {sample_id,...}}
+// Live "this is what it will look like" example under a field, mirroring the
+// microscopy runner. Resolves ${discovered.*}/${synth} against the first
+// previewed scan, set after each preview. Before a preview runs there's no real
+// scan to resolve against, so it stays blank. Shared by the link-name field and
+// the project-name field.
+let sampleCtx = null;   // {ctx: {discovered...}, synth: {sample_id,...}}
 
-function resolveLinkExample(template, sample) {
+function resolveExample(template, sample) {
   if (!template || !sample) return { text: "", unresolved: false };
   let unresolved = false;
   const text = template.replace(/\$\{([^}]+)\}/g, (mm, ref) => {
@@ -118,57 +119,186 @@ function updateLinkExample() {
   const el = $("#link-example");
   if (!el) return;
   const tpl = linkField.serialize();
-  if (!linkSampleCtx) {
+  if (!sampleCtx) {
     el.textContent = tpl ? "Preview to see an example link name." : "";
     el.classList.remove("bad");
     return;
   }
-  const { text, unresolved } = resolveLinkExample(tpl, linkSampleCtx);
+  const { text, unresolved } = resolveExample(tpl, sampleCtx);
   el.textContent = text ? "e.g.  " + text : "";
   el.classList.toggle("bad", unresolved);
 }
 
-// ---------------------------------------------------------------- project mode
+// ---------------------------------------------------------------- project name
 const projectMode = $("#project-mode");
 const projectFixedWrap = $("#project-fixed-wrap");
-const projectNameInput = $("#project-name");
 const linkFieldset = $("#link-fieldset");
 const projectNote = $("#project-note");
 
-// A project's name IS its folder name, so it must stay OS-safe: convert typed
-// spaces to hyphens live, in front of the operator, rather than silently
-// rewriting the name later (05_PROJECTS "Project reference model").
-projectNameInput.addEventListener("input", () => {
-  const converted = projectNameInput.value.replace(/\s+/g, "-");
-  if (converted !== projectNameInput.value) {
-    const at = projectNameInput.selectionStart;
-    projectNameInput.value = converted;
-    projectNameInput.setSelectionRange(at, at);
-  }
+// The destination project is built exactly like the link name: fixed text plus
+// ${discovered.*} chips, resolved PER SCAN. That is the whole point -- an
+// operator pulling a week's work off the scanner has no single static project
+// name to type, so a run spanning several protocols needs the name to come from
+// each scan's own metadata. The engine has always supported this (the template's
+// own default is `AE-biomaGUNE-${discovered.project_code}`); until now only the
+// link-name field exposed it.
+//
+// spacesToHyphens: a project's name IS its folder name (05_PROJECTS "Project
+// reference model"), so a typed space becomes a hyphen in front of the operator
+// rather than being silently rewritten downstream.
+const projectField = new TokenField($("#project-field"), {
+  onChange: () => updateProjectExample(),
+  spacesToHyphens: true,
 });
+// Deliberately a NARROWER palette than the link name's. A link name wants
+// per-scan UNIQUENESS; a project name wants per-scan GROUPING. Exam / recon /
+// sequence chips are withheld here because they differ per acquisition and
+// would mint one project per scan. See MRI_PROJECT_PALETTE_KEYS in app.py.
+renderPalette($("#project-palette"),
+  paletteEntries(MRI.projectPaletteKeys || []), projectField);
+$("#project-default").addEventListener("click", () => {
+  projectField.setValue(MRI.projectDefault || "");
+  updateProjectExample();
+});
+
+function updateProjectExample() {
+  const el = $("#project-example");
+  if (!el) return;
+  const tpl = projectField.serialize().trim();
+  if (!sampleCtx) {
+    el.textContent = tpl ? "Preview to see the project name this produces." : "";
+    el.classList.remove("bad");
+    return;
+  }
+  const { text, unresolved } = resolveExample(tpl, sampleCtx);
+  el.textContent = text ? "e.g.  " + text : "";
+  el.classList.toggle("bad", unresolved);
+}
 
 function updateProjectMode() {
   const mode = projectMode.value;
   projectFixedWrap.hidden = mode !== "fixed";
   linkFieldset.hidden = mode === "none";
+  // Seed from the locked default rather than an empty box: the operator edits a
+  // working expression, and the default stops being invisible.
+  if (mode === "fixed" && !projectField.serialize().trim()) {
+    projectField.setValue(MRI.projectDefault || "");
+  }
   if (mode === "auto") {
     projectNote.textContent =
       "Each scan goes to its own animal-protocol project (AE-biomaGUNE-<NNNN>, from the folder name), auto-created if it doesn’t exist.";
   } else if (mode === "fixed") {
-    projectNote.textContent = "All scans in this run link into the one project you name. The name is also the folder researchers open.";
+    // Sits BELOW the field, so it must not say "the name below" -- and the
+    // paragraph above the field already explains how to build the name. Use the
+    // space for the safety net instead: what Preview will show you.
+    projectNote.textContent =
+      "Preview lists every project this run would file into, with a scan count and a mark on any " +
+      "it would create — read it before you ingest.";
   } else {
     projectNote.textContent = "Scans are ingested and registered, but NOT linked into any project (no hard links created).";
   }
+  updateProjectExample();
 }
 projectMode.addEventListener("change", updateProjectMode);
 updateProjectMode();
 
-// Short human label for the chosen destination project (for the completion modal).
-function projectDestLabel() {
+// The project-name template the operator has asked for; "" means no project.
+function projectTemplate() {
   const mode = projectMode.value;
-  if (mode === "fixed") return projectNameInput.value.trim() || "(a specific project)";
-  if (mode === "none") return "No project (no links created)";
-  return "Per animal-protocol code (auto)";
+  if (mode === "none") return "";
+  if (mode === "fixed") return projectField.serialize().trim();
+  return MRI.projectDefault || "";
+}
+
+// An empty custom name is NOT the same request as "no project", but the config
+// cannot tell them apart -- both resolve to a blank `registry.project_name`, so
+// an empty box would silently ingest with no links at all. Make the operator say
+// which one they meant. Returns "" when the setting is usable.
+function projectError() {
+  if (projectMode.value !== "fixed") return "";
+  if (projectTemplate()) return "";
+  return "Type a project name, or click a metadata label to build one \u2014 " +
+    "or choose \u201cNo project\u201d if that is what you meant.";
+}
+
+// Destination projects the LAST PREVIEW actually resolved, biggest first.
+// `c.project` is the preview's Step-9.5 replica: "PROJ-XXXX", "will
+// auto-create: <name>", "not found: <name>", or "(no project)".
+//
+// For an EXISTING project that string is the bare PROJ id, which is not what an
+// operator recognises -- so pair it with the canonical name, which the same
+// preview already wrote onto `registry_resolved.project_name` (that is the name
+// the ingest will use, casing correction included).
+function distinctProjects(cases) {
+  const seen = new Map();
+  (cases || []).forEach((c) => {
+    const raw = c.project || "";
+    if (!raw || raw === "(no project)") return;
+    const e = seen.get(raw) || { n: 0, name: "" };
+    e.n += 1;
+    if (!e.name) e.name = ((c.registry_resolved || {}).project_name || "").trim();
+    seen.set(raw, e);
+  });
+  return Array.from(seen, ([raw, e]) => {
+    const stripped = raw.replace(/^(will auto-create|not found):\s*/, "");
+    const resolved = /^PROJ-\d+$/.test(stripped);
+    return {
+      name: (resolved && e.name) ? e.name : stripped,
+      id: resolved ? stripped : "",
+      n: e.n,
+      create: /^will auto-create:/.test(raw),
+      missing: /^not found:/.test(raw),
+    };
+  }).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+}
+
+// Short human label for the chosen destination (for the completion modal).
+// Prefers what the preview actually resolved over what the operator typed --
+// with a token-valued name those are not the same thing.
+function projectDestLabel() {
+  if (projectMode.value === "none") return "No project (no links created)";
+  const dests = distinctProjects(lastCases);
+  if (dests.length === 1) return dests[0].name;
+  if (dests.length > 1) {
+    const head = dests.slice(0, 3).map((d) => `${d.name} (${d.n})`).join(", ");
+    return `${dests.length} projects — ${head}${dests.length > 3 ? ", …" : ""}`;
+  }
+  return projectTemplate() || "Per animal-protocol code (auto)";
+}
+
+// The per-destination breakdown shown under the preview counts. With a
+// token-valued project name one run can touch several projects and CREATE
+// several -- the operator has to see that list before committing, not after.
+function renderProjectSummary(cases) {
+  const box = $("#project-summary");
+  const dests = distinctProjects(cases);
+  const noProj = (cases || []).filter(
+    (c) => !c.project || c.project === "(no project)").length;
+  if (!dests.length && !noProj) { box.innerHTML = ""; box.style.display = "none"; return; }
+  const parts = [];
+  if (dests.length) {
+    parts.push(dests.length === 1
+      ? "All scans file into <strong>1</strong> project:"
+      : `Scans file into <strong>${dests.length}</strong> different projects:`);
+    parts.push("<ul>" + dests.map((d) => {
+      const tag = d.create ? ' <span class="pill">will be created</span>'
+        : d.missing ? ' <span class="pill no">does not exist</span>' : "";
+      const id = d.id ? ` <span class="muted">${esc(d.id)}</span>` : "";
+      return `<li><code>${esc(d.name)}</code>${id} — ${d.n} scan(s)${tag}</li>`;
+    }).join("") + "</ul>");
+  }
+  if (noProj) {
+    parts.push(`<span class="muted">${noProj} scan(s) file into no project (no links created).</span>`);
+  }
+  const nMissing = dests.filter((d) => d.missing).length;
+  const nCreate = dests.filter((d) => d.create).length;
+  if (nMissing) {
+    parts.push(`<strong>⚠ ${nMissing} project(s) above do not exist and will NOT be created</strong> — those scans ingest without a project link.`);
+  } else if (nCreate > 3) {
+    parts.push(`<strong>⚠ this run would create ${nCreate} new projects.</strong> Read the names above before ingesting.`);
+  }
+  box.innerHTML = parts.join("<br>");
+  box.style.display = "";
 }
 
 // ---------------------------------------------------------------- payload
@@ -181,7 +311,7 @@ function buildPayload() {
     project_mode: mode,
     regenerate: $("#regenerate").checked,
   };
-  if (mode === "fixed") p.project_name = projectNameInput.value.trim();
+  if (mode === "fixed") p.project_name = projectField.serialize().trim();
   if (mode !== "none") p.link_filename = linkField.serialize();
   return p;
 }
@@ -259,6 +389,7 @@ function updateDicomifierNote() {
 async function preview() {
   $("#errors").textContent = "";
   $("#summary").innerHTML = "";
+  $("#project-summary").style.display = "none";
   $("#collisions").style.display = "none";
   $("#dropped").style.display = "none";
   $("#table-wrap").innerHTML = "";
@@ -266,6 +397,8 @@ async function preview() {
   $("#ingest").disabled = true;
   const payload = buildPayload();
   if (!payload.staging_path) { $("#errors").textContent = "Pull studies from the scanner first."; return; }
+  const projErr = projectError();
+  if (projErr) { $("#errors").textContent = projErr; return; }
   $("#preview").disabled = true;
   try {
     const d = await postJSON("/api/mri/preview", payload);
@@ -276,7 +409,7 @@ async function preview() {
     const first = lastCases[0];
     if (first) {
       const reg = first.registry_resolved || {};
-      linkSampleCtx = {
+      sampleCtx = {
         ctx: first.discovered || {},
         synth: {
           sample_id: reg.sample_id || "",
@@ -286,7 +419,9 @@ async function preview() {
         },
       };
       updateLinkExample();
+      updateProjectExample();
     }
+    renderProjectSummary(lastCases);
     renderCollisions(d.collisions, d.existing_targets);
     renderDropped(d.dropped);
     renderTable(lastCases);
@@ -355,6 +490,8 @@ async function ingest() {
   // The source is always a pull into staging — remove it after a clean real ingest.
   payload.cleanup_staging = true;
   if (!payload.operator) { $("#errors").textContent = "Operator is required (who ran the scanner)."; return; }
+  const projErr = projectError();
+  if (projErr) { $("#errors").textContent = projErr; return; }
   $("#ingest").disabled = true;
   $("#preview").disabled = true;
   $("#log-wrap").hidden = false;
