@@ -79,16 +79,23 @@ go to <code>http://127.0.0.1:5000/mri</code> yourself.</p>
 </div></div>
 
 <div class="step"><div class="num">5</div><div>
-  <h3>Choose where the scans get linked (optional)</h3>
+  <h3>Choose where the scans get filed (optional)</h3>
   <strong>Destination project</strong> defaults to “per animal-protocol code” — each scan goes to
-  its own project automatically. Leave it unless you specifically want them all in one named
-  project, or no project at all.
+  its own project automatically. Leave it unless you want something else.
+  <p><strong>Pulling several protocols in one go?</strong> Choose
+  <em>“A name I set”</em> and build the name the same way you build the link name: type
+  fixed text, and click or drag the <strong>metadata labels</strong> underneath. A label like
+  <em>protocol code</em> is filled in <strong>per scan</strong>, so one run can file scans into
+  <strong>several different projects</strong> — you don't have to split the pull or run it twice.
+  Fixed text with no label sends the whole run to one project.</p>
+  <p>Whatever you choose, <strong>Preview lists every project the run would touch</strong>, with a
+  scan count, and marks the ones that would be created. Read that list before you ingest.</p>
 </div></div>
 
 <div class="step"><div class="num">6</div><div>
   <h3>Press Preview and read the table</h3>
   Click <strong>Preview</strong>. You'll see one row per scan, with the ID, sample, project, and
-  the link name. A line like <em>“5 non-scan folder(s) skipped (normal ParaVision housekeeping)”</em>
+  the link name, plus a short list of <strong>which projects the run files into</strong>. A line like <em>“5 non-scan folder(s) skipped (normal ParaVision housekeeping)”</em>
   is <strong>completely normal</strong> — those are the scanner's bookkeeping folders, not scans.
 </div></div>
 

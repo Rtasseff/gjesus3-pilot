@@ -193,6 +193,13 @@ locked-down Windows machine it ships as a **single frozen executable,
 has a **microscopy page** (the default, described here) and an **MRI page** (the
 Windows alternative to `mri-ingest`).
 
+> **MRI operators — pulling more than one protocol in one go?** Under *Destination
+> project* choose **“A name I set”** and build the name from the **metadata labels**
+> underneath, exactly as you do for the link name. A label is filled in *per scan*, so
+> one run can file scans into **several different projects** — no need to split the pull.
+> Preview then lists every project the run would touch, with a scan count and a mark on
+> the ones it would create. Click-by-click: the MRI page's **? Help** link.
+
 ### Running the GUI
 
 1. **Double-click `gjesus3_ingest.exe`** (microscopy page), or the

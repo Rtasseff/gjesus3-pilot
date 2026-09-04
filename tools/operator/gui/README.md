@@ -1,6 +1,6 @@
 # Ingest GUI (`gjesus3_ingest.exe`) — microscopy + MRI
 
-*Last Updated: 2026-08-10*
+*Last Updated: 2026-09-04*
 
 A local Flask web-app that lets an operator run the validated ingest pipeline
 from the browser — no hand-written YAML. It is a **thin front-end** over the
@@ -71,6 +71,32 @@ apart):
   `auto_create_project` via clickable `discovered.*` token chips, each field
   showing a live resolved example (unresolved `${…}` flag red); **Save recipe**
   to `tools/operator/recipes/`.
+- **The MRI page (`/mri`)** has neither — MRI has one locked convention
+  (`mri_bruker`), so there is no recipe or builder. The operator sets who ran the
+  scanner, the destination project, and the project link name.
+  - **Destination project** — a dropdown (per animal-protocol code / a name I set
+    / no project) plus, for "a name I set", a **TokenField with its own palette**
+    (`MRI_PROJECT_PALETTE_KEYS`, passed as `project_palette_keys`). Fixed text
+    sends the run to one project; a `${discovered.*}` chip is resolved **per
+    scan**, so a single run can file scans into several different projects —
+    which is the point: an operator pulling a week off the scanner has no one
+    static project name to type. The engine always supported this (the template's
+    own default is `AE-biomaGUNE-${discovered.project_code}`); before 2026-09-04
+    only the link-name field exposed it.
+    - The palette is deliberately **narrower than the link name's**: a link name
+      wants per-scan *uniqueness*, a project name wants per-scan *grouping*, so
+      the exam / recon / sequence fields (and the resolver extras like
+      `${acq_id}`) are withheld — they would mint one project per scan.
+    - Preview renders a **per-destination breakdown** (`#project-summary`) with a
+      scan count per project and a flag on the ones that would be auto-created;
+      with a token-valued name one run can create several projects, so that list
+      is what makes the run safe to approve.
+    - An **empty** custom name is refused rather than read as "no project" — both
+      resolve to a blank `registry.project_name`, and the config cannot tell them
+      apart. Guarded on both Preview and Ingest.
+    - A custom name also replaces `auto_create_project.description`, which
+      otherwise states every project it creates came from an animal-protocol code.
+  - Regression test: `tools/operator/test_mri_project_name.py`.
 
 ## Run (development — Python, no freeze)
 
