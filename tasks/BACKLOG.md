@@ -467,6 +467,42 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   alias. Also note the `subject:` block schema currently has no way to say
   "this subject is human" other than `species: Homo sapiens`.
 
+## 🔸 MODERATE — the `researcher` name convention is with the group; do NOT normalise until they decide (2026-09-03)
+
+**Status: deliberately parked. This is not a defect to be fixed on sight.**
+
+The `researcher` column currently holds the same person under more than one spelling, split by
+capitalisation:
+
+| Value | Rows | | Value | Rows |
+|---|---|---|---|---|
+| `itziar` | 552 | | `Itziar` | 390 |
+| `Irene` | 402 | | `irene` | 255 |
+| `Marina` | 503 | | `marina` | 17 |
+
+**2,119 acquisitions affected.** The practical consequence is that a Finder search on a name
+returns a subset — e.g. `Itziar` matches 390 of her 942 rows.
+
+**Why it is parked, not fixed.** Ryan put the naming convention to the group at the 2026-09-03
+launch rollout. **They may not choose first-name-only at all** — surname, `first.last`, initials,
+or an institutional username are all live possibilities. Normalising the case now would be work
+thrown away, and worse, it would look like the convention had already been settled by the Data
+Office when it has explicitly been left to the people whose names they are.
+
+- [ ] **Wait for the group's answer.** One decision, then this becomes mechanical.
+- [ ] **Then backfill the whole column in one pass**, not just the case split — whatever convention
+  wins applies to every historical row, so treat the case-collapse and the convention change as a
+  single migration rather than doing the easy half now.
+- [ ] **Then make the tools write it that way**: the GUI operator/researcher fields and the
+  per-instrument templates must emit the chosen form, or the split re-opens on the next ingest.
+  This is the part that makes the backfill stick.
+- [ ] Consider whether the resolver should normalise defensively (case-fold on write) once the
+  convention is known — a convention the tooling cannot enforce will drift again.
+
+**Note:** `researcher` is blank on 12,386 of 16,375 rows, which is the honest state for historical
+data that names no person — that is *not* part of this item and must not be back-filled by guessing.
+This item covers only the ~4,000 rows that *do* carry a name.
+
 ## 🔺 HIGH — the MRI GUI can't use metadata labels for the *destination project*, only for the link name (2026-09-03)
 
 **Reported by Ryan, 2026-09-03.** On the MRI ingest page (`/mri`) the clickable / draggable
