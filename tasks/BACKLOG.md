@@ -503,7 +503,9 @@ Office when it has explicitly been left to the people whose names they are.
 data that names no person — that is *not* part of this item and must not be back-filled by guessing.
 This item covers only the ~4,000 rows that *do* carry a name.
 
-## 🔺 HIGH — the MRI GUI can't use metadata labels for the *destination project*, only for the link name (2026-09-03)
+## 🔺 HIGH — the MRI GUI can't use metadata labels for the *destination project*, only for the link name (2026-09-03 — ✅ **BUILT + TESTED 2026-09-04**, ⚠ **NOT YET DEPLOYED**)
+
+> **Status 2026-09-04.** Built on `feat/mri-gui-project-tokens` and verified end-to-end; > the resolution is at the bottom of this item. **The one thing left is the exe rebuild + > redeploy** — operators run the frozen `gjesus3_ingest.exe` from the NAS, so until that > happens nothing has changed for them. Per this project's rule, "done" means done in > production, and this is not there yet.
 
 **Reported by Ryan, 2026-09-03.** On the MRI ingest page (`/mri`) the clickable / draggable
 `${discovered.*}` metadata chips work for **Project link name** but **not** for **Project name** —
@@ -570,6 +572,44 @@ MRI page consistent with the microscopy page and with the template's own existin
 **Test it against the case that motivated it:** one pull whose folders span two or more protocol
 codes, with the project name set to something *other* than the AE convention, and confirm the
 preview sends each scan to its own correct project.
+
+### ✅ Resolution (2026-09-04) — branch `feat/mri-gui-project-tokens`
+
+Everything above is built except the deploy. What landed, and the parts worth knowing before
+touching it again:
+
+- **The field is a `TokenField` with its own palette** (`#project-field` / `#project-palette` in
+  `mri.html`), a live resolved example, and `spacesToHyphens: true` — an option the widget
+  *already carried*, with a comment saying "used by the project-name field". The MRI page was
+  simply never wired to it.
+- **The palette is narrower than the link-name palette, on purpose.** `MRI_PROJECT_PALETTE_KEYS`
+  in `app.py` = `project_code, animal_num, pi_initials, jrc_id, mri_study_name`. Exam / recon /
+  sequence are withheld because they differ per acquisition and would mint **one project per
+  scan**; `${acq_id}` / `${original_name}` likewise; `${project_name}` / `${project_id}` are
+  circular (both are post-Step-9.5). **Do not "helpfully" widen this to match the link palette.**
+- **Preview gained a per-destination breakdown** (`renderProjectSummary`): every project the run
+  would touch, scan counts, a flag on the ones that would be auto-created, and a warning above
+  three new projects. With a token-valued name one run can create several projects — that list
+  is the safety net, and it is the reason the palette can stay permissive rather than locked down.
+- **An empty custom name is now refused** on both Preview and Ingest (`projectError()`). It and
+  "no project" both resolve to a blank `registry.project_name` and the config cannot tell them
+  apart, so an empty box would previously have ingested silently with no links at all.
+- **A custom name rewrites `auto_create_project.description`.** The template's text says the
+  project came from an animal-protocol code; once projects are named some other way that sentence
+  would be written into every project the run creates.
+- **Verified end-to-end**, not just unit-tested: a two-protocol ParaVision batch root (0522 +
+  0599) driven through Flask's test client against a throwaway test NAS. `auto` resolved the
+  existing protocol to a `PROJ-` id and the unknown one to a pending auto-create (both Step-9.5
+  arms); `MFB-${discovered.project_code}` produced **two destinations from one run**, 2 scans
+  each; a three-token expression resolved with nothing left unsubstituted; `none` gave
+  `(no project)` throughout.
+- **Regression test:** `tools/operator/test_mri_project_name.py` (24 checks, self-contained —
+  needs no test NAS or sample tree). Run it before any future edit to this page.
+
+- [ ] **Remaining: rebuild `gjesus3_ingest.exe` and redeploy it to
+  `\\gjesus3\gjesus3\gjesus3-data\tools\`.** Needs Ryan — it is a production NAS write, and
+  the frozen exe has its own bundling failure mode (see `tools/operator/gui/README.md` and the
+  2026-07-17 frozen-exe README crash). Nothing changes for operators until this is done.
 
 ## 🔺 HIGH — external collaborator archives are one row per EXAM, not per series (2026-08-14)
 

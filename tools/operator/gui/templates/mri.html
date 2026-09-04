@@ -88,18 +88,27 @@
 
     <!-- DESTINATION PROJECT -->
     <fieldset>
-      <legend>Destination project <span class="muted">— where the scans are linked</span></legend>
+      <legend>Destination project <span class="muted">— which project each scan is filed under</span></legend>
       <div class="row">
-        <label>Link to
+        <label>File under
           <select id="project-mode">
             <option value="auto">Per animal-protocol code (default) — AE-biomaGUNE-&lt;NNNN&gt;</option>
-            <option value="fixed">A specific project…</option>
+            <option value="fixed">A name I set — fixed text and/or metadata labels…</option>
             <option value="none">No project (don’t create links)</option>
           </select>
         </label>
-        <label class="grow" id="project-fixed-wrap" hidden>Project name
-          <input id="project-name" type="text" placeholder="AE-biomaGUNE-0424">
-        </label>
+      </div>
+      <div id="project-fixed-wrap" hidden>
+        <p class="muted">Type a fixed name, or click/drag a metadata label to build the name
+          <strong>from each scan’s own metadata</strong> — that way one run can file scans into
+          <strong>several different projects</strong>. A project’s name <em>is</em> its folder name,
+          so spaces become hyphens as you type.</p>
+        <div id="project-field" class="tokenfield is-empty" data-placeholder="e.g. AE-biomaGUNE-0424"></div>
+        <div class="example" id="project-example"></div>
+        <div class="row">
+          <button id="project-default" type="button">Use the default (AE-biomaGUNE-&lt;protocol&gt;)</button>
+        </div>
+        <div id="project-palette" class="palette"></div>
       </div>
       <p class="muted" id="project-note"></p>
     </fieldset>
@@ -131,6 +140,7 @@
     </div>
 
     <div id="summary" class="summary"></div>
+    <div id="project-summary" class="summary"></div>
     <div id="collisions" class="errbox"></div>
     <div id="dropped" class="dropbox"></div>
     <div id="errors" class="errbox"></div>
@@ -202,6 +212,7 @@
       linkDefault: {{ link_default|tojson }},
       projectDefault: {{ project_default|tojson }},
       paletteKeys: {{ palette_keys|tojson }},
+      projectPaletteKeys: {{ project_palette_keys|tojson }},
       paletteExtras: {{ palette_extras|tojson }}
     };
   </script>

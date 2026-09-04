@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
-**Last Updated:** 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
+**Last Updated:** 2026-09-04 (**§5.2** the MRI page's **destination project is token-valued** — "a name I set" is a token field with its own palette, not a text box, so one run can file scans into several projects; the engine was unchanged, only the GUI had withheld it. Preview gains a per-destination breakdown.) Prior: 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
 
 ---
 
@@ -1022,6 +1022,24 @@ apart from a cross-link + a behaviour-identical refactor.
   name, e.g. `"Biospec 70/30"`→`Bruker BioSpec 7T`, `"117/16"`→`11.7T`; 1H-frequency
   fallback), so there is no operator field — see [09_MODALITIES §1.4](09_MODALITIES.md)
   (`discovered.mri_scanner_model`). `mri-ingest --model` remains a CLI override.
+- **Destination project is token-valued (2026-09-04).** The page offers three choices:
+  *per animal-protocol code* (the template default,
+  `AE-biomaGUNE-${discovered.project_code}`), *a name I set*, or *no project*. "A name I
+  set" is a **token field with its own palette**, not a text box: fixed text sends the whole
+  run to one project, while a `${discovered.*}` chip is resolved **per scan**, so a single
+  run can file scans into several different projects. This matters when an operator pulls a
+  week's work covering more than one protocol — there is no one static project name to type,
+  and the alternative was one run per project or hand-edited YAML. Nothing in the engine
+  changed: `registry.project_name` has always been a token-resolvable user-controllable
+  column (§`registry:` above) and the template's own default is an expression; only the GUI
+  exposed it for the link name and not for the project. Notes: the project palette is
+  deliberately **narrower** than the link-name palette (per-scan fields like exam / recon /
+  sequence are withheld — they would mint one project per scan); preview shows a
+  **per-destination breakdown** with scan counts and flags the projects that would be
+  auto-created; an **empty** custom name is refused rather than silently read as "no
+  project"; and a custom name replaces `auto_create_project.description`, which otherwise
+  states every project it creates came from an animal-protocol code. Remember that
+  protocol → project is a **convention, not a rule** — see [05_PROJECTS](05_PROJECTS.md) §2a.
 - **Guardrails:** the destination NAS is validated **before** a pull (no wasted transfer on
   an unusable NAS); preview warns on link-name collisions (in-batch) and on-NAS overwrite
   targets (`tools/operator/collisions.py`); non-scan ParaVision sibling folders (AdjResult /
