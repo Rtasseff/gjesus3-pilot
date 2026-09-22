@@ -26,3 +26,6 @@ __pycache__/
 
 # Read-only probe outputs (may contain sample identifiers; not for commit)
 _probes/
+
+# Local contact list (personal email addresses — kept on disk, never committed)
+/contacts.xlsx
