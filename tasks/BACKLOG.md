@@ -359,13 +359,35 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   deferred to wk of 2026-07-07"**, so it is parked mid-flight and now ~2 weeks stale.
   It needs a decision — land it or consciously park it — not cleanup. Relates to the
   NI live-sync go-live item in `STATUS.md` §2.
-- [ ] **Decide what to do about `contacts.xlsx`.** Tracked, not ignored, and
-  perpetually dirty in the working tree — it has shown up as modified in every session
-  and is deliberately never staged (`CLAUDE.md`: don't stage the binaries). There is a
-  commit on `feat/finder-mvp` literally titled *"chore: commit a stale manual edit to
-  contacts.xlsx"*, so this recurs. Options: `.gitignore` it (+ `git rm --cached`),
-  keep tracking and accept the noise, or move it out of the repo entirely. Right now
-  it is permanent noise in every `git status`, which is how real changes get missed.
+- [x] **`contacts.xlsx` — RESOLVED 2026-09-22: untracked + gitignored** (`1185ed1`,
+  pushed). `git rm --cached` plus `/contacts.xlsx` in `.gitignore`. The file is
+  **untouched on disk** — sha256 `ad773fb2…` identical before and after. It is gone
+  from the tip of `origin/main`, verified from the *public* side rather than just the
+  local ref: `api.github.com/…/contents/contacts.xlsx?ref=main` → 404, with
+  `README.md` → 200 as a control. Also ends the permanent `M contacts.xlsx` noise in
+  every `git status`.
+- [ ] **🔸 Residual — `contacts.xlsx` is still in the repo's HISTORY, and the repo
+  is public.** It entered at the **initial commit** `595b68d` (2026-02-11), so it sits
+  in the tree of all 398 commits and at the tip of every branch and both `backup/*`
+  tags (~10 KB, 3 distinct blob versions). It remains fetchable by direct SHA URL.
+  Ryan saw the full costing on 2026-09-22 and **deliberately deferred the purge** —
+  this is a conscious accept, not an oversight. What it would take:
+  - `pip install git-filter-repo` (not installed), then
+    `--invert-paths --path contacts.xlsx`, then force-push 4 branches + 2 tags.
+  - **Run it in place, NOT on a mirror clone** — `feat/ni-live-hardening` holds
+    commits that are not on origin, so a mirror rewrite would silently drop them.
+  - Disturbs **two live worktrees**, and the two `backup/ni-live-pre-rebase-*` tags
+    are the safety nets for exactly the branch that would then need rebasing.
+  - **Force-pushing does not delete the blob from GitHub.** Unreachable objects stay
+    fetchable by SHA until GitHub Support garbage-collects them on request — without
+    that ticket the rewrite is cosmetic. (0 forks, so no fork network to chase.)
+  - Invalidates **124 commit-SHA citations** (69 in tracked `.md`, 55 in the Claude
+    memory files). Mitigable: filter-repo writes `.git/filter-repo/commit-map`
+    (old→new), so a scripted find-replace can repair them.
+  - **Best window:** after `feat/ni-live-hardening` lands or is consciously parked,
+    and **before** the Box A port clones onto the new machine.
+  - Scope is genuinely this one file: a sweep of the tracked tree for email-shaped
+    strings found only `git@github.com` and a public institutional info address.
 
 ## Misc
 
