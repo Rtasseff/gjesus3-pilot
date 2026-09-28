@@ -24,6 +24,9 @@ __pycache__/
 # Claude Code personal config
 .claude/settings.local.json
 
+# drive_staging/lock_usb.ps1 logs next to itself
+lock_usb.log
+
 # Read-only probe outputs (may contain sample identifiers; not for commit)
 _probes/
 

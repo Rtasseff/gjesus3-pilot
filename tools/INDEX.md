@@ -12,7 +12,7 @@ and where its full docs live. New to the system? Pick your role in
 > and the **Project Manager** GUI.
 > A term you don't recognise → [`GLOSSARY.md`](../GLOSSARY.md).
 
-*Last Updated: 2026-08-12*
+*Last Updated: 2026-09-28*
 
 ---
 
@@ -117,6 +117,7 @@ Read-only checks, recovery, and one-off helpers. Run `python tools/<name>.py …
 | **`backfill_project_subfolders.py`** | One-time (idempotent, `--dry-run` first) back-fill of the recommended project subfolders `working/` · `outputs/` · `metadata/` onto projects that predate the convention. Skips + lists closed projects whose folders were deleted; reports rather than repairs folders with no `_project.yaml`. See [`10_TOOLS §3.1a`](../mfb-rdm-docs/10_TOOLS.md). |
 | **`backfill_microscopy_anatomy.py`**, **`backfill_mri_anatomy.py`**, **`backfill_microscopy_bestguess.py`** | One-time anatomy back-fills for historical acquisitions. See [`ANATOMY_BACKFILL.md`](ANATOMY_BACKFILL.md). |
 | **`extract_ni_archives.py`**, **`extract_xmri_archives.py`** | Unpack archived source data into staging ahead of an ingest. |
+| **`drive_staging/`** (`stage_copy.py` + `lock_usb.ps1` + `wait_for_drive.ps1`) | Copy an external drive that is the **only copy** of its data onto local staging disk: read each file once, hash it during that same read, verify the copy from the local disk alone. The drive can go back to its owner before verification starts. Pre-ingest only; never touches the NAS. See [`drive_staging/README.md`](drive_staging/README.md). |
 
 ---
 

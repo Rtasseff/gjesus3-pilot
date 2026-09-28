@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-09-02
+**Last Updated:** 2026-09-28
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -157,6 +157,7 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **Historical microscopy on external drives — 🔶 STAGING IN PROGRESS (since 2026-09-22), nothing ingested yet.** One-copy drives are being copied onto `D:\projects\gjesus3\staging\drive<N>_<label>_<id>\` with [`tools/drive_staging/`](../tools/drive_staging/README.md), then handed here to decide what goes into gjesus3. As of 2026-09-28: **drive 1 `FRIO X6`** — 43,121 files / 3,776 GB, copy 0 errors, `VERIFY PASS`. **Drive 2 `MFB Disco 2`** — 35,718 files / 2,445 GB, copy running; its inventory reports **11 unreadable entries**, which will not be copied. Check them before the drive goes back.
 - **SegBioMed segmentation harvest + the 2021 MRI recovery — ✅ DONE IN PRODUCTION 2026-08-21.** A long exchange with the SegBioMed project (full thread: `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`, six replies each way) that turned into four production changes. **Everything below is finished and verified; what remains are the decisions in §0.**
   - **854 acquisitions recovered from 2021** (`Proyecto 1019`, `K:\gjesus\MRI`) — registry 15,474 → 16,328, 0 duplicates, 0 blank acquisition timestamps, `subject_ids` 854/854 from the facility DB, `checksum_present` Y on all, and the 9 DICOM-less exams regenerated to completion. **Ingested with NO project, deliberately** — the first end-to-end exercise of that path. **Cause of the gap, established not guessed:** the 2026-06 bulk pull read the *scanner host* (`kenia`) with no cutoff, and its earliest acquisition anywhere is 2022-01-10 — that floor is the **scanner's own retention horizon**. Consequence: **any internal MRI older than ~2022-01 survives only on researcher shares**, unsurveyed.
   - **`curated_datasets/` deployed** (§10 steps 1–3; `CDS-01` decided → include, as a pilot): `README_START_HERE.txt`, `segmentation/{MICROSCOPY,DICOM}/`, and `registry_datasets.csv` initialised with its 14-column header. **`CDS-02` answered** — curator set is the Data Management Lead plus delegated agents; no backup; one approval gate.
