@@ -35,10 +35,11 @@ Usage (from the repo root, Windows):
         --src  "C:/Users/rtasseff/temp/HPIC_33cases" ^
         --dest "D:/projects/gjesus3/xmri_staging/HPIC_33cases_extracted"
 
-(Both of the above are ALREADY EXTRACTED as of 2026-08-12 — 42/42 and 33/33
-cases present — so the DTS24 re-ingest needs no extraction step at all. They
-predate the `.extracted` sentinel, so a re-run would redo them; the ingest
-reads the directories directly and does not care.)
+(Both of the above were run 2026-08-12 — 42/42 and 33/33 cases — for the
+DTS24 re-ingest. The extracted trees under `xmri_staging` and the `--src`
+archives were found deleted 2026-09-28; the verbatim primaries survive in
+`/raw/`. A re-run needs a fresh extraction to the SAME `--dest`, because the
+ingest's `original_name` is taken relative to `staging_dir`.)
 
 Add `--limit N` to extract only the first N archives (cheap validation), and
 `--dry-run` to list what would be extracted without writing anything.

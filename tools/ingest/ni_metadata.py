@@ -8,7 +8,7 @@ Mirrors the public shape of `paravision_metadata.py` and `czi_metadata.py`:
   extract(folder)                 -> tuple  ((discovered, ni_section, "ni"))
 
 Input: a path to one extracted Molecubes acquisition folder (e.g.
-`D:/projects/Nuke/test_data/irene_0525_251029_0525_m13_20251029101558_CT/`).
+`<staging>/irene_0525_251029_0525_m13_20251029101558_CT/`).
 Folder must contain `protocol.txt` at the root and at least one
 `recon_<idx>/` subfolder; otherwise the extractor returns empties.
 

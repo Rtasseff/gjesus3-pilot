@@ -80,7 +80,9 @@ When you're done: `rm -rf C:\Users\<you>\temp\testnas` and rebuild any time.
 
 Sample data on this workstation:
 - MRI ParaVision studies: `D:\projects\gjesus3\data_test` (7 studies, m13–m29)
-- NI extracted acquisitions: `D:\projects\Nuke\test_data` (PET/CT folders)
+- NI extracted acquisitions: **none local any more** — the old
+  `D:\projects\Nuke\test_data` was deleted (found gone 2026-09-28). Extract a
+  couple first: `python tools/extract_ni_archives.py --archive-root "//cicmgsp02/gnuclear2$/2025/Jesus/" --staging "D:/staging/ni_test/" --limit 2`
 - microscopy `.czi`: **not local** — lives on the `S:`/`K:` shares; point the GUI
   at a mapped-drive `.czi` batch.
 
@@ -105,11 +107,11 @@ across studies (the dedup key keeps `<study>/<exam>`).
 
 ```sh
 # single acquisition, real commit (fast — small payload)
-python tools/operator/ni_ingest.py D:\projects\Nuke\test_data\irene_0525_251029_0525_m13_20251029100311_PET \
+python tools/operator/ni_ingest.py D:\staging\ni_test\irene_0525_251029_0525_m13_20251029100311_PET \
     --nas-root C:\Users\<you>\temp\testnas --go
 
 # whole batch root, preview only
-python tools/operator/ni_ingest.py D:\projects\Nuke\test_data \
+python tools/operator/ni_ingest.py D:\staging\ni_test \
     --nas-root C:\Users\<you>\temp\testnas --dry-run
 ```
 
@@ -149,7 +151,7 @@ anything platform-specific:
 ```sh
 # in WSL, with the deps installed there too:
 export GJESUS3_ROOT=/mnt/c/Users/<you>/temp/testnas
-python3 tools/operator/ni_ingest.py /mnt/d/projects/Nuke/test_data/<acq> --dry-run
+python3 tools/operator/ni_ingest.py /mnt/d/staging/ni_test/<acq> --dry-run
 ```
 
 The thing a WSL pass catches that Windows can't: **hard-link creation onto the

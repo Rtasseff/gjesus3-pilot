@@ -22,18 +22,18 @@ Usage:
     # Extract every .tgz under one PI's annual archive:
     python tools/extract_ni_archives.py \\
         --archive-root "//cicmgsp02/gnuclear2$/2025/Jesus/" \\
-        --staging      "D:/projects/Nuke/test_data/"
+        --staging      "D:/staging/ni_<batch>/"
 
     # Dry-run (list what would be extracted, touch nothing):
     python tools/extract_ni_archives.py \\
         --archive-root "//cicmgsp02/gnuclear2$/2025/Jesus/" \\
-        --staging      "D:/projects/Nuke/test_data/" \\
+        --staging      "D:/staging/ni_<batch>/" \\
         --dry-run
 
     # Limit to the first N archives (useful for piloting):
     python tools/extract_ni_archives.py \\
         --archive-root "//cicmgsp02/gnuclear2$/2025/Jesus/" \\
-        --staging      "D:/projects/Nuke/test_data/" \\
+        --staging      "D:/staging/ni_<batch>/" \\
         --limit 2
 
 Idempotent: skips any archive whose staged folder already exists with a

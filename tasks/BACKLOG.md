@@ -762,8 +762,8 @@ not been opened.
 **Correcting the premise this was raised under:** the ingest does **not** recompress anything.
 `ingest_raw._resolve_archive_primary` locates the **original collaborator archive** and copies it
 verbatim, renamed to `<ACQ-ID>.<ext>` — the config says so in as many words ("one fast SMB
-transfer each, no re-zip step"). The extraction to `D:\projects\gjesus3\xmri_staging\…` is
-local-disk and read-only, purely to read headers. So the mixed formats are **inherited from the
+transfer each, no re-zip step"). The extraction to `D:\projects\gjesus3\xmri_staging\…` was
+local-disk and read-only, purely to read headers (it was found deleted 2026-09-28). So the mixed formats are **inherited from the
 collaborators**, not produced by us, and "pick one" is a new normalisation policy rather than a
 bug fix.
 

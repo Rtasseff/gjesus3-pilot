@@ -196,6 +196,10 @@ auto_discover:
   # has dropped the extracted archive folders. Each subfolder = one
   # acquisition (one .tgz worth of content, with the 6-level outer
   # nesting stripped).
+  # ⚠️ This staging folder no longer exists (found deleted 2026-09-28). The
+  # path is kept as the record of the original run. Re-extract to it before
+  # any re-run: original_name is taken relative to staging_dir, and
+  # original_name is half the dedup key.
   staging_dir: "D:/projects/Nuke/gnuclear2_jesus_2025"
   pattern: "*/"
   filename_parse:
