@@ -492,7 +492,7 @@ def stream_hash(fobj, want_czi=False):
 
 def czi_summary(p, ref):
     """Flatten a czi probe dict + fingerprint for the row writers."""
-    if not p or not p.get("ok"):
+    if not p or not p.get("ok") or "serials" not in p:      # not a czi probe
         return {}
     inst, rule, fired = fingerprint(ref, p["serials"], p["keys"], p["stand"])
     p = dict(p)
