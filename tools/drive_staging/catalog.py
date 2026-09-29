@@ -670,7 +670,8 @@ def list_7z(path):
             kv = dict(l.split(" = ", 1) for l in blk.strip().splitlines() if " = " in l)
             if "Path" in kv:
                 members.append((kv["Path"], int(kv.get("Size") or 0) if (kv.get("Size") or "0").isdigit() else 0,
-                                kv.get("Folder") == "+", kv.get("Encrypted") == "+"))
+                                kv.get("Folder") == "+" or "D" in (kv.get("Attributes") or " ").split()[0],
+                                kv.get("Encrypted") == "+"))
     return members, err, r.returncode
 
 
