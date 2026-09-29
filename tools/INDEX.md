@@ -118,6 +118,7 @@ Read-only checks, recovery, and one-off helpers. Run `python tools/<name>.py …
 | **`backfill_microscopy_anatomy.py`**, **`backfill_mri_anatomy.py`**, **`backfill_microscopy_bestguess.py`** | One-time anatomy back-fills for historical acquisitions. See [`ANATOMY_BACKFILL.md`](ANATOMY_BACKFILL.md). |
 | **`extract_ni_archives.py`**, **`extract_xmri_archives.py`** | Unpack archived source data into staging ahead of an ingest. |
 | **`drive_staging/`** (`stage_copy.py` + `lock_usb.ps1` + `wait_for_drive.ps1`) | Copy an external drive that is the **only copy** of its data onto local staging disk: read each file once, hash it during that same read, verify the copy from the local disk alone. The drive can go back to its owner before verification starts. Pre-ingest only; never touches the NAS. See [`drive_staging/README.md`](drive_staging/README.md). |
+| **`drive_staging/catalog.py`** | Read-only, resumable **per-file catalog of a staged drive** (2026-09-29): one row per file and per archive member with its class, the physical instrument that made each `.czi` (by device serial, from [`reference/microscopy_instruments.yaml`](reference/microscopy_instruments.yaml) — the stand name does not identify it), acquisition date, duplicate copies, and whether production already holds the bytes (by SHA-256). Facts about content only; project/animal claims are a separate table. Tests: `python tools/test_drive_catalog.py`. See [`drive_staging/README.md`](drive_staging/README.md#per-file-catalog-catalogpy). |
 
 ---
 
