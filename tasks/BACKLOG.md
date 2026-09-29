@@ -205,6 +205,35 @@ what "already ingested" means as new instruments are added.
   snapshot under concurrent ingest. This item is about the *key's* content-stability,
   not locking.
 
+**2026-09-29: this has already happened in production. 32 `.czi` files are registered
+twice.** Found by joining every microscopy acquisition's `checksums.json` on SHA-256
+(read-only), while sizing the historical-drives ingest (STATUS §2).
+
+- **22 AxioScan files ingested twice, both times as `ZWSI`** (rows in `PROJ-0014` and
+  `PROJ-0018`). Every pair is one row from the 2026-06-14 bulk config
+  `axioscan7_mfb_20260614.yaml` and one from the operator recipe `recipes/aua.yaml`,
+  e.g. `ACQ-20260304-ZWSI-001` (`20260304/MFB_AUA_1123_ID12_PR_10x.czi`) and `-023`
+  (`MFB_AUA_1123_ID12_PR_10x.czi`). Same bytes, different staging root, so a different
+  `original_name` and a different key. That is the gap described above, reached by
+  a bulk ingest followed by a normal operator ingest.
+- **10 files registered as both `CELL` (in `PROJ-0039`) and `ZWSI` (in `PROJ-0019`).**
+  The `CELL` side of all 10 belongs to a related defect:
+  **23 production `CELL` rows are AxioScan 7 files by their own metadata**
+  (`instrument_model = Axioscan 7`). All 23 are in `PROJ-0039` from
+  `cellobs_bestguess_claudia.yaml`, and came from a K: `CELL OBSERVER` sub-folder
+  literally named `1022 MANON FIGURAS PB_Axioscan`. The best-guess ingest took the
+  instrument from the folder, not from the file. The instrument code is part of the
+  ACQ-ID, so fixing either defect means retiring ACQ-IDs, which is a deliberate
+  production repair, not a quick edit.
+
+So "correct for the normal workflow" no longer holds. **Any bulk or historical ingest
+must dedup by checksum before it runs and must not rely on this key.** The external-drive
+microscopy ingest is planned on that basis.
+
+- [ ] Decide how to retire the 32 duplicate registrations and re-code the 23 `CELL`
+  rows that are AxioScan files (keep the older ACQ-ID of each pair? tombstone the other?).
+- [ ] Re-rate this item's priority in the light of the production evidence.
+
 ## Person/role rename — residual cleanup (core done 2026-06-09)
 
 The global researcher/operator/tech/user rename ([06_REGISTRIES §2.3a-bis](../mfb-rdm-docs/06_REGISTRIES.md)) landed in the code, schema, templates, configs, CLIs, GUI, and the authoritative docs. Residual, non-blocking:
