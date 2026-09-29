@@ -226,12 +226,21 @@ twice.** Found by joining every microscopy acquisition's `checksums.json` on SHA
   ACQ-ID, so fixing either defect means retiring ACQ-IDs, which is a deliberate
   production repair, not a quick edit.
 
+**Update, the same day:** the drives catalog checked every production microscopy sidecar
+against the device fingerprint (`tools/reference/microscopy_instruments.yaml`). It found **2
+more**: `ACQ-20240625-LSM9-001` and `-002` are Cell Observer files (`…\190624\48h\CS_fijadas_cell
+obs_1/2.czi`), ingested as `LSM9` because they sat in the LSM 900 folder of
+`lsm900_bestguess_itziar-lipofectamine-mcherry.yaml`. That makes **25 rows with the wrong
+instrument code** (list: `D:\projects\gjesus3\staging\_analysis\catalog\production_instrument_audit.csv`,
+`agree = N`). All 3,489 other microscopy rows agree.
+
 So "correct for the normal workflow" no longer holds. **Any bulk or historical ingest
 must dedup by checksum before it runs and must not rely on this key.** The external-drive
 microscopy ingest is planned on that basis.
 
-- [ ] Decide how to retire the 32 duplicate registrations and re-code the 23 `CELL`
-  rows that are AxioScan files (keep the older ACQ-ID of each pair? tombstone the other?).
+- [ ] Decide how to retire the 32 duplicate registrations and re-code the 25 rows with
+  the wrong instrument (23 `CELL` rows that are AxioScan files, 2 `LSM9` rows that are
+  Cell Observer files). Keep the older ACQ-ID of each pair? Tombstone the other?
 - [ ] Re-rate this item's priority in the light of the production evidence.
 
 ## Person/role rename — residual cleanup (core done 2026-06-09)

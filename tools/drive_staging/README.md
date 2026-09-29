@@ -84,3 +84,28 @@ python catalog.py all
   every pass. `probe` and `archives` append as they go, so a stopped run resumes where it left off.
 - The findings that came out of the first run are in [`../../tasks/drives_catalog_findings.md`](../../tasks/drives_catalog_findings.md).
 - Tests (synthetic `.czi`, no disk or NAS needed): `python tools/test_drive_catalog.py`.
+
+## Project claims (`project_claims.py`)
+
+*Added 2026-09-29.* The companion to the catalog. The catalog says what each file **is**; this
+says which project, researcher and animal its **path** claims. Every claim is checked against the
+animal-facility DB (read-only) and sorted into **Confirmed**, **(A)** corrected typo, **(B)**
+`Project-NNNN` or **(C)** uncertain, following the 2026-09-29 rule in
+[`../../CHANGELOG.md`](../../CHANGELOG.md). Outputs go to `<staging>\_analysis\codes\`, keyed
+`(drive, relpath)` like `files.csv`.
+
+```
+python tools/drive_staging/project_claims.py              # full run (~2 min once archives are cached)
+python tools/drive_staging/project_claims.py --relist     # re-list archive members (slow: LEONE.zip)
+python tools/drive_staging/project_claims.py --fresh-db   # ignore the DB lookup cache
+```
+
+- **A code that resolves in the DB is not enough.** The file's animals, and the DB's own birth and
+  procedure dates, have to agree with it. Nested claims that disagree are decided by procedure
+  dates, or they go to (C).
+- **Every rejected number is logged** in `rejected_tokens.csv`: dates, animal numbers, counters and
+  numbered series. Those are the misreads that produced 21 fabricated codes in the 2026-08 NI pull.
+- **The drive label is spelled differently in the two tables:** `drive1`/`drive2` here, `D1`/`D2`
+  in the catalog.
+- The review document from the first run, with the approvals it needs, is
+  [`../../tasks/drives_project_codes_findings.md`](../../tasks/drives_project_codes_findings.md).
