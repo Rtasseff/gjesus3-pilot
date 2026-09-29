@@ -303,17 +303,18 @@ def _text(e, path):
 def parse_czi_xml(xml_bytes):
     """Fields the catalog records (handoff §4). Raises ET.ParseError on unparseable XML."""
     root = ET.fromstring(xml_bytes)
-    hw = root.find(".//HardwareSetting")
+    # NB: there are several <HardwareSetting> elements (the top-level one that carries the device list,
+    # and presets inside <HardwareSettingsPool>); a first-match find() lands on a preset and misses
+    # every serial. Union over all of them.
+    hws = list(root.iter("HardwareSetting"))
+    hw = hws[0] if hws else None
     serials = set()
     keys = set()
-    if hw is not None:
-        for d in hw.iter("Device"):
+    for h in hws:
+        for d in h.iter("Device"):
             s = (d.get("SerialNumber") or "").strip()
             if s:
                 serials.add(s)
-        for k in hw.iter("StandCharacteristic"):
-            if k.get("Key"):
-                keys.add(k.get("Key"))
     for k in root.iter("StandCharacteristic"):          # stand keys can also sit outside HardwareSetting
         if k.get("Key"):
             keys.add(k.get("Key"))

@@ -111,6 +111,12 @@ def main():
     check(cat.czi_class({"ok": True, **cat.parse_czi_xml(xml_for(hw=False, exp=False))}) == "czi-processed", "no HardwareSetting and no Experiment -> czi-processed")
     check(cat.czi_class({"ok": True, **cat.parse_czi_xml(xml)}) == "czi-raw" and cat.czi_class({"ok": False}) == "czi-unreadable", "czi-raw / czi-unreadable")
 
+    # a preset inside <HardwareSettingsPool> comes first in document order and has no <Device> elements:
+    # a first-match find() there missed every serial on real LSM 900 files
+    pool = xml_for(serials=["03761880"], keys=["LSM"]).replace(
+        b"<Experiment/>", b'<Experiment><HardwareSettingsPool><HardwareSetting Name="Before"><ParameterCollection Id="x"/></HardwareSetting></HardwareSettingsPool></Experiment>')
+    check(cat.parse_czi_xml(pool)["serials"] == ["03761880"], "serials found even when a preset HardwareSetting comes first")
+
     print("CZI reading: seek vs streaming capture")
     with tempfile.TemporaryDirectory() as td:
         for pos in (1000, 40_000):
