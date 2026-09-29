@@ -165,7 +165,8 @@ The genuinely in-flight items (kept tight — everything else is in
   - **About 1,470 of the 11,294 `.czi` copies (~380 GB) are already in production** (AxioScan via `axioscan7_mfb_20260614.yaml` and the `mbc`/`aua` recipes, plus the 2026-06-15 K: best-guess Cell Observer / LSM 900 ingests). So roughly 4 TB is new. **Dedup has to be by checksum:** production already holds 32 `.czi` registered twice, which is exactly the name-based dedup gap (see [`BACKLOG.md`](BACKLOG.md) "Dedup identity").
   - **Decided by Ryan the same day** (see [`../CHANGELOG.md`](../CHANGELOG.md) 2026-09-29):
     - **LSM 800:** the onboarding is void unless the full scan finds another LSM serial.
-    - **Axio Imager.Z2:** enters as **external data with its own `X`-code** (like `XMRI`); the researcher is to confirm it was Charité's microscope.
+    - **Axio Imager.Z2:** enters as **external data with its own `X`-code** (like `XMRI`). Ryan confirmed it was Charité's microscope. The code's name is still open (`XMIC` suggested), to settle before the ingest session.
+    - **`Project-NNNN` naming** (code as written) confirmed by Ryan; the resemblance to `PROJ-NNNN` machine ids is accepted.
     - **Project claims are classified before ingest:** confirmed in the animal DB; **(A)** a typo with a corroborated DB match, corrected and ingested as normal; **(B)** clearly not an animal protocol, ingested with no animal-DB link into a new project `Project-NNNN`; **(C)** uncertain, ingested with a blank project and listed with the project each file claimed.
     - **Non-raw material** clearly tied to a defined project is copied into that project's folder.
   - **In flight (2026-09-29):** two worktrees under `gjesus3-dev\`, both read-only against production and the staged data:
