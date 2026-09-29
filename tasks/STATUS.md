@@ -174,7 +174,17 @@ The genuinely in-flight items (kept tight — everything else is in
     - **Claims:** 19,019 files Confirmed against 20 existing projects; 147 files in (A) (`118 LUCIA` → `0118`); 180 files in (C); 59,490 files (1.9 TB) with no claim. The only (B) is `Project-0521`, 26 documents. **No fabricated code.**
     - **Two more mis-coded production rows** (`ACQ-20240625-LSM9-001/-002` are Cell Observer files), which makes 25 in total; see BACKLOG "Dedup identity".
     - **The drives also carry a lot of MRI and PET/CT** (Laura's backup, `Cardiac MRI.zip`, Haizpea's `project0420`, Peio's `1319`). Pre-2022 MRI there exists nowhere else. That is a separate DICOM stream, after the microscopy.
-  - **Waiting on Ryan:** the approvals in `drives_project_codes_findings.md` §§1–4 and §7 (new projects, the (A) correction, `Project-0521`, researcher vs operator for the `AINHIZE`/`Marta` folders). **Next:** one microscopy ingest session with a dry-run review gate before any production write.
+  - **Approved by Ryan the same day** (see [`../CHANGELOG.md`](../CHANGELOG.md)):
+    - `AINHIZE`/`Marta` top folders give the operator, not the researcher.
+    - `118 LUCIA` → `0118` is approved, with its animal links held until Lucia confirms.
+    - Six new projects: `AE-biomaGUNE-0118`, `-1319`, `-1116`, `-1420`, `-1520` and `Project-0521`.
+    - DB-date readings are applied to the clear shared-animal cases.
+    - The Charité code is `XMIC`.
+  - **In flight:** worktree `gjesus3-dev\drives-microscopy-ingest` (`feat/drives-microscopy-ingest`) builds the **`.czi` ingest** and runs a **dry run**, then **stops** for the coordinator's review before any production write. Later, separate sessions will handle:
+    - placing the non-raw material into project folders, including the four paperwork-only projects;
+    - the DICOM stream (MRI and PET/CT on the drives);
+    - `.tif`/`.lsm`;
+    - the 25 mis-coded production rows.
 - **SegBioMed segmentation harvest + the 2021 MRI recovery — ✅ DONE IN PRODUCTION 2026-08-21.** A long exchange with the SegBioMed project (full thread: `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`, six replies each way) that turned into four production changes. **Everything below is finished and verified; what remains are the decisions in §0.**
   - **854 acquisitions recovered from 2021** (`Proyecto 1019`, `K:\gjesus\MRI`) — registry 15,474 → 16,328, 0 duplicates, 0 blank acquisition timestamps, `subject_ids` 854/854 from the facility DB, `checksum_present` Y on all, and the 9 DICOM-less exams regenerated to completion. **Ingested with NO project, deliberately** — the first end-to-end exercise of that path. **Cause of the gap, established not guessed:** the 2026-06 bulk pull read the *scanner host* (`kenia`) with no cutoff, and its earliest acquisition anywhere is 2022-01-10 — that floor is the **scanner's own retention horizon**. Consequence: **any internal MRI older than ~2022-01 survives only on researcher shares**, unsurveyed.
   - **`curated_datasets/` deployed** (§10 steps 1–3; `CDS-01` decided → include, as a pilot): `README_START_HERE.txt`, `segmentation/{MICROSCOPY,DICOM}/`, and `registry_datasets.csv` initialised with its 14-column header. **`CDS-02` answered** — curator set is the Data Management Lead plus delegated agents; no backup; one approval gate.
