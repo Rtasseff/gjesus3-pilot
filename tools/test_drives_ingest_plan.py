@@ -100,7 +100,20 @@ def test_archive_keys():
     check(len({k1, k2, k3}) == 3, "same archive name on another drive / folder -> distinct folders")
 
 
+def test_resave_key():
+    print("test_resave_key")
+    k = P.resave_key
+    a = k("CELL", "2023-07-26T09:12:33.1234567Z", "drive1_FRIO-X6/a/B/4h_HepG2_20X_6.czi")
+    check(a == k("CELL", "2023-07-26T09:12:33Z", r"UPTAKE\4h_hepg2_20x_6.CZI"),
+          "same acquisition: timestamp to the second, filename case- and folder-blind")
+    check(a != k("LSM9", "2023-07-26T09:12:33Z", "4h_HepG2_20X_6.czi"), "another instrument is another acquisition")
+    check(a != k("CELL", "2023-07-26T09:12:34Z", "4h_HepG2_20X_6.czi"), "another second is another acquisition")
+    check(P.GROUP_NOTE.format(m=1, s="") == "shares its acquisition timestamp with 1 other file in this "
+          "ingest (likely a ZEN scene split, stitched copy or extract)", "the R4 notes clause")
+
+
 def main():
+    test_resave_key()
     test_person_fields()
     test_zwsi_initials()
     test_canonical_order()

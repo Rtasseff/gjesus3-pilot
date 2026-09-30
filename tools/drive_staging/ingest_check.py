@@ -18,6 +18,9 @@ printed PASS/FAIL per check. Exit 1 on any unexplained mismatch.
                      data_source, original_name (+ instrument_model, sample, link name): 0 mismatches
   3 production       no in-scope sha256 in the production index, and that index is not older than
                      the registry
+  3b re-saves        no planned file is a re-save of a production acquisition (same instrument,
+                     timestamp to the second and filename), and no two planned files are (gate R1/R2)
+  3c derivatives     no planned file shares instrument + timestamp with a production acquisition (R3)
   4 dates            no blank acquisition_datetime, no ACQ-ID date == today
   5 projects         exactly one project would be created (AE-biomaGUNE-0118); every other exists
   6 subjects         none on 0118 / (C) / no-claim rows; each present one re-resolves in the facility
@@ -104,6 +107,7 @@ def main():
                 "sample_id": c.get("sample_id", ""), "sample_type": c.get("sample_type", ""),
                 "link_name": link or "", "sha256": d.get("drv_sha256", ""),
                 "czi_microscope_name": d.get("czi_microscope_name", ""),
+                "acq_group": d.get("drv_acq_group", ""), "notes": c.get("notes", ""),
             })
         print(f"{b['batch']}: {len(cases)} cases, log {engine_log[b['batch']]} "
               f"({time.time() - t0:.0f}s)", flush=True)
@@ -185,6 +189,9 @@ def main():
                       f"catalog={e['acquisition_datetime']!r}")
         if k != e["original_name"]:
             mism["original_name"] += 1
+        if g["acq_group"] != e["acq_group"] or g["notes"] != e["notes"]:
+            mism["acq_group/notes"] += 1
+            c2.append(f"{k}: acq_group/notes differ from the plan")
     checks["2 per-file"] = c2
     notes["2"].append({"mismatch_by_field": dict(mism), "cases_compared": len(got)})
 
@@ -201,6 +208,26 @@ def main():
                        "registry_mtime": dt.datetime.fromtimestamp(os.path.getmtime(reg)).isoformat(timespec="seconds"),
                        "hash_index_mtime": dt.datetime.fromtimestamp(os.path.getmtime(ph)).isoformat(timespec="seconds")})
     checks["3 production"] = c3
+
+    # ---- 3b / 3c the same ACQUISITION under different bytes (gate 2026-09-30, R1-R3) -----------
+    by_key, by_ts = P.production_index(args.nas)
+    c3b, c3c = [], []
+    seen_key = collections.defaultdict(list)
+    for e in exp.values():
+        k = P.resave_key(e["instrument"], e["acquisition_datetime"], e["original_name"])
+        if k in by_key:
+            c3b.append(f"re-save of production {by_key[k][0]['acq_id']}: {e['original_name']}")
+        seen_key[k].append(e["original_name"])
+        t = (e["instrument"], e["acquisition_datetime"][:19])
+        if t in by_ts:
+            c3c.append(f"shares instrument+timestamp with production {[r['acq_id'] for r in by_ts[t]]}: "
+                       f"{e['original_name']}")
+    c3b += [f"re-saves within the plan: {v}" for v in seen_key.values() if len(v) > 1]
+    checks["3b re-saves"] = c3b
+    checks["3c derivatives"] = c3c
+    groups = {e["acq_group"] for e in exp.values() if e.get("acq_group")}
+    notes["3b"].append({"planned_rows": len(exp), "same_timestamp_groups_flagged": len(groups),
+                        "files_in_them": sum(1 for e in exp.values() if e.get("acq_group"))})
 
     # ---- 4 dates ------------------------------------------------------------------------------------
     c4 = []

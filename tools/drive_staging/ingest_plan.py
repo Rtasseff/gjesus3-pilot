@@ -185,6 +185,160 @@ def canon_key(c, strict=False):
             0 if c["drive"] == "D1" else 1, c["path"])
 
 
+# ---------------------------------------------------------------------------------------------
+# Gate rules R1-R4 (coordinator gate 2026-09-30): the same ACQUISITION under different bytes.
+# ZEN rewrites a .czi when display settings, annotations (a scale bar) or pyramids are saved, so the
+# sha256 differs and content dedup passes it through. The acquisition timestamp (to the second) is
+# written at acquisition and survives a re-save; with the instrument and the filename it identifies
+# the acquisition.
+# ---------------------------------------------------------------------------------------------
+
+RESAVE_SIZE_TOL = 150_000      # bytes: a same-size twin is a plain re-save
+# Twins that differ in size were inspected by hand (2026-09-30; tile-by-tile pixel comparison with
+# czifile). Any new one stops the plan until it is looked at.
+RESAVE_DECISIONS = {
+    # 4h_HepG2_LP-IONP_20X_6.czi vs ACQ-20230726-CELL-037: pixels identical (3x520x692); production
+    # is 0.5 MB LARGER (extra saved metadata) -> a re-save; drop.
+    "44f35a6eb91ff0081a1ee99e5839ed0ee4dacabed2f98a720c6423e36b32cc3a": "drop",
+    # ID59_1022_tumor_CD206.czi vs ACQ-20251031-CELL-003: the PRODUCTION copy is truncated (5.1 MB
+    # short; tile 108 of 108 unreadable, "failed to read 9348144 bytes, got 4267924"); the drive copy
+    # is complete and its other 107 tiles are identical. Same acquisition, so not a new ACQ-ID: HOLD
+    # it and report -- the repair is to replace production's primary (recovery pattern).
+    "dc8e8fe75a7356ee8ad229d3b329ed5ebff72dfcaca6bf7555f1bea0dd2bc497": "hold-production-truncated",
+}
+# Same (instrument, timestamp) as a production acquisition, different name (R3), inspected:
+DERIVED_DECISIONS = {
+    # the four `...Scale...` Cell Observer files: pixels identical to their production parent
+    # (checked 2026-09-30); a scale-bar annotation re-save -> a derivative, not raw.
+    "e0093b162dd099707a867d2ae4059686eed23899b5e058cd1dfdf1fdc25220a8": "scale-bar copy, pixels identical",
+    "4f00e31a7dd281da81468dad6bd1b79de322efce044ec5af117304f1ee5977c0": "scale-bar copy, pixels identical",
+    "1ef3b08a63ff20d383108ca2abbf6a736c1f4ee50cf058131347bee8e4a99fd1": "scale-bar copy, pixels identical",
+    "ca458e8fd82210701b35487f322a6e9f8f0ed3843f9d282c6ab0af65e12eb59e": "scale-bar copy, pixels identical",
+}
+ROI_LOBULO_RE = re.compile(r"_ROI lobulo \d+\.czi$", re.I)   # the 18 ZWSI per-lobe crops (gate G2/R3)
+NONRAW_COLS = ["sha256", "instrument", "size", "original_name", "drive", "relpath", "why",
+               "parent_acq_ids", "parent_original_names", "parent_project_ids", "destination_project",
+               "acquisition_datetime"]
+GROUP_NOTE = ("shares its acquisition timestamp with {m} other file{s} in this ingest (likely a ZEN scene "
+              "split, stitched copy or extract)")
+
+
+def _base(p):
+    return p.replace("\\", "/").split("/")[-1].lower()
+
+
+def resave_key(inst, adt, name):
+    return (inst, (adt or "")[:19], _base(name))
+
+
+def production_index(nas):
+    """(instrument, ts19, basename) -> [rows] and (instrument, ts19) -> [rows] from registry_raw."""
+    by_key, by_ts = collections.defaultdict(list), collections.defaultdict(list)
+    for r in rcsv(os.path.join(nas, "registries", "registry_raw.csv")):
+        ts = r["acquisition_datetime"][:19]
+        if len(ts) < 19:
+            continue
+        by_key[resave_key(r["instrument"], ts, r["original_name"])].append(r)
+        by_ts[(r["instrument"], ts)].append(r)
+    return by_key, by_ts
+
+
+def apply_gate_rules(expected, excluded, conflicts, nas):
+    by_key, by_ts = production_index(nas)
+    kept, nonraw = [], []
+    # R1 -- a re-save of a production acquisition
+    for e in expected:
+        twins = by_key.get(resave_key(e["instrument"], e["acquisition_datetime"], e["original_name"]))
+        if not twins:
+            kept.append(e)
+            continue
+        if len(twins) > 1:
+            raise SystemExit(f"R1: {e['original_name']} matches {len(twins)} production rows")
+        t = twins[0]
+        prim = os.path.join(nas, t["canonical_path"].strip("/").replace("/", "\\"), t["primary_file_name"])
+        diff = int(e["size"]) - os.path.getsize(prim)
+        decision = "drop" if abs(diff) <= RESAVE_SIZE_TOL else RESAVE_DECISIONS.get(e["sha256"])
+        if decision is None:
+            raise SystemExit(f"R1: {e['original_name']} vs {t['acq_id']} differs by {diff} bytes and has "
+                             f"no recorded decision: inspect it and add it to RESAVE_DECISIONS")
+        reason = (f"resave-of-production:{t['acq_id']}" if decision == "drop"
+                  else f"production-copy-truncated:{t['acq_id']} (drive copy complete; HOLD, repair production)")
+        excluded.append({"sha256": e["sha256"], "instrument": e["instrument"], "size": e["size"],
+                         "reason": reason.split(":")[0], "detail": reason + f"; size diff {diff} B",
+                         "copies": e["n_copies"], "path": e["original_name"]})
+    expected, kept = kept, []
+    # R3 -- same (instrument, timestamp) as a production acquisition under another name
+    for e in expected:
+        parents = by_ts.get((e["instrument"], e["acquisition_datetime"][:19]))
+        if not parents:
+            kept.append(e)
+            continue
+        base = e["original_name"].split("/")[-1]
+        if e["instrument"] == "ZWSI" and ROI_LOBULO_RE.search(base):
+            why = "per-lobe ROI crop of an AxioScan scan (same timestamp), folder 'Prueba jpeg'"
+        elif e["sha256"] in DERIVED_DECISIONS:
+            why = DERIVED_DECISIONS[e["sha256"]]
+        else:
+            raise SystemExit(f"R3: {e['original_name']} shares its timestamp with "
+                             f"{[p['acq_id'] for p in parents]}: inspect it and record a decision")
+        nonraw.append({"sha256": e["sha256"], "instrument": e["instrument"], "size": e["size"],
+                       "original_name": e["original_name"], "drive": e["drive"], "relpath": e["relpath"],
+                       "why": why, "parent_acq_ids": ";".join(p["acq_id"] for p in parents),
+                       "parent_original_names": ";".join(p["original_name"] for p in parents),
+                       "parent_project_ids": ";".join(sorted({p["project_id"] for p in parents if p["project_id"]})),
+                       "destination_project": e["project"],
+                       "acquisition_datetime": e["acquisition_datetime"]})
+        excluded.append({"sha256": e["sha256"], "instrument": e["instrument"], "size": e["size"],
+                         "reason": "derivative-of-production", "detail": why + "; parents "
+                         + ";".join(p["acq_id"] for p in parents) + "; -> nonraw_derived.csv",
+                         "copies": e["n_copies"], "path": e["original_name"]})
+    expected = kept
+    # R2 -- re-saves within the plan: one canonical per (instrument, ts19, filename)
+    groups = collections.defaultdict(list)
+    for e in expected:
+        groups[resave_key(e["instrument"], e["acquisition_datetime"], e["original_name"])].append(e)
+    kept = []
+    for key, es in groups.items():
+        es.sort(key=lambda e: canon_key(e["_c"]))
+        keep = es[0]
+        if len(es) > 1:
+            real = sorted({e["project"] for e in es if e["project"]})
+            if len(real) > 1:
+                conflicts.append({"sha256": keep["sha256"], "instrument": keep["instrument"],
+                                  "projects": ";".join(real), "canonical": keep["original_name"],
+                                  "copies": "R2 re-save group: " + " | ".join(e["original_name"] for e in es)})
+                keep.update(project="", subject_id="", subject_alias="", subject_animal="",
+                            verdict="CONFLICT", sample_type="")
+            extra = []
+            for e in es[1:]:
+                extra.append(e["original_name"])
+                if e["other_copies"]:
+                    extra.append(e["other_copies"])
+                excluded.append({"sha256": e["sha256"], "instrument": e["instrument"], "size": e["size"],
+                                 "reason": "resave-within-plan",
+                                 "detail": f"same instrument/timestamp/filename as kept {keep['sha256'][:12]} "
+                                           f"({keep['original_name']}); size diff "
+                                           f"{int(e['size']) - int(keep['size'])} B",
+                                 "copies": e["n_copies"], "path": e["original_name"]})
+            keep["other_copies"] = ";".join(x for x in [keep["other_copies"]] + extra if x)
+            keep["n_copies"] = int(keep["n_copies"]) + sum(int(e["n_copies"]) for e in es[1:])
+            keep["resave_group_n"] = len(es)
+        kept.append(keep)
+    expected = kept
+    # R4 -- still-distinct files sharing (instrument, full timestamp): keep all, make them findable
+    ts_groups = collections.defaultdict(list)
+    for e in expected:
+        ts_groups[(e["instrument"], e["acquisition_datetime"])].append(e)
+    for (inst, adt), es in ts_groups.items():
+        n = len(es)
+        for e in es:
+            e["acq_group"] = f"{inst}|{adt}" if n > 1 else ""
+            e["acq_group_n"] = str(n) if n > 1 else ""
+            if n > 1:
+                e["notes"] = e["notes"].rstrip(".") + "; " + GROUP_NOTE.format(m=n - 1, s="" if n == 2 else "s") + "."
+    return expected, nonraw
+
+
 def load_projects(nas):
     out = {}
     for r in rcsv(os.path.join(nas, "registries", "registry_projects.csv")):
@@ -403,7 +557,12 @@ def cmd_plan(args):
             "conflict": conflict_note or canon["conflict"],
             "n_copies": len(cs),
             "other_copies": ";".join(f"{DRIVES[c['drive']][1]}/{c['path'].replace(chr(92), '/')}" for c in cs[1:]),
+            "_c": canon,
         })
+
+    # ---- gate rules R1-R4 (2026-09-30): same acquisition under different bytes ------------------
+    expected, nonraw = apply_gate_rules(expected, excluded, conflicts, args.nas)
+    wcsv(os.path.join(args.out, "nonraw_derived.csv"), NONRAW_COLS, nonraw)
 
     # ---- projects ---------------------------------------------------------------------------------
     projects = load_projects(args.nas)
@@ -484,7 +643,7 @@ def cmd_plan(args):
             "original_name", "acquisition_datetime", "czi_stand", "instrument_model", "project",
             "project_id", "project_status", "verdict", "claimed", "researcher", "operator", "subject_id",
             "subject_alias", "subject_animal", "sample_id", "sample_type", "data_source", "link_name",
-            "notes", "conflict", "n_copies", "other_copies"]
+            "notes", "conflict", "n_copies", "other_copies", "acq_group", "acq_group_n", "resave_group_n"]
     expected.sort(key=lambda e: (e["batch"], e["original_name"]))
     wcsv(os.path.join(args.out, "expected.csv"), cols, expected)
     wcsv(os.path.join(args.out, "excluded.csv"),
@@ -591,8 +750,33 @@ def farm_target(e):
     return os.path.join(FARM, e["batch"], e["original_name"].replace("/", "\\"))
 
 
+def prune_farm(exp):
+    """Remove farm entries the current plan no longer places there (a re-plan moved or dropped
+    them). Only a HARD LINK is removed -- st_nlink >= 2 proves the staged / extracted copy still
+    holds the bytes -- then empty folders. Anything else found in the farm stops the run."""
+    want = {os.path.normcase(farm_target(e)) for e in exp}
+    removed = 0
+    for root, dirs, files in os.walk(longpath(FARM), topdown=False):
+        for fn in files:
+            p = os.path.join(root, fn)
+            if os.path.normcase(p[4:]) in want:
+                continue
+            if os.stat(p).st_nlink < 2:
+                raise SystemExit(f"prune: {p} is not a hard link (nlink 1): refusing to delete it")
+            os.remove(p)
+            removed += 1
+        for d in dirs:
+            try:
+                os.rmdir(os.path.join(root, d))
+            except OSError:
+                pass  # not empty
+    print(f"prune: removed {removed} farm links no longer in the plan")
+
+
 def cmd_farm(args):
     exp = load_expected(args.out)
+    if args.prune:
+        prune_farm(exp)
     if args.batch:
         exp = [e for e in exp if e["batch"] in set(args.batch)]
     made = kept = errs = 0
@@ -631,7 +815,7 @@ def cmd_farm(args):
 
 CASE_COLS = ["original_name", "drv_project", "drv_researcher", "drv_operator", "drv_subject_alias",
              "drv_subject_animal", "drv_sample_id", "drv_sample_type", "drv_link_name", "drv_notes",
-             "drv_sha256", "drv_claim"]
+             "drv_sha256", "drv_claim", "drv_acq_group", "drv_acq_group_n"]
 
 YAML = """\
 # Historical microscopy drives -- batch {batch}: {instrument}, {files} files, {gb} GB ({bucket}).
@@ -719,7 +903,8 @@ def cmd_configs(args):
              "drv_subject_alias": e["subject_alias"], "drv_subject_animal": e["subject_animal"],
              "drv_sample_id": e["sample_id"], "drv_sample_type": e["sample_type"],
              "drv_link_name": e["link_name"], "drv_notes": e["notes"], "drv_sha256": e["sha256"],
-             "drv_claim": e["verdict"]} for e in es))
+             "drv_claim": e["verdict"], "drv_acq_group": e.get("acq_group", ""),
+             "drv_acq_group_n": e.get("acq_group_n", "")} for e in es))
         extra = EXTRA_0118 if b["bucket"] == "CELL-0118" else EXTRA_XMIC if inst == "XMIC" else \
             EXTRA_CLOSED if b["bucket"].startswith("CELL-closed") else ""
         text = YAML.format(
@@ -791,6 +976,7 @@ def main():
     sub.add_parser("extract")
     f = sub.add_parser("farm")
     f.add_argument("--batch", action="append")
+    f.add_argument("--prune", action="store_true", help="first remove farm links the plan no longer places")
     c = sub.add_parser("configs")
     c.add_argument("--config-dir", default=CONFIG_DIR)
     sc = sub.add_parser("scratch")
