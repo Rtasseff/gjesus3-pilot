@@ -83,6 +83,12 @@ m23 on 2022-01-24 share link names, and a no-date placeholder; `1019` 421 links 
 
 ## 2. One batch (repeat for each row of §3, in order)
 
+**`bash tools/drive_staging/run_drives_batch.sh Bxx` runs exactly the steps below** (0 and a–f) and
+**stops at the first failed condition** — before the run whenever it can (step 0, the backup, the dry
+run, a still-closed target project). It was used for B01–B04. Read every line of its output against the
+pass conditions; the validator stop assumes the baseline 10,314 (if the MRI placeholder is fixed in the
+meantime it stops by design — re-baseline, don't bypass). The commands, for reference:
+
 ```bash
 B=B01                         # the batch
 D=$(date +%Y%m%d)
