@@ -238,6 +238,20 @@ So "correct for the normal workflow" no longer holds. **Any bulk or historical i
 must dedup by checksum before it runs and must not rely on this key.** The external-drive
 microscopy ingest is planned on that basis.
 
+**2026-09-30: SHA-256 is not an acquisition identity either.** The drives-ingest gate found
+**206 planned `.czi` that are re-saved copies of production acquisitions.** Each has the same
+instrument, the same acquisition timestamp to the second and the same filename, and 202 of them the
+same size, but the bytes differ (ZEN rewrites a file when, for example, display settings are
+saved). There were
+also **84 such re-save groups among the drive files themselves.** A SHA-256 dedup lets all of them
+through as "new". The key **(instrument, `.czi` acquisition timestamp, filename)** catches them.
+Applied to production, it finds exactly the 22 known duplicate `ZWSI` pairs plus **1 more
+duplicate, in `LSM9`** (`lsm900_bestguess_irene-transfeccion.yaml`). **Design input for the
+content-anchored key above:** for microscopy, the acquisition timestamp (with the instrument, and
+the file name or the image dimensions) identifies the acquisition. The bytes do not. A timestamp
+shared under *different* names is ZEN's scene splits, stitched copies and region extracts. Those
+are the same acquisition, but not always the same pixels.
+
 - [ ] Decide how to retire the 32 duplicate registrations and re-code the 25 rows with
   the wrong instrument (23 `CELL` rows that are AxioScan files, 2 `LSM9` rows that are
   Cell Observer files). Keep the older ACQ-ID of each pair? Tombstone the other?
@@ -1094,6 +1108,13 @@ over them.
 - [ ] `CDS-02` (who the curators are beyond the Data Management Lead) becomes real as soon as
   someone outside the Data Office wants to promote something.
 - [ ] `CDS-03` (mandated label formats per ecosystem) — this pilot is the natural place to settle it.
+- [ ] **Candidate (2026-09-30, Ryan): AxioScan lung-lobe ROI extracts.** The drives hold 18
+  `MFB_AUA_1123_ID2xxLu_TM_10x_ROI lobulo N.czi` files in `CELL OBSERVER 2\AINHIZE\AXIOSCAN\AINHIZE-ITZIAR TM\Prueba jpeg\ID2xx\`.
+  They are per-lobe crops of whole-slide scans already in production (`ACQ-20260416-ZWSI-001…-020`,
+  project `AE-biomaGUNE-1123`), and each shares its parent's acquisition timestamp to the second, so
+  the traceability to ACQ-IDs that §6.2 requires is already established. They are **not** ingested
+  into `/raw/`; the drives' non-raw session places them in `1123`'s folder. Ryan asked to **consider
+  starting the curated-dataset process** for them: lobe-level delineations tied to raw ACQ-IDs.
 - [ ] `DS-SEG-0001` provenance `creator` is **unknown** — the folder is `Analisis Unai`, likely a
   login artifact. *Unai* is a real person here (NI Platform Manager), which makes guessing more
   tempting and no more correct. **Leave it blank; ask.**
@@ -1800,6 +1821,23 @@ project fields, create projects, and import data into them. Two capabilities wer
     status change until it has run, warn, or queue the project for the Data Mgmt Lead?
     The close-out tool itself does not exist yet.
   - Is `closed` reversible in the GUI, or one-way once close-out has run?
+  - **Evidence, 2026-09-30.** The 2026-07-14 close-out marked 8 projects `closed`, but closed
+    projects keep receiving data:
+    - an operator ingested **18 new AxioScan sections into `AE-biomaGUNE-1019` on 2026-09-29**
+      through the GUI;
+    - the NI pull added **70 CT to `AE-biomaGUNE-0219` on 2026-08-13**.
+
+    The ingest ignores `status` and simply writes links into the folder. **6 of the 8 closed
+    projects still have folders**, but their older links are gone (`1019`: 58 links for 479
+    acquisitions). Ryan: *"I probably should not have closed those projects… this may happen a few
+    times."* **A reopen tool (`tools/reopen_project.py`) is being built on
+    `feat/drives-microscopy-ingest`** to reopen `0219` and `1019` before the drives ingest. It sets
+    the status back to active, recomputes the dates from the acquisitions, and recreates the missing
+    hard links. **This argues that closing on "newest acquisition older than 3 years" is premature
+    for protocols whose data is still surfacing,** because historical data from drives and shares
+    keeps arriving. `0320` and `1519` (both closed) are next, in the drives' MRI stream.
+    **Decided 2026-09-30 (Ryan): reopen case by case,** when a closed project's data arrives. The
+    other closed projects are not reopened wholesale.
   - Should closing set a `closed_date` / `outcome`? `_project.yaml` already has both
     fields (`closed_date`, `outcome`, `promoted_to`); `registry_projects.csv` has
     **neither** — so recording them means either a projects-registry schema change or
