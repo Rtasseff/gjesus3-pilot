@@ -277,7 +277,7 @@ The structured form of all the above plus DICOM header summaries + parsed XML au
 | Attribute | Value |
 |-----------|-------|
 | **Code** | `XMIC` (ecosystem `MICROSCOPY`, primary = the single `.czi`, like §1.1–1.3) |
-| **First instance** | Zeiss **Axio Imager.Z2** (device serial `784053`) at Charité, Berlin: 338 `.czi` of the `Ferritas` project, acquired 2024-09-27 → 2024-10-11, found on the historical drives (`tasks/drives_catalog_findings.md`). The same project's local histology is `CELL`. |
+| **First instance** | Zeiss **Axio Imager.Z2** (device serial `784053`) at Charité, Berlin: 338 `.czi` of the `Ferritas` project, acquired 2024-09-27 → 2024-11-07, found on the historical drives (`tasks/drives_catalog_findings.md`). The same project's local histology is `CELL`. |
 | **How it is recognised** | By the `.czi`'s own device serial, never its folder: `tools/reference/microscopy_instruments.yaml` fingerprints it as `EXTERNAL:AxioImagerZ2`, which the ingest maps to `XMIC`. |
 | **Registry** | `instrument_model` written literally (`Axio Imager.Z2`, the value the file carries); `data_source` = `collaborator:<origin>` — `collaborator:Charite` for the first batch. |
 | **Embedded metadata** | The same 21 `discovered.czi_*` fields as §1.1 (same extractor). |
