@@ -109,3 +109,33 @@ python tools/drive_staging/project_claims.py --fresh-db   # ignore the DB lookup
   in the catalog.
 - The review document from the first run, with the approvals it needs, is
   [`../../tasks/drives_project_codes_findings.md`](../../tasks/drives_project_codes_findings.md).
+- **Histology tie-break (2026-09-30, Ryan's approval of 2026-09-29).** When a file's animal is in two
+  candidate protocols and neither rule above separates them, a microscopy file is settled by the one
+  candidate whose animal had `Organ sampling` / `Perfusion` on or before the file date. The rule may
+  only confirm the file's nearest claim, never overrule it, and it is not applied to in-vivo data.
+
+## The `.czi` ingest (`ingest_plan.py`, `ingest_check.py`, `ingest_verify.py`)
+
+*Added 2026-09-30.* Turns the catalog and the claims into a per-file ingest. One-time tools for the
+historical-drives `.czi`; the procedure is
+[`../../tasks/drives_microscopy_ingest_runbook.md`](../../tasks/drives_microscopy_ingest_runbook.md),
+the dry-run evidence [`../../tasks/drives_ingest_dryrun_review.md`](../../tasks/drives_ingest_dryrun_review.md).
+
+```
+python tools/drive_staging/ingest_plan.py goptical --hash   # ZWSI already in S:\goptical's AxioScan archive?
+python tools/drive_staging/ingest_plan.py plan              # -> _analysis\ingest\expected.csv, batches.csv, excluded.csv
+python tools/drive_staging/ingest_plan.py extract           # archive-only .czi -> _extract\ (7-Zip, hash-verified)
+python tools/drive_staging/ingest_plan.py farm              # hard-link farm -> _farm\<batch>\ (zero space, same volume)
+python tools/drive_staging/ingest_plan.py configs           # -> tools/configs/drives_2026-09/ (YAML + case table per batch)
+python tools/drive_staging/ingest_check.py                  # the dry-run review: engine resolution vs plan, file by file
+python tools/drive_staging/ingest_verify.py --nas-root <root> --batch B01   # after a batch ran
+```
+
+- **One row per distinct content** (sha256), one canonical copy each; the other copies' paths are kept
+  for the provenance. Content already in production, or (ZWSI) already on `S:\goptical`, is excluded.
+- **The farm is the source.** Every file sits at `_farm\<batch>\<drive-label>\<its path on the drive>`,
+  so the engine's `original_name` is the traceable source path, and the dedup key is stable across
+  re-runs. It is built from hard links: the staged copy is never modified.
+- **Per-file values** (project, researcher, operator, subject, sample, link name) reach the engine
+  through `auto_discover.case_table` (10_TOOLS §2.1.3). Tests: `python tools/test_drives_ingest_plan.py`
+  and `PYTHONPATH=tools python tools/ingest/test_case_table.py`.
