@@ -573,6 +573,46 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   alias. Also note the `subject:` block schema currently has no way to say
   "this subject is human" other than `species: Homo sapiens`.
 
+## 🔸 MODERATE — no ingest maintains a project's `start_date` / `last_activity` (2026-10-01)
+
+Since 2026-07-14 these two columns of `registry_projects.csv` **mean acquisition dates**. They were
+backfilled once that day, and **nothing has maintained them since.**
+
+- A project created by an ingest gets its **creation date** for both. For example, `DTS24` reads
+  2026-08-12 though its data spans 2018 to 2025, and `AE-biomaGUNE-0118` reads 2026-09-30 though its
+  slides date from 2022 to 2023.
+- A later ingest into an existing project never moves `last_activity`. `AE-biomaGUNE-0424` reads
+  2026-05-06 but received scans on 2026-09-29; `-1123` reads 2026-06-05 but has acquisitions to
+  2026-07-24.
+
+**Why it matters:** the close-out rule ("newest acquisition older than 3 years") reads these dates.
+Stale dates are how `1019` was closed while it was still receiving data (see "Define what
+`status = closed` actually does").
+
+- [ ] Engine fix: when an ingest registers an acquisition into a project, widen that project's
+  `start_date`/`last_activity` to cover its acquisition date. Do it under the projects-registry lock
+  (`ingest/projects_registry.py`), and never move a date inward.
+- [ ] One-time recompute for every project, backup-first. The logic already exists inside
+  `tools/reopen_project.py` (on `feat/drives-microscopy-ingest`); lift it into a shared function.
+  Run it after the historical-drives ingest, which touches 13 projects.
+
+## 🔸 MODERATE — audit production `.czi` for truncated primaries (2026-10-01)
+
+The drives ingest found that **`ACQ-20251031-CELL-003` is truncated in production**. The file is
+5.1 MB short and its last tile (108 of 108) cannot be read, while the drive copy is complete. Its
+`checksums.json` matches the *truncated* bytes, because the ingest hashed what it copied. So
+`verify_checksums` cannot catch this class. The file came from the 2026-06-15 best-guess ingest,
+which read from `K:\gjesus\Ainhize`, a live share; others may be affected the same way. (The repair
+of this one was approved on 2026-10-01 and is being done on `feat/drives-microscopy-ingest`.)
+
+- [ ] Read-only audit of all ~4,400 production `.czi`, over SMB. For each file, read the header
+  and the subblock directory, and flag any whose last subblock ends beyond the end of the file.
+  This is cheap: a few KB per file.
+- [ ] For each hit, look for a complete copy: `K:` (if still there), the staged drives
+  (`files.csv` by the re-save key), `S:\goptical`. Repair with the in-place pattern: **overwrite the
+  bytes of the existing file** so project hard links keep pointing at it. Then update
+  `checksums.json`, the registry size and `notes`.
+
 ## 🔸 MODERATE — the `researcher` name convention is with the group; do NOT normalise until they decide (2026-09-03)
 
 **Status: deliberately parked. This is not a defect to be fixed on sight.**
@@ -2115,7 +2155,8 @@ backfilled exams' studies remain link-less because of exactly this collision —
 `MRI_m23_0219_20220124_3_1` (ACQ-20220124-MRI-003 vs -008); in each pair the
 second acquisition has no project link of its own (the relink correctly skipped
 rather than merged — frame counts matched, so no data was mixed). Fix these two
-when the link-name template fix lands. Same run also found and repaired **510
+when the link-name template fix lands. *(2026-09-30: `tools/reopen_project.py` hit the same
+collisions when it reopened `0219`. It reported 4 and left them alone, as it should.)* Same run also found and repaired **510
 pre-existing empty link shells** the 2026-06-14 relink had left behind.
 
 Measured on the 3,297-acq imaging regen batch: **3,097 distinct names → 144
