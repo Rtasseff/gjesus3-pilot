@@ -35,7 +35,7 @@ sys.path.insert(0, HERE)
 import ingest_plan as P  # noqa: E402
 
 PROV_COLS = ["acq_id", "batch", "drive", "relpath", "archive", "member", "sha256", "manifest_verified",
-             "other_copies"]
+             "other_copies", "notes"]
 
 
 def main():

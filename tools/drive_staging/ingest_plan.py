@@ -204,6 +204,7 @@ RESAVE_DECISIONS = {
     # short; tile 108 of 108 unreadable, "failed to read 9348144 bytes, got 4267924"); the drive copy
     # is complete and its other 107 tiles are identical. Same acquisition, so not a new ACQ-ID: HOLD
     # it and report -- the repair is to replace production's primary (recovery pattern).
+    # REPAIRED 2026-10-01 (tools/repair_primary_inplace.py): production now holds these bytes.
     "dc8e8fe75a7356ee8ad229d3b329ed5ebff72dfcaca6bf7555f1bea0dd2bc497": "hold-production-truncated",
 }
 # Same (instrument, timestamp) as a production acquisition, different name (R3), inspected:

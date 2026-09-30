@@ -46,7 +46,7 @@ scale bar or pyramids are saved, so its sha256 changes and content dedup lets it
   107 tiles are identical. It is the same acquisition, so it must not become a second ACQ-ID: **held**
   (`production-copy-truncated` in `excluded.csv`) and **reported as a production repair** — replace the
   primary of `ACQ-20251031-CELL-003` from the drive copy (the recovery pattern; a separate, approved
-  write). Most likely the production file was copied while ZEN was still writing it.
+  write). **Done 2026-10-01 (Ryan's approval): repaired in place — see §11.** Most likely the production file was copied while ZEN was still writing it.
 
 **R5 — before → after:**
 
@@ -390,7 +390,7 @@ and **confirm the tie-break guard** (§2).
 
 **Proposed `CHANGELOG.md` row** (2026-09-30):
 
-> **Historical microscopy drives: the `.czi` ingest is built, dry-run and rehearsed; nothing written to production.** **(1) The approved DB-date tie-break** is in `project_claims.py`: a histology file whose animal is in two protocols goes to the one whose animal was organ-sampled or perfused by the file date; (C) 180 → 131, the 49 movers exactly the approved readings. A guard was added: the rule confirms, never overrules, the file's own nearest claim, because the DB logs sampling unevenly (1321's animals 98–101 have slides but no sampling). **(2) New instrument code `XMIC`** for an external microscope's `.czi` (first: the Charité Axio Imager.Z2, `collaborator:Charite`). **(3) New ingest option `auto_discover.case_table`** (default off): a CSV keyed on `original_name` that sets values per file, so project / researcher / operator / subject decided file by file reach the engine exactly; the dry run proved the engine reads them back on all 9,090 files. **(4) `Project-NNNN` documented** (05_PROJECTS §2a.7). **(5) The plan:** one canonical copy per sha256 of every new `czi-raw` (9,090 files, 4.0 TB, 347 of them only inside archives, extracted and hash-verified), laid out in a hard-link farm so `original_name` is the drive path; 14 `ZWSI` excluded as already on `S:\goptical`; one `.czi` excluded because its name starts with a dot and the engine's glob cannot see it — a silent skip the dry run caught. **(6) Gate:** `AE-biomaGUNE-0219` and `-1019` are closed projects with deleted folders; their 399 files wait for a decision.
+> **Historical microscopy drives: the `.czi` ingest is built, dry-run and rehearsed; nothing written to production.** **(1) The approved DB-date tie-break** is in `project_claims.py`: a histology file whose animal is in two protocols goes to the one whose animal was organ-sampled or perfused by the file date; (C) 180 → 131, the 49 movers exactly the approved readings. A guard was added: the rule confirms, never overrules, the file's own nearest claim, because the DB logs sampling unevenly (1321's animals 98–101 have slides but no sampling). **(2) New instrument code `XMIC`** for an external microscope's `.czi` (first: the Charité Axio Imager.Z2, `collaborator:Charite`). **(3) New ingest option `auto_discover.case_table`** (default off): a CSV keyed on `original_name` that sets values per file, so project / researcher / operator / subject decided file by file reach the engine exactly; the dry run proved the engine reads them back on all 9,090 files. **(4) `Project-NNNN` documented** (05_PROJECTS §2a.7). **(5) The plan:** one canonical copy per sha256 of every new `czi-raw` (9,090 files, 4.0 TB, 347 of them only inside archives, extracted and hash-verified), laid out in a hard-link farm so `original_name` is the drive path; 14 `ZWSI` excluded as already on `S:\goptical`; one `.czi` excluded because its name starts with a dot and the engine's glob cannot see it — a silent skip the dry run caught. **(6) After the gate (2026-09-30/10-01):** re-saves of production acquisitions (206) and within the plan (72) dropped, 22 derivatives (ROI crops, scale-bar copies) handed to the non-raw session, 247 same-timestamp groups flagged; the plan is 8,790 files / 3.85 TB in 16 batches. `AE-biomaGUNE-0219` and `-1019` reopened with the new `tools/reopen_project.py` (closed projects keep receiving data; 501 links restored). **The production primary of `ACQ-20251031-CELL-003` was found truncated** (5.1 MB short, last of 108 tiles unreadable) and **repaired in place** from the drive copy with the new `tools/repair_primary_inplace.py` (same file, so its project link sees the repair; `checksums.json`, `file_size_mb` and a notes clause updated; `verify_checksums` passes). B01–B04 (869 acquisitions, incl. the new project `AE-biomaGUNE-0118` = PROJ-0060) ingested and verified; B05–B16 follow.
 
 ---
 
@@ -461,6 +461,34 @@ Outputs (regenerable, on the un-backed-up D:): `D:\projects\gjesus3\staging\_ana
 - **Pending list:** `pending_subject_metadata.csv` is unchanged, so there were 0 DB misses.
 - **Warnings:** only the documented sentinels.
 - **Provenance:** `tasks/drives_ingest_provenance.csv` holds 869 rows so far, all `manifest_verified` Y.
+
+**Repair of `ACQ-20251031-CELL-003` (approved by Ryan; coordinator's answers 2026-10-01; run 14:57, workstation clock 2026-09-30).**
+The production primary (PROJ-0039 `claudia`, from `cellobs_bestguess_claudia.yaml`) was truncated. It is
+now **repaired in place** from the drive copy
+`D2\CELL OBSERVER 2\AINHIZE\1022\CD206\def\ID59_1022_tumor_CD206.czi`, using `tools/repair_primary_inplace.py`.
+
+- **Links.** A scan of all 399,018 files under `projects\` found **one** link to the primary:
+  `claudia\raw_linked\CELL_ID59_1022_tumor_CD206.czi`, which is the same file as the primary.
+- **Backup.** Taken first and SHA-256-verified: all registry CSVs, `.acq_id_seq.json`, and the
+  acquisition's `checksums.json` and `metadata.json`, in
+  `C:\Users\rtasseff\temp\gjesus3_repair_backup_20260930_145741_ACQ-20251031-CELL-003\`.
+- **The damaged primary** is kept for the record, verified, at
+  `D:\projects\gjesus3\staging\_repair\ACQ-20251031-CELL-003\ACQ-20251031-CELL-003.czi.truncated`.
+- **The write.** The existing file was opened `r+b`, written from offset 0, then `truncate`, flush and
+  `fsync`. There was no `os.replace`, so every hard link sees the repair.
+- **Checks after the write:**
+  - the primary's SHA-256 is `dc8e8fe7…`, equal to the drive manifest's (it was `fcc7e287…`);
+  - all **108 / 108** subblocks read with `czifile`;
+  - the `claudia` link hashes the same as the primary.
+- **Records:**
+  - `checksums.json`: only the hash string changed; CRLF line endings kept, same length.
+  - `registry_raw`: `file_size_mb` 3391.9 → **3397.0**, and the notes clause added, through
+    `registry.update_row` under the lock. That is exactly one line changed; every other byte is identical.
+  - The sidecar is untouched. Its size-like fields are image dimensions, identical in both copies.
+- **Verification:** `verify_checksums --acq ACQ-20251031-CELL-003` passes (0 fail, 0 error). The validator
+  holds at **10,314**, all the known placeholder.
+- **Paper trail:** a provenance row (`batch` = `repair`, `manifest_verified` Y, note "repair, not a new
+  acquisition"), and `excluded.csv` now reads `repaired-production`.
 
 **Measured throughput to the NAS:** 31–39 MB/s effective (B02: 6.8 GB in 222 s; B04: 3.0 GB in 76 s),
 including the source hash and the read-back verify. At that rate a 400 GB batch takes about 3–3.5 h, and
