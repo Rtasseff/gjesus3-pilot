@@ -1,0 +1,17 @@
+batch,bucket,instrument,files,gb,projects,members,auto_create,needs_decision
+B01,XMIC,XMIC,338,4.3,(none),0,N,
+B02,CELL-0118,CELL,141,6.8,AE-biomaGUNE-0118,0,Y,
+B03,LSM9,LSM9,397,5.3,AE-biomaGUNE-1123,6,N,
+B04,ZWSI,ZWSI,22,22.1,AE-biomaGUNE-0424;AE-biomaGUNE-1123,0,N,
+B05,CELL-noproject,CELL,2187,216.6,(none),259,N,
+B06,CELL-project,CELL,274,327.6,AE-biomaGUNE-1321;AE-biomaGUNE-1422,0,N,
+B07,CELL-noproject,CELL,1584,393.4,(none),0,N,
+B08,CELL-project,CELL,1232,396.9,AE-biomaGUNE-0420;AE-biomaGUNE-0423;AE-biomaGUNE-0424;AE-biomaGUNE-0522;AE-biomaGUNE-0619;AE-biomaGUNE-0721,82,N,
+B09,CELL-project,CELL,142,397.2,AE-biomaGUNE-1321,0,N,
+B10,CELL-project,CELL,149,398.2,AE-biomaGUNE-1123;AE-biomaGUNE-1321,0,N,
+B11,CELL-project,CELL,940,398.6,AE-biomaGUNE-0721;AE-biomaGUNE-1022;AE-biomaGUNE-1123,0,N,
+B12,CELL-noproject,CELL,816,398.9,(none),0,N,
+B13,CELL-project,CELL,260,399.5,AE-biomaGUNE-1123,0,N,
+B14,CELL-project,CELL,209,399.7,AE-biomaGUNE-1321,0,N,
+B15,CELL-closed-1019,CELL,260,28.1,AE-biomaGUNE-1019,0,N,reopen closed project
+B16,CELL-closed-0219,CELL,139,228.7,AE-biomaGUNE-0219,0,N,reopen closed project

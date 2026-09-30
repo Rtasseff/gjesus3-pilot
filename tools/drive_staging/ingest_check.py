@@ -126,9 +126,9 @@ def main():
            for k in got if k in exp_in and got[k]["sha256"] != exp_in[k]["sha256"]]
     # independent re-derivation from the catalog (not from the plan's own code path)
     prod = {r["sha256"] for r in P.rcsv(os.path.join(P.CAT, "production_hashes.csv"))}
-    gopt = collections.Counter()
+    gopt = collections.Counter()   # planned exclusions other than production (S: AxioScan, dot-files)
     for x in P.rcsv(os.path.join(args.out, "excluded.csv")):
-        if x["reason"] == "in-goptical-axioscan":
+        if x["reason"] != "in-production":
             gopt[x["sha256"]] += 1
     derived = collections.defaultdict(dict)
     for r in P.rcsv(os.path.join(P.CAT, "files.csv")):
@@ -160,8 +160,7 @@ def main():
     c2 = []
     fields = [("instrument", "instrument"), ("project", "project"), ("researcher", "researcher"),
               ("operator", "operator"), ("subject_id", "subject_id"), ("data_source", "data_source"),
-              ("instrument_model", "instrument_model"), ("sample_id", "sample_id"),
-              ("sample_type", "sample_type"), ("link_name", "link_name")]
+              ("sample_id", "sample_id"), ("sample_type", "sample_type"), ("link_name", "link_name")]
     mism = collections.Counter()
     for k, g in got.items():
         e = exp_in.get(k)
@@ -171,6 +170,14 @@ def main():
             if g[gf] != e[ef]:
                 mism[gf] += 1
                 c2.append(f"{k}: {gf} engine={g[gf]!r} expected={e[ef]!r}")
+        # instrument_model: the catalog's stand name where it has one (archive members: no stand in
+        # the catalog -> the engine's own reading must at least be non-blank)
+        if e["instrument_model"] and g["instrument_model"] != e["instrument_model"]:
+            mism["instrument_model"] += 1
+            c2.append(f"{k}: instrument_model engine={g['instrument_model']!r} expected={e['instrument_model']!r}")
+        if not g["instrument_model"]:
+            mism["instrument_model"] += 1
+            c2.append(f"{k}: instrument_model blank")
         # acquisition_datetime: the engine reads the .czi itself; the catalog read it independently
         if resolver.normalize_acquisition_datetime(e["acquisition_datetime"]) != g["acquisition_datetime"]:
             mism["acquisition_datetime"] += 1

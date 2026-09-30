@@ -324,6 +324,15 @@ def cmd_plan(args):
             raise SystemExit(f"one content, two instruments: {sha} {insts}")
         inst = insts.pop()
         size = cs[0]["size"]
+        # The engine discovers with glob, which never matches a name starting with "." -- such a
+        # copy would sit in the farm and silently not ingest (found by the 2026-09-30 dry run).
+        visible = [c for c in cs if not c["path"].split("\\")[-1].startswith(".")]
+        if not visible:
+            excluded.append({"sha256": sha, "instrument": inst, "size": size, "reason": "hidden-dotfile",
+                             "detail": "name starts with '.': the engine's glob cannot see it; list for a one-off",
+                             "copies": len(cs), "path": cs[0]["path"]})
+            continue
+        cs = visible
         if sha in prod:
             excluded.append({"sha256": sha, "instrument": inst, "size": size, "reason": "in-production",
                              "detail": prod[sha], "copies": len(cs), "path": min(cs, key=canon_key)["path"]})
