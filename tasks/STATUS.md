@@ -94,7 +94,7 @@ production care.
 
 | | |
 |---|---|
-| Acquisitions in `/raw/` | **16,375** (all checksummed + `metadata.json` sidecar'd) — 15,474 until 2026-08-21, then **+854** from the 2021 `Proyecto 1019` recovery, **+24** from the G1 session, and **+23** from a routine operator AxioScan ingest on 2026-08-26 (`PROJ-0059`). Also — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) and the **1,508** from the `S:\gnuclear` NI backfill (§3) |
+| Acquisitions in `/raw/` | **17,306 on 2026-10-01** (+62 operator AxioScan on 2026-09-29, then **+869** from the historical drives' first four batches; §2). Earlier history: **16,375** (all checksummed + `metadata.json` sidecar'd) — 15,474 until 2026-08-21, then **+854** from the 2021 `Proyecto 1019` recovery, **+24** from the G1 session, and **+23** from a routine operator AxioScan ingest on 2026-08-26 (`PROJ-0059`). Also — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) and the **1,508** from the `S:\gnuclear` NI backfill (§3) |
 | Projects | **58 registered** — 50 active + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). Every live folder carries the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
 | Subjects (`registry_subjects.csv`) | **1,165** (one row per subject; 1,124 until the 2026-08-21 ingests added the 2021 animals) — was 1,146 until the 2026-08-16 `-None` subject-id repair, which dropped 65 ambiguous rows and added back 43 real ones (see 2). The 2026-08-19 PROJ-0056 repair left the total unchanged (3 rows dropped, 3 added). |
 | Curated datasets (`registry_datasets.csv`) | **4** — `DS-SEG-0001`…`0004`, segmentation, DICOM ecosystem. Area deployed 2026-08-21 as a pilot (`CDS-01` decided). Provenance traceability verified **100% on all four**. |
@@ -187,6 +187,11 @@ The genuinely in-flight items (kept tight — everything else is in
 
     Required fixes: drop the re-saves, collapse the in-plan groups, route the crops to project `1123` as non-raw material, and flag the remaining same-timestamp groups (ZEN scene splits and stitching). All are in the worktree's `GATE_2026-09-30.md`.
   - **Closed projects (G1):** `AE-biomaGUNE-0219` and `-1019` are to be **reopened** (Ryan), with a reusable `tools/reopen_project.py` built on the ingest branch. Status goes back to active, the dates are recomputed, and hard links are recreated for every production acquisition. Their folders were never actually gone: 6 of the 8 closed projects still have folders, and **an operator ingested 18 new AxioScan sections into `1019` on 2026-09-29**, because the ingest ignores `closed`.
+  - **🔶 IN PRODUCTION, PART-WAY (2026-09-30 / 10-01).** The gate changes are done: the 205 re-saves of production were dropped, 65 in-plan re-save groups collapsed, and 22 crops and scale-bar copies routed to non-raw. The plan is now **8,790 files, 3.85 TB**, frozen at `c5f7fff`.
+    - `0219` and `1019` were **reopened** with `tools/reopen_project.py`: 80 and 421 links recreated, no file lost, a re-run was a no-op.
+    - **B01–B04 are in production and verified: 869 acquisitions** (`XMIC` 338; `AE-biomaGUNE-0118` created as **PROJ-0060** with 140; `LSM9` 387; `ZWSI` 4). The registry is **17,306 rows**, and the validator is unchanged (the 10,314 known placeholders).
+    - **Next: B05–B16** (7,921 `CELL` files, ~3.8 TB, ~30–35 h at 31–39 MB/s), run by a Sonnet session from the worktree's `HANDOFF_RUN.md`. No ingest window is needed: no operator has ever ingested `CELL` or `LSM9` data.
+    - **A truncated production primary was found:** `ACQ-20251031-CELL-003` (the drive copy is complete). Its repair was approved on 2026-10-01, in place, so that project hard links keep pointing at it. See BACKLOG "audit production `.czi` for truncated primaries".
   - **Later, separate sessions will handle:**
     - placing the non-raw material into project folders, including the four paperwork-only projects;
     - the DICOM stream (MRI and PET/CT on the drives);
