@@ -150,7 +150,14 @@ def main():
                        "catalog_gb": P.gb(sum(derived[inst].values())),
                        "plan": len(pe), "plan_gb": P.gb(sum(int(e["size"]) for e in pe)),
                        "of_which_archive_only": sum(1 for e in pe if e["kind"] == "member")}
-        if set(derived[inst]) != {e["sha256"] for e in pe}:
+        if args.batch:
+            # per-batch (pre-flight of one production batch): earlier batches are IN production now,
+            # so only require that this batch's files are still new in-scope content
+            pin = {e["sha256"] for e in exp_in.values() if e["instrument"] == inst}
+            if pin - set(derived[inst]):
+                c1.append(f"{inst}: {len(pin - set(derived[inst]))} planned file(s) of this batch are no "
+                          f"longer new in-scope content (now in production?)")
+        elif set(derived[inst]) != {e["sha256"] for e in pe}:
             c1.append(f"{inst}: catalog-derived set != plan set "
                       f"({len(set(derived[inst]) - {e['sha256'] for e in pe})} missing, "
                       f"{len({e['sha256'] for e in pe} - set(derived[inst]))} extra)")
@@ -196,7 +203,7 @@ def main():
     notes["2"].append({"mismatch_by_field": dict(mism), "cases_compared": len(got)})
 
     # ---- 3 production -------------------------------------------------------------------------------
-    c3 = [f"in production: {e['original_name']}" for e in exp.values() if e["sha256"] in prod]
+    c3 = [f"in production: {e['original_name']}" for e in exp_in.values() if e["sha256"] in prod]
     reg = os.path.join(args.nas, "registries", "registry_raw.csv")
     ph = os.path.join(P.CAT, "production_hashes.csv")
     with open(reg, encoding="utf-8-sig", newline="") as f:
@@ -213,7 +220,7 @@ def main():
     by_key, by_ts = P.production_index(args.nas)
     c3b, c3c = [], []
     seen_key = collections.defaultdict(list)
-    for e in exp.values():
+    for e in exp_in.values():
         k = P.resave_key(e["instrument"], e["acquisition_datetime"], e["original_name"])
         if k in by_key:
             c3b.append(f"re-save of production {by_key[k][0]['acq_id']}: {e['original_name']}")
@@ -225,9 +232,9 @@ def main():
     c3b += [f"re-saves within the plan: {v}" for v in seen_key.values() if len(v) > 1]
     checks["3b re-saves"] = c3b
     checks["3c derivatives"] = c3c
-    groups = {e["acq_group"] for e in exp.values() if e.get("acq_group")}
-    notes["3b"].append({"planned_rows": len(exp), "same_timestamp_groups_flagged": len(groups),
-                        "files_in_them": sum(1 for e in exp.values() if e.get("acq_group"))})
+    groups = {e["acq_group"] for e in exp_in.values() if e.get("acq_group")}
+    notes["3b"].append({"planned_rows": len(exp_in), "same_timestamp_groups_flagged": len(groups),
+                        "files_in_them": sum(1 for e in exp_in.values() if e.get("acq_group"))})
 
     # ---- 4 dates ------------------------------------------------------------------------------------
     c4 = []

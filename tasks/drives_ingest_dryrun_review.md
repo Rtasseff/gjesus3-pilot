@@ -1,6 +1,6 @@
 # Historical microscopy drives — the `.czi` ingest: dry run, rehearsal and review package
 
-**Status:** 🔶 **READY FOR THE COORDINATOR'S REVIEW — nothing written to production.**
+**Status:** ✅ **Gate PASSED 2026-09-30 with required changes R1–R7, all done — see [Gate changes](#gate-changes-2026-09-30).** §1–§10 are the pre-gate dry run, kept as the record; **the current plan is the one in Gate changes.**
 **Branch:** `feat/drives-microscopy-ingest` · **Date:** 2026-09-30 · **Procedure:** [`drives_microscopy_ingest_runbook.md`](drives_microscopy_ingest_runbook.md)
 
 ## Summary (10 lines)
@@ -12,9 +12,111 @@
 5. **Tie-break implemented and re-run:** (C) 180 → 131; the 49 movers are exactly the approved readings (29 `.czi` enter this ingest). One guard added: the rule may confirm, never overrule, the file's own nearest claim (§2).
 6. **Rehearsal on a scratch NAS (4 batches, 898 acquisitions): PASS**, and the re-run added **0** rows (§7).
 7. **The dry run caught one silent skip:** a `.czi` whose name starts with `.` is invisible to the engine's glob. Excluded and listed (§3).
-8. **Gate item G1: two target projects are CLOSED** (`0219`, `1019`, folders deleted 2026-07-14). Their batches (B15, B16) must not run until reopened or re-planned.
+8. **Gate item G1: two target projects are CLOSED** (`0219`, `1019`). *Corrected at the gate:* their folders were not gone; the close-out left the status and removed the older links. Both are reopened with `tools/reopen_project.py` before B15/B16.
 9. **New code/doc:** `XMIC` code; `auto_discover.case_table` (per-file values, default off); `Project-NNNN` documented; tools `ingest_plan/check/verify.py`.
 10. **Runtime ≈ 45 h** of transfer over SMB (2× bytes at ~60 MB/s), in evening/weekend windows (§8).
+
+
+---
+
+## Gate changes (2026-09-30)
+
+The coordinator's gate passed the plan with required changes R1–R7 (`GATE_2026-09-30.md`). All are
+done; **every check passes** on the new plan (now 9 checks: 3b and 3c are new).
+
+**R1–R4 — the same acquisition under different bytes.** ZEN rewrites a `.czi` when display settings, a
+scale bar or pyramids are saved, so its sha256 changes and content dedup lets it through. The key
+**(instrument, acquisition timestamp to the second, lower-cased filename)** identifies the acquisition.
+
+| Rule | Gate expected | Found | Action |
+|---|---|---|---|
+| **R1** re-save of a production acquisition | 206 files, 3.8 GB (`CELL` 200, `LSM9` 6); 202 same size, 4 differing by up to 152 MB | **206 files, 3.8 GB** (`CELL` 200, `LSM9` 6). On the production primaries' **exact** bytes: **204** within 0.15 MB, **2** differ (0.5 MB and 5.1 MB). The gate's 202 / 4 split came from the registry's rounded `file_size_mb` | 205 dropped (`resave-of-production:<ACQ-ID>` in `excluded.csv`); **1 held** (below) |
+| **R2** re-saves within the plan | 84 groups, 91 extra files, ~147 GB; 21 same size; 29 with copies in different projects | 84 groups: **19 were wholly re-saves of production** (gone by R1); **65 collapse** to one canonical each (**72 files, 149.7 GB** dropped, their paths in `other_copies`). The 29 mixed a project with blank, and rule 1 kept the project. **0 groups claim two different real projects.** | `resave-within-plan` in `excluded.csv` |
+| **R3** same instrument + timestamp as a production acquisition, other name | 22 (18 `ZWSI`, 4 `CELL`) | **22**: the 18 `…_ROI lobulo N.czi` (crops of `ACQ-20260416-ZWSI-*`, folder `Prueba jpeg`) and 4 `CELL` — `COL-PBS-20x-SCALE.czi`, `24h_HepG2_LP-IONP_20X_7_Scale.czi`, `…_Scale-sinrojo.czi`, `Ctrl-_HepG2_LP-IONP_20X_2-Scale-50um.czi` — whose **pixels are identical** to their production parent: scale-bar annotation re-saves, not separate scenes | all 22 out of `/raw/`; **`_analysis\ingest\nonraw_derived.csv`** lists each with its parent ACQ-ID(s) and destination project, for the non-raw session |
+| **R4** distinct files sharing instrument + full timestamp | ~226 groups | **247 groups, 819 files** (≥ 2 differently named files after R1–R3; 253 before them) | kept; case-table columns `drv_acq_group` / `drv_acq_group_n` and a `notes` clause |
+
+**Inspected by hand** (tile-by-tile pixel comparison with `czifile`; recorded in `ingest_plan.py`
+`RESAVE_DECISIONS` / `DERIVED_DECISIONS`, so a new unexplained case stops the plan):
+
+- `4h_HepG2_LP-IONP_20X_6.czi` vs `ACQ-20230726-CELL-037`: identical pixels (3×520×692); production is
+  0.5 MB *larger* (extra metadata). A re-save: dropped.
+- ⚠️ **`ID59_1022_tumor_CD206.czi` vs `ACQ-20251031-CELL-003`: the PRODUCTION copy is truncated.** It is
+  5.1 MB short and its last tile (108 of 108) cannot be read ("failed to read 9,348,144 bytes, got
+  4,267,924"). The drive copy (`D2\CELL OBSERVER 2\AINHIZE\1022\CD206\def\`) is complete, and its other
+  107 tiles are identical. It is the same acquisition, so it must not become a second ACQ-ID: **held**
+  (`production-copy-truncated` in `excluded.csv`) and **reported as a production repair** — replace the
+  primary of `ACQ-20251031-CELL-003` from the drive copy (the recovery pattern; a separate, approved
+  write). Most likely the production file was copied while ZEN was still writing it.
+
+**R5 — before → after:**
+
+| Instrument | Files before | GB before | Files after | GB after |
+|---|---:|---:|---:|---:|
+| `CELL` | 8,333 | 3,990.0 | **8,061** | **3,836.6** |
+| `LSM9` | 397 | 5.3 | **387** | **5.2** |
+| `ZWSI` | 22 | 22.1 | **4** | **3.0** |
+| `XMIC` | 338 | 4.3 | 338 | 4.3 |
+| **Total** | 9,090 | 4,021.7 | **8,790** | **3,849.1** |
+
+| Batch | Before (files / GB) | After (files / GB) | After: projects |
+|---|---|---|---|
+| B01 | 338 / 4.3 | 338 / 4.3 | — (`XMIC`) |
+| B02 | 141 / 6.8 | 140 / 6.8 | `0118` (created) |
+| B03 | 397 / 5.3 | 387 / 5.2 | 1123 |
+| B04 | 22 / 22.1 | 4 / 3.0 | 0424 |
+| B05 | 2,187 / 216.6 | 2,023 / 129.3 | — |
+| B06 | 274 / 327.6 | 235 / 257.0 | 1321, 1422 |
+| B07 | 1,584 / 393.4 | 1,519 / 393.2 | — |
+| B08 | 1,232 / 396.9 | 1,050 / 398.1 | 0721, 1022, 1123 |
+| B09 | 142 / 397.2 | 221 / 398.8 | 1321 |
+| B10 | 149 / 398.2 | 147 / 398.9 | 1123 |
+| B11 | 940 / 398.6 | 153 / 398.9 | 1123, 1321 |
+| B12 | 816 / 398.9 | 138 / 399.1 | 1321 |
+| B13 | 260 / 399.5 | 1,235 / 399.7 | 0420 0423 0424 0522 0619 0721 |
+| B14 | 209 / 399.7 | 801 / 400.0 | — |
+| B15 | 260 / 28.1 | 260 / 28.1 | 1019 (reopened first) |
+| B16 | 139 / 228.7 | 139 / 228.7 | 0219 (reopened first) |
+
+From B05 on, the batches were **re-cut** (the 400 GB cut points moved), so B05–B14 now hold different
+files. The farm was pruned (4,041 links moved or dropped, each first checked to be a second link to its
+staged file) and rebuilt: 8,790 links, 0 errors, 0 stray.
+
+- **Projects:** still exactly one created (`0118`, 140 files). 12 existing: `0522` 719 · `1022` 664 ·
+  `1123` 498 · `1321` 478 · `0721` 437 · `1019` 260 · `1422` 140 · `0219` 139 · `0424` 105 · `0420` 82 ·
+  `0619` 37 · `0423` 36. **Blank project: 5,055** (Ryan's list). Subjects: 3,432 rows, 337 animals, all
+  re-resolved in the facility DB.
+- **Checks** (`ingest_check.py`, all 16 configs, the engine's own resolution): **1, 2, 3, 3b, 3c, 4, 5, 6,
+  7 all PASS**; 0 per-file mismatches over 8,790 files, now including `drv_acq_group` and the notes.
+  3b: no planned file is a re-save of a production acquisition or of another planned file. 3c: no planned
+  file shares instrument + timestamp with a production acquisition.
+- **Frozen plan.** The plan and configs are not regenerated once production starts: a re-plan would re-cut
+  the batches and reuse config names for other files. Instead `ingest_check.py --batch Bxx` checks one
+  batch against the live registry and a fresh hash index — step 0 of each batch in the runbook.
+
+**R6 — `tools/reopen_project.py`.** Proven on a scratch subset of `0219` (63 acquisitions, their real
+`/raw/` folders, 41 links present): the dry run wrote nothing (a hash of every file matched before and
+after); the run backed up and verified, restored `_project.yaml` from the close-out backup (migrated
+`short_name` → `name`), created the 3 missing subfolders, recreated **19** links with provenance rows,
+reported **3** collisions, set `active` and regenerated `index.html`; **a re-run changed nothing.**
+Production dry runs (read-only):
+
+| | `AE-biomaGUNE-0219` (PROJ-0017) | `AE-biomaGUNE-1019` (PROJ-0006) |
+|---|---|---|
+| acquisitions | 335 (10 without a date) | 479 (1 without a date) |
+| links present / to create | 251 / **80** | 58 / **421** |
+| collisions (reported, left alone) | **4.** Animal m23 had **two MRI sessions on 2022-01-24** (`…083002…`, `…092931…`) whose link names coincide, so `ACQ-20220124-MRI-006/007/008` never had links; `ACQ-20260613-MRI-015` is a no-date placeholder named after its ingest date | 0 |
+| registry row | `status` closed → active; `notes` + "Reopened …"; dates unchanged (2022-01-24 … 2022-06-22) | `status` → active; **`last_activity` 2022-09-28 → 2026-09-29**; `notes` + "Reopened …" |
+| other | `_project.yaml` restored; no subfolder missing; **no deletion** | the same |
+
+Both show only the gate's (a)–(c). **G1 premise corrected:** the folders were never gone. `0219` has 251
+links (the NI pull and later ingests re-created `raw_linked\`), and `1019` has 58, including the 18
+AxioScan sections an operator ingested on 2026-09-29. What the close-out left behind was a wrong status
+and the loss of the older links. Procedure: `05_PROJECTS §4.y`, plus a `tools/INDEX.md` row.
+
+**R7:** the Charité (`XMIC`) files run **2024-09-27 → 2024-11-07** (fixed in `09_MODALITIES §1.6`). The
+hidden dot-file stays listed for a later one-off.
+
+**R5 rehearsal re-run:** see §7b.
 
 ---
 
@@ -234,6 +336,25 @@ primary** (same file, not a stand-in); no duplicate `acq_id` / `original_name` i
   "already in registry" — **0 rows added**.
 - Per-acquisition overhead on local disk: 0.2–0.3 s (B01: 338 in 89 s). Byte throughput on one
   spinning disk (hash + copy + verify): ~80 MB/s (B04).
+
+### 7b. Rehearsal re-run after the gate (R5)
+
+B02–B04 changed (B01's 338 files did not; re-run anyway). A fresh scratch root
+(`D:\projects\gjesus3\scratch_nas_gate\`, same construction as §7), the same four batches, then again:
+
+| Batch | Result | Time | Re-run |
+|---|---|---:|---|
+| B01 `XMIC` | 338 / 0 failed | 86 s | Total: 0 |
+| B02 `0118` (created) | 140 / 0 failed | 76 s | Total: 0 |
+| B03 `LSM9` | 387 / 0 failed | 127 s | Total: 0 |
+| B04 `ZWSI` | 4 / 0 failed | 45 s | Total: 0 |
+
+`ingest_verify`: **all PASS** (869 rows = 869 planned; fields, checksums = manifest sha256, sidecars, links
+are the raw primary, no duplicates). Validator count unchanged (26,751 on scratch, as in §7). 53 of the
+869 carry the R4 flag: `discovered.drv_acq_group` / `drv_acq_group_n` in the sidecar and the notes clause
+(e.g. `ACQ-20240930-XMIC-011`: `XMIC|2024-09-30T10:15:57.972561Z`, 2 files). B05–B16 changed only in
+which files they hold, not in any code path the rehearsal exercised; their per-file values are proven by
+check 2.
 
 ---
 
