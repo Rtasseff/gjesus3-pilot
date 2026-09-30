@@ -51,7 +51,7 @@ git status                        # clean, on feat/drives-microscopy-ingest
 #    for the big CELL batches.
 
 # 2. Extraction and farm present and exact (idempotent; they only fill gaps)
-python tools/drive_staging/ingest_plan.py extract   # "extract: 347 members, 0 bad"
+python tools/drive_staging/ingest_plan.py extract   # "extract: 346 members, 0 bad"
 python tools/drive_staging/ingest_plan.py farm      # "0 errors, 0 stray files"
 
 # 3. DB reachable (a miss would write subject = pending-db)
@@ -158,9 +158,9 @@ Small and new-path batches first: `XMIC` (new code), `0118` (the one project cre
 | B14 | CELL, no project | 801 | 400.0 | — | 4.5 h |
 | B15 | CELL — `AE-biomaGUNE-1019`, **after its reopen (§1)** | 260 | 28.1 | 1019 | 20 min |
 | B16 | CELL — `AE-biomaGUNE-0219`, **after its reopen (§1)** | 139 | 228.7 | 0219 | 2.5 h |
-| | **Total** | **8,790** | **3,849** | | **≈ 43 h** |
+| | **Total** | **8,790** | **3,849** | | **≈ 30–35 h** |
 
-¹ Each file is read once locally (source hash), written over SMB, and read back over SMB (verify):
+¹ **Measured on B01–B04: 31–39 MB/s effective** (≈ 3–3.5 h per 400 GB). Each file is read once locally (source hash), written over SMB, and read back over SMB (verify):
 2× bytes over the link at the 55–65 MB/s the NI pull sustained (`ni_gnuclear_production_runbook.md`)
 ≈ 35 s/GB, plus the per-acquisition registry/sidecar/link work (0.2–0.3 s on local disk in the
 rehearsal; allow 1–2 s over SMB). The table is `tools/configs/drives_2026-09/batches.csv` of the frozen plan.

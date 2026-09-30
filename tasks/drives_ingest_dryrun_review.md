@@ -415,3 +415,55 @@ Outputs (regenerable, on the un-backed-up D:): `D:\projects\gjesus3\staging\_ana
 `…\_analysis\catalog\_pre_refresh_20260930\`, the farm `…\staging\_farm\`, the extractions
 `…\staging\_extract\` (58 GB; keep until the ingest is verified), the scratch NAS
 `D:\projects\gjesus3\scratch_nas\` (delete after the review).
+
+---
+
+## 11. Production batch log
+
+**Pre-flight 2026-09-30 11:05:**
+
+- **Extraction:** 346 members, 0 bad (one of the original 347 left with R2).
+- **Farm:** 8,790 links, 0 errors.
+- **Animal DB:** OK.
+- **Baseline validator:** 10,314 errors, all the known MRI `operator` placeholder, and 0 warnings. File: `C:\Users\rtasseff\temp\gjesus3_drives_ingest_20260930\baseline_validate.txt`.
+- **Registry:** 16,437 rows.
+
+**Reopened 2026-09-30 11:07–11:12** with `tools/reopen_project.py`; the logs are in the same folder.
+
+- **`AE-biomaGUNE-0219`:** 80 links recreated, 4 collisions reported (see §Gate changes), status active.
+- **`AE-biomaGUNE-1019`:** 421 links recreated, `last_activity` → 2026-09-29, status active.
+- **Verified afterwards:**
+  - Before/after file lists of both folders: **0 files missing**; the only new top-level files are `_project.yaml` and `index.html`.
+  - `registry_projects.csv` changed in those two rows only.
+  - A re-run of both is a no-op.
+- **Backups:** `C:\Users\rtasseff\temp\gjesus3_reopen_backup_20260930_110743_AE-biomaGUNE-0219\` and `…_110926_AE-biomaGUNE-1019\`.
+
+| Batch | When (2026-09-30) | Rows | Run | `ingest_verify` | Validator | Re-run | Backup (`C:\Users\rtasseff\temp\`) |
+|---|---|---:|---:|---|---|---|---|
+| B01 `XMIC` | 11:15–11:20 | 338 / 338 | 220 s | all PASS | 10,314 (unchanged) | 0 | `gjesus3_registry_backup_20260930_drives_B01` |
+| B02 `0118` | 11:22–11:27 | 140 / 140 | 222 s | all PASS | 10,314 | 0 | `…_drives_B02` — **`AE-biomaGUNE-0118` = PROJ-0060** (projects 58 → 59 rows) |
+| B03 `LSM9` | 11:30–11:36 | 387 / 387 | 284 s | all PASS | 10,314 | 0 | `…_drives_B03` |
+| B04 `ZWSI` | 11:38–11:41 | 4 / 4 | 76 s | all PASS | 10,314 | 0 | `…_drives_B04` |
+
+**Every batch went through the same steps:**
+
+1. **Step 0:** a fresh `catalog.py production`, then `ingest_check.py --batch`; all 9 checks passed, with 0 SKIPs.
+2. A verified off-NAS registry backup.
+3. A dry run that matched the plan.
+4. The run itself.
+5. `ingest_verify`: rows, fields, checksums equal to the manifest sha256, sidecars, and links that are the raw primary.
+6. The validator.
+7. An idempotent re-run.
+
+**After B04:**
+
+- **Registry:** **17,306 rows** (+869), with 0 duplicate `acq_id`, 0 duplicate `original_name` and 0 blank dates.
+- **Pending list:** `pending_subject_metadata.csv` is unchanged, so there were 0 DB misses.
+- **Warnings:** only the documented sentinels.
+- **Provenance:** `tasks/drives_ingest_provenance.csv` holds 869 rows so far, all `manifest_verified` Y.
+
+**Measured throughput to the NAS:** 31–39 MB/s effective (B02: 6.8 GB in 222 s; B04: 3.0 GB in 76 s),
+including the source hash and the read-back verify. At that rate a 400 GB batch takes about 3–3.5 h, and
+the remaining B05–B16 (3,830 GB) about **30–35 h**.
+
+**Next: B05**, handed to a fresh session (`HANDOFF_RUN.md` at the worktree root).
