@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
-**Last Updated:** 2026-09-04 (**§5.2** the MRI page's **destination project is token-valued** — "a name I set" is a token field with its own palette, not a text box, so one run can file scans into several projects; the engine was unchanged, only the GUI had withheld it. Preview gains a per-destination breakdown.) Prior: 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
+**Last Updated:** 2026-09-30 (**§2.1.3** new default-off `auto_discover.case_table:` — a CSV keyed on `original_name` whose columns become per-case `discovered.<column>` values, so a config can set project / researcher / operator / subject **per file**; built for the historical-drives ingest. New instrument code `XMIC` (external microscope `.czi`) in `ingest/config.py`.) Prior: 2026-09-04 (**§5.2** the MRI page's **destination project is token-valued** — "a name I set" is a token field with its own palette, not a text box, so one run can file scans into several projects; the engine was unchanged, only the GUI had withheld it. Preview gains a per-destination breakdown.) Prior: 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
 
 ---
 
@@ -270,6 +270,30 @@ For a folder name like `20251016_083822_jrc_251016_m17_0424_jrc_251016_m17_0424_
 - Mixing is allowed: a `regex:` block runs first; any `discovered.<name>` it sets overrides defaults. Then `separator` + `fields` runs on the same input (if both are present) and applies normal collision rules.
 - WARN on regex non-match (no name groups extracted) — file is still ingested with whatever other discovery sources populate `discovered`.
 
+**`case_table`** — per-case override table (new 2026-09-30, default off):
+
+When project, researcher, operator or subject have already been decided **file by file** — on more evidence than a filename can carry — list them in a CSV and let each case pick up its own row. The CSV is keyed on the case's **`original_name`** (the staging-relative path `expand_batch` assigns, with forward slashes); **every other column becomes `discovered.<column>`** for that case, and is then used like any discovered value in `registry:`, the top-level `operator:`, `subject_lookup:` and `link_filename:`.
+
+```yaml
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/staging/_farm/B03"
+  pattern:     "**/*.czi"
+  case_table:
+    file:       cases_B03.csv      # relative -> the config file's directory
+    key:        original_name      # the only key supported
+    on_missing: error              # error (default): a file with no row aborts the batch
+                                   # skip: that file is logged and skipped
+registry:
+  researcher:   discovered.drv_researcher
+  project_name: discovered.drv_project
+operator: discovered.drv_operator
+```
+
+- **Precedence:** the table's value wins over every other discovered source (path levels, filename chunks, embedded metadata). A blank cell resolves to blank, not to an error or a default.
+- **Fail-fast by default:** a file with no row stops the batch before anything is copied (`on_missing: error`), so no file can fall back to a batch-level value by accident. Rows that match no file are reported as a WARN. A duplicate key, an unknown option or a missing `original_name` column is refused at load time.
+- **What it does not do:** it sets `discovered.*` values only. It writes nothing of its own, so the side-effect inventory below is unchanged. The values do land in the sidecar's `discovered` block, which is the record of why the acquisition got them.
+- **First use:** the one-time historical-drives `.czi` ingest (`tools/configs/drives_2026-09/`, generated by `tools/drive_staging/ingest_plan.py`). There, a filename parse could only approximate the per-file claims, and a well-formed but wrong subject id is the costly error (the PROJ-0056 lesson). Implemented in `ingest/config.py` (`load_case_table`); tests: `tools/ingest/test_case_table.py`.
+
 ### 2.1.4 `auto_create_project:` block
 
 When `ingest.auto_create_projects: true` and a new project is about to be created during an ingest, the optional `auto_create_project:` block supplies the project's metadata. Values resolve through the same mechanism as `registry:` — literal text, `discovered.<field>`, `${...}` interpolation, or `NA`.
@@ -523,7 +547,7 @@ Three required top-level blocks plus one optional. `defaults:` is gone — non-r
 | Block                   | Required? | Purpose |
 |-------------------------|-----------|---------|
 | `ingest:`               | Yes       | Pipeline control flags (`delete_source_after_ingest`, `auto_create_projects`, ...). Not registry columns. |
-| `auto_discover:`        | Yes       | How to discover cases and what variables to extract per case. Each case's discovered fields land in a `discovered` namespace, referenceable below. Supports `filename_parse:` and `path_parse:` (see §2.1.3). |
+| `auto_discover:`        | Yes       | How to discover cases and what variables to extract per case. Each case's discovered fields land in a `discovered` namespace, referenceable below. Supports `filename_parse:`, `path_parse:` and the per-case `case_table:` (see §2.1.3). |
 | `registry:`             | Yes       | Explicit per-column registry mapping. Three value forms: literal text/number, `discovered.<field>` (bare reference), or `"...${discovered.<field>}..."` (interpolation). Use `NA` to leave a column intentionally empty. |
 | `auto_create_project:`  | Optional  | Project-creation metadata used only when `ingest.auto_create_projects: true` and a new project is being created. Resolver-evaluated like `registry:`. First-write-wins (see §2.1.4). |
 | `condition:`            | Optional  | Preclinical disease-state / study-role block (Phase 3). Resolver-evaluated, set-once-per-batch, non-blocking. Written to `metadata.json` for `sample_type ∈ {organism, tissue}`. See §2.1.6 + [08_METADATA §4.5](08_METADATA.md). |

@@ -1,6 +1,6 @@
 # Equipment Index
 
-**Last Updated:** 2026-08-06
+**Last Updated:** 2026-09-30
 
 This folder contains reference documentation for all imaging equipment whose data is in scope for the gjesus3 archival system. It is the map between the abstract system specs in [`mfb-rdm-docs/`](../mfb-rdm-docs/00_INDEX.md) and the concrete reality of each instrument: what its "raw" data looks like, how operators name and stage it, and how it reaches gjesus3.
 
@@ -19,11 +19,11 @@ There are two categories of equipment, and the meaning of "raw" data on gjesus3 
 **Institutional imaging platforms (MRI, Nuclear Imaging):** The platforms operate the instruments and manage their own long-term storage of true acquisition data (e.g., PET listmode files, raw k-space MRI data). This truly raw data is usually not useful to end-user researchers. What the platforms provide to researchers are **reconstructed images** — internal MRI as Bruker ParaVision exam folders (with JCAMP-DX aux files + per-frame DICOM); Nuclear Imaging primarily as DICOM (possibly NIfTI from MILabs VECTor).
 
 **On-disk shape on gjesus3 varies per ecosystem** (see [03_RAW_STORAGE §4](../mfb-rdm-docs/03_RAW_STORAGE.md)). `/raw/` is organised into **data-family ecosystems** — currently two are deployed plus one reserved:
-- **`MICROSCOPY`** — the three Zeiss `.czi`-producing microscopes (AxioScan 7, Cell Observer, LSM 900). Primary entity = the single instrument file.
+- **`MICROSCOPY`** — the three in-house Zeiss `.czi`-producing microscopes (AxioScan 7, Cell Observer, LSM 900), plus external `.czi` received from collaborators (`XMIC`, e.g. the Charité Axio Imager.Z2 — [09_MODALITIES §1.6](../mfb-rdm-docs/09_MODALITIES.md)). Primary entity = the single instrument file.
 - **`DICOM`** — internal MRI and (legacy) collaborator DICOM, plus future Nuclear Imaging. Internal MRI (since round 6, 2026-05-22) is **folder-as-primary** (no zip); the acquisition folder contains `acquisition_aux/` + `reconstructions/pdata_<idx>/` (see [`mri-platform/internal_mri_data_handling_workflow_notes.md`](./mri-platform/internal_mri_data_handling_workflow_notes.md) "Systematic naming convention"). Legacy collaborator DICOM (rounds 1-2) is a compressed archive (.zip / .tar.gz), not re-shaped. Internal Nuclear Imaging convention is documented in [`nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](./nuclear-imaging/internal_ni_data_handling_workflow_notes.md); on-disk shape will be finalised when that ingest round begins.
 - **`EM`** — **reserved, not deployed.** The electron-microscopy ecosystem is allocated in the `/raw/` layout for future use; no instrument is onboarded and the folder is not populated. See [03_RAW_STORAGE §4](../mfb-rdm-docs/03_RAW_STORAGE.md).
 
-The instrument's identity is recorded in the **ACQ-ID** and the registry (instrument code column), not in the ecosystem folder name (RAW-05) — so all three microscopes share `MICROSCOPY` and are told apart by code (`ZWSI` / `CELL` / `LSM9`).
+The instrument's identity is recorded in the **ACQ-ID** and the registry (instrument code column), not in the ecosystem folder name (RAW-05) — so all three microscopes share `MICROSCOPY` and are told apart by code (`ZWSI` / `CELL` / `LSM9`; external `.czi` = `XMIC`). The code comes from the `.czi`'s own device fingerprint, not from the folder it was filed in ([`tools/reference/microscopy_instruments.yaml`](../tools/reference/microscopy_instruments.yaml)).
 
 These reconstructed images are treated as gjesus3's "raw" data — the authoritative starting point for the MFB group's research-facing analysis and archiving. The reframe in [13_GJESUS3_ROLE](../mfb-rdm-docs/13_GJESUS3_ROLE.md) elaborates on the two-tier model: gjesus3 as research-facing working layer, platforms as deep-time raw archive.
 
@@ -81,6 +81,8 @@ All instruments follow the same shape, with the per-instrument template supplyin
 | 4b | Bruker BioSpec 7T MRI | `MRI` | Preclinical MRI scanner | Platform instrument | Reconstructed images | DICOM | [`mri-platform/`](./mri-platform/) |
 | 5a | Molecubes PET/SPECT/CT | `PET`/`SPECT`/`CT` | Modular trimodal nuclear imaging | Platform instrument | Reconstructed images | DICOM (TBC) | [`nuclear-imaging/`](./nuclear-imaging/) |
 | 5b | MILabs VECTor PET/SPECT/CT/OI | `PET`/`SPECT`/`CT` | Integrated multimodal nuclear imaging | Platform instrument | Reconstructed images | DICOM, NIfTI | [`nuclear-imaging/`](./nuclear-imaging/) |
+
+> **External data is not in this table.** Collaborator data carries an `X`-prefixed code and has no reference folder here, because it is not our equipment: `XMRI` / `XCT` / `XPET` / `XSPECT` for DICOM, and **`XMIC`** (since 2026-09-30) for an external microscope's `.czi`. The first `XMIC` is the Charité Axio Imager.Z2 (serial `784053`), whose 338 `.czi` came in with the historical microscopy drives. See [09_MODALITIES §1.6](../mfb-rdm-docs/09_MODALITIES.md) and [03_RAW_STORAGE §3.2](../mfb-rdm-docs/03_RAW_STORAGE.md).
 
 Each reference folder is a free-form home for vendor specs, platform descriptions, user protocols, screenshots, and any other equipment-specific context. Drop new files in directly; no schema. The narrative sections below summarize what's currently in each folder.
 

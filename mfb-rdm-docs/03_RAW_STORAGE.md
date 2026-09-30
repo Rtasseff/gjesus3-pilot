@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft (in production use — structure + conventions stable; a few sub-rules still 🔶/❓)
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-09-30
 
 ---
 
@@ -199,8 +199,9 @@ Instrument codes identify the source instrument in the ACQ-ID and registry. They
 | `XCT` | External CT (collaborator-provided DICOM) | DICOM | .dcm |
 | `XPET` | External PET (collaborator-provided DICOM) | DICOM | .dcm |
 | `XSPECT` | External SPECT (collaborator-provided DICOM) | DICOM | .dcm |
+| `XMIC` | External microscope (collaborator `.czi`; first: Charité Axio Imager.Z2, 2026-09-30) | MICROSCOPY | .czi |
 
-The exact code is determined by DICOM header inspection during ingestion (Modality tag 0008,0060). The `data_source` registry field records the collaborator origin (e.g., `collaborator:HPIC`).
+The exact DICOM code is determined by DICOM header inspection during ingestion (Modality tag 0008,0060); `XMIC` is assigned from the `.czi`'s own device fingerprint ([09_MODALITIES §1.6](09_MODALITIES.md)), never from a folder name. The `data_source` registry field records the collaborator origin (e.g., `collaborator:HPIC`, `collaborator:Charite`).
 
 > **❓ EVALUATING:** Additional codes pending:
 > - `SEM` — Scanning electron microscopy (if included)
