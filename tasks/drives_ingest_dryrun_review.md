@@ -65,6 +65,7 @@ scale bar or pyramids are saved, so its sha256 changes and content dedup lets it
 | B03 | 397 / 5.3 | 387 / 5.2 | 1123 |
 | B04 | 22 / 22.1 | 4 / 3.0 | 0424 |
 | B05 | 2,187 / 216.6 | 2,023 / 129.3 | — |
+| B06 `CELL` 1321, 1422 | 2026-09-30 16:29–18:19 | 235 / 235 | 6,490 s | all PASS | 10,314 | 0 | `…_drives_B06` (registry 19,329 → 19,564; projects unchanged at 59; WARNs only the is_control / region sentinels) |
 | B06 | 274 / 327.6 | 235 / 257.0 | 1321, 1422 |
 | B07 | 1,584 / 393.4 | 1,519 / 393.2 | — |
 | B08 | 1,232 / 396.9 | 1,050 / 398.1 | 0721, 1022, 1123 |
