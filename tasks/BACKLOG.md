@@ -1827,6 +1827,8 @@ project fields, create projects, and import data into them. Two capabilities wer
     hard links. **This argues that closing on "newest acquisition older than 3 years" is premature
     for protocols whose data is still surfacing,** because historical data from drives and shares
     keeps arriving. `0320` and `1519` (both closed) are next, in the drives' MRI stream.
+    **Decided 2026-09-30 (Ryan): reopen case by case,** when a closed project's data arrives. The
+    other closed projects are not reopened wholesale.
   - Should closing set a `closed_date` / `outcome`? `_project.yaml` already has both
     fields (`closed_date`, `outcome`, `promoted_to`); `registry_projects.csv` has
     **neither** — so recording them means either a projects-registry schema change or
