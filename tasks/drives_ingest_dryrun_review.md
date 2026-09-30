@@ -348,6 +348,7 @@ B02–B04 changed (B01's 338 files did not; re-run anyway). A fresh scratch root
 | B02 `0118` (created) | 140 / 0 failed | 76 s | Total: 0 |
 | B03 `LSM9` | 387 / 0 failed | 127 s | Total: 0 |
 | B04 `ZWSI` | 4 / 0 failed | 45 s | Total: 0 |
+| B05 `CELL` no project | 2026-09-30 15:06–16:20 | 2,023 / 2,023 | 4,054 s | all PASS | 10,314 | 0 | `…_drives_B05` (registry 17,306 → 19,329; projects unchanged at 59; 0 WARN lines) |
 
 `ingest_verify`: **all PASS** (869 rows = 869 planned; fields, checksums = manifest sha256, sidecars, links
 are the raw primary, no duplicates). Validator count unchanged (26,751 on scratch, as in §7). 53 of the
