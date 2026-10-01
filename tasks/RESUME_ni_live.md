@@ -3,15 +3,95 @@
 **Single entry point** for the `feat/ni-live-hardening` work. Written 2026-08-07 immediately
 before migrating to a new worktree and restarting the session, so **assume the assistant has
 zero memory of any of this** — everything needed is here or in the docs this points to.
+**Updated 2026-10-01:** the NI Mac is now reachable from the Data Office (§0). §0 is the current
+order of work and overrides anything older below that disagrees with it.
+
+---
+
+## 0. ▶ Start here — the order of work (2026-10-01)
+
+**The goal (Ryan, 2026-10-01).** NI researchers operate the Molecubes scanner themselves. They
+should ingest as close to acquisition as possible, with as few extra steps as possible. **The first
+strategy is this branch:** a sync command they run on the acquisition Mac. The ultimate goal is
+step 5: they leave the room when the experimental work is done and never come back for the data.
+
+**What changed on 2026-10-01: the Mac can be operated from here.** A reverse SSH tunnel (Mac
+LaunchAgent → workstation WSL) is live and hardened. From the workstation:
+
+```powershell
+wsl -d Ubuntu -- ssh -p 2222 molecubes@localhost      # no password; lands on molecubess-iMac.local
+```
+
+The full record (how it works, checks, removal, the visit, and the Box A move) is
+`equipment/nuclear-imaging/live_machine_remote_access.md`. **That update is on branch
+`docs/ni-tunnel-live`** (worktree `gjesus3-dev\ni-tunnel-live`, commit `9a98832`, off `main`
+`48080b9`), **not on this branch**, to keep this branch's catch-up small. Merge it into `main`
+first, and step 1 brings it here. Until then, the copy of that doc on this branch is stale (it
+still says the box half is not installed).
+
+**Do these in order:**
+
+1. **Catch up with `main`.** This branch is **19 ahead / 111 behind** local `main` `48080b9`
+   (2026-10-01). A dry run (`git merge-tree --write-tree main HEAD`, which writes nothing)
+   conflicts in **7 files**:
+   - **code:** `tools/ingest_raw.py`, `tools/ingest/metadata_sidecar.py` — resolve carefully,
+     then run every test suite (§1);
+   - **specs/docs:** `mfb-rdm-docs/08_METADATA.md`, `tasks/STATUS.md`,
+     `equipment/historical_data_archives.md`;
+   - **add/add** (both sides created the file):
+     - `tasks/ni_gnuclear_active_space_plan.md` — `main`'s 550-line copy carries the finished
+       historical pull (2026-08-12/13). Take `main`'s, then check whether this branch's 302-line
+       copy holds anything `main` lacks.
+     - `equipment/nuclear-imaging/gnuclear_active_workspace_layout.md` — both copies started from
+       the same re-home on 2026-08-06. This branch then added the corrections-file content
+       (`75c369a`). Take `main`'s and re-apply that addition.
+
+   These merged cleanly in the dry run: `CHANGELOG.md`, `10_TOOLS.md`, `BACKLOG.md`,
+   `tools/ingest/config.py`, `tools/operator/README.md`. Tag a backup first, as before. With 19
+   commits replaying over code conflicts, consider `git merge main` (one resolution pass) instead
+   of a rebase (possibly the same `ingest_raw.py` hunk several times) — Ryan's call. Either way,
+   the push needs explicit permission.
+2. **Get the Mac's `gjesus3` mount to stay up.** It is the sync's destination, and Ryan reports
+   it drops (cause unknown). On 2026-10-01 16:32 it was mounted as
+   `//rtasseff@GJESUS3._smb._tcp.local/gjesus3` on `/Volumes/gjesus3` (SMB 3.1.1). Both
+   `gnuclear` mounts use an IP or DNS name instead — a lead, not a diagnosis. Diagnose over the
+   tunnel, read-only first. **Also needs Ryan's decision:** the mount uses his personal
+   credentials, a superuser under the permission model, so every researcher's sync would write
+   with Full rights on `raw/` rather than an operator's write-but-not-modify.
+3. **Run the on-box merge gates (§4) over the tunnel.** Stage a fresh copy of `tools/` on
+   `gnuclear` first (§4). Gate 3 needs the `gjesus3` mount from step 2. A `--go` writes to
+   production, so treat each run as a production operation. **Check the platform-manager
+   constraint (§3) first.** He was fine with what Ryan runs *while present*; running from here
+   while nobody is in the room is new, so confirm he is comfortable with it. Schedule runs outside
+   acquisitions, because the box is slow.
+4. **Merge; operators start using it** (`tools/operator/NI_LIVE_RUNBOOK.md`).
+5. **Then, not now:** the Box A port, which takes the tunnel along, make-before-break through the
+   live tunnel with no visit (B2, decided 2026-10-01). After it, **one ingest web app on Box A**
+   for every instrument: microscopy via network drives, MRI via SFTP, NI pulled through the
+   tunnel. Users behind the firewall log in, and the server works with the system's setup and
+   permissions on their behalf. A workstation-hosted version would work today, but it cannot
+   serve everyone, because a tunnel cannot be set up on every user's machine. Details: `main`'s
+   `tasks/BACKLOG.md` "Ingest from one place" and `tasks/box_a_production_migration_plan.md`
+   (both on `docs/ni-tunnel-live` until it is merged).
+
+**Tunnel do's and don'ts:**
+- Don't run `WorkstationOps\setup\test-tunnel-path.sh` while the Mac is connected. Step 6 fails,
+  because the Mac holds port 2222, and step 7 passes for the wrong reason. To check the live
+  tunnel, run `wsl -d Ubuntu -- bash -c 'nc -w 4 localhost 2222 </dev/null | head -1'`, which
+  should print `SSH-2.0-OpenSSH_8.1`.
+- When scripting remote commands through `wsl.exe -- ssh … '…'`, `$(…)` expands on the
+  workstation, not the Mac. Use a script with `ssh … 'bash -s' <<'EOF'`.
+- After a Mac reboot, the tunnel returns only once someone logs into `molecubes`: there is no
+  auto-login.
 
 ---
 
 ## 1. Where things stand
 
-- **Branch `feat/ni-live-hardening`**, **18 commits ahead of `main`, 0 behind** (rebased onto
-  **local** `main` `85af9d6` on 2026-08-12; before that `origin/main` `6b2ef41` on 2026-08-07
-  and `dde99fc` on 2026-08-06 — we had silently drifted 69 commits behind once, don't let
-  that happen again).
+- **Branch `feat/ni-live-hardening`** — ⚠️ **as of 2026-10-01: 19 commits ahead of `main`, 111
+  behind** (it drifted again; the catch-up is step 1 of §0). Last rebased onto **local** `main`
+  `85af9d6` on 2026-08-12; before that `origin/main` `6b2ef41` on 2026-08-07 and `dde99fc` on
+  2026-08-06 — we had silently drifted 69 commits behind once, don't let that happen again.
 - **⚠️ REBASE ONTO LOCAL `main`, NOT `origin/main`.** As of 2026-08-12 local `main`
   (`85af9d6`) is **3 commits ahead of `origin/main`** (`b882e4a`) and is the only one that
   has the pending-links adoption. Rebasing onto `origin/main` silently misses it and
@@ -67,7 +147,10 @@ stop mattering too.
 *location of the code* changes.
 
 Longer term this is all expected to be superseded by a dedicated box everyone can reach
-(plus a tunnel, or an ethernet cable between the two machines).
+(plus a tunnel, or an ethernet cable between the two machines). **Now concrete (2026-10-01):**
+that box is Box A, the tunnel exists and moves there, and the plan is one ingest web app on it
+(§0 step 5). Once a server can pull through the tunnel, nothing needs to run on the Mac at all. So
+revisit (b) only if (a)'s footprint on the Mac becomes the blocker before Box A is ready.
 
 ## 3. The platform-manager constraint (important, easy to lose)
 
@@ -125,7 +208,7 @@ No `--go` ingest has **ever** run on the box. The 2026-08-05 session stopped at 
 |---|---|---|
 | 1 | A real `--go` producing `.../recon_N` registry rows (one acquisition per reconstruction). | ✅ passes locally (2026-08-07) |
 | 2 | A corrected session showing a `session_extra` block in its `metadata.json`. | ✅ passes locally |
-| 3 | `registries/pending_links.csv` written with `ENOTSUP` / `darwin` rows. **This file exists on neither NAS today.** | ❌ **box only** — hard links succeed on Windows, so this can only fail-and-queue on the Mac |
+| 3 | `registries/pending_links.csv` written with `ENOTSUP` / `darwin` rows. **This file exists on neither NAS today.** | ❌ **box only** — hard links succeed on Windows, so this can only fail-and-queue on the Mac. Runnable **over the tunnel** since 2026-10-01; needs the Mac's `gjesus3` mount up (§0 step 2). |
 | 4 | A second sync: idempotent (0 new), and a **late reconstruction registering into an already-corrected session with the correction still applied.** | ✅ passes locally |
 
 Gate 4 is the acceptance test for the persistent-corrections change and is the one most
@@ -168,8 +251,8 @@ of them** — it was cherry-picked onto `main` and is now upstream of this branc
   `tools/relink_pending.py`. This needed no access slot and is **not** a task for the SSH
   tunnel — `NI-RA-05` in `equipment/nuclear-imaging/live_machine_remote_access.md` can close
   against it.
-- **Remote access to the box is NOT established.** The workstation half is verified; the box
-  half has never run and needs a physical access slot. Do not plan around having it.
+- ~~**Remote access to the box is NOT established.**~~ **Superseded 2026-10-01: it is
+  established** — the tunnel is live and the Mac can be operated from the workstation (§0).
 - **Reconstruction indices are append-only** on the box — a new reconstruction always lands in
   a new, higher-numbered `recon_<idx>/`, and an existing one is never overwritten. This is why
   `<anchor>/recon_<idx>` is a safe dedup key and why no content hashing is needed.
