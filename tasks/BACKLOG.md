@@ -252,6 +252,18 @@ the file name or the image dimensions) identifies the acquisition. The bytes do 
 shared under *different* names is ZEN's scene splits, stitched copies and region extracts. Those
 are the same acquisition, but not always the same pixels.
 
+- [ ] **Decide whether to clean up the drives ingest's same-timestamp groups (2026-10-01).** The
+  historical-drives ingest kept every member of its **247 same-timestamp groups (819 files)** in
+  `/raw/` and flagged each one with `drv_acq_group` and `drv_acq_group_n` in the sidecar's
+  `discovered` block (gate rule R4: nothing unique lost).
+  - Many groups turn out to be **one original plus small exports.** For example, `0721-M113-Liver-PB-20X.czi`
+    (2.9 GB) and its `-Original` (3.2 GB) sit alongside five 6–15 MB `…-scale` and `prussian-blue-…-scale`
+    copies. The exports also carry **no project**, while the originals are in `AE-biomaGUNE-0721`.
+  - A uniform pass could keep the original of each group in `/raw/` and move the exports to the
+    project's non-raw material. That is what was done for exports of acquisitions already in
+    production (gate R3).
+  - Before such a pass, a pixel check decides which files are true copies and which are distinct
+    scenes. Doing it is Ryan's call: it is a production repair that retires ACQ-IDs.
 - [ ] Decide how to retire the 32 duplicate registrations and re-code the 25 rows with
   the wrong instrument (23 `CELL` rows that are AxioScan files, 2 `LSM9` rows that are
   Cell Observer files). Keep the older ACQ-ID of each pair? Tombstone the other?
