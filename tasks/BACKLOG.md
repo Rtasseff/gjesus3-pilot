@@ -20,13 +20,18 @@ When a backlog item becomes a blocker for delivery, promote it to `STATUS.md`.
 **The plan is written and awaiting review:
 [`box_a_production_migration_plan.md`](box_a_production_migration_plan.md).** Read that, not
 this stub — it carries the full inventory, the phase-by-phase steps, each phase's
-verification, and the four open decisions (B1–B4).
+verification, and the open decisions (B1, B3, B4 — B2 was decided 2026-10-01).
 
 Box A (HP Z2 G1i SFF) arrived 2026-09-03. It becomes the **production** machine for this
 system; this workstation becomes **dev**. All RDM operations move; backups and the two
 image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 
-**Three things worth knowing without opening the plan:**
+**Four things worth knowing without opening the plan:**
+
+- ✅ **B2 decided (Ryan, 2026-10-01): `molecubes-tunnel` moves to Box A.** The NI
+  acquisition Mac's tunnel went live that day, so the Mac can be re-pointed at Box A
+  **through the tunnel itself**, make-before-break, with no visit to the acquisition room.
+  Procedure: [`live_machine_remote_access.md` §10](../equipment/nuclear-imaging/live_machine_remote_access.md).
 
 - ⚠️ **Phase 0.1 is not gated on Box A and should not wait for it.** The 46 Claude
   memory files (292 KB) sit at `C:\Users\rtasseff\.claude\projects\<slug>\memory\` —
@@ -44,6 +49,49 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 
 ⛔ **Timing:** `image-server\README.md` holds racking/provisioning/migration until after the
 **10 September 2026** leadership meeting. Phase 0 (dev-box only) is the stated exception.
+
+---
+
+## Ingest from one place — one web app on Box A, NI pulled through the tunnel (Ryan, 2026-10-01)
+
+**The goal behind the NI live-sync work.** NI researchers operate the Molecubes scanner
+themselves, and today they spend time in the acquisition room dragging and dropping data
+into place. The Mac-side sync ([`STATUS.md`](STATUS.md) §2) removes the manual copying, but
+someone still has to be at the Mac to run it. Reconstruction can take a long time, so
+collecting the data can mean finding another free slot in that room. **The goal is that they
+leave as soon as the experimental work is done, and never come back for the data.**
+
+**The shape: every ingest comes from one application.** All three transport paths already
+reach the Data Office workstation:
+
+| Instrument family | How the app reaches the data |
+|---|---|
+| Microscopy | the ordinary network drives |
+| MRI | SFTP to the scanner host |
+| NI (Molecubes) | the reverse SSH tunnel ([`live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md)) |
+
+So a first version could run on the workstation today. It cannot serve everyone from there,
+because a reverse tunnel cannot be set up on every user's machine. It belongs on **Box A**,
+which takes over the tunnel (B2, above) and serves **one web app that people behind the
+firewall log into**. The app does the work with the system's own setup and permissions on the
+user's behalf. This is the merge that [`10_TOOLS`](../mfb-rdm-docs/10_TOOLS.md) already
+anticipates for the GUI exes ("redesigned as one web app and the exes retire").
+
+**Order (Ryan):** (1) the NI sync on the Mac — next; (2) the Box A port
+([`box_a_production_migration_plan.md`](box_a_production_migration_plan.md)), tunnel included;
+(3) the app.
+
+**Questions for when it is designed** (❓ EVALUATING — options, not answers):
+
+- **Attribution under a service identity.** Today each operator writes to the NAS with their
+  own SMB account, under the permission model's write-but-not-modify grant
+  ([`03_RAW_STORAGE`](../mfb-rdm-docs/03_RAW_STORAGE.md)). If the server writes on everyone's
+  behalf, the NAS sees one identity. "Who ingested this" then has to come from the app's login,
+  carried into the registry and provenance.
+- **When does the app pull an NI session?** Reconstructions finish late, and a new one lands in a
+  new, higher-numbered `recon_<idx>/`. So "the scan ended" does not mean "the data is complete".
+  The live sync's one-acquisition-per-reconstruction model already absorbs late arrivals; a
+  server-side pull could reuse it, and a scheduled sweep might replace "pull now".
 
 ---
 
