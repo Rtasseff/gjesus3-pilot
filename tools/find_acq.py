@@ -18,6 +18,7 @@ See tools/FINDER.md.
 import argparse
 import csv
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -155,6 +156,19 @@ def main(argv=None):
         anatomy=args.anatomy or "", project=args.project or "",
         since=args.since or "", until=args.until or "")]
     print(f"{len(hits)} of {len(records)} acquisitions match")
+    # A retired ACQ-ID has left registry_raw.csv (06_REGISTRIES §2.9). Searching for
+    # one by id must say so -- and what replaced it -- rather than look like a typo.
+    q = (args.query or "").strip()
+    if not hits and re.fullmatch(r"ACQ-\d{8}-[A-Z0-9]+-\d{3}", q):
+        res = registry.resolve_acq_id(q, os.path.join(args.nas_root, "registries"))
+        if res["status"] == "retired":
+            t = res["tombstone"]
+            print(f"  {q} is RETIRED ({t.get('retired_at', '')[:10]}, {t.get('disposition')}"
+                  f"{' of ' + res['superseded_by'] if res['superseded_by'] else ''}): {t.get('reason')}")
+            if res["resolved"]:
+                print(f"  -> use {res['resolved']}")
+            if t.get("moved_to"):
+                print(f"  its bytes now live at {t['moved_to']}")
     for r in hits[:args.limit]:
         print(f"  {r.get('acq_id',''):28s} {(r.get('acquisition_datetime') or '')[:10]:11s} "
               f"{r.get('instrument',''):6s} {r.get('sample_id',''):18s} "

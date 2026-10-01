@@ -92,6 +92,52 @@ def read_registry(registry_path):
     return []
 
 
+def resolve_acq_id(acq_id, registries_dir, _live=None, _retired=None):
+    """Resolve an ACQ-ID against the live registry AND the tombstone file.
+
+    Returns a dict:
+      status          "live" | "retired" | "unknown"
+      row             the live registry_raw row (live), else the tombstone's
+                      verbatim original row parsed into a dict ({} for an orphan)
+      tombstone       the retired_acquisitions.csv row (retired), else None
+      superseded_by   the tombstone's superseded_by ("" otherwise)
+      resolved        the LIVE id this one stands for today -- itself when live,
+                      the end of the superseded_by chain when retired, "" when
+                      the chain ends nowhere live (an orphan, or a broken chain)
+
+    Use it wherever an ACQ-ID arrives from outside the live registry (a curated
+    dataset's citation, a researcher's notes, an old provenance row): an id that
+    is not live is either retired -- and then says what replaced it -- or never
+    existed. ``_live`` / ``_retired`` are pre-loaded {acq_id: row} maps for bulk
+    callers; by default both files are read (registry_raw.csv and
+    retired_acquisitions.csv under ``registries_dir``).
+    """
+    from . import retired as _ret  # local: retired imports nothing from here
+    if _live is None:
+        _live = {(r.get("acq_id") or "").strip(): r
+                 for r in read_registry(os.path.join(registries_dir, "registry_raw.csv"))}
+    if _retired is None:
+        _retired = _ret.read_retired(_ret.retired_path(registries_dir))
+    acq_id = (acq_id or "").strip()
+    if acq_id in _live:
+        return {"status": "live", "row": _live[acq_id], "tombstone": None,
+                "superseded_by": "", "resolved": acq_id}
+    if acq_id not in _retired:
+        return {"status": "unknown", "row": {}, "tombstone": None,
+                "superseded_by": "", "resolved": ""}
+    tomb = _retired[acq_id]
+    nxt, seen, resolved = (tomb.get("superseded_by") or "").strip(), {acq_id}, ""
+    while nxt and nxt not in seen:
+        if nxt in _live:
+            resolved = nxt
+            break
+        seen.add(nxt)
+        nxt = ((_retired.get(nxt) or {}).get("superseded_by") or "").strip()
+    return {"status": "retired", "row": _ret.original_row(tomb, REGISTRY_FIELDS),
+            "tombstone": tomb, "superseded_by": (tomb.get("superseded_by") or "").strip(),
+            "resolved": resolved}
+
+
 def assert_header_compatible(registry_path):
     """Raise RuntimeError if an existing registry CSV's header doesn't match
     REGISTRY_FIELDS.

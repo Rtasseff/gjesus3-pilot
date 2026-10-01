@@ -19,9 +19,18 @@ def _validate_date(date_str):
 
 
 def _max_seq_in_registry(registry_path, prefix):
-    """Highest committed sequence number for `prefix` in the registry (0 if none)."""
+    """Highest committed sequence number for `prefix` in the registry (0 if none).
+
+    Counts RETIRED ids too (registries/retired_acquisitions.csv, beside the
+    registry): a retired id's row has left registry_raw.csv, and ids are never
+    reused, so the high-water must not depend on `.acq_id_seq.json` alone
+    (06_REGISTRIES §2.9).
+    """
+    from . import retired
     max_seq = 0
-    for row in registry.read_registry(registry_path):
+    tomb_ids = retired.read_retired(retired.retired_path(
+        os.path.dirname(os.path.abspath(registry_path)))) if registry_path else {}
+    for row in list(registry.read_registry(registry_path)) + [{"acq_id": a} for a in tomb_ids]:
         acq_id = row.get("acq_id", "")
         if acq_id.startswith(prefix):
             try:
