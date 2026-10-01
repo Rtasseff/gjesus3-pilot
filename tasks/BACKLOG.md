@@ -252,7 +252,18 @@ the file name or the image dimensions) identifies the acquisition. The bytes do 
 shared under *different* names is ZEN's scene splits, stitched copies and region extracts. Those
 are the same acquisition, but not always the same pixels.
 
-- [ ] **Decide whether to clean up the drives ingest's same-timestamp groups (2026-10-01).** The
+- [ ] **Clean up the drives ingest's same-timestamp groups after the run (2026-10-01).**
+  **Ryan's principle, restated 2026-10-01:** the acquisition (or reconstruction) goes in `/raw/`;
+  derivatives and complements go in the project folder; a file stays in raw with a flag only when
+  it is genuinely ambiguous.
+  **Planned:** scale-bar copies and thumbnails/exports are not acquisitions, so they move to the
+  original's project folder and their ACQ-IDs are retired, as gate R3 did for derivatives of earlier
+  production scans. **Needs a per-group pixel check before any decision:** scene splits and stitched
+  copies.
+  **Coordinator's note:** at the gate these were all kept with one uniform "keep and flag" rule,
+  and described as scene splits and stitched copies. That understated the scale-bar copies and
+  thumbnails among them, which were separable before the run.
+  *Original framing follows.* The
   historical-drives ingest kept every member of its **247 same-timestamp groups (819 files)** in
   `/raw/` and flagged each one with `drv_acq_group` and `drv_acq_group_n` in the sidecar's
   `discovered` block (gate rule R4: nothing unique lost).
