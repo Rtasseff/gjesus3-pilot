@@ -997,7 +997,11 @@ def window_check(run):
     if os.path.exists(lock):
         msgs.append(f"{lock} exists: an ingest (or another registry writer) is running")
     age = time.time() - os.path.getmtime(raw) if os.path.exists(raw) else 1e9
-    if age < RECENT_WRITE_WINDOW_S and not run.args.allow_recent_registry_writes:
+    tomb = retired.retired_path(run.reg_dir)
+    # The tool's own last commit is not an ingest: the tombstone is written just before registry_raw.
+    ours = (os.path.exists(tomb) and os.path.exists(raw)
+            and os.path.getmtime(tomb) >= os.path.getmtime(raw) - 5)
+    if age < RECENT_WRITE_WINDOW_S and not ours and not run.args.allow_recent_registry_writes:
         msgs.append(f"registry_raw.csv changed {age / 60:.1f} min ago: an ingest may be mid-batch "
                     f"(never retire inside an ingest's window; --allow-recent-registry-writes overrides "
                     f"once you have confirmed none is running)")
