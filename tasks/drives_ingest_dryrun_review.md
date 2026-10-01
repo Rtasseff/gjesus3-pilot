@@ -71,6 +71,7 @@ scale bar or pyramids are saved, so its sha256 changes and content dedup lets it
 | B08 `CELL` 0721, 1022, 1123 (re-run after the 3c fix) | 2026-10-01 08:33–11:29 | 1,050 / 1,050 | 10,559 s | all PASS | 10,314 | 0 | `…_20261001_drives_B08` (registry 21,083 → 22,133; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS with 7 files exempt under the 3c rule) |
 | B09 `CELL` 1321 | 2026-10-01 11:51–14:42 | 221 / 221 | 10,263 s | all PASS | 10,314 | 0 | `…_20261001_drives_B09` (registry 22,133 → 22,354; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS with 11 files exempt under the 3c rule, as predicted) |
 | B10 `CELL` 1123 | 2026-10-01 14:58–17:47 | 147 / 147 | 10,117 s | all PASS | 10,314 | 0 | `…_20261001_drives_B10` (registry 22,354 → 22,501; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS, 0 exemptions as predicted) |
+| B11 `CELL` 1123, 1321 | 2026-10-01 18:05–20:56 | 153 / 153 | 10,255 s | all PASS | 10,314 | 0 | `…_20261001_drives_B11` (registry 22,501 → 22,654; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS with 4 files exempt under the 3c rule, as predicted) |
 | B06 | 274 / 327.6 | 235 / 257.0 | 1321, 1422 |
 | B07 | 1,584 / 393.4 | 1,519 / 393.2 | — |
 | B08 | 1,232 / 396.9 | 1,050 / 398.1 | 0721, 1022, 1123 |
