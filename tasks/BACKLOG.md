@@ -285,7 +285,10 @@ are the same acquisition, but not always the same pixels.
       clean-up has to list it by name.
     - Out of `/raw/` already: the gate's R3 derivatives of earlier production scans (22) and the
       re-saves (R1/R2). `.tif`/`.jpg`/`.png` exports were never in this ingest's scope.
-- [ ] Decide how to retire the 32 duplicate registrations and re-code the 25 rows with
+- [ ] *(2026-10-01: the retire tool is being built on `feat/retire-acquisition`. With it, the
+  duplicates below become a dry-run-first operation, and the 10 `CELL`↔`ZWSI` twins are retired
+  as duplicates of their `ZWSI` side. That also fixes 10 of the 23 mis-coded `CELL` rows.
+  Re-coding the other 15 waits for v2's re-identify.)* Decide how to retire the 32 duplicate registrations and re-code the 25 rows with
   the wrong instrument (23 `CELL` rows that are AxioScan files, 2 `LSM9` rows that are
   Cell Observer files). Keep the older ACQ-ID of each pair? Tombstone the other?
 - [ ] Re-rate this item's priority in the light of the production evidence.
@@ -605,6 +608,37 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   (`facility_animal_id`, `strain`, `cohort_id`) should gain a human-appropriate
   alias. Also note the `subject:` block schema currently has no way to say
   "this subject is human" other than `species: Homo sapiens`.
+
+## 🔸 MEDIUM — reconsider a `status` column for retired acquisitions, instead of the tombstone file (2026-10-01)
+
+**Decided for now (Ryan, 2026-10-01):** a retired ACQ-ID leaves `registry_raw.csv` and is recorded
+in a new `registries/retired_acquisitions.csv` (the tombstone file; tool on branch
+`feat/retire-acquisition`). **Ryan expects this to cause trouble later**, and wants it reconsidered:
+
+> *"The registry really should be the main source of updated truth about the files. This makes it
+> wrong. It's easy to spot and then understand the issue, but then every future thing that
+> believes the registry will need to account for the fact that it could be wrong. Changing a lot
+> of existing stuff is problematic, but we can at least define that set. Anticipating what new
+> things will be built is not possible."*
+
+- **Timing:** reconsider **before expanding to other groups.**
+- **A natural moment** is the CSV-to-database move (see "Metadata database — retire the CSV
+  registries" below). A database makes a `status` column, or a proper acquisition-lifecycle table,
+  cheap, and once the record count outgrows a CSV, this has to be revisited anyway.
+- **Input already being produced:** the `feat/retire-acquisition` session lists every existing
+  reader of `registry_raw.csv`. That is the "definable set" that a status column would have to
+  teach to skip retired rows.
+- **Mitigations in v1:** `resolve_acq_id()` returns the live row *or* the tombstone (with
+  `superseded_by`), and the validator flags a curated dataset that references a retired ID.
+
+## 🔽 LOW — reconsider quarantine-and-purge-later for retired acquisitions (2026-10-01)
+
+**Decided for now (Ryan, 2026-10-01): delete once verified.** A retired *duplicate's* bytes are
+deleted as soon as the surviving acquisition is verified to hold byte-identical content. A retired
+*derivative* moves into its original's project folder. **This item is to reconsider, not to
+build,** the alternative: move retired bytes to a quarantine area (e.g. `raw\_retired\`) and delete
+them only in a separate, explicit purge step. That would make a retirement reversible until the
+purge.
 
 ## 🔸 MODERATE — no ingest maintains a project's `start_date` / `last_activity` (2026-10-01)
 
