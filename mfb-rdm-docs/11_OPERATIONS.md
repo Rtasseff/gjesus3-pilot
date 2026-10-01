@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ In use (true production)  
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-10-01 (new §5.7 — retiring an ACQ-ID)
 
 ---
 
@@ -377,6 +377,46 @@ reporting 0 to add means it holds.
 - Run log: `WorkstationOps\logs\finder-refresh-<date>.log`.
 
 **Not this job.** The **per-project** index is refreshed immediately by the operator GUI on each ingest (targeted `--project`), independent of this schedule — so a just-uploaded scan appears in its project index within seconds without waiting for 03:00. Only the ~19 MB global page depends on this scheduled job.
+
+### 5.7 Retiring an ACQ-ID — duplicates, derivatives, orphans (Data Office)
+
+> **Status:** 🕗 Procedure written 2026-10-01; tool built and rehearsed on a scratch copy only. **No
+> production retirement has run.** Each one is a separate, approved operation. Tool: [10_TOOLS §3.9](10_TOOLS.md).
+> Schema: [06_REGISTRIES §2.9](06_REGISTRIES.md).
+
+**Who.** The Data Office only. Never an operator, never a researcher, never by hand-editing a registry.
+
+**When — the window rule.** **Never while any ingest is running** — a GUI ingest, a scripted batch, or a
+multi-batch historical run. A batch ingest checks row counts and validator baselines, and can restore a
+registry backup: a retirement inside its window would either trip its checks or be silently undone. The tool
+refuses while `registries\.registry.lock` exists or `registry_raw.csv` changed in the last 15 minutes, but it
+cannot see an ingest that is *between* batches — **confirm with whoever is running ingests**. Override the
+15-minute check (`--allow-recent-registry-writes`) only after that confirmation.
+
+**Steps.**
+
+1. **Decide the pairs, with evidence.** For duplicates, which id survives (see the proposal in
+   `tasks/retire_acquisition_review.md`); for derivatives, the original and the project. Write them into a
+   list CSV (`acq_id, disposition, target_acq_id, to_project, reason`).
+2. **Dry run** (no `--execute`). Read every line: the hashes it compared, the rows it will remove, each link
+   and what will happen to it (`replace` / `remove` / `absent` / `foreign`), the subjects it keeps. Any
+   `REFUSED` stops the whole list: fix the cause, don't work around it.
+3. **Get the approval** for exactly that dry run's output.
+4. **Execute** the same command with `--execute`. It takes its own off-NAS backup first
+   (`C:\Users\rtasseff\temp\gjesus3_retire_backup_<run>\`, every copy SHA-256-verified) and writes its
+   report and log there.
+5. **If it stops** (exit 4), re-run the same command. Every step resumes from what is on disk; nothing is
+   done twice. `validate_registries` shows a half-done retirement as an ERROR until it is finished.
+6. **Verify:** re-run the command (it must report `no-op`), run `validate_registries` (no new error class),
+   and regenerate the global Finder page (`python tools\generate_index.py --nas-root J:\gjesus3-data`) or
+   wait for the 03:00 job.
+
+**Exit codes:** 0 done / no-op · 2 refused (nothing written) · 3 backup failed (nothing written) · 4 stopped
+mid-run (re-run to finish) · 5 self-check failed (read the report).
+
+**Restoring a retirement** (not automated): the tombstone row holds the original `registry_raw` record
+verbatim and every other removed row in `other_rows_removed`; the run's backup holds the pre-run registries
+and the sidecars. A deleted duplicate's bytes are the survivor's; a derivative's are at `moved_to`.
 
 ---
 
