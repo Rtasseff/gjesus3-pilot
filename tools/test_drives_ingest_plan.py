@@ -18,6 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "drive_staging"))
 import ingest_plan as P  # noqa: E402
+import ingest_check as C  # noqa: E402
 
 FAILS = []
 
@@ -112,12 +113,35 @@ def test_resave_key():
           "ingest (likely a ZEN scene split, stitched copy or extract)", "the R4 notes clause")
 
 
+def test_check_3c_exemption():
+    print("test_check_3c_exemption")
+    g = "CELL|2023-06-23T10:00:00.1234567Z"
+    exp = {  # the frozen plan: an export planned in B05 and a planned sibling of it
+        "d/Kidney-HE.czi": {"acq_group": g},
+        "d/Other-group.czi": {"acq_group": "CELL|2023-06-02T09:00:00Z"},
+        "d/No-group.czi": {"acq_group": ""},
+    }
+    e = {"acq_group": g}
+    ex, hits = C.split_3c_hits(e, [{"acq_id": "ACQ-1", "original_name": "d/Kidney-HE.czi"}], exp)
+    check(len(ex) == 1 and not hits, "production row = a planned row, same acq_group -> exempt, no hit")
+    ex, hits = C.split_3c_hits(e, [{"acq_id": "ACQ-2", "original_name": "d/NOT-IN-THE-PLAN.czi"}], exp)
+    check(not ex and len(hits) == 1, "production row not in the plan (pre-existing / operator ingest) -> still a hit")
+    ex, hits = C.split_3c_hits(e, [{"acq_id": "ACQ-3", "original_name": "d/Other-group.czi"}], exp)
+    check(not ex and len(hits) == 1, "planned row of another acq_group -> still a hit")
+    ex, hits = C.split_3c_hits({"acq_group": ""}, [{"acq_id": "ACQ-4", "original_name": "d/No-group.czi"}], exp)
+    check(not ex and len(hits) == 1, "checked file in no R4 group -> never exempt")
+    ex, hits = C.split_3c_hits(e, [{"acq_id": "ACQ-1", "original_name": "d/Kidney-HE.czi"},
+                                   {"acq_id": "ACQ-2", "original_name": "d/NOT-IN-THE-PLAN.czi"}], exp)
+    check(len(ex) == 1 and len(hits) == 1, "mixed: the exempt one is listed, the other still fails")
+
+
 def main():
     test_resave_key()
     test_person_fields()
     test_zwsi_initials()
     test_canonical_order()
     test_archive_keys()
+    test_check_3c_exemption()
     print()
     if FAILS:
         print(f"FAILED ({len(FAILS)})")

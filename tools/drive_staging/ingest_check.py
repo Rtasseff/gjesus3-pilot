@@ -20,7 +20,8 @@ printed PASS/FAIL per check. Exit 1 on any unexplained mismatch.
                      the registry
   3b re-saves        no planned file is a re-save of a production acquisition (same instrument,
                      timestamp to the second and filename), and no two planned files are (gate R1/R2)
-  3c derivatives     no planned file shares instrument + timestamp with a production acquisition (R3)
+  3c derivatives     no planned file shares instrument + timestamp with a production acquisition (R3),
+                     except a planned R4 sibling an earlier batch of this run ingested (INFO-listed)
   4 dates            no blank acquisition_datetime, no ACQ-ID date == today
   5 projects         exactly one project would be created (AE-biomaGUNE-0118); every other exists
   6 subjects         none on 0118 / (C) / no-claim rows; each present one re-resolves in the facility
@@ -45,6 +46,24 @@ sys.path.insert(0, TOOLS)
 import ingest_plan as P  # noqa: E402
 from ingest import config, enrichment, linker, resolver  # noqa: E402
 import animal_db  # noqa: E402
+
+
+def split_3c_hits(e, prod_rows, exp):
+    """Split one planned file's production matches (same instrument + timestamp) for check 3c.
+
+    Returns (exempt, hits). A match is EXEMPT -- an expected planned sibling, not a derivative --
+    when the production row's original_name is itself a row of the frozen plan (so an earlier batch
+    of THIS run ingested it) AND that row's planned acq_group equals the checked file's acq_group
+    (gate rule R4: keep every member of a same-timestamp group). Everything else stays a hit: a
+    derivative of an acquisition that was in production before this run, or an operator ingest of
+    a sibling. (Coordinator answer to the B08 stop, 2026-10-01: ANSWER_B08_STOP.md.)
+    """
+    grp = e.get("acq_group", "")
+    exempt, hits = [], []
+    for r in prod_rows:
+        planned = exp.get(r["original_name"])
+        (exempt if grp and planned and planned.get("acq_group") == grp else hits).append(r)
+    return exempt, hits
 
 
 def main():
@@ -218,7 +237,7 @@ def main():
 
     # ---- 3b / 3c the same ACQUISITION under different bytes (gate 2026-09-30, R1-R3) -----------
     by_key, by_ts = P.production_index(args.nas)
-    c3b, c3c = [], []
+    c3b, c3c, exempt_3c = [], [], []
     seen_key = collections.defaultdict(list)
     for e in exp_in.values():
         k = P.resave_key(e["instrument"], e["acquisition_datetime"], e["original_name"])
@@ -227,11 +246,19 @@ def main():
         seen_key[k].append(e["original_name"])
         t = (e["instrument"], e["acquisition_datetime"][:19])
         if t in by_ts:
-            c3c.append(f"shares instrument+timestamp with production {[r['acq_id'] for r in by_ts[t]]}: "
-                       f"{e['original_name']}")
+            exempt, hits = split_3c_hits(e, by_ts[t], exp)
+            for r in exempt:
+                exempt_3c.append((e["original_name"], r["acq_id"], e["acq_group"]))
+            if hits:
+                c3c.append(f"shares instrument+timestamp with production {[r['acq_id'] for r in hits]}: "
+                           f"{e['original_name']}")
     c3b += [f"re-saves within the plan: {v}" for v in seen_key.values() if len(v) > 1]
     checks["3b re-saves"] = c3b
     checks["3c derivatives"] = c3c
+    for name, acq, grp in exempt_3c:
+        print(f"INFO 3c exempt (planned R4 sibling ingested earlier in this run): {name} -> {acq}, group {grp}")
+    print(f"INFO 3c exemptions: {len({n for n, _, _ in exempt_3c})} files "
+          f"({len(exempt_3c)} file-to-production matches)", flush=True)
     groups = {e["acq_group"] for e in exp_in.values() if e.get("acq_group")}
     notes["3b"].append({"planned_rows": len(exp_in), "same_timestamp_groups_flagged": len(groups),
                         "files_in_them": sum(1 for e in exp_in.values() if e.get("acq_group"))})
