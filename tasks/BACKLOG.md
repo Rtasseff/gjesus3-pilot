@@ -264,6 +264,16 @@ are the same acquisition, but not always the same pixels.
     production (gate R3).
   - Before such a pass, a pixel check decides which files are true copies and which are distinct
     scenes. Doing it is Ryan's call: it is a production repair that retires ACQ-IDs.
+  - **Measured from the frozen plan (2026-10-01):**
+    - 31 files have `scale` in the name (3.4 GB). Scale bars are vector overlays, so the pixels
+      match the original.
+    - About 18 small export-named files are under 5% of their group's original (e.g. `Untitled5`).
+    - About 550 more are scene splits (e.g. one 54-well plate split into per-well files) and
+      stitched copies (~320 GB).
+    - All are flagged except one: **`ID65_PB_lung_20x_scale.czi` (2.9 GB) has no group**, so a
+      clean-up has to list it by name.
+    - Out of `/raw/` already: the gate's R3 derivatives of earlier production scans (22) and the
+      re-saves (R1/R2). `.tif`/`.jpg`/`.png` exports were never in this ingest's scope.
 - [ ] Decide how to retire the 32 duplicate registrations and re-code the 25 rows with
   the wrong instrument (23 `CELL` rows that are AxioScan files, 2 `LSM9` rows that are
   Cell Observer files). Keep the older ACQ-ID of each pair? Tombstone the other?
