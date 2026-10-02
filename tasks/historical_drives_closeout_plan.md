@@ -176,6 +176,8 @@ did.
   - **All 10 of Claudia's links are the same file as their `ZWSI` survivor** (`os.path.samefile`),
     under the same names.
   - This also fixes 10 of the 25 mis-coded rows; the other 15 wait for retire v2 (stream E).
+  - The validator checked 25,195 rows: 10,314 errors, all the known placeholder, and warnings
+    unchanged at 23,859. There is no new class.
 - The global Finder page is left to the 03:00 job.
 
 *The procedure, as it was planned:*
