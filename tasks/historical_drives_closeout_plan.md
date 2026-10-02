@@ -159,7 +159,26 @@ The order is either, but the conflicts are known.
     wording.
   - Push.
 
-## Step 3: the first retirements in production
+## Step 3: the first retirements in production (✅ DONE 2026-10-02)
+
+**Result: both operations ran, and both were verified independently.** Under Ryan's pre-approval,
+each full dry run had to show every pair byte-identical and match the approved list exactly; both
+did.
+
+- **The 22 `ZWSI` twins:** run `RET-20261002-115731-642`. Backup:
+  `C:\Users\rtasseff\temp\gjesus3_retire_backup_20261002-115731-642\`.
+  - The registry went 25,227 → 25,205 and stayed BOM-free with CRLF line endings.
+  - 22 tombstones were written, the rows and folders are gone, and the survivors are intact.
+  - The validator shows 10,314 errors, all the known placeholder, with no new class.
+- **The 10 `CELL` copies:** run `RET-20261002-121520-505`. Backup:
+  `…\gjesus3_retire_backup_20261002-121520-505\`.
+  - The registry went 25,205 → 25,195, with 32 tombstones in all.
+  - **All 10 of Claudia's links are the same file as their `ZWSI` survivor** (`os.path.samefile`),
+    under the same names.
+  - This also fixes 10 of the 25 mis-coded rows; the other 15 wait for retire v2 (stream E).
+- The global Finder page is left to the 03:00 job.
+
+*The procedure, as it was planned:*
 
 Do this after Step 2, with nothing ingesting. **Each operation is its own dry run, then Ryan's go,
 then `--execute`, then verify.**

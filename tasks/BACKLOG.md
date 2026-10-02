@@ -359,6 +359,7 @@ are the same acquisition, but not always the same pixels.
   each dry first, **after the drives ingest is merged**: the 22 `ZWSI` twins
   (`tasks/retire_lists/2026-10_sha256_twins_zwsi.csv`), then the 10 `CELL` rows (`…_cell.csv`). Per-pair
   table and commands: `tasks/retire_acquisition_review.md` §6a.
+  **✅ 2026-10-02 — the 32 duplicates are retired in production** (close-out plan Step 3; runs `RET-20261002-115731-642` and `RET-20261002-121520-505`, each after a full dry run that showed every pair byte-identical, and each verified independently). This fixes 10 of the 25 mis-coded rows. **What remains is re-coding the other 15** (13 `CELL` → `ZWSI`, 2 `LSM9` → `CELL`): that is the v2 re-identify item below, being built on `feat/retire-v2` (2026-10-03/04).
 - [ ] **v2 of the retire tool: a "content-equivalent duplicate" mode for `.czi` (2026-10-01).** A
   duplicate may be retired when the decoded subblocks, the metadata XML and the attachment payloads are
   all identical, even though the bytes differ (ZEN rewrote the container). Record the evidence in the
