@@ -1,0 +1,11 @@
+acq_id,disposition,target_acq_id,to_project,reason
+ACQ-20260507-CELL-001,duplicate,ACQ-20260507-ZWSI-001,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical
+ACQ-20260507-CELL-002,duplicate,ACQ-20260507-ZWSI-002,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical
+ACQ-20260507-CELL-003,duplicate,ACQ-20260507-ZWSI-003,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical
+ACQ-20260507-CELL-004,duplicate,ACQ-20260507-ZWSI-004,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical
+ACQ-20260507-CELL-005,duplicate,ACQ-20260507-ZWSI-005,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical
+ACQ-20260507-CELL-006,duplicate,ACQ-20260507-ZWSI-006,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical
+ACQ-20260507-CELL-007,duplicate,ACQ-20260507-ZWSI-007,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical
+ACQ-20260507-CELL-008,duplicate,ACQ-20260507-ZWSI-008,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical
+ACQ-20260507-CELL-009,duplicate,ACQ-20260507-ZWSI-009,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical
+ACQ-20260507-CELL-010,duplicate,ACQ-20260507-ZWSI-010,,AxioScan 7 file registered twice: as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the folder name) and as ZWSI by axioscan7_mfb_20260614.yaml; byte-identical

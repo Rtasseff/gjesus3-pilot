@@ -1,8 +1,9 @@
 # Review: `retire_acquisition.py` — retiring an ACQ-ID (branch `feat/retire-acquisition`)
 
 **Date:** 2026-10-01 · **Status:** built, unit-tested and rehearsed on a scratch copy. **Not merged, and
-never run against production** (not even a dry run: the drives ingest is using the NAS). Ready for the
-coordinator's review.
+never run against production** (not even a dry run: the drives ingest is using the NAS).
+**Coordinator review 2026-10-01: approved with one change — a retirement never deletes a subject row —
+now made (2026-10-02, §2.7). Ryan's decisions are recorded in §7.** The coordinator merges.
 
 Decisions implemented: CHANGELOG 2026-10-01 (Ryan) — tombstone file, delete once verified, v1 =
 duplicate + derivative, Data Office only. Specs: [06_REGISTRIES §2.9](../mfb-rdm-docs/06_REGISTRIES.md),
@@ -45,8 +46,8 @@ duplicate + derivative, Data Office only. Specs: [06_REGISTRIES §2.9](../mfb-rd
    provenance event.
 4. **Commit, under the registry lock:** read the live state again; compute every row to remove; append the
    tombstone **first** (carrying all of them, verbatim); then remove the `registry_raw`, `ingest_manifest`,
-   `pending_subject_metadata`, `pending_dicom_regen`, `pending_links` rows and every `registry_subjects`
-   row no **remaining** live row references. Header-checked; byte-exact; read back.
+   `pending_subject_metadata`, `pending_dicom_regen`, `pending_links` rows. **`registry_subjects.csv` is
+   never touched** (§2.7). Header-checked; byte-exact; read back.
 5. **Links, then bytes.** Each link's provenance event is appended **before** its action (write-ahead —
    see 2.3); a duplicate is re-hashed against the survivor right before its folder is deleted unless this
    run already hashed both; a derivative's placement is re-verified before `/raw/` is deleted.
@@ -125,10 +126,12 @@ unregistered folders (BACKLOG 2026-08-13 still open).
 - **Inventory gap fixed:** 10_TOOLS §2.1's "everything an ingest writes" table was missing
   `pending_dicom_regen.csv` and `pending_links.csv` (both keyed by `acq_id`, written by `ingest_raw.py`
   L1073 / L1569). Added as rows #11–#12; the tool removes those rows too.
-- **`06 §2.8.3` says subjects are never deleted.** The handoff (and 10_TOOLS inventory row #5) say a
-  retirement removes a subject only that acquisition referenced. Implemented as the handoff says, the row
-  kept verbatim in the tombstone, and an **additive** update-rule row in 06 §2.8.3 — the ❌ row is unchanged.
-  Flagging because it touches a ✅ table. (In the first production list no subject would be removed.)
+- **Subjects are never deleted** (✅ 06 §2.8.3 — Ryan, 2026-10-01: *an animal existed whether or not
+  gjesus3 keeps its acquisition*). The first version removed a subject row no other live acquisition
+  referenced, as the handoff and the 10_TOOLS inventory row #5 said; the coordinator's review reversed
+  that. A retirement now **never** touches `registry_subjects.csv`. The additive row I had put in
+  06 §2.8.3 is reverted (the table is exactly as on `main`), and the contradiction is fixed where it
+  lived: inventory row #5's *Reverse by* now reads *"never: subjects are never deleted"*.
 
 ### 2.8 Things the tool does not do (flag for the procedure)
 
@@ -152,8 +155,8 @@ unknown id, survivor retired in the same list (whole list refused), a held regis
 4. duplicate with a project link re-pointed (same name, now the survivor's inode), byte diff of
 `registry_raw.csv` / `ingest_manifest.csv`, tombstone verbatim + no BOM + CRLF, shared subject kept,
 backup contents (no duplicate bytes); 5. idempotent re-run (no write, no backup) and the chain refusal;
-6. duplicate whose survivor is already linked there (link removed), unshared subject + pending row removed
-and kept verbatim; 7. derivative; 8. crash after the tombstone (validator flags it, re-run finishes, one
+6. duplicate whose survivor is already linked there (link removed), a subject **only the retiree
+referenced is kept** and `registry_subjects.csv` is byte-identical, pending row removed and kept verbatim; 7. derivative; 8. crash after the tombstone (validator flags it, re-run finishes, one
 tombstone); 9. crash after links (validator flags the folder, re-run re-hashes and deletes, one event);
 10. orphan; 11. `resolve_acq_id`, allocator without `.acq_id_seq.json`, dedup; 12. validator ERRORs;
 13–14. **crash after every step** (`placed`, `tombstone`, `commit`, `links`, `bytes`, `provenance`) for a
@@ -219,7 +222,7 @@ backups (`recover_subject_ids*`), so the new file is picked up harmlessly. Test 
 branch is merged. Run from the repo root on the workstation. Full dry runs hash over SMB — run them when
 the NAS is quiet. `--quick` (sizes only) is a cheap first look.
 
-### (a) The 32 SHA-256 twins — `tasks/retire_lists/2026-10_sha256_twins.csv`
+### (a) The 32 SHA-256 twins — ✅ APPROVED, two operations: `tasks/retire_lists/2026-10_sha256_twins_zwsi.csv` (22) then `…_cell.csv` (10)
 
 **Proposed keep/retire rule: keep the registration that the project already uses; on a tie, the older
 one.** Here every criterion points the same way for all 32 pairs:
@@ -237,8 +240,8 @@ one.** Here every criterion points the same way for all 32 pairs:
   "Dedup identity").
 
 Checked read-only against the 2026-10-01 snapshot and live provenance: all 32 survivors are older and
-linked; no retiree or survivor is cited by a curated dataset; no subject row would be removed (the CELL
-rows have none; each ZWSI twin's subject is its survivor's); each retiree has exactly one other row
+linked; no retiree or survivor is cited by a curated dataset; no subject row is touched (none ever is);
+each retiree has exactly one other row
 (`ingest_manifest.csv`). Size: 22.2 GB + 4.5 GB per side → a full dry run reads ≈ 53 GB over SMB; the
 execute reads it again plus the 10 re-pointed links (4.5 GB). Frees ≈ 26.7 GB.
 
@@ -277,16 +280,21 @@ execute reads it again plus the 10 re-pointed links (4.5 GB). Frees ≈ 26.7 GB.
 | 31 | `ACQ-20260507-CELL-009` | `ACQ-20260507-ZWSI-009` | CELL↔ZWSI | 421.6 | PROJ-0039 | PROJ-0019 | `…\CELL_MFB_AUA_1022_ID72T_HIF1A_10x.czi` → re-point | – |
 | 32 | `ACQ-20260507-CELL-010` | `ACQ-20260507-ZWSI-010` | CELL↔ZWSI | 354.4 | PROJ-0039 | PROJ-0019 | `…\CELL_MFB_AUA_1022_ID72T_VEGFA_10x.czi` → re-point | – |
 
+**Two operations (Ryan, 2026-10-01), each dry first and then `--execute`, after the drives ingest is
+merged.** The 22 `ZWSI` twins first (they touch no project folder), then the 10 `CELL`:
+
 ```
-python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_sha256_twins.csv --quick
-python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_sha256_twins.csv
-:: after approval of that dry run's output:
-python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_sha256_twins.csv --execute
+:: operation 1 -- the 22 ZWSI twins
+python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_sha256_twins_zwsi.csv --quick
+python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_sha256_twins_zwsi.csv
+python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_sha256_twins_zwsi.csv --execute
+
+:: operation 2 -- the 10 CELL rows (re-points 10 claudia links)
+python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_sha256_twins_cell.csv
+python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_sha256_twins_cell.csv --execute
 ```
 
-Optionally split it: the 22 `ZWSI` twins first (they touch no project folder), then the 10 `CELL`.
-
-### (b) The `LSM9` re-save — `ACQ-20250915-LSM9-016` vs `-001`: **recommend leaving it for now (v2)**
+### (b) The `LSM9` re-save — `ACQ-20250915-LSM9-016` vs `-001`: ✅ **leave it** (Ryan); v2 mode backlogged
 
 Measured on the scratch copies (local, read-only):
 
@@ -315,25 +323,35 @@ Dry run if Ryan picks 3 (or to see the refusal): `python tools\retire_acquisitio
 
 ### (c) The 17 orphans — `tasks/retire_lists/2026-10_orphans_20260710_MRI.csv` (`--orphan` mode built)
 
+> ✅ **Retire them (Ryan), but only after the 2026-07-10 session is re-ingested properly.** Facts the
+> coordinator established: the folders were created 2026-07-16 09:16 UTC by `ingest_raw.py`; each has an
+> empty `.data` folder, a `checksums.json` with no files and no `README.txt` — the no-DICOM placeholder
+> shape; the run stopped before the registry append, cause not established. Their session
+> `jrc20260710_m12_1125_bis` (animal 12 of protocol 1125, 17 exams) is **not in gjesus3 under any ID**.
+> **Agreed order:** (1) a normal MRI ingest of that session from the scanner host — its no-DICOM exams go
+> to the DICOM-regen worklist (11_OPERATIONS §5.5) and get fresh IDs (the reservation already holds
+> `ACQ-20260710-MRI-` = 17, so they start at `-018`); (2) then `--orphan` retires the 17 empty IDs.
+
 `ACQ-20260710-MRI-001…017`: no registry row, no manifest/pending/provenance row (checked against the
 snapshot and live provenance), 108–160 KB each, `.acq_id_seq.json` already holds `ACQ-20260710-MRI- = 17`.
 Each folder is backed up whole off-NAS, tombstoned (`disposition=orphan`, no `superseded_by`, no row) and
-deleted. **The BACKLOG item still asks "register them or delete them"** — this is the delete branch; the
-sidecars carry full subject metadata (m12, protocol 1125), which survives in the backup. Ryan's call.
+deleted. The sidecars carry full subject metadata (m12, protocol 1125), which survives in the backup.
 
 ```
 python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_orphans_20260710_MRI.csv
 python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_orphans_20260710_MRI.csv --execute
 ```
 
-## 7. Decisions for Ryan
+## 7. Ryan's decisions (coordinator review, 2026-10-01 — `ANSWERS_2026-10-01.md`)
 
-1. **Keep/retire rule** for (a) — "keep what the project uses; tie → older" — and the 32-pair table.
-2. **Dedup policy** (§2.5): retired rows keep blocking re-ingest. Confirm.
-3. **LSM9 re-save** (§6b): leave now, v2 content-equivalence later?
-4. **Orphans** (§6c): retire (delete, backed up) rather than register?
-5. **Derivative ACL** (§2.8): a moved derivative stays read-only (shared inode). Fine?
-6. The **06 §2.8.3** additive rule row (subjects only a retired acquisition referenced) — §2.7.
+| # | Question | Decision |
+|---|---|---|
+| 1 | The 32 twins (§6a) | ✅ Rule approved: keep what the project uses; tie → the older. **Two operations**: the 22 `ZWSI` pairs, then the 10 `CELL`; each dry then `--execute`, **after the drives ingest is merged**. Lists split (`…_zwsi.csv`, `…_cell.csv`). |
+| 2 | Subjects (§2.7) | ✅ **Never delete subject rows** — 06 §2.8.3 stands. Done 2026-10-02: code, tests, docs. |
+| 3 | The 17 orphans (§6c) | ✅ Retire, **after** the 2026-07-10 session (`jrc20260710_m12_1125_bis`) is re-ingested. |
+| 4 | Dedup blocks re-ingest of a retired source (§2.5) | ✅ Confirmed. **Note for v2's re-identify:** it must not be blocked by its own tombstone. |
+| 5 | The `LSM9` re-save (§6b) | ✅ Leave it. The v2 content-equivalent duplicate mode goes to BACKLOG (first user `ACQ-20250915-LSM9-016`). |
+| 6 | A derivative's ACL (§2.8) | ✅ Fine as is: read-only via the shared inode. |
 
 ## 8. Proposed wording for the coordinator (not applied here)
 
@@ -342,8 +360,8 @@ python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retir
 > **ACQ-ID retire tool built, not yet used** (branch `feat/retire-acquisition`, 2026-10-01).
 > `tools/retire_acquisition.py` retires duplicates, derivatives and orphan `/raw/` folders into
 > `registries/retired_acquisitions.csv` (06 §2.9). Rehearsed on scratch; proposals for the first three
-> production uses (32 twins, the `LSM9` re-save, 17 orphans) in `tasks/retire_acquisition_review.md` §6 —
-> each waits for Ryan's approval and for the drives ingest to be merged.
+> production uses (32 twins in two operations, approved; the `LSM9` re-save left; 17 orphans after the 2026-07-10
+> session is re-ingested) in `tasks/retire_acquisition_review.md` §6 — all after the drives ingest is merged.
 
 **`CHANGELOG.md`** (new top row):
 
@@ -362,7 +380,6 @@ python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retir
 > byte-exact diff of every registry file, no new validator error class. The `LSM9` re-save is
 > information-identical (pixels, metadata, attachments) with a different container; v1 refuses it. |
 
-**`tasks/BACKLOG.md`** — under "Dedup identity": *"2026-10-01: the retire tool is built
-(`tasks/retire_acquisition_review.md`); the 32 twins have a proposed list. v2 candidate: a
-content-equivalent duplicate mode for `.czi` (decoded subblocks + metadata XML + attachments), first user
-`ACQ-20250915-LSM9-016`."* Under the orphan item: *"`--orphan` mode built; list proposed."*
+**`tasks/BACKLOG.md`** — applied on this branch (2026-10-02): under "Dedup identity", the retire tool, the
+approved twin lists and the v2 items (content-equivalent duplicate mode; re-identify not blocked by its
+own tombstone); under the orphan item, the agreed order.

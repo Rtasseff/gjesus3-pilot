@@ -399,7 +399,7 @@ cannot see an ingest that is *between* batches — **confirm with whoever is run
    `tasks/retire_acquisition_review.md`); for derivatives, the original and the project. Write them into a
    list CSV (`acq_id, disposition, target_acq_id, to_project, reason`).
 2. **Dry run** (no `--execute`). Read every line: the hashes it compared, the rows it will remove, each link
-   and what will happen to it (`replace` / `remove` / `absent` / `foreign`), the subjects it keeps. Any
+   and what will happen to it (`replace` / `remove` / `absent` / `foreign`). Subject rows are never removed. Any
    `REFUSED` stops the whole list: fix the cause, don't work around it.
 3. **Get the approval** for exactly that dry run's output.
 4. **Execute** the same command with `--execute`. It takes its own off-NAS backup first
