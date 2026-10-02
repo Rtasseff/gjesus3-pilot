@@ -84,6 +84,22 @@ BACKLOG current.
    sit under a project claim.
 3. **671 TopSpin NMR experiments** (1.15 GB of chem-lab spectrometer data, not imaging), listed by
    stream B. **Default:** the same as question 2.
+4. **Stream B's questions** (Phase 1 done 2026-10-02; review `tasks/drives_dicom_review.md` on
+   `feat/drives-dicom`). Each has the coordinator's recommendation.
+   - **Q1:** reopen `1519` (`PROJ-0008`, closed) for B02 (526 exams, March 2022) and B03 (136 exams,
+     September 2020)? **Yes.**
+   - **Q2:** B06, the 1019 MRS 2021 exams on the 11.7T (66): leave the project blank, like the 854
+     other 2021 1019 exams (STATUS §0 D6)? **Yes, blank.**
+   - **Q3:** 133 phantom and collaboration exams from 2022–23 (initials `prc`/`pr`): ingest with a
+     blank project? **Yes.**
+   - **Q4:** 363 exams from an external Bruker ICON in Madrid (Claudia, 4 mice, 2024): ingest as
+     `XMRI` collaborator data, as was done for Charité's `XMIC`? **Yes.**
+   - **Q5:** 3 PET/CT files from 2019 with no AE code: **hold them** with the `S:\gnuclear` set that
+     is waiting for AE codes.
+   - **Q6:** 18 Molecubes FDK reconstructions (Marina, `1321`) are in the `S:\gnuclear` snapshot but
+     not in production. That is a gnuclear question, **not a drives ingest.**
+   - **Q7:** go for B04 (`0619`, 236 exams), B05 (`0420`, 343) and N03 (`1319` PET/CT, 8, with the
+     project created), once their dry runs are clean? **Yes.**
 
 **A gap found on 2026-10-02: the catalog never opened nested archives** (archives inside
 archives).
