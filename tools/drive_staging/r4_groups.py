@@ -17,27 +17,45 @@ a file stays in /raw/ flagged only when it is genuinely ambiguous.
 
 THE EVIDENCE. Every file is UNCOMPRESSED (819 of 819), so pixels are compared as stored, not decoded
 and re-rendered. Each file is read once into a cache of its level-0 subblocks (tiles): position,
-shape and the SHA-256 of the pixel payload. Two exact tests then relate a member A to a candidate
-parent B:
+shape and the SHA-256 of the pixel payload. Exact tests then relate a member A to a candidate
+parent B (a hit is equality of every value compared, never a tolerance):
 
   hash match   every A tile is byte-identical to some B tile, all at ONE constant offset
-               (identical copy, scale-bar copy -- the overlay is metadata --, scene split, re-save);
-  crop match   an A tile is a byte-exact sub-rectangle of a B tile (ZEN cuts the tiles at a crop's
-               border), all at ONE constant offset.
+               (identical copy, scale-bar copy -- the overlay is metadata --, scene split, re-save,
+               whole-tile subset);
+  crop match   every A tile is a byte-exact sub-rectangle of a B tile (ZEN cuts the tiles at a crop's
+               border), all at ONE constant offset;
+  region       A's whole image equals a region of B's at ONE offset although A's blocks are its own
+               (a crop ZEN re-blocked from its own origin: no block is a piece of one B tile);
+  retile       the same tile payloads at positions no single offset explains (a stitched copy that
+               kept its tiles; which file is the stitched one is decided by tile-grid regularity);
+  retrim       every A tile is a sub-rectangle of SOME B tile, each at its own offset (fused stitching);
+  stitch       the central interiors of 16 sampled tiles of the tiled B are found, byte for byte, in
+               A (a stitched copy that blended its tiles);
+  rendering    rank correlation of the image planes (an 8-bit rendering of a 16-bit image).
 
-A third check covers a stitched copy, which re-tiles and blends and so cannot match tile for tile:
-the interior of each tile of the tiled original is searched for, byte for byte, in the stitched
-file. Whatever matches none of these is `distinct` (or `ambiguous`, with the evidence listed).
+Why not compare composites: the image pasted from overlapping tiles depends on the paste order, so a
+true crop can differ in 10-20% of its pixels (all in the overlaps); tiles have no such artefact.
+Pairs are tested only inside a group and only past cheap gates (same pixel size, a shared stage
+position, a smaller canvas); the groups whose members are all distinct stage positions are not
+compared (validated: `validate`, and an all-pairs identical-tile test on their cache).
+Whatever matches none of these is `distinct` (or `ambiguous`, with the evidence listed).
 
-    python tools/drive_staging/r4_groups.py table      # one row per member: ACQ-ID, project, ...
-    python tools/drive_staging/r4_groups.py features   # metadata + scale-bar overlay per member
-    python tools/drive_staging/r4_groups.py pieces     # the tile cache (reads ~730 GB once)
-    python tools/drive_staging/r4_groups.py relations  # pairwise pixel tests per group
-    python tools/drive_staging/r4_groups.py classify   # class per member + tables
-    python tools/drive_staging/r4_groups.py lists      # tasks/retire_lists/2026-10_r4_*.csv
+    python tools/drive_staging/r4_groups.py table         # one row per member: ACQ-ID, project, ...
+    python tools/drive_staging/r4_groups.py features      # metadata + scale-bar overlay per member
+    python tools/drive_staging/r4_groups.py pieces        # the tile cache (reads ~730 GB once)
+    python tools/drive_staging/r4_groups.py check         # cache consistency
+    python tools/drive_staging/r4_groups.py relations     # pairwise pixel tests per group (all tests)
+    python tools/drive_staging/r4_groups.py retile|restitch|retrim|region   # add a later test to
+                                                          # relation files made before it existed
+    python tools/drive_staging/r4_groups.py validate      # the stage-position gate, on a sample
+    python tools/drive_staging/r4_groups.py classify      # class per member -> classified.csv
+    python tools/drive_staging/r4_groups.py lists         # tasks/retire_lists/2026-10_r4_*.csv (4)
+    python tools/drive_staging/r4_groups.py verify-lists  # the lists against production, read-only
+    python tools/drive_staging/r4_groups.py report        # tables for the review, waiting_groups.csv
 
-Pure helpers (path, subfolder, list rows, byte-search) are unit-tested by
-tools/test_drives_r4_groups.py.
+Pure helpers (path, subfolder, list rows, byte-search, every pixel test, the classification) are
+unit-tested by tools/test_drives_r4_groups.py. Review: tasks/drives_r4_cleanup_review.md.
 """
 import argparse
 import collections
@@ -503,6 +521,15 @@ def index_by_hash(F):
     for q in F["pieces"]:
         idx[(q["hash"], q["w"], q["h"])].append(q)
     return idx
+
+
+def shared_payloads(P):
+    """How many tile payloads (hash, w, h) occur in two or more of the files in P ({id: tile table})."""
+    seen = collections.defaultdict(set)
+    for i, F in P.items():
+        for q in F["pieces"]:
+            seen[(q["hash"], q["w"], q["h"])].add(i)
+    return sum(1 for v in seen.values() if len(v) > 1)
 
 
 def hash_match(A, B, bidx=None):
@@ -1845,11 +1872,20 @@ def cmd_classify(args):
         cl = classify_group(nodes, rels[k])
         if k not in sibling:
             similarity_pass(ms, cl, args.out)
+        else:
+            # the gate says these members cannot be copies; the tile cache can contradict it for free
+            n_shared = shared_payloads({m["acq_id"]: load_pieces(args.out, m["sha256"], m["staged_path"]) for m in ms})
+            if n_shared:
+                print(f"STOP: group {k} has members at distinct stage positions, yet {n_shared} tile payload(s) are "
+                      f"shared by two of them: the stage-position gate is contradicted; compare this group exhaustively "
+                      f"(`--only {k[:24]} --exhaustive --redo relations`)", file=sys.stderr)
+                return 1
         for m in ms:
             c = cl[m["acq_id"]]
             if c["class"] == C_DISTINCT and not c["evidence"]:
                 c["evidence"] = (
-                    "a different stage position from every other member (XML scene centre); tiles not compared"
+                    "a different stage position from every other member (XML scene centre); the crop and stitch tests "
+                    "were not run, and no tile payload is shared with any other member"
                     if k in sibling else
                     "no tile of it is in another member and no tile of another member is in it")
             parent = byid.get(c["parent"]) if c["parent"] else None

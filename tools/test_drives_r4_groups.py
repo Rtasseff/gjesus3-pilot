@@ -8,9 +8,14 @@ clean-up of the drives .czi ingest), on synthetic tiles: no .czi file, no NAS, n
   3. Haystack.locate: a byte-exact sub-array is found at its position, a near miss is not.
   4. hash_match: identical tiles at one offset; a scene split; a partial match is not complete.
   5. crop_match / stitch_match on tiles written to a scratch file the way a .czi stores them.
+  5b. tileset_match + grid_score (re-placed tiles), cutset_match + trim_records (trimmed pieces),
+     region_match + region_records (a crop re-blocked from its own origin), informative (blank tiles
+     prove nothing), the rank correlation of a rendering.
   6. classify_group: original + crop + scale-bar copy of the crop; master + scene splits; siblings;
-     pixel-identical twins; a stitched copy; a member contained in two unrelated files.
-  7. the original of a set of identical files (rank_key) and the retire-list row.
+     pixel-identical twins; stitched copies; a member contained in two unrelated files; chains.
+  7. the original of a set of identical files (rank_key); decide_action (lists a, r, b, k, waiting,
+     conflict, closed; the 5% boundary between b and k); the retire-list row, its file format and
+     the path checks.
 
 Run:  python tools/test_drives_r4_groups.py
 """
@@ -151,6 +156,14 @@ def test_hash_match():
         check(h["complete"] and h["maps"][0]["to_scene"] == 3, "a split file maps to scene 3 of the master")
         check(R.hash_match(M, S)["matched"] == 1 and not R.hash_match(M, S)["complete"],
               "the master is not contained in the split")
+        # the cache-only check of the stage-position gate: a payload that two files share, anywhere
+        x = FakeFile(tmp, "x").add(t[0], 0, 0).add(img(40, 50), 50, 0).done()
+        y = FakeFile(tmp, "y").add(img(40, 50), 0, 0).add(img(40, 50), 60, 9).done()
+        z = FakeFile(tmp, "z").add(img(40, 50), 3, 3).add(t[0], 500, 500).done()
+        check(R.shared_payloads({"x": x, "y": y}) == 0, "two files with no tile in common share no payload")
+        check(R.shared_payloads({"x": x, "y": y, "z": z}) == 1, "one payload at different positions in two files is found")
+        dup = FakeFile(tmp, "dup").add(t[1], 0, 0).add(t[1], 60, 0).done()
+        check(R.shared_payloads({"dup": dup}) == 0, "a payload repeated inside ONE file is not 'shared'")
 
 
 def test_crop_and_stitch():
