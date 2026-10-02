@@ -182,8 +182,11 @@ In rough order:
      - a pseudonymous operator `subject:` block, so the animal DB is never consulted.
    - **Read first:** BACKLOG 🔺 "external collaborator archives are one row per EXAM, not per
      series" and 🔸 "pick ONE archive container"; both decide its shape.
-   - **Sequencing:** ideally after the two 🔺 HIGH (top) items, the human/privacy flag and the DPA
-     reference, so LEONE gets both at ingest. Otherwise LEONE joins DTS24 in their backfill.
+   - **Sequencing (Ryan, 2026-10-02):** copy LEONE **now**, within this effort and while the
+     staged data is still on D:, and don't wait for anything. The two 🔺 HIGH (top) items, the
+     human/privacy flag and the DPA reference, come **later**. They are then **back-filled in
+     place** on LEONE, the `DTS24` acquisitions (both cohorts) and the Charité `XMIC` files.
+     Nothing is deleted, re-ingested or reloaded from source.
 6. **The `.tif`/`.lsm` decision:** raw or export.
 7. **Backlog leftovers this effort produced:**
    - the project-date recompute and its engine fix;

@@ -38,8 +38,8 @@ boolean. Not sure, but it seems worthwhile; open to suggestions."*
   - a backfill: the 75 `DTS24` rows, plus `LEONE` if it is ingested before this lands.
 - It also closes META-12's note that *"the `subject:` block … has no way to say 'this subject is
   human' other than `species: Homo sapiens`"*.
-- **Sequencing:** ideally settle this **before the `LEONE` ingest**, so LEONE gets the flag at
-  ingest time rather than through a backfill.
+- **Backfill, in place, with no re-ingest:** set the flag on the existing human acquisitions, i.e.
+  `DTS24` (both cohorts, 75) and `LEONE`, which is copied first (Ryan, 2026-10-02).
 
 ## 🔺 HIGH (top) — record the data processing agreement (DPA) for every external dataset (2026-10-02)
 
@@ -74,10 +74,10 @@ a DPA reference.** That gives a validator rule: human ⇒ DPA present.
   - the README template (`README_raw.txt`, `ingest/readme.py`);
   - the external-data templates;
   - `validate_registries`.
-- **Backfill:** existing external data is `DTS24` (75, LIONS/HPIC, human) and `XMIC` (338,
-  Charité). It needs a controlled rewrite of each sidecar and README in `/raw/` (the recovery
-  pattern), plus the agreement details for each cohort from Ryan.
-- **Sequencing:** as above, ideally **before the `LEONE` ingest.**
+- **Backfill, in place, with no re-ingest:** `DTS24` (75, LIONS/HPIC, human), `LEONE` (copied
+  first, Ryan 2026-10-02) and `XMIC` (338, Charité). Each needs a controlled rewrite of its sidecar
+  and README in `/raw/` (the recovery pattern), plus the agreement details for each cohort from
+  Ryan.
 
 ## 🔺 HIGH — port gjesus3 RDM production onto Box A (2026-09-04)
 
