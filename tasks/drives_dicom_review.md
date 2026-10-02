@@ -148,6 +148,34 @@ Every unmatched study is missing from production, whatever its date. Among them 
 | **Siblings** (MRI) | `dicom_B04_sibling_dedup` and `dicom_B05_sibling_dedup` (each batch family's own regex, pointed at production study `20220221_092531_jrc220221_m29_1519_1_1`, staged the same flat way): **0 listed, 18/18 skipped "already in registry"**. This proves that this staging gives `original_name` the production shape |
 | B02 / B03 `1519` | configs written; staging waits on the coordinator (it would take my scratch past 50 GB) and on Q1 |
 
+### 7b. Production writes, 2026-10-02 (Ryan's go relayed by the coordinator; write window granted)
+
+**Before writing:** validator baseline 10,314 errors, one class (the `operator` placeholder); registry 25,212 rows. **Every batch:**
+1. a fresh dated backup, `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261002_dicom_<batch>\`, compared with `cmp`;
+2. a re-dry-run, checked equal to its §7a line;
+3. the real run;
+4. verification with `verify_batch.py`: rows == expected; `checksums.json` re-hashed against disk; one project link per DICOM acquisition, proven with `os.path.samefile`; the validator re-run; no row dated 2026; no `(date, original_name)` duplicate.
+
+Added to all MRI configs before the first real run: `link_filename` (the production MRI template). Without it, the link name falls back to `original_name`, `<study>/<exam>`, whose slash would nest folders. It was checked unique within every batch.
+
+| Batch | Rows | Checksums | Links (samefile) | Validator | Result |
+|---|---:|---|---|---|---|
+| B04a `0619` 11.7T | +67 (25,212 → 25,279) | 67/67 PASS | 67/67 | 10,314 / 1 class | ✅ PASS |
+| B04b `0619` 7T | +165 (→ 25,444) | 165/165 PASS | 163/163 (2 no-DICOM: regen worklist) | 10,314 / 1 class | ✅ PASS |
+| B05a `0420` s2.1 | +165 (→ 25,609) | 165/165 PASS | 165/165 | 10,314 / 1 class | ✅ PASS |
+| B05b `0420` s2.2 | +173 (→ 25,782) | 173/173 PASS | 173/173 | 10,314 / 1 class | ✅ PASS |
+| N03 `1319` PET/CT | +8 (→ 25,790) | 8/8 PASS | 8/8 | 10,314 / 1 class | ✅ PASS |
+| **Total** | **+578** (570 MRI + 8 NI) | **578/578** | **576/576** | unchanged | |
+
+- **ACQ-ID ranges:** `ACQ-20200224-MRI-*`, `ACQ-20200303/04-MRI-*`, `ACQ-20210610/30-MRI-*`, `ACQ-20211117/18-MRI-*`, `ACQ-20211220-MRI-*`, and `ACQ-20210514-PET-001…004` / `-CT-001…004`.
+- **Projects:**
+  - `PROJ-0004` (`0619`) +232;
+  - `PROJ-0012` (`0420`) +338;
+  - **`PROJ-0061` = `AE-biomaGUNE-1319` created** (pre-approved), +8.
+- **Subjects:** every row carries its facility id (`<n>-AE-biomaGUNE-0619/0420/1319`).
+- **Model:** `Bruker BioSpec 11.7T` on B04a; `7T` on B04b, B05a and B05b; `Molecubes (PET/SPECT/CT)` on N03.
+- **Not repaired, for the record:** `PROJ-0061`'s `start_date` is 2026-10-02 (creation day) rather than the 2021 acquisition date. The other auto-created projects behave the same way (STATUS: the project-date recompute backlog item).
+
 **Nested `BrEt/OneDrive_1_29-1-2021.zip` (14.2 GB): a byte-identical copy.** Its 4 studies / 67 exams are the same as `BrEt\` (4,269/4,269 common members CRC-32 equal; the only differences are a renamed NIfTI folder and `.DS_Store`). It is the OneDrive download that `BrEt\` was unpacked from, so **nothing new**. Listing: `_analysis\drives-dicom\nested_listings_cardiac_mri.csv`.
 
 ## 8. Questions for Ryan

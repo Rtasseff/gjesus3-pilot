@@ -64,3 +64,8 @@ registry:
   notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol ${discovered.project_code}); recons kept: ${discovered.mri_recon_indices}; historical drives (drive 1 Haizpea_2020-2022.7z, session 2.2), predates the kenia retention horizon"
 
 operator: "NA"
+
+# Project link name: the production MRI template (mri_jrc_animalfirst.yaml). Without it the
+# link falls back to original_name, "<study>/<exam>", whose slash would nest folders.
+# Checked unique within every batch (animal + date + exam).
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
