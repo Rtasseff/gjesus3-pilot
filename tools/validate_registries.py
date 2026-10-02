@@ -34,6 +34,9 @@ WHAT IT CHECKS
 
   retired_acquisitions.csv (the tombstone file; 06_REGISTRIES §2.9) -- only when it exists
     - header EXACTLY equals ingest.retired.RETIRED_FIELDS.
+    - disposition and bytes_fate are known values (ingest.retired.DISPOSITIONS / BYTES_FATES). ERROR.
+    - a `reidentified` id's superseded_by is the same acquisition under another instrument code
+      (same original_name and acquisition_datetime, a different instrument). ERROR.
     - no id is both live (registry_raw) and retired. ERROR -- also the signature of a
       retire run that crashed mid-commit: re-run retire_acquisition.py to finish it.
     - every superseded_by (blank only for an orphan) names a LIVE acquisition. ERROR.
@@ -343,11 +346,12 @@ def check_subjects_registry(registries_dir, issues):
 
 # ---- Retired-acquisition (tombstone) checks (ERROR-level) ----------------
 
-def check_retired(nas_root, registries_dir, live_ids, issues):
+def check_retired(nas_root, registries_dir, live_ids, issues, live_rows=None):
     """ERROR-level checks of registries/retired_acquisitions.csv against the live registry.
 
     A no-op when the file does not exist (nothing has ever been retired), so the
     validator's output on a registry without retirements is unchanged.
+    ``live_rows`` ({acq_id: row}) enables the `reidentified` consistency check.
     """
     path = retired.retired_path(registries_dir)
     if not os.path.exists(path):
@@ -358,6 +362,11 @@ def check_retired(nas_root, registries_dir, live_ids, issues):
         return 0
     tombs = retired.read_retired(path)
     for acq, t in tombs.items():
+        disp = (t.get("disposition") or "").strip()
+        if disp not in retired.DISPOSITIONS:
+            issues.error(f"retired with an unknown disposition {disp!r} (known: {retired.DISPOSITIONS})", acq)
+        if (t.get("bytes_fate") or "").strip() not in retired.BYTES_FATES:
+            issues.error(f"retired with an unknown bytes_fate {t.get('bytes_fate')!r}", acq)
         if acq in live_ids:
             issues.error("is both live (registry_raw.csv) and retired "
                          f"({retired.RETIRED_FILENAME}) -- a retire run stopped mid-commit? "
@@ -366,8 +375,17 @@ def check_retired(nas_root, registries_dir, live_ids, issues):
         if sup and sup not in live_ids:
             issues.error(f"retired, superseded_by {sup}, which is not a live acquisition"
                          + (" (it is retired too)" if sup in tombs else ""), acq)
-        elif not sup and (t.get("disposition") or "").strip() != "orphan":
+        elif not sup and disp != "orphan":
             issues.error(f"retired as {t.get('disposition')!r} with no superseded_by", acq)
+        elif disp == "reidentified" and live_rows is not None and sup in live_rows:
+            # A re-identified id's superseded_by is the SAME acquisition under another instrument code.
+            old = retired.original_row(t, registry.REGISTRY_FIELDS)
+            new = live_rows[sup]
+            if old and (old.get("original_name") != new.get("original_name")
+                        or old.get("acquisition_datetime") != new.get("acquisition_datetime")
+                        or old.get("instrument") == new.get("instrument")):
+                issues.error(f"re-identified as {sup}, but {sup} is not this acquisition under another "
+                             f"instrument code (original_name / acquisition_datetime / instrument)", acq)
         old = (t.get("original_canonical_path") or "").strip()
         if old.startswith("/raw/") and os.path.isdir(_acq_folder_on_disk(nas_root, old)):
             issues.error(f"retired, but its /raw/ folder still exists ({old}) -- a retire run "
@@ -546,7 +564,8 @@ def validate(nas_root, check_enrich=True):
     check_subjects_registry(registries_dir, issues)
 
     # 12. the tombstone file (ERROR) -- only when it exists.
-    check_retired(nas_root, registries_dir, set(seen_acq), issues)
+    check_retired(nas_root, registries_dir, set(seen_acq), issues,
+                  live_rows={(r.get("acq_id") or "").strip(): r for r in rows})
 
     return issues, len(rows)
 
