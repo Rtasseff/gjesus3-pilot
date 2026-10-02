@@ -333,6 +333,10 @@ def cmd_plan(args):
     # stream B's imaging roots (drives-dicom/imaging_roots.csv), in place of the directory rule
     roots = load_imaging_roots(args.roots)
     say(f"imaging roots: {sum(len(v) for v in roots.values())} from {args.roots}")
+    mapping = load_mapping(args.mapping) if args.mapping else {}
+    mapping_used = collections.Counter()
+    if args.mapping:
+        say(f"2b mapping: {len(mapping)} groups mapped in {args.mapping}")
     fromb = {}  # stream B's non-raw list: (drive, archive or '-', path) -> project ('' = none)
     if os.path.exists(args.from_b):
         for r in it(args.from_b):
@@ -350,6 +354,13 @@ def cmd_plan(args):
 
     def add(base, rec):
         dec, reason, proj = decide(rec, {"projects": projects})
+        if dec == "holding" and mapping and base["class"] != "lsm":  # 2b: Ryan's group -> project
+            d, who, series, _kind = manifest_group(base)
+            nk = norm_key(key_string(d, who, series))
+            if nk in mapping:
+                mapping_used[nk] += 1
+                dec, reason, proj = _project_decision(mapping[nk], {"projects": projects},
+                                                      f"2b mapping ({who} | {series})")
         r = dict(base)
         r.update(decision=dec, reason=reason)
         if proj:
@@ -467,10 +478,17 @@ def cmd_plan(args):
 
     for i, r in enumerate(rows, 1):
         r["row"] = i
+    if mapping:
+        unused = [k for k in mapping if not mapping_used[k]]
+        say(f"2b mapping: {sum(mapping_used.values())} non-raw files re-decided from {len(mapping) - len(unused)} "
+            f"groups; {len(unused)} mapped groups matched no holding file (raw-only groups, or a stale key):")
+        for k in unused:
+            say(f"    unmatched: {k} -> {mapping[k]}")
     annotate_duplicates(rows, say)
     check_nas(rows, args.nas, projects, say)
     wcsv(os.path.join(out, "placement_manifest.csv"), MANIFEST_FIELDS, rows)
-    write_summaries(rows, out, args.repo, say, leone)
+    base_plan = not args.mapping and os.path.normcase(os.path.abspath(out)) == os.path.normcase(OUT_DEFAULT)
+    write_summaries(rows, out, args.repo if base_plan else None, say, leone)
     with io.open(os.path.join(out, "plan.log"), "a", encoding="utf-8") as f:
         f.write("\n".join(log) + "\n\n")
 
@@ -567,8 +585,9 @@ def write_summaries(rows, out, repo, say, leone):
                      "by_class": "; ".join(f"{k}:{v[0]}" for k, v in sorted(classes.items()))})
     wcsv(os.path.join(out, "per_project_summary.csv"),
          ["project_name", "project_id", "project_status", "decision", "files", "bytes", "gb", "by_class"], prow)
-    wcsv(os.path.join(repo, "tasks", "drives_nonraw_placement_per_project.csv"),
-         ["project_name", "project_id", "project_status", "decision", "files", "bytes", "gb", "by_class"], prow)
+    if repo:  # the committed record: only the base plan (default --out, no --mapping) writes it
+        wcsv(os.path.join(repo, "tasks", "drives_nonraw_placement_per_project.csv"),
+             ["project_name", "project_id", "project_status", "decision", "files", "bytes", "gb", "by_class"], prow)
     say("\nPER PROJECT (place / closed-project)")
     for p in prow:
         say(f"  {p['project_id']:9s} {p['project_name']:28s} {p['project_status']:12s} {p['decision']:14s} {p['files']:6d} {p['gb']:>8s} GB")
@@ -1014,14 +1033,97 @@ def series_of(relpath, researcher):
     return "\\".join(parts[:2]) if len(parts) > 2 else parts[0] if len(parts) > 1 else "(drive root)"
 
 
-WORKSHEET_FIELDS = ["group", "drive", "researcher", "series", "kind", "nonraw_files", "nonraw_gb",
-                    "raw_acqs_blank_project", "date_min", "date_max", "example_1", "example_2",
-                    "example_3", "acq_ids", "project", "note_for_ryan"]
+# `project` + `note_for_ryan` first (what Ryan types); `group_key` last (the machine join key --
+# never edit it). G-numbers are display order only.
+WORKSHEET_FIELDS = ["group", "priority", "project", "note_for_ryan", "drive", "researcher", "series", "kind",
+                    "nonraw_files", "nonraw_gb", "raw_acqs_blank_project", "date_min", "date_max",
+                    "example_1", "example_2", "example_3", "acq_ids", "group_key"]
+
+
+def group_key(drive, researcher, relpath, verdict, claim_id, member=""):
+    """THE 2b group of a file or a blank-project acquisition -> (drive, researcher, series, kind).
+
+    One definition, used by `worksheet` (to build the rows Ryan maps) and by `plan --mapping` /
+    `apply-raw` (to apply them), so a mapped group is exactly the set of files it was shown with.
+    `member` is the archive member path (outer member for nested archives) or "" for a loose file.
+      (C) claim                  -> one group per claim id
+      member of a DRIVE-ROOT archive -> the archive + "!" + the member's first two folders below
+                                    the archive's own repeated top folder (these archives are
+                                    whole libraries: Drive zuri, Maria Jesus/Irati, Haizpea)
+      anything else (a loose file, or a member of an archive inside a researcher's folder)
+                                 -> project_claims.py's (researcher, series) rule on the path, so
+                                    an archive groups with the loose files around it"""
+    if verdict == "C":
+        return drive, researcher, f"(C) {claim_id}", "(C) claim"
+    if member and "\\" not in relpath:
+        stem = os.path.splitext(relpath)[0]
+        folders = member.replace("\\", "/").split("/")[:-1]
+        if folders and folders[0] == stem:
+            folders = folders[1:]
+        return drive, researcher, relpath + "!" + ("/".join(folders[:2]) or "(top level)"), "no claim"
+    return drive, researcher, series_of(relpath, researcher), "no claim"
+
+
+def key_string(drive, researcher, series):
+    """The stable join key written into the worksheet (`group_key` column). G-numbers are only a
+    display order and change when the worksheet is regenerated; never join on them."""
+    return f"{drive}|{researcher}|{series}"
+
+
+def manifest_group(r):
+    return group_key(r["drive"], r["researcher"], r["relpath"], r["verdict"], r["claim_id"],
+                     r["member"].split(NESTED_SEP)[0] if r["archive"] else "")
+
+
+def blank_list_group(a):
+    verdict = a["verdict"] if a["verdict"] == "C" else ""
+    return group_key(a["drive"], a["researcher"], a["archive"] or a["relpath"], verdict, a["claim_id"],
+                     a["member"] if a["archive"] else "")
+
+
+def norm_key(key):
+    """Accent- and case-blind form of a group key: Excel may re-save the worksheet in ANSI and lose
+    the `ñ` of `Zuriñe`, so the join compares with every non-ASCII character as `?`."""
+    return re.sub(r"[^\x00-\x7f]", "?", key or "").strip().lower()
+
+
+def read_worksheet(path):
+    """Read the worksheet as Ryan saved it. Tolerates what Excel does to a CSV on a Spanish-locale
+    machine: `;` instead of `,`, ANSI (cp1252) instead of UTF-8, a BOM or not."""
+    raw = open(path, "rb").read()
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    first = text.splitlines()[0] if text else ""
+    delim = ";" if first.count(";") > first.count(",") else ","
+    return list(csv.DictReader(io.StringIO(text), delimiter=delim))
+
+
+def load_mapping(path):
+    """A filled-in worksheet -> {norm_key(group_key): project name} (rows with `project` filled)."""
+    out = {}
+    for r in read_worksheet(path):
+        p = (r.get("project") or "").strip()
+        if p:
+            if not r.get("group_key"):
+                raise SystemExit(f"worksheet row {r.get('group')} has a project but no group_key: "
+                                 f"the column was deleted or edited -- restore it from git")
+            out[norm_key(r["group_key"])] = p
+    return out
 
 
 def cmd_worksheet(args):
     """2b: one row per no-claim group (noclaim_groups.csv) plus one per (C)-claim group, with the
-    holding-bound non-raw files and the blank-project raw acquisitions it would map."""
+    holding-bound non-raw files and the blank-project raw acquisitions it would map. Refuses to
+    overwrite a worksheet in which any `project` cell is already filled (that is Ryan's work)."""
+    path = os.path.join(args.repo, "tasks", "drives_nonraw_mapping_worksheet.csv")
+    if os.path.exists(path) and load_mapping(path) and not args.force:
+        print(f"REFUSED: {path} already has {len(load_mapping(path))} mapped groups (Ryan's answers). "
+              f"Copy it aside first, or pass --force if you really mean to discard them.")
+        return 2
     rows = load_manifest(args.manifest)
     groups = {}
     for g in it(os.path.join(ANALYSIS, "codes", "noclaim_groups.csv")):
@@ -1030,33 +1132,22 @@ def cmd_worksheet(args):
             "drive": d, "researcher": g["researcher"], "series": g["series"], "kind": "no claim",
             "files": [], "bytes": 0, "acqs": [], "dates": [g["date_min"], g["date_max"]]}
 
-    def grp(drive, researcher, relpath, verdict, claim_id, member=""):
-        if verdict == "C":
-            key = (drive, researcher, f"(C) {claim_id}")
-            kind = "(C) claim"
-        elif member:  # an archive member: the archive plus the member's first two folders
-            folders = member.replace("\\", "/").split("/")[:-1][:2]
-            key = (drive, researcher, relpath + ("!" + "/".join(folders) if folders else ""))
-            kind = "no claim"
-        else:
-            key = (drive, researcher, series_of(relpath, researcher))
-            kind = "no claim"
+    def grp(gk):
+        drive, researcher, series, kind = gk
+        key = (drive, researcher, series)
         if key not in groups:
-            groups[key] = {"drive": drive, "researcher": researcher, "series": key[2], "kind": kind,
+            groups[key] = {"drive": drive, "researcher": researcher, "series": series, "kind": kind,
                            "files": [], "bytes": 0, "acqs": [], "dates": []}
         return groups[key]
 
     for r in rows:
         if r["decision"] != "holding" or r["class"] == "lsm":  # .lsm: holding by decision, not mapped
             continue
-        g = grp(r["drive"], r["researcher"], r["relpath"], r["verdict"], r["claim_id"],
-                r["member"].split(NESTED_SEP)[0] if r["archive"] else "")
+        g = grp(manifest_group(r))
         g["files"].append(r["member"] or r["relpath"])
         g["bytes"] += int(r["size"])
     for a in it(os.path.join(args.repo, "tasks", "drives_blank_project_list.csv")):
-        rel = a["archive"] or a["relpath"]
-        verdict = a["verdict"] if a["verdict"] == "C" else ""
-        g = grp(a["drive"], a["researcher"], rel, verdict, a["claim_id"], a["member"] if a["archive"] else "")
+        g = grp(blank_list_group(a))
         g["acqs"].append(a["acq_id"])
         g["dates"].append(a["acquisition_date"])
     out = []
@@ -1065,7 +1156,8 @@ def cmd_worksheet(args):
             continue
         ex = sorted(set(os.path.basename(f.replace("/", "\\")) for f in g["files"]))[:3]
         dates = sorted(x for x in g["dates"] if x)
-        out.append({"drive": DRIVES[d][0], "researcher": who, "series": series, "kind": g["kind"],
+        out.append({"group_key": key_string(d, who, series),
+                    "drive": DRIVES[d][0], "researcher": who, "series": series, "kind": g["kind"],
                     "nonraw_files": len(g["files"]), "nonraw_gb": gb(g["bytes"]),
                     "raw_acqs_blank_project": len(g["acqs"]),
                     "date_min": dates[0] if dates else "", "date_max": dates[-1] if dates else "",
@@ -1077,12 +1169,96 @@ def cmd_worksheet(args):
     out.sort(key=lambda x: (-x["_bytes"], -x["raw_acqs_blank_project"]))
     for i, x in enumerate(out, 1):
         x["group"] = f"G{i:03d}"
-    path = os.path.join(args.repo, "tasks", "drives_nonraw_mapping_worksheet.csv")
-    wcsv(path, WORKSHEET_FIELDS, out)
+        # A = worth Ryan's time (>= 1 GB of non-raw, or >= 20 blank-project acquisitions); B = the long
+        # tail, which may simply stay blank (-> holding folder)
+        x["priority"] = "A" if x["_bytes"] >= 1e9 or x["raw_acqs_blank_project"] >= 20 else "B"
+    # UTF-8 WITH a BOM: Excel then opens the accents correctly (a researcher folder is `Zuriñe`).
+    with io.open(path, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=WORKSHEET_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(out)
     print(f"worksheet: {len(out)} groups -> {path}")
     print(f"  non-raw files {sum(x['nonraw_files'] for x in out)}, "
           f"{gb(sum(x['_bytes'] for x in out))} GB; blank raw acqs {sum(x['raw_acqs_blank_project'] for x in out)}")
     return 0
+
+
+def link_names_for(rows, raw_linked_dir, taken=None):
+    """acq_id -> a link name unique in this project's raw_linked\\ -- the SAME rule the drives ingest
+    used (ingest_plan.py, "link names: unique per project"): `<INSTR>_<name>`, then
+    `<INSTR>_<stem>_<YYYYMMDD><ext>`, then `<INSTR>_<stem>_<ACQ-ID><ext>` (always unique). Without it
+    raw_linked\\ (flat) collides on the many same-named files (`10x-1.czi`) -- the 2026-10-02 trial
+    hit 404 collisions in two projects."""
+    if taken is None:
+        taken = {n.lower() for n in os.listdir(lp(raw_linked_dir))} if os.path.isdir(lp(raw_linked_dir)) else set()
+    out = {}
+    for r in sorted(rows, key=lambda r: (r.get("original_name") or "", r["acq_id"])):
+        base = (r.get("original_name") or "").replace("\\", "/").split("/")[-1] or r["acq_id"]
+        stem, ext = os.path.splitext(base)
+        inst = r.get("instrument") or "RAW"
+        day = (r.get("acquisition_datetime") or "")[:10].replace("-", "")
+        for cand in (f"{inst}_{base}", f"{inst}_{stem}_{day}{ext}", f"{inst}_{stem}_{r['acq_id']}{ext}"):
+            if cand.lower() not in taken:
+                break
+        taken.add(cand.lower())
+        out[r["acq_id"]] = cand
+    return out
+
+
+def cmd_apply_raw(args):
+    """2b, the RAW half: put each mapped group's blank-project acquisitions into Ryan's project.
+
+    Reuses tools/manager/raw_import.py -- the Project Manager's "import from raw" engine -- so each
+    acquisition gets exactly what ingest would have given it: a hard link in raw_linked/, a
+    provenance row, and registry_raw.project_id set ONLY where it is still blank
+    (set_project_id_if_blank). Nothing in /raw/ moves. Dry run (raw_import.plan) unless --execute;
+    the plan per project is written to <out>\\apply_raw_<project>.csv either way. A project that does
+    not exist or is closed is refused, never created or reopened here."""
+    from manager import raw_import
+    mapping = load_mapping(args.mapping)
+    projects = load_projects(args.nas)
+    reg = {r["acq_id"]: r for r in rd(os.path.join(args.nas, "registries", "registry_raw.csv"))}
+    by_proj = collections.defaultdict(list)
+    used = set()
+    for a in it(os.path.join(args.repo, "tasks", "drives_blank_project_list.csv")):
+        d, who, series, _kind = blank_list_group(a)
+        nk = norm_key(key_string(d, who, series))
+        if nk in mapping:
+            by_proj[mapping[nk]].append(a["acq_id"])
+            used.add(nk)
+    print(f"{'EXECUTE' if args.execute else 'DRY RUN'}: {len(mapping)} mapped groups, {len(used)} with blank-project "
+          f"acquisitions, {sum(len(v) for v in by_proj.values())} acquisitions into {len(by_proj)} projects")
+    bad = 0
+    for proj, ids in sorted(by_proj.items()):
+        prow = projects.get(proj)
+        if prow is None:
+            print(f"  REFUSED {proj}: not in registry_projects.csv -- create it first (create_project.py)")
+            bad += 1
+            continue
+        if (prow.get("status") or "").strip().lower() == "closed":
+            print(f"  REFUSED {proj}: closed -- reopening is Ryan's call (reopen_project.py)")
+            bad += 1
+            continue
+        rows = [reg[i] for i in ids if i in reg]
+        missing = [i for i in ids if i not in reg]
+        proj_dir = os.path.join(args.nas, "projects", project_folder(proj, projects))
+        names = link_names_for(rows, os.path.join(proj_dir, "raw_linked"))
+        pl = raw_import.plan(args.nas, prow, rows, link_names=names)
+        wcsv(os.path.join(args.out, f"apply_raw_{proj}.csv"),
+             ["acq_id", "status", "link_name", "raw_primary", "note", "existing_projects"],
+             [dict(p, existing_projects=";".join(p["existing_projects"])) for p in pl])
+        st = collections.Counter(p["status"] for p in pl)
+        print(f"  {proj:28s} {len(ids):5d} acqs  {dict(st)}" + (f"  NOT IN REGISTRY: {len(missing)}" if missing else ""))
+        if st.get(raw_import.ST_COLLISION) or st.get(raw_import.ST_NO_RAW) or missing:
+            print(f"    -> resolve the collisions / missing rows in apply_raw_{proj}.csv before --execute")
+            bad += 1
+            continue
+        if args.execute:
+            todo = [reg[p["acq_id"]] for p in pl if p["status"] == raw_import.ST_NEW]
+            res = raw_import.import_acquisitions(args.nas, prow, todo, args.by, link_names=names,
+                                                 tool_name="nonraw_placement.py apply-raw")
+            print(f"    {raw_import.summary_sentence(res)}")
+    return 1 if bad else 0
 
 
 # -------------------------------------------------------------------------------------- dotfile
@@ -1166,12 +1342,20 @@ def main(argv=None):
     sp.add_argument("--from-b", default=os.path.join(ANALYSIS, "drives-dicom", "nonraw_for_A.csv"))
     sp.add_argument("--nested", default=os.path.join(OUT_DEFAULT, "nested_members.csv"))
     sp.add_argument("--nested-dedup", default=os.path.join(OUT_DEFAULT, "nested_czi_dedup.csv"))
+    sp.add_argument("--mapping", default=None,
+                    help="2b: Ryan's filled-in worksheet; holding files of a mapped group are placed")
     sub.add_parser("dotfile-farm")
     sub.add_parser("nested").add_argument("--scratch", default=SCRATCH_DEFAULT)
     nf = sub.add_parser("nested-farm")
     nf.add_argument("--scratch", default=SCRATCH_DEFAULT)
     nf.add_argument("--dedup", default=os.path.join(OUT_DEFAULT, "nested_czi_dedup.csv"))
-    sub.add_parser("worksheet").add_argument("--manifest", default=None)
+    ws = sub.add_parser("worksheet")
+    ws.add_argument("--manifest", default=None)
+    ws.add_argument("--force", action="store_true", help="overwrite a worksheet that has mapped groups")
+    ar = sub.add_parser("apply-raw")
+    ar.add_argument("--mapping", required=True, help="Ryan's filled-in worksheet")
+    ar.add_argument("--execute", action="store_true")
+    ar.add_argument("--by", default=f"Data Office ({getpass.getuser()})")
     for name in ("copy", "verify", "holding"):
         s = sub.add_parser(name)
         s.add_argument("--manifest", default=None)
@@ -1185,7 +1369,7 @@ def main(argv=None):
     if getattr(args, "manifest", None) is None:
         args.manifest = os.path.join(args.out, "placement_manifest.csv")
     os.makedirs(args.out, exist_ok=True)
-    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "nested-farm": cmd_nested_farm, "worksheet": cmd_worksheet, "copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
+    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "nested-farm": cmd_nested_farm, "worksheet": cmd_worksheet, "apply-raw": cmd_apply_raw, "copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
 
 
 if __name__ == "__main__":

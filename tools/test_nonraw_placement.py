@@ -150,6 +150,58 @@ def test_roots():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_worksheet_roundtrip():
+    print("2b worksheet round trip (Excel on a Spanish-locale machine)")
+    g = N.group_key("D1", "Zuriñe", "Former students\\Zuriñe\\0 IMAGEN CONFOCAL\\a\\b.tif", "", "")
+    check(g[:3] == ("D1", "Zuriñe", "0 IMAGEN CONFOCAL"), f"loose group {g}")
+    g = N.group_key("D1", "zuri", "Drive zuri 170823.zip", "", "", "Drive zuri 170823/PAPERS/x/y.pdf")
+    check(g[2] == "Drive zuri 170823.zip!PAPERS/x", f"drive-root archive: first two folders below its top {g[2]}")
+    g = N.group_key("D1", "Zuriñe", r"Former students\Zuriñe\0 IMAGEN CONFOCAL\CDH5\F.zip", "", "", "ki67/C PBS/a.tif")
+    check(g[2] == "0 IMAGEN CONFOCAL", f"archive inside a researcher folder joins that folder's group {g[2]}")
+    check(N.group_key("D1", "X", "a\\b.tif", "C", "CL-0473")[2] == "(C) CL-0473", "(C) group = claim id")
+    key = N.key_string("D1", "Zuriñe", "0 IMAGEN CONFOCAL")
+    tmp = tempfile.mkdtemp(prefix="nonraw_ws_")
+    try:
+        # what Excel (es-ES) writes on "Save as CSV": `;` separators, cp1252, no BOM
+        p = os.path.join(tmp, "ws_excel.csv")
+        with open(p, "wb") as f:
+            f.write(("group;project;note_for_ryan;group_key\r\n"
+                     f"G001;AE-biomaGUNE-1123;ok;{key}\r\n"
+                     "G002;;;D1|Laura|Cell observer\r\n").encode("cp1252"))
+        m = N.load_mapping(p)
+        check(m == {N.norm_key(key): "AE-biomaGUNE-1123"}, f"; + cp1252 read, blank project skipped: {m}")
+        # the same, saved as "CSV UTF-8" with commas and a BOM
+        p2 = os.path.join(tmp, "ws_utf8.csv")
+        with open(p2, "w", encoding="utf-8-sig", newline="") as f:
+            f.write(f"group,project,group_key\r\nG001,AE-biomaGUNE-1123,{key}\r\n")
+        check(N.load_mapping(p2) == m, "UTF-8 + BOM read gives the same mapping")
+        # an accent lost on the way still joins
+        check(N.norm_key("D1|Zuri?e|0 IMAGEN CONFOCAL") == N.norm_key(key), "lost ñ still joins")
+        # a deleted group_key column must stop the run, not silently map nothing
+        p3 = os.path.join(tmp, "ws_bad.csv")
+        with open(p3, "w", encoding="utf-8", newline="") as f:
+            f.write("group,project\r\nG001,AE-biomaGUNE-1123\r\n")
+        try:
+            N.load_mapping(p3)
+            check(False, "a mapped row without group_key must stop")
+        except SystemExit:
+            check(True, "a mapped row without group_key stops the run")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_link_names():
+    print("2b raw links: unique names in a flat raw_linked\\ (the ingest's rule)")
+    rows = [{"acq_id": "ACQ-1", "instrument": "CELL", "original_name": "d1/a/10x-1.czi", "acquisition_datetime": "2023-05-03T10:00"},
+            {"acq_id": "ACQ-2", "instrument": "CELL", "original_name": "d1/b/10x-1.czi", "acquisition_datetime": "2023-05-04T10:00"},
+            {"acq_id": "ACQ-3", "instrument": "CELL", "original_name": "d1/c/10x-1.czi", "acquisition_datetime": "2023-05-04T11:00"}]
+    n = N.link_names_for(rows, "/nonexistent", taken={"cell_10x-1.czi"})
+    check(n["ACQ-1"] == "CELL_10x-1_20230503.czi", f"existing name taken -> date suffix {n['ACQ-1']}")
+    check(n["ACQ-2"] == "CELL_10x-1_20230504.czi", f"next one gets its own date {n['ACQ-2']}")
+    check(n["ACQ-3"] == "CELL_10x-1_ACQ-3.czi", f"same name, same day -> ACQ-ID suffix {n['ACQ-3']}")
+    check(len(set(v.lower() for v in n.values())) == 3, "all unique")
+
+
 def _sha(b):
     return hashlib.sha256(b).hexdigest()
 
@@ -221,6 +273,8 @@ if __name__ == "__main__":
     test_layout()
     test_decide()
     test_roots()
+    test_worksheet_roundtrip()
+    test_link_names()
     test_copy()
     print(f"\n{'FAILED: ' + str(len(FAILS)) if FAILS else 'all passed'}")
     sys.exit(1 if FAILS else 0)
