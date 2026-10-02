@@ -176,6 +176,18 @@ Added to all MRI configs before the first real run: `link_filename` (the product
 - **Model:** `Bruker BioSpec 11.7T` on B04a; `7T` on B04b, B05a and B05b; `Molecubes (PET/SPECT/CT)` on N03.
 - **Not repaired, for the record:** `PROJ-0061`'s `start_date` is 2026-10-02 (creation day) rather than the 2021 acquisition date. The other auto-created projects behave the same way (STATUS: the project-date recompute backlog item).
 
+### 7c. One-off X1: three real exams the ParaVision path cannot take (dry run only)
+
+**What they are:** `0619` `m27/4` and `m31/4` (B04b), and `1519` `m14/8` (B03). Their only copy has no `acqp`, and `_is_paravision_exam` requires `acqp` + `method`. **Decided (coordinator, 2026-10-02):** bring them in through a scoped one-off, with no detector change.
+
+**Config:** `dicom_X1_oneoff_acqpless.yaml` uses the engine's generic DICOM copy, which stores them under `<ACQ-ID>/series/` with a `dicom` header sidecar block.
+
+| Batch | Dry-run result |
+|---|---|
+| **X1** one-off | **3 / 3 / 0** · `ACQ-20200304-MRI-068`, `-069` (after B04b's 67), `ACQ-20200923-MRI-001` · files 3 / 3 / 30 (m14/8 = recons 1 + 3, staged as `recon<idx>_<name>` so the two reconstructions' shared basenames cannot collide) · `0619` ×2 (`PROJ-0004`), `1519` ×1 (**closed until reopened**) · `Bruker BioSpec 7T` · datetimes: `VisuCreationDate` ×2, DICOM `SeriesDate`+`SeriesTime` ×1 |
+
+⚠️ **The shape differs from every other internal-MRI row** (`series/` vs `.data/`; a `dicom` sidecar block, not `mri`). It is the price of no code change. The alternative is a small, reviewed change that lets the ParaVision path accept a `method`-only exam.
+
 **Nested `BrEt/OneDrive_1_29-1-2021.zip` (14.2 GB): a byte-identical copy.** Its 4 studies / 67 exams are the same as `BrEt\` (4,269/4,269 common members CRC-32 equal; the only differences are a renamed NIfTI folder and `.DS_Store`). It is the OneDrive download that `BrEt\` was unpacked from, so **nothing new**. Listing: `_analysis\drives-dicom\nested_listings_cardiac_mri.csv`.
 
 ## 8. Questions for Ryan
