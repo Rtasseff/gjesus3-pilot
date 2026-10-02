@@ -15,6 +15,70 @@ When a backlog item becomes a blocker for delivery, promote it to `STATUS.md`.
 
 ---
 
+## 🔺 HIGH (top) — a registry flag for human, privacy-restricted data (2026-10-02)
+
+**Raised by Ryan, 2026-10-02, at the highest priority; to discuss before building.** Human data is
+in the system (DTS24, 75 acquisitions), and more is coming (`LEONE`, from the historical drives).
+There is a species column (`sample_organism` = `Homo sapiens`), but, in Ryan's words, *"since
+there is such a concern about privacy on human data it may be worth its own column, maybe it's
+actually called privacy or something indicating that additional privacy is required, and it's a
+boolean. Not sure, but it seems worthwhile; open to suggestions."*
+
+**The coordinator's suggestions, for the discussion:**
+
+| Option | Column | What it says | Notes |
+|---|---|---|---|
+| 1 | `human_subject` (Y/N) | a **fact** | Derivable from `sample_organism`, but explicit and easy to filter. |
+| 2 | `privacy_restricted` (Y/N) | a **handling flag**: extra privacy care required | What tools act on (export, sharing, Finder display). It covers human data now, and anything else needing care later. The validator would enforce "`Homo sapiens` ⇒ Y". **The coordinator leans this way.** |
+
+- **Touchpoints:**
+  - `06_REGISTRIES` and `REGISTRY_FIELDS`, through `tools/migrate_registry_columns.py`;
+  - the readers of `registry_raw.csv`, already listed in `tasks/retire_acquisition_review.md` §5;
+  - a Finder filter, a validator rule, and the external-data templates and configs;
+  - a backfill: the 75 `DTS24` rows, plus `LEONE` if it is ingested before this lands.
+- It also closes META-12's note that *"the `subject:` block … has no way to say 'this subject is
+  human' other than `species: Homo sapiens`"*.
+- **Sequencing:** ideally settle this **before the `LEONE` ingest**, so LEONE gets the flag at
+  ingest time rather than through a backfill.
+
+## 🔺 HIGH (top) — record the data processing agreement (DPA) for every external dataset (2026-10-02)
+
+**Raised by Ryan, 2026-10-02, at the highest priority; to discuss before building.** External data
+should say which **data processing agreement** covers it. Acceptable forms:
+
+- **a reference to a specific document on record** (a number or ID);
+- **a comment describing the arrangement**;
+- **a contact who holds the information**.
+
+**Where, per Ryan:**
+
+- **Not in the registry.**
+- **A metadata field** (in the `metadata.json` sidecar), **applied conditionally to external data**
+  (`data_source` = `collaborator:*` / external).
+- **Also written into the acquisition's `README.txt` in `/raw/`.**
+
+It is useful for every external dataset, and it fits human studies especially well:
+**biomaGUNE collects no human data of its own, so every human acquisition is external and can carry
+a DPA reference.** That gives a validator rule: human ⇒ DPA present.
+
+**Suggested shape, for the discussion:**
+
+- A sidecar block, e.g. `data_agreement: {reference, description, contact}`, set per batch in the
+  ingest config (like `user_provided_metadata`).
+- The ingest **WARNs, or refuses (to decide)**, when `data_source` is external and the block is
+  missing.
+- `README.txt` gains a "Data agreement" section.
+- **Touchpoints:**
+  - `08_METADATA`, which is an integrity mirror with `ingest/metadata_sidecar.py`;
+  - `10_TOOLS` (config);
+  - the README template (`README_raw.txt`, `ingest/readme.py`);
+  - the external-data templates;
+  - `validate_registries`.
+- **Backfill:** existing external data is `DTS24` (75, LIONS/HPIC, human) and `XMIC` (338,
+  Charité). It needs a controlled rewrite of each sidecar and README in `/raw/` (the recovery
+  pattern), plus the agreement details for each cohort from Ryan.
+- **Sequencing:** as above, ideally **before the `LEONE` ingest.**
+
 ## 🔺 HIGH — port gjesus3 RDM production onto Box A (2026-09-04)
 
 **The plan is written and awaiting review:
@@ -614,6 +678,13 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   (`facility_animal_id`, `strain`, `cohort_id`) should gain a human-appropriate
   alias. Also note the `subject:` block schema currently has no way to say
   "this subject is human" other than `species: Homo sapiens`.
+  - **2026-10-02, Ryan: the legal basis (c) is settled.** Storing collaborator human data at
+    biomaGUNE is **approved under the collaboration agreements with the people who collected it**,
+    and **the institute has no additional policies.** Human data is therefore stored, starting with
+    `LEONE` from the historical drives. The follow-ups are the two 🔺 HIGH items at the top of this
+    file: a human/privacy-restricted registry flag, and a DPA reference on every external dataset.
+    (a), (b) and (d) are not re-decided here; with no additional institute policy, today's practice
+    stands.
 
 ## 🔸 MEDIUM — reconsider a `status` column for retired acquisitions, instead of the tombstone file (2026-10-01)
 

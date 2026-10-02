@@ -133,10 +133,10 @@ OneDrive marks the directories read-only.
   - The lab knows gjesus3 has no off-site backup yet (INFRA-06; Ryan is working on it). gjesus3 is
     already an improvement on two SSDs.
   - **Until erased, it feeds the work still to come** (Step 5): the non-raw placement, the DICOM
-    stream and the `.tif`/`.lsm` decision read their sources from it. **There is no rush** (Ryan,
-    2026-10-02): holding D: for a day, or even a week, is fine. A stream that would hold it much
-    longer, such as `LEONE.zip` waiting on the META-12 policy, should re-stage what it needs from
-    the owners' drives later, rather than keep D: occupied.
+    stream, `LEONE` and the `.tif`/`.lsm` decision read their sources from it. **There is no
+    rush** (Ryan, 2026-10-02): holding D: for a day, or even a week, is fine. A stream that would
+    hold it much longer should re-stage what it needs from the owners' drives later, rather than
+    keep D: occupied.
 
 ## Step 5: the remaining work, each its own worktree and fresh session later
 
@@ -166,7 +166,24 @@ In rough order:
      production first;
    - the loose `.dcm`/`.nii` files;
    - pre-2022 internal MRI that exists only here.
-5. **`LEONE.zip`:** human clinical data. The META-12 privacy policy comes first.
+5. **`LEONE.zip` → a new project `LEONE` (Ryan, 2026-10-02: in scope, and approved).**
+   - **The data:** human clinical cardiac MRI. 82 GB zipped, 141 GB uncompressed, 671,410 DICOM
+     members; 17 case folders (`LEONE1.01`, `LEONE 1.13`, `LEONE 304`, `CNIC`, `ExportLeone`,
+     nested `Leone-*.zip`).
+   - **Approval:** storage at biomaGUNE is covered by the collaboration agreements with the people
+     who collected it, and the institute has no additional policies (BACKLOG META-12).
+   - **Before ingesting, compare against `DTS24` (`PROJ-0054`):** it already holds the LIONS cohort
+     as 42 cases, stored as **zip primaries**, so the comparison has to be member by member.
+     LEONE looks like a related working set, not a clean duplicate.
+   - **Follow `DTS24`'s pattern:**
+     - instrument `XMRI`;
+     - a `collaborator:` `data_source`;
+     - the 08_METADATA §4.10 privacy allow-list: no date of birth in sidecars;
+     - a pseudonymous operator `subject:` block, so the animal DB is never consulted.
+   - **Read first:** BACKLOG 🔺 "external collaborator archives are one row per EXAM, not per
+     series" and 🔸 "pick ONE archive container"; both decide its shape.
+   - **Sequencing:** ideally after the two 🔺 HIGH (top) items, the human/privacy flag and the DPA
+     reference, so LEONE gets both at ingest. Otherwise LEONE joins DTS24 in their backfill.
 6. **The `.tif`/`.lsm` decision:** raw or export.
 7. **Backlog leftovers this effort produced:**
    - the project-date recompute and its engine fix;
