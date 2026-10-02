@@ -100,6 +100,32 @@ BACKLOG current.
      not in production. That is a gnuclear question, **not a drives ingest.**
    - **Q7:** go for B04 (`0619`, 236 exams), B05 (`0420`, 343) and N03 (`1319` PET/CT, 8, with the
      project created), once their dry runs are clean? **Yes.**
+5. **Stream E's questions** (retire tool v2, built and unmerged on `feat/retire-v2`; review
+   `tasks/retire_v2_review.md` §2.5). The coordinator reviewed it, and 30/30 test suites pass.
+   - **Its finding:** of the 15 rows left to re-code, **only 2 are mis-coded acquisitions**
+     (`ACQ-20240625-LSM9-001/-002` are Cell Observer files). **The other 13 `CELL` rows are ZEN
+     exports of AxioScan scans already coded correctly:** 3 crops of `ZWSI-001…003` (2026-04-22) and
+     10 single-scene splits of the two-scene scans `ZWSI-001…010` (2026-05-07). Each shares its
+     scan's acquisition timestamp.
+   - **E-Q1 (decide first):** retire the 13 as **derivatives** into their own project, `claudia`, at
+     `working\<original folder>`, rather than re-coding them. **Yes.** This is your principle:
+     exports are not acquisitions. It is a same-timestamp retirement, so it needs your go.
+     - The rule the coordinator proposes: a derivative goes to its own registered project if it has
+       one; otherwise, to the original's project.
+   - **E-Q2 to E-Q8 (the design):** accept E's defaults as a package. **Yes.**
+     - Re-identify in place: a hard link to the same file, so nothing is copied and every project
+       link stays valid.
+     - New dispositions `reidentified` and `equivalent`, so that `duplicate` still means
+       byte-identical.
+     - The evidence goes in `reason`, so the schema doesn't change.
+     - Link names are unchanged; only the identity fields change; `bytes_fate` = `moved`; the
+       no-chain rule stays.
+   - **E-Q9:** retire `ACQ-20250915-LSM9-016` as `equivalent` of `-001`. You had said to leave the
+     pair until this mode exists; it now exists. **Yes.**
+   - **The go,** once the questions are answered:
+     - re-identify the 2 `LSM9` rows as `CELL` (their dry run gives `ACQ-20240625-CELL-008/-009`);
+     - the `equivalent` retirement;
+     - the 13 derivative retirements.
 
 **A gap found on 2026-10-02: the catalog never opened nested archives** (archives inside
 archives).
