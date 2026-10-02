@@ -1,0 +1,59 @@
+# Historical drives, DICOM stream (stream B), group B07: phantoms and nanoparticle /
+# collaboration samples on the internal MRI, 2022-10..2023-07 (initials prc / pr / jrc).
+# Review: tasks/drives_dicom_review.md (group B07, Q3). Approved in principle (Ryan via the
+# coordinator, 2026-10-02): ingest with a BLANK project.
+#
+# WHY: post-horizon sessions the 2026-06 kenia pull dropped silently, because their study
+# names carry no animal/protocol (STATUS D3). Source: drive 2 Laura's backup,
+# `Proyectos_Laboratorio_Laura\MRI\Phantom-*` and `Colaboraciones\*` (Catarina-Portugal,
+# Susana MnEquiva, Muestra-Claudia, Muestras Portugal). The `Muestras Portugal\7T` and
+# `Colaboracion-Catarina-Portugal\MRI-NPs` copies of the same sessions are deduplicated per exam.
+#
+# STAGING: HARD LINKS on D: (0 bytes) into a flat
+#     D:/projects/gjesus3/scratch_drives-dicom/stage_B07/<study>/<exam>/
+# Per-exam values from cases_dicom_B07_phantoms_collab_2022_23.csv:
+#   drv_acq_datetime  VisuCreationDate, else acqp ACQ_time (never today)
+#   drv_model         from ACQ_station: `Biospec 70/30` -> 7T, `BIOSPEC 500` -> 11.7T (1 study)
+#   drv_sample_type   `phantom` when the study / subject / folder says phantom, else `material`
+#                     (bare nanoparticle samples). A judgement (06_REGISTRIES §2.4 vocabulary).
+#   drv_subject       the ParaVision SUBJECT_id (sample label), used as sample_id + session_id
+# 8 never-acquired setup exams are excluded (excluded_dicom_B07_*.csv).
+#
+# NO ANIMAL: subject_from_db is off; sample_type phantom/material has no subject block.
+# DICOM: none of these exams has DICOM -> the regen worklist (or Dicomifier in WSL).
+#
+#   python tools/ingest_raw.py --config tools/configs/drives_2026-09/dicom/dicom_B07_phantoms_collab_2022_23.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false
+  acquisition_layout: folder
+  copy_strategy: mri_paravision_v2
+  reconstructions: all
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/scratch_drives-dicom/stage_B07"
+  pattern: "*/[0-9]*"
+  case_table:
+    file:       cases_dicom_B07_phantoms_collab_2022_23.csv
+    key:        original_name
+    on_missing: skip
+  subject_from_db: false
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     discovered.drv_model
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            discovered.drv_subject
+  sample_type:          discovered.drv_sample_type
+  session_id:           discovered.drv_subject
+  acquisition_datetime: discovered.drv_acq_datetime
+  project_name:         ""
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, ${discovered.drv_sample_type} sample ${discovered.drv_subject}; recons kept: ${discovered.mri_recon_indices}; historical drives (drive 2 Laura backup); the kenia pull skipped it (no animal/protocol token)"
+
+operator: "NA"
+
+link_filename: "MRI_${discovered.drv_subject}_${acq_date}_${discovered.mri_exam_number}"
