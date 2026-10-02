@@ -330,8 +330,9 @@ with tempfile.TemporaryDirectory() as tmp:
                   "--reason", "r")
     check(rc == 2 and "superseded_by" in out, "retiring a survivor a tombstone points at -> refused")
 
-    # ---- 6. duplicate whose survivor is already linked in the project; unshared subject removed ----
-    print("6. duplicate retire (survivor already linked; unshared subject + pending row)")
+    # ---- 6. duplicate whose survivor is already linked in the project; unshared subject KEPT ----
+    print("6. duplicate retire (survivor already linked; unshared subject kept; pending row)")
+    subj_bytes = raw_bytes(nas, "registry_subjects.csv")
     rc, out = run(nas, bk, "--acq-id", "ACQ-20260304-ZWSI-024", "--duplicate-of", "ACQ-20260304-ZWSI-002",
                   "--reason", "operator recipe re-ingest", "--execute")
     check(rc == 0, f"execute rc=0 (got {rc})")
@@ -342,10 +343,9 @@ with tempfile.TemporaryDirectory() as tmp:
     subj = subjects_table.read_subjects(subjects_table.subjects_path(reg_dir))
     t = tombs(nas)["ACQ-20260304-ZWSI-024"]
     o = retired.other_rows(t)
-    check("9-AE-biomaGUNE-1123" not in subj and any("9-AE-biomaGUNE-1123" in x for x in
-                                                    o.get("registry_subjects.csv", [])),
-          "subject only the retiree referenced: removed, kept verbatim in the tombstone")
-    check("2-AE-biomaGUNE-1123" in subj, "other subjects untouched")
+    check("9-AE-biomaGUNE-1123" in subj and "registry_subjects.csv" not in o,
+          "subject only the retiree referenced: KEPT (subjects are never deleted, 06 §2.8.3)")
+    check(raw_bytes(nas, "registry_subjects.csv") == subj_bytes, "registry_subjects.csv byte-identical")
     check(o.get(RA.pending.PENDING_FILENAME) and
           not RA.pending.read_pending(os.path.join(reg_dir, RA.pending.PENDING_FILENAME)),
           "pending_subject_metadata row removed, kept verbatim")

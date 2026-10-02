@@ -55,9 +55,9 @@ RETIRED_FIELDS = [
     "backup_dir",        # the off-NAS backup taken before the run
     "registry_raw_row",  # the removed registry_raw.csv record, VERBATIM (no line terminator);
                          #   "" for an orphan (it never had one)
-    "other_rows_removed",  # JSON {file name: [verbatim records]} -- ingest_manifest,
-                           #   pending_* queues, and any registry_subjects row no
-                           #   live acquisition referenced any more
+    "other_rows_removed",  # JSON {file name: [verbatim records]} -- the ingest_manifest
+                           #   and pending_* queue rows. Never a registry_subjects row:
+                           #   subjects are never deleted (06 §2.8.3).
 ]
 
 DISPOSITIONS = ("duplicate", "derivative", "orphan")

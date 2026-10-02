@@ -37,9 +37,10 @@ ORDER (a crash at any point is finished by re-running the same command; a re-run
      the survivor); a derivative's are moved, not lost.
   3. derivative only: hard-link the primary into the project subfolder; verify by identity + SHA-256.
   4. COMMIT, under the registry lock: append the tombstone (carrying every row about to be removed,
-     verbatim); remove the registry_raw row; remove its ingest_manifest / pending_* rows; remove each
-     registry_subjects row no other LIVE acquisition references. Every removal is byte-exact (all other
-     bytes, line endings and quoting kept) and atomic (temp + os.replace), and read back to prove it.
+     verbatim); remove the registry_raw row; remove its ingest_manifest / pending_* rows. Every removal
+     is byte-exact (all other bytes, line endings and quoting kept) and atomic (temp + os.replace), and
+     read back to prove it. registry_subjects.csv is NEVER touched: subjects are never deleted (06 §2.8.3,
+     Ryan 2026-10-01) -- an animal existed whether or not gjesus3 keeps its acquisition.
   5. links, then bytes: re-point / remove project links (identity via file id, content via SHA-256 -- link
      counts read 1 over this SMB share, file ids do not lie); a duplicate is re-hashed against the survivor
      right before its folder is deleted; then the /raw/ folder goes. A link a researcher already deleted or
@@ -74,7 +75,7 @@ TOOLS = os.path.dirname(os.path.abspath(__file__))
 if TOOLS not in sys.path:
     sys.path.insert(0, TOOLS)
 from ingest import csv_safe, locking, pending, pending_dicom, pending_links  # noqa: E402
-from ingest import project_ids as pids, projects_registry, provenance, registry, retired, subjects_table  # noqa: E402
+from ingest import project_ids as pids, projects_registry, provenance, registry, retired  # noqa: E402
 
 CHUNK = 8 * 1024 * 1024
 SIDECARS = ("metadata.json", "checksums.json", "README.txt")
@@ -661,25 +662,9 @@ def plan_rows(run, p):
         n = len(csv_safe.remove_records(path, "acq_id", {acq}, dry_run=True))
         if n:
             rows[fn] = n
-    subj = unreferenced_subjects(run, p)
-    if subj:
-        rows["registry_subjects.csv"] = len(subj)
-    p["subjects_to_remove"] = subj
     p["rows"] = rows
-    p["subjects_kept"] = [s for s in subject_ids(p["row"]) if s not in subj]
-
-
-def unreferenced_subjects(run, p, live=None):
-    live = run.live if live is None else live
-    mine = subject_ids(p.get("row") or {})
-    if not mine:
-        return []
-    others = set()
-    for aid, r in live.items():
-        if aid != p["acq_id"]:
-            others.update(subject_ids(r))
-    present = subjects_table.read_subjects(subjects_table.subjects_path(run.reg_dir))
-    return [s for s in mine if s not in others and s in present]
+    # Subjects are never deleted (06 §2.8.3): the retiree's subject rows stay, referenced or not.
+    p["subjects_kept"] = subject_ids(p["row"])
 
 
 def has_work(p):
@@ -820,7 +805,6 @@ def commit(run, p):
     """The commit point. Under the registry lock; every removal byte-exact, atomic and read back."""
     acq = p["acq_id"]
     raw_csv = os.path.join(run.reg_dir, "registry_raw.csv")
-    subj_csv = subjects_table.subjects_path(run.reg_dir)
     with locking.registry_lock(run.reg_dir):
         registry.assert_header_compatible(raw_csv)
         live = read_live(run.nas)
@@ -836,10 +820,6 @@ def commit(run, p):
                 recs = csv_safe.remove_records(os.path.join(run.reg_dir, fn), "acq_id", {acq}, dry_run=True)
                 if recs:
                     others[fn] = [r.decode("utf-8", "replace").rstrip("\r\n") for r in recs]
-            subj = unreferenced_subjects(run, p, live=live)
-            if subj:
-                recs = csv_safe.remove_records(subj_csv, "facility_id", set(subj), dry_run=True)
-                others["registry_subjects.csv"] = [r.decode("utf-8", "replace").rstrip("\r\n") for r in recs]
             retired.append_retired(retired.retired_path(run.reg_dir), {
                 "acq_id": acq, "retired_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "disposition": p["disposition"], "superseded_by": p["target"], "reason": p["reason"],
@@ -861,14 +841,7 @@ def commit(run, p):
             n = len(csv_safe.remove_records(os.path.join(run.reg_dir, fn), "acq_id", {acq}))
             if n:
                 removed[fn] = n
-        # Recompute against the registry as it is NOW (the retiree's row is gone).
-        live_now = read_live(run.nas)
-        subj = unreferenced_subjects(run, p, live=live_now)
-        if subj:
-            subjects_table.assert_header_compatible(subj_csv)
-            removed["registry_subjects.csv"] = len(csv_safe.remove_records(subj_csv, "facility_id", set(subj)))
-        p["subjects_removed"] = subj
-    run.log(f"  commit: removed rows {removed or '{}'}; subjects kept (still referenced): "
+    run.log(f"  commit: removed rows {removed or '{}'}; subject rows left as they are (never deleted): "
             f"{p.get('subjects_kept') or '-'}")
     p["rows_removed"] = removed
     fail_point("commit")
@@ -1021,8 +994,8 @@ def describe(run, p):
     for a in p["actions"]:
         run.log(f"    will: {a}")
     if p["rows"]:
-        run.log(f"    will: remove rows {p['rows']} (registry_subjects only for subjects no live "
-                f"acquisition references; kept: {p.get('subjects_kept') or '-'})")
+        run.log(f"    will: remove rows {p['rows']} (subject rows are never removed; "
+                f"left as they are: {p.get('subjects_kept') or '-'})")
     for L in p["links"]:
         run.log(f"    link: {L['action']:8s} {nas_rel(run.nas, L['path'])} -- {L['why']}")
     ev = missing_events(p)
@@ -1039,13 +1012,12 @@ def write_report(run, plans, results):
     with open(path, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["acq_id", "disposition", "superseded_by", "state_before", "result", "sha256",
-                    "moved_to", "rows_removed", "subjects_removed", "subjects_kept", "links", "message"])
+                    "moved_to", "rows_removed", "subjects_kept", "links", "message"])
         for p in plans:
             res, msg = results.get(p["acq_id"], ("", ""))
             w.writerow([p["acq_id"], p["disposition"], p["target"], p["state"], res, p.get("sha256", ""),
                         nas_rel(run.nas, p["dest"]) if p.get("dest") else "",
-                        json.dumps(p.get("rows_removed", {})), ";".join(p.get("subjects_removed", [])),
-                        ";".join(p.get("subjects_kept", [])),
+                        json.dumps(p.get("rows_removed", {})), ";".join(p.get("subjects_kept", [])),
                         "; ".join(f"{L.get('done_as', L['action'])}:{L['output_path']}@"
                                   f"{os.path.basename(L['project_dir'])}" for L in p["links"]), msg])
     with open(os.path.join(run.backup_dir, f"{run.run_id}.log"), "w", encoding="utf-8") as f:
