@@ -207,14 +207,21 @@ def decide(rec, ctx):
         return "exclude", f"czi-raw ({why})", None
     if cls in EXCLUDE_CLASSES:
         return "exclude", EXCLUDE_CLASSES[cls], None
+    if os.path.basename(win(rec["member"].split(NESTED_SEP)[-1] if rec["archive"] else rec["relpath"])).startswith("._"):
+        return "exclude", "system-file (macOS AppleDouble ._ stub)", None
     if cls == "archive" and INSTALLER_ARCHIVE_RE.search(win(rec["relpath"])):
         return "exclude", "software (installer archive)", None
     if is_personal(flag):
         return "exclude", "personal-admin-heuristic", None
     if is_zero(flag, rec["size"]):
         return "exclude", "zero-byte", None
+    if cls == "archive" and not rec["archive"] and (rec.get("from_b") is not None or not rec.get("imaging_root")):
+        # an archive outside B's roots, or one B handed over whole: its members decide
+        return "expanded", "archive: its members are decided one by one", None
     if rec.get("from_b") is not None:  # stream B's own non-raw list (nonraw_for_A.csv), its project
         proj = rec["from_b"] or None
+        if cls == "archive":  # B lists a nested archive whole; its inner content comes in B's v2 list
+            return "unclear", "B->A nested archive: waiting for B's v2 (its contents), not placed whole", proj
         if not proj:
             return "holding", "B->A non-raw, no project", None
         return _project_decision(proj, ctx, "B->A non-raw")
@@ -326,6 +333,10 @@ def cmd_plan(args):
     say(f"B->A non-raw rows: {len(fromb)} from {args.from_b}")
     nested_rows = rd(args.nested) if os.path.exists(args.nested) else []
     nested_archives = {(r["drive"], r["archive"], r["nested"]) for r in nested_rows}
+    nested_dedup = {}  # nested czi-raw already in production (scratchpad dedup -> nested_czi_dedup.csv)
+    if os.path.exists(args.nested_dedup):
+        for r in it(args.nested_dedup):
+            nested_dedup[(r["drive"], r["nested"], r["inner"])] = f"{r['dedup']} {r['detail']}".strip()
     say(f"nested-archive members: {len(nested_rows)} in {len(nested_archives)} nested archives")
 
     rows = []
@@ -348,6 +359,7 @@ def cmd_plan(args):
         rows.append(r)
 
     archives = {}
+    archive_fromb = {}  # an archive B handed over whole: its members take B's project
     for f in files:
         drive = f["drive"]
         c = fclaims.get((drive, f["relpath"]), {})
@@ -365,6 +377,7 @@ def cmd_plan(args):
         add(base, rec)
         if f["class"] == "archive":
             archives[(drive, f["relpath"])] = rows[-1]
+            archive_fromb[(drive, f["relpath"])] = rec["from_b"]
     say(f"loose files: {len(rows)}")
 
     # archive members: claims per member where the claims pass produced them, else the archive's own
@@ -406,7 +419,8 @@ def cmd_plan(args):
                    excluded_reason=None,
                    ingested=(m["archive_relpath"], m["member"]) in ingested_member,
                    derived=None,
-                   from_b=fromb.get((drive, m["archive_relpath"], m["member"])))
+                   from_b=fromb.get((drive, m["archive_relpath"], m["member"]),
+                                    archive_fromb.get((drive, m["archive_relpath"]))))
         if (drive, m["archive_relpath"], m["member"]) in nested_archives:
             rec["special"] = ("expanded", "nested archive: its members are decided one by one", None)
         if installer:
@@ -431,7 +445,7 @@ def cmd_plan(args):
         rec = dict(base, proposed_project=fclaims.get((drive, n["archive"]), {}).get("proposed_project", ""),
                    imaging_root=imaging_root(roots, drive, n["archive"], os.path.splitext(n["nested"])[0] + "/x"),
                    excluded_reason=None, ingested=False, derived=None, from_b=None)
-        rec["special"] = nested_special(n, prod_sha=None)
+        rec["special"] = nested_special(n, nested_dedup.get((drive, n["nested"], n["inner"])))
         add(base, rec)
 
     # Simu_2_V_XYZ.zip and other unreadable archives: nothing listed -> the archive itself is unclear
@@ -454,10 +468,13 @@ def cmd_plan(args):
 NESTED_PERSONAL_RE = re.compile(r"Meals cost original documents\.zip$", re.I)  # meal receipts (B, 2026-10-02)
 
 
-def nested_special(n, prod_sha=None):
-    """Per-file decisions for nested-archive members that the general rules would get wrong."""
+def nested_special(n, dedup=None):
+    """Per-file decisions for nested-archive members that the general rules would get wrong.
+    `dedup`: this czi's verdict from nested_czi_dedup.csv (`in-production-...` = already ingested)."""
     if NESTED_PERSONAL_RE.search(n["nested"]):
         return ("exclude", "personal-admin (meal receipts archive)", None)
+    if n["class"] == "czi-raw" and dedup and dedup.startswith("in-production"):
+        return ("exclude", f"czi-raw (nested; {dedup.split()[0]}: see nested_czi_dedup.csv)", None)
     if n["class"] == "czi-raw":
         return ("raw-oneoff", "czi-raw inside a nested archive: never seen by the .czi ingest -> /raw/ "
                               "one-off (dedup against production first)", None)
@@ -1003,7 +1020,9 @@ def cmd_worksheet(args):
             "drive": d, "researcher": g["researcher"], "series": g["series"], "kind": "no claim",
             "files": [], "bytes": 0, "acqs": [], "dates": [g["date_min"], g["date_max"]]}
 
-    def grp(drive, researcher, relpath, verdict, claim_id):
+    def grp(drive, researcher, relpath, verdict, claim_id, member=""):
+        if member:  # an archive member: the archive plus its first two folders is the natural unit
+            relpath = relpath + "!" + "/".join(member.replace("\\", "/").split("/")[:2])
         if verdict == "C":
             key = (drive, researcher, f"(C) {claim_id}")
             kind = "(C) claim"
@@ -1018,13 +1037,14 @@ def cmd_worksheet(args):
     for r in rows:
         if r["decision"] != "holding" or r["class"] == "lsm":  # .lsm: holding by decision, not mapped
             continue
-        g = grp(r["drive"], r["researcher"], r["relpath"], r["verdict"], r["claim_id"])
+        g = grp(r["drive"], r["researcher"], r["relpath"], r["verdict"], r["claim_id"],
+                r["member"].split(NESTED_SEP)[0] if r["archive"] else "")
         g["files"].append(r["member"] or r["relpath"])
         g["bytes"] += int(r["size"])
     for a in it(os.path.join(args.repo, "tasks", "drives_blank_project_list.csv")):
         rel = a["archive"] or a["relpath"]
         verdict = a["verdict"] if a["verdict"] == "C" else ""
-        g = grp(a["drive"], a["researcher"], rel, verdict, a["claim_id"])
+        g = grp(a["drive"], a["researcher"], rel, verdict, a["claim_id"], a["member"] if a["archive"] else "")
         g["acqs"].append(a["acq_id"])
         g["dates"].append(a["acquisition_date"])
     out = []
@@ -1077,6 +1097,50 @@ def cmd_dotfile_farm(args):
     return 0 if ok else 1
 
 
+NESTED_FARM = r"D:\projects\gjesus3\scratch_drives-nonraw-placement\farm_nested"
+
+
+def cmd_nested_farm(args):
+    """The nested-archive .czi that are NEW (nested_czi_dedup.csv verdict `NEW`) -> a farm on D: laid
+    out as `<drive label>/<archive relpath>/<nested member path>/<inner path>` -- the same
+    original_name convention the main ingest used for archive members (the `.zip` stays in the path)
+    -- plus the per-file case table for tools/configs/drives_2026-10_dotfile/drives_nested.yaml.
+    These are byte COPIES (a member cannot be hard-linked), verified against the hashed listing."""
+    dd = [r for r in rd(args.dedup) if r["dedup"] == "NEW"]
+    cases = []
+    for r in dd:
+        label = DRIVES[r["drive"]][0]
+        orig = "/".join([label, r["archive"].replace("\\", "/"), r["nested"], r["inner"]])
+        dst = os.path.join(NESTED_FARM, *orig.split("/"))
+        if not (os.path.exists(lp(dst)) and sha256_file(dst) == r["sha256"]):
+            outer = os.path.join(DRIVES[r["drive"]][1], "files", win(r["archive"]))
+            with zipfile.ZipFile(lp(extract_nested(outer, r["nested"], args.scratch))) as z, z.open(r["inner"]) as src:
+                os.makedirs(lp(os.path.dirname(dst)), exist_ok=True)
+                with open(lp(dst), "wb") as out:
+                    shutil.copyfileobj(src, out, 8 << 20)
+        ok = sha256_file(dst) == r["sha256"]
+        print(f"  {'ok ' if ok else 'BAD'} {orig}")
+        if not ok:
+            return 1
+        name = os.path.basename(r["inner"])
+        cases.append({"original_name": orig, "drv_project": "", "drv_researcher": "zuri", "drv_operator": "",
+                      "drv_subject_alias": "", "drv_subject_animal": "", "drv_sample_id": name,
+                      "drv_sample_type": "", "drv_link_name": f"{r['czi_instrument']}_{name}",
+                      "drv_notes": ("Historical drive ingest 2026 (drive1_FRIO-X6); project / researcher / operator / "
+                                    "subject decided per file before ingest (tasks/drives_ingest_dryrun_review.md). "
+                                    "Claim: NO-CLAIM. Found inside a NESTED archive the first catalog never opened "
+                                    "(tasks/drives_nonraw_placement_review.md); same rules as its batch-B05 siblings."),
+                      "drv_sha256": r["sha256"], "drv_claim": "NO-CLAIM", "drv_acq_group": "", "drv_acq_group_n": ""})
+    inst = {r["czi_instrument"] for r in dd}
+    if inst != {"CELL"}:
+        print(f"!! expected only CELL, got {inst}: the config is single-instrument")
+        return 1
+    path = os.path.join(args.repo, "tools", "configs", "drives_2026-10_dotfile", "cases_nested.csv")
+    wcsv(path, list(cases[0].keys()), cases)
+    print(f"{len(cases)} cases -> {path}")
+    return 0
+
+
 # ------------------------------------------------------------------------------------------ cli
 
 def main(argv=None):
@@ -1089,8 +1153,12 @@ def main(argv=None):
     sp.add_argument("--roots", default=ROOTS_DEFAULT)
     sp.add_argument("--from-b", default=os.path.join(ANALYSIS, "drives-dicom", "nonraw_for_A.csv"))
     sp.add_argument("--nested", default=os.path.join(OUT_DEFAULT, "nested_members.csv"))
+    sp.add_argument("--nested-dedup", default=os.path.join(OUT_DEFAULT, "nested_czi_dedup.csv"))
     sub.add_parser("dotfile-farm")
     sub.add_parser("nested").add_argument("--scratch", default=SCRATCH_DEFAULT)
+    nf = sub.add_parser("nested-farm")
+    nf.add_argument("--scratch", default=SCRATCH_DEFAULT)
+    nf.add_argument("--dedup", default=os.path.join(OUT_DEFAULT, "nested_czi_dedup.csv"))
     sub.add_parser("worksheet").add_argument("--manifest", default=None)
     for name in ("copy", "verify", "holding"):
         s = sub.add_parser(name)
@@ -1105,7 +1173,7 @@ def main(argv=None):
     if getattr(args, "manifest", None) is None:
         args.manifest = os.path.join(args.out, "placement_manifest.csv")
     os.makedirs(args.out, exist_ok=True)
-    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "worksheet": cmd_worksheet, "copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
+    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "nested-farm": cmd_nested_farm, "worksheet": cmd_worksheet, "copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
 
 
 if __name__ == "__main__":

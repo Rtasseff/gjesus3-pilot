@@ -1,0 +1,46 @@
+# Historical microscopy drives -- the 14 NEW .czi found inside a NESTED archive (close-out plan Step 5,
+# raw one-offs): drive1_FRIO-X6 `Drive zuri 170823.zip` > `Drive zuri 170823/Proyecto Cav1 CNIC/8583.zip`
+# > `8583/{10x-1..3,20x-1..11}.czi`, CELL (Axio Observer), acquired 2023-05-03.
+#
+# The first catalog never opened archives inside archives, so the .czi ingest never saw these.
+# nested_czi_dedup.py checked all 250 nested .czi against production (SHA-256, then (instrument,
+# timestamp to the second, lower-cased name)): 236 are already in production, these 14 are not.
+#
+# Same per-file rules as their 253 siblings from Drive zuri in batch B05 (cases_nested.csv): no claim
+# -> blank project, researcher `zuri`, operator blank. staging_dir is a farm of byte COPIES (a member
+# cannot be hard-linked), built and SHA-256-verified by
+#   python tools/drive_staging/nonraw_placement.py nested-farm
+# laid out so original_name = `drive1_FRIO-X6/<archive>/<nested archive>/<inner path>`, the main
+# ingest's convention for archive members. Record: tasks/drives_nonraw_placement_review.md.
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/scratch_drives-nonraw-placement/farm_nested"
+  pattern: "**/*.czi"
+  case_table:
+    file: cases_nested.csv
+    on_missing: error
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.drv_subject_alias}"
+    animal_code:   "${discovered.drv_subject_animal}"
+
+registry:
+  instrument:           CELL
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  researcher:           discovered.drv_researcher
+  data_source:          internal
+  sample_id:            discovered.drv_sample_id
+  sample_type:          discovered.drv_sample_type
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  project_name:         discovered.drv_project
+  notes:                discovered.drv_notes
+
+operator: discovered.drv_operator
+
+link_filename: "${discovered.drv_link_name}"

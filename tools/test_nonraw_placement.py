@@ -93,6 +93,8 @@ def test_decide():
           "R3 derivative placed in its parent's project, whatever its own claim")
     check(D(**{"class": "software"})[0] == "exclude", "software excluded")
     check(D(**{"class": "system"})[0] == "exclude", "system excluded")
+    check(D(relpath="a\\._x.pzfx", **{"class": "analysis"})[0] == "exclude", "macOS ._ stub excluded")
+    check(D(archive="z.zip", relpath="z.zip", member="d/._y.tif", **{"class": "tif"})[0] == "exclude", "._ stub in an archive excluded")
     check(D(flag="personal-admin-heuristic:cv")[1] == "personal-admin-heuristic", "personal excluded")
     check(D(size="0", flag="zero-byte")[1] == "zero-byte", "zero-byte excluded")
     check(D(**{"class": "bruker"})[1].startswith("B?"), "imaging class outside the roots -> B, flagged")
@@ -110,6 +112,9 @@ def test_decide():
     check(D(**{"class": "volume"}, imaging_root="mri: x", from_b="")[0] == "holding", "B->A row, no project -> holding")
     check(D(from_b="AE-biomaGUNE-1519")[0] == "closed-project", "B->A row into a closed project -> listed")
     check(D(**{"class": "system"}, from_b="AE-biomaGUNE-1123")[0] == "exclude", "B->A system file still excluded")
+    zr = dict(relpath="Former students\\Lydia\\NMR\\ZBLM.zip", **{"class": "archive"})
+    check(D(imaging_root="nmr: x", **zr)[0] == "other-stream", "archive under a B root stays B's")
+    check(D(imaging_root="mri: x", from_b="", **zr)[0] == "expanded", "archive B handed over -> expanded")
     # nested-archive specials
     n = {"nested": "Z/Gastos Giessen/Meals cost original documents.zip", "class": "document", "ext": ".pdf"}
     check(N.nested_special(n)[0] == "exclude", "meal receipts excluded")
