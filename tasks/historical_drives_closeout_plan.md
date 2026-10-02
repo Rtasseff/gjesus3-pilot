@@ -126,6 +126,25 @@ BACKLOG current.
      - re-identify the 2 `LSM9` rows as `CELL` (their dry run gives `ACQ-20240625-CELL-008/-009`);
      - the `equivalent` retirement;
      - the 13 derivative retirements.
+6. **Stream A's interim report** (2026-10-02). Its session hit its usage limit, so Phase 1 is
+   unfinished. Its branch is at `ebe9f8d`, and it has later edits that are not committed. It left a
+   list for a fresh session; see the review on its branch once it is written.
+   - **A blocker, for Ryan: path length.** 5,083 of the 6,206 files to place would get a UNC path
+     longer than 259 characters (the longest is 402). All of them come from
+     `Drive Maria Jesus and Irati 20211209.zip`. The options are:
+     - shorter labels in the destination;
+     - keeping that zip whole, as one file;
+     - accepting long paths.
+   - **250 `.czi` sit in nested archives,** most of them `LSM9` and most inside
+     `Fotos confocales cdh5 jagged2.zip` within `Drive zuri`. That contradicts stream B's note. They
+     include `8583.zip`'s 14. **They need deduplicating** against production, by SHA-256 and by
+     (instrument, timestamp, name), before any raw one-off.
+   - **Closed projects** would receive material: `0320` 14 documents, and `1519` 6, plus about
+     10,110 of stream B's rows. That links to B-Q1.
+   - **Unclear:** `Simu_2_V_XYZ.zip` (97 GB, which cannot be opened as a zip) and 2 unreadable
+     `.czi` that have bytes.
+   - **The dot-file `.czi`:** its dry run is clean (it would become `ACQ-20240125-CELL-050`). It needs
+     Ryan's go.
 
 **A gap found on 2026-10-02: the catalog never opened nested archives** (archives inside
 archives).
