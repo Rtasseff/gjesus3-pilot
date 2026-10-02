@@ -1,0 +1,61 @@
+# Historical drives, DICOM stream (stream B), group B04b: protocol 0619 ethidium bromide
+# ("BrEt"), 2020-03-03/04, mice 20/21/23/24/25/27-32, Bruker BioSpec 7T.
+# Review: tasks/drives_dicom_review.md (group B04). Inventory: _analysis\drives-dicom\inventory.csv.
+#
+# WHY: pre-2022 (before the kenia retention horizon), so it exists only here.
+# Source: drive 1 `Cardiac MRI.zip` -> `Cardiac MRI/Proyecto 0619 (Ratones Hipoxia)/BrEt/`
+# and `BrEt/DICOM/` (the same sessions twice; deduplicated PER EXAM, the copy with
+# DICOM + fid wins). Facility DB: each mouse has "MRI 7T" logged on 2020-03-03/04;
+# ACQ_station is `Biospec 70/30` (7 T).
+#
+# STAGING: the canonical exams are copied out of the zip into a FLAT
+#     D:/projects/gjesus3/scratch_drives-dicom/stage_B04/<study>/<exam>/
+# so original_name = "<study>/<exam>", the same shape as every production MRI row
+# (the staging_dir dedup trap, mri_1019_*.yaml). The copy is scratch; it is deleted
+# after the batch is verified.
+#
+# REGEX: the study token has no protocol code (`jrc200303_m25_BE`,
+# `jrc200304_m27_BE`), so it matches neither shared regex (the D3 silent skip).
+# This config's regex is SCOPED by `pattern` to the 2020-03-03/04 studies only; the
+# shared regex is not changed. The protocol 0619 comes from the folder claim
+# (`Proyecto 0619`), confirmed by the facility DB, and is set literally below.
+#
+# MODEL: set EXPLICITLY (7T here), for symmetry with B04a, whose `BIOSPEC 500`
+# the auto-derivation turns into "50T" (a bug, BACKLOG).
+#
+# Expected: 11 studies, 169 exams (165 with DICOM; 4 without -> regen worklist). Dry run:
+#   python tools/ingest_raw.py --config tools/configs/drives_2026-09/dicom/dicom_B04b_0619_bret_7T.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false             # AE-biomaGUNE-0619 = PROJ-0004 exists (active)
+  acquisition_layout: folder
+  copy_strategy: mri_paravision_v2        # DICOMs only
+  reconstructions: all
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/scratch_drives-dicom/stage_B04"
+  pattern: "2020030[34]_*/[0-9]*"
+  filename_parse:
+    source: parent_name
+    regex: '(?P<jrc_id>(?P<pi_initials>jrc)\d{6}_m(?P<animal_num>\d+)_[A-Za-z0-9]+)'
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "0619"
+    animal_code:   "${discovered.animal_num}"
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     "Bruker BioSpec 7T"
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "m${discovered.animal_num}_0619"
+  sample_type:          organism
+  session_id:           "${discovered.jrc_id}"
+  acquisition_datetime: discovered.mri_acquisition_datetime
+  project_name:         "AE-biomaGUNE-0619"
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol 0619 from folder claim); recons kept: ${discovered.mri_recon_indices}; historical drives (drive 1 Cardiac MRI.zip, BrEt), predates the kenia retention horizon"
+
+operator: "NA"

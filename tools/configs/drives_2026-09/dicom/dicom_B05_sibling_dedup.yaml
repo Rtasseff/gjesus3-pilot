@@ -1,0 +1,63 @@
+# DEDUP REHEARSAL (DRY-RUN ONLY, never run for real). The batch config below, pointed at ONE
+# production-ingested study staged the SAME way (flat <study>/<exam> out of Cardiac MRI.zip):
+# 20220221_092531_jrc220221_m29_1519_1_1 (1519 Basal, production ACQ-20220221-MRI-*).
+# Expected dry run: 0 to ingest; every exam skipped as already registered on (acq_date, original_name).
+#
+# Historical drives, DICOM stream (stream B), group B05a: protocol 0420, Haizpea's
+# session 2.1 (2021-06-10 and 2021-06-30), rats 11-15, Bruker BioSpec 7T.
+# Review: tasks/drives_dicom_review.md (group B05). Inventory: _analysis\drives-dicom\inventory.csv.
+#
+# WHY: pre-2022 (before the kenia retention horizon), so it exists only here.
+# Source: drive 1 `Haizpea_2020-2022.7z` -> `Haizpea_2020-2022/project0420/20210610_0420_2.1/MRI_0420/`.
+# Facility DB: every (0420, rat, date) has "MRI 7T" logged on the scan day.
+#
+# STAGING: the two MRI folders were extracted whole from the .7z (a solid archive,
+# so a member-only extract still decompresses the whole stream) into scratch:
+#     D:/projects/gjesus3/scratch_drives-dicom/stage_B05/<archive path>/<study>/<exam>/
+# staging_dir is the MRI folder itself, which already holds <study>/<exam> directly,
+# so original_name = "<study>/<exam>", the same shape as every production MRI row.
+# The extract is scratch; it is deleted after the batch is verified.
+#
+# REGEX: the study tokens parse with the SHARED animal-first regex
+# (`jrc210610_m12_0420`), unchanged. The `Splits/` siblings hold derived .mhd/.nii,
+# no numeric exam folders, so `*/[0-9]*` with the ParaVision detector skips them
+# (they go to stream A as non-raw).
+#
+# MODEL: set explicitly (ACQ_station `Biospec 70/30`).
+#
+# Expected: 9 studies, 165 exams (all with DICOM). Dry run:
+#   python tools/ingest_raw.py --config tools/configs/drives_2026-09/dicom/dicom_B05a_0420_haizpea_s21.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false             # AE-biomaGUNE-0420 = PROJ-0012 exists (active)
+  acquisition_layout: folder
+  copy_strategy: mri_paravision_v2        # DICOMs only
+  reconstructions: all
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/scratch_drives-dicom/stage_sib_cardiac"
+  pattern: "20220221_092531_*/[0-9]*"
+  filename_parse:
+    source: parent_name
+    regex: '(?P<jrc_id>(?P<pi_initials>[a-z]+)_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))'
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.project_code}"
+    animal_code:   "${discovered.animal_num}"
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     "Bruker BioSpec 7T"
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "m${discovered.animal_num}_${discovered.project_code}"
+  sample_type:          organism
+  session_id:           "${discovered.jrc_id}"
+  acquisition_datetime: discovered.mri_acquisition_datetime
+  project_name:         "AE-biomaGUNE-${discovered.project_code}"
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol ${discovered.project_code}); recons kept: ${discovered.mri_recon_indices}; historical drives (drive 1 Haizpea_2020-2022.7z, session 2.1), predates the kenia retention horizon"
+
+operator: "NA"

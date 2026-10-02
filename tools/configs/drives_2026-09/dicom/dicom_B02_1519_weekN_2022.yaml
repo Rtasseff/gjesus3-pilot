@@ -1,0 +1,62 @@
+# Historical drives, DICOM stream (stream B), group B02: protocol 1519 (Santander),
+# "Segunda tanda" weeks 1-4, 2022-03-10..30, rats 29-36, Bruker BioSpec 7T.
+# Review: tasks/drives_dicom_review.md (group B02, question Q1). Inventory: _analysis\drives-dicom\inventory.csv.
+#
+# WHY: these sessions are AFTER the kenia retention horizon (2022-01-10), so the
+# 2026-06 scanner pull saw them, and DROPPED them silently: the token `_week<N>` in
+# `jrc220310_m31_week1_1519` matches neither shared regex (STATUS D3). Production
+# holds the same study's Basal sessions and 2 week-1 sessions without the token
+# (m29, m30); the other 526 exams exist only on this drive (and maybe still on kenia).
+# Facility DB: rats 29-36 of 1519 found; "MRI 7T" logged on 03-10/16/22/30. On
+# 03-15 (rats 29, 30) and 03-23 (rats 33-36) no MRI is logged; kept on the
+# folder's own claim (a DB check confirms, never overrules).
+#
+# ⚠️ PROJECT: AE-biomaGUNE-1519 = PROJ-0008 is CLOSED. Do not run for real until
+# Ryan decides Q1 (reopen with tools/reopen_project.py, or ingest project-less by
+# setting project_name: "").
+#
+# STAGING: canonical exams copied out of `Cardiac MRI.zip` into a FLAT
+#     D:/projects/gjesus3/scratch_drives-dicom/stage_B02/<study>/<exam>/
+# so original_name = "<study>/<exam>" (the production shape). The
+# `..._m35_week3_1519_1_1_bad` folder is the SAME session (identical acquisition
+# and reconstruction times on all 34 exams); it is not staged.
+#
+# REGEX: scoped by `pattern` to the `_week<N>_1519` studies; the shared regex is
+# not changed.
+#
+# Expected: 30 studies, 526 exams (520 with DICOM; 6 without -> regen worklist). Dry run:
+#   python tools/ingest_raw.py --config tools/configs/drives_2026-09/dicom/dicom_B02_1519_weekN_2022.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false
+  acquisition_layout: folder
+  copy_strategy: mri_paravision_v2        # DICOMs only
+  reconstructions: all
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/scratch_drives-dicom/stage_B02"
+  pattern: "*_week[0-9]_1519_1_1/[0-9]*"
+  filename_parse:
+    source: parent_name
+    regex: '(?P<jrc_id>(?P<pi_initials>jrc)\d{6}_m(?P<animal_num>\d+)_week\d_(?P<project_code>\d{4}))'
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.project_code}"
+    animal_code:   "${discovered.animal_num}"
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     "Bruker BioSpec 7T"
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "m${discovered.animal_num}_${discovered.project_code}"
+  sample_type:          organism
+  session_id:           "${discovered.jrc_id}"
+  acquisition_datetime: discovered.mri_acquisition_datetime
+  project_name:         "AE-biomaGUNE-${discovered.project_code}"
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol ${discovered.project_code}); recons kept: ${discovered.mri_recon_indices}; historical drives (drive 1 Cardiac MRI.zip); the `_week` token made the 2026-06 kenia pull skip it"
+
+operator: "NA"

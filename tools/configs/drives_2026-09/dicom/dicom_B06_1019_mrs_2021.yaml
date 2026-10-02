@@ -1,0 +1,61 @@
+# Historical drives, DICOM stream (stream B), group B06: protocol 1019 MRS (brain and
+# liver spectroscopy), 2021-01-28..03-02, mice 50/53/55-58, Bruker BioSpec 11.7T.
+# Review: tasks/drives_dicom_review.md (group B06, question Q2). Inventory: _analysis\drives-dicom\inventory.csv.
+#
+# WHY: pre-2022, exists only here. Source: drive 1 `Drive Maria Jesus and Irati 20211209.zip`
+# -> `.../Proyecto 1019 Envejecimiento y dieta/Procedimiento 4/MRS/{Brain,Liver}/...raw*/`.
+# Facility DB: "MRI 11.7T" logged on the scan day for every mouse; ACQ_station is
+# `BIOSPEC 500`.
+#
+# PROJECT: BLANK (proposed, Q2), the same as the 854 other 2021 1019 exams already in
+# production (decision D6: the SegBioMed project). A blank project_name is a supported
+# path (ingest_raw skips resolution and the link step).
+#
+# STAGING: copied out of the zip into a FLAT
+#     D:/projects/gjesus3/scratch_drives-dicom/stage_B06/<study>/<exam>/
+#
+# REGEX: `jrc210128_m50MBmrs` / `jrc210301_m57LVmrs` match neither shared regex (D3);
+# scoped here by `pattern`. The protocol 1019 is the folder claim (DB-confirmed).
+#
+# MODEL: set EXPLICITLY. The auto-derivation turns `BIOSPEC 500` into "50T" (BACKLOG).
+#
+# DICOM: none of the 66 exams has DICOM. Most are spectroscopy (PRESS), which the regen
+# backfill marks not-applicable; the localizer / FLASH / B0-map exams can be regenerated
+# by Dicomifier. Leave auto_regenerate_dicom off; they go to the regen worklist.
+#
+# Expected: 8 studies, 66 exams (0 with DICOM). Dry run:
+#   python tools/ingest_raw.py --config tools/configs/drives_2026-09/dicom/dicom_B06_1019_mrs_2021.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false
+  acquisition_layout: folder
+  copy_strategy: mri_paravision_v2
+  reconstructions: all
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/scratch_drives-dicom/stage_B06"
+  pattern: "*mrs_1_1/[0-9]*"
+  filename_parse:
+    source: parent_name
+    regex: '(?P<jrc_id>(?P<pi_initials>jrc)\d{6}_m(?P<animal_num>\d+)(?:MB|LV)mrs)'
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "1019"
+    animal_code:   "${discovered.animal_num}"
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     "Bruker BioSpec 11.7T"
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "m${discovered.animal_num}_1019"
+  sample_type:          organism
+  session_id:           "${discovered.jrc_id}"
+  acquisition_datetime: discovered.mri_acquisition_datetime
+  project_name:         ""
+  notes:                "Internal MRS/MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol 1019 from folder claim); recons kept: ${discovered.mri_recon_indices}; historical drives (drive 1 Drive Maria Jesus and Irati 20211209.zip), predates the kenia retention horizon"
+
+operator: "NA"
