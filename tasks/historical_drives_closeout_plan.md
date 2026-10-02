@@ -55,6 +55,34 @@ BACKLOG current.
     with that path instead of the tool's default `outputs\derived`.
 - **The 63 `.lsm` files go to the holding folder** (item 2c), not to `/raw/`.
 
+**Open questions for Ryan.** The coordinator keeps this list current; the newest are last.
+
+1. **A second missing July MRI session: ingest it?** The session is
+   `20260706_111010_jrc20260703_m6_1125`: 15 exams of animal 6 of protocol 1125
+   (`PROJ-0021`), from 2026-07-06.
+   - It is in no registry and has no `/raw/` folder. The counter `ACQ-20260706-MRI-` stands at 30,
+     from two failed GUI attempts on 2026-07-16.
+   - It is outside the pre-approval, which covers only `m12`.
+   - **Its operator is not in the data.** ParaVision records only the shared login `nmr`. The
+     evidence points to Irene: the same scan protocol, the same day's pulls, and the failed GUI
+     attempt recorded as `ifernandez`.
+   - **Recommendation:** ingest it from the scanner, as `m12` was, with operator Irene.
+2. **15 Aperio `.svs` whole-slide scans** (~4.1 GB), in two nested zips under
+   `PAPERS\TUNEL 230123 CDH5 JAGGED2\` in `Drive zuri 170823.zip`. The instrument is not onboarded.
+   **Default,** by analogy with the `.lsm` decision: the holding folder, or project material if they
+   sit under a project claim.
+3. **671 TopSpin NMR experiments** (1.15 GB of chem-lab spectrometer data, not imaging), listed by
+   stream B. **Default:** the same as question 2.
+
+**A gap found on 2026-10-02: the catalog never opened nested archives** (archives inside
+archives).
+- Stream B listed the 8 inside `Drive zuri 170823.zip`. One of them, `8583.zip`, holds **14 `.czi`
+  that the ingest never saw**. Stream A takes them as raw stragglers, together with the dot-file.
+- Stream A covers the remaining nested archives; `LEONE.zip` and `Cardiac MRI.zip` stay with their
+  own streams.
+- **This must be closed before the D: erase.** The test for the erase is that everything from the
+  drives is accounted for.
+
 ---
 
 ## Where things are (2026-10-02)
