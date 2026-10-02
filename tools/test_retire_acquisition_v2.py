@@ -454,6 +454,25 @@ with tempfile.TemporaryDirectory() as tmp:
     rc, out = run(nas, bk, "--list", lst, "--execute")
     check(rc == 2 and "not a target_acq_id" in out, "a target_acq_id on a re-identify -> refused")
     check(snapshot(nas) == before and not os.listdir(bk), "no refusal wrote anything")
+    real_link = os.link
+
+    def _no_raw_link(src, dst, *a, **k):
+        if RA.PROBE_PREFIX in str(dst):
+            raise PermissionError(13, "Access is denied (simulated share policy)", str(dst))
+        return real_link(src, dst, *a, **k)
+    os.link = _no_raw_link
+    try:
+        rc, out = run(nas, bk, *reid_args(LSM1), "--execute")
+    finally:
+        os.link = real_link
+    after = {k: v for k, v in snapshot(nas).items()}
+    check(rc == 4 and "nothing committed" in out and after == before
+          and not [d for d in os.listdir(os.path.dirname(RA.nas_abs(nas, R[LSM1]["canonical_path"].rstrip("/"))))
+                   if d.startswith(RA.PROBE_PREFIX)],
+          "a share that refuses a hard link inside /raw/: stopped by the probe BEFORE commit A, the NAS "
+          "byte-identical, no probe folder left")
+    for d in os.listdir(bk):
+        RA.remove_tree_or_file(os.path.join(bk, d))      # that run's backup: not part of what follows
 
     print("5. re-identify: execute")
     raw_before, man_before = raw_bytes(nas, "registry_raw.csv"), raw_bytes(nas, "ingest_manifest.csv")

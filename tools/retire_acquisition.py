@@ -1269,6 +1269,46 @@ def commit(run, p):
     fail_point("commit")
 
 
+PROBE_PREFIX = ".retire-probe-"
+
+
+def probe_raw_link(run, p):
+    """Re-identify, BEFORE commit A: prove a hard link can be made and removed beside the new folder.
+
+    An ingest never creates a hard link inside /raw/; a re-identify does. If the share refuses it, stop
+    here -- nothing committed -- instead of after the tombstone. The probe is a dot-folder named for this
+    run (the ingest's glob skips dot-files); a stale one from a crashed run is removed first.
+    """
+    parent = os.path.dirname(p["new_dir"])
+    for stale in glob.glob(os.path.join(parent, PROBE_PREFIX + "*")):
+        try:
+            for f in tree_files(stale).values():
+                os.remove(lp(f))
+            os.rmdir(lp(stale))
+        except OSError as ex:   # never force it: its file's attributes are shared with a primary
+            run.log(f"  WARN: a stale probe folder could not be removed ({stale}: {ex}); left as it is")
+    probe = os.path.join(parent, PROBE_PREFIX + run.run_id)
+    dst = os.path.join(probe, "probe" + os.path.splitext(p["primary"])[1])
+    try:
+        os.makedirs(lp(probe), exist_ok=True)
+        os.link(lp(p["primary"]), lp(dst))
+        same = samefile(dst, p["primary"])
+        remove_link_name(dst, p["primary"])
+        os.rmdir(lp(probe))
+    except OSError as ex:
+        try:
+            if exists(dst):
+                remove_link_name(dst, p["primary"])
+            if isdir(probe):
+                os.rmdir(lp(probe))
+        except OSError as ex2:
+            run.log(f"  WARN: the probe folder {probe} could not be removed: {ex2}")
+        raise RuntimeError(f"{p['acq_id']}: cannot create (or remove) a hard link in {parent}: "
+                           f"{type(ex).__name__}: {ex} -- nothing committed")
+    if not same:
+        raise RuntimeError(f"{p['acq_id']}: a hard link made in {parent} is not the same file -- nothing committed")
+
+
 def commit_a(run, p):
     """Re-identify, commit A: allocate the new id and append the tombstone that records it. The old row
     stays live (and points at its intact folder) until commit B."""
@@ -1633,6 +1673,8 @@ def write_report(run, plans, results):
 
 def execute_one(run, p):
     if p["disposition"] == "reidentified":
+        if p["state"] == "fresh":
+            probe_raw_link(run, p)
         commit_a(run, p)
         build_new_folder(run, p)
         commit_b(run, p)
