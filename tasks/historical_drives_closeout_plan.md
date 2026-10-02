@@ -133,9 +133,10 @@ OneDrive marks the directories read-only.
   - The lab knows gjesus3 has no off-site backup yet (INFRA-06; Ryan is working on it). gjesus3 is
     already an improvement on two SSDs.
   - **Until erased, it feeds the work still to come** (Step 5): the non-raw placement, the DICOM
-    stream and the `.tif`/`.lsm` decision read their sources from it. If D: space is needed before
-    those are done, the alternative is to re-stage only what they need from the owners' drives
-    later. That is Ryan's call.
+    stream and the `.tif`/`.lsm` decision read their sources from it. **There is no rush** (Ryan,
+    2026-10-02): holding D: for a day, or even a week, is fine. A stream that would hold it much
+    longer, such as `LEONE.zip` waiting on the META-12 policy, should re-stage what it needs from
+    the owners' drives later, rather than keep D: occupied.
 
 ## Step 5: the remaining work, each its own worktree and fresh session later
 
