@@ -60,10 +60,9 @@ still says the box half is not installed).
    with Full rights on `raw/` rather than an operator's write-but-not-modify.
 3. **Run the on-box merge gates (§4) over the tunnel.** Stage a fresh copy of `tools/` on
    `gnuclear` first (§4). Gate 3 needs the `gjesus3` mount from step 2. A `--go` writes to
-   production, so treat each run as a production operation. **Check the platform-manager
-   constraint (§3) first.** He was fine with what Ryan runs *while present*; running from here
-   while nobody is in the room is new, so confirm he is comfortable with it. Schedule runs outside
-   acquisitions, because the box is slow.
+   production, so treat each run as a production operation. ✅ **The platform manager (Unai)
+   has OK'd running the sync tests on the box remotely** (2026-10-02, asked by Ryan). The rest of
+   §3 still applies. Schedule runs outside acquisitions, because the box is slow.
 4. **Merge; operators start using it** (`tools/operator/NI_LIVE_RUNBOOK.md`).
 5. **Then, not now:** the Box A port, which takes the tunnel along, make-before-break through the
    live tunnel with no visit (B2, decided 2026-10-01). After it, **one ingest web app on Box A**
@@ -159,6 +158,9 @@ not a CS person; to him the box is where numbers come out of the PET hardware.
 
 - **He does not mind what Ryan runs while physically present.** His concern is **what we leave
   behind and ask operators to run.**
+- ✅ **2026-10-02: he OK'd running the sync tests on the box remotely**, over the tunnel (asked by
+  Ryan). This covers remote runs of the sync tests, not anything else; the concerns below still
+  stand.
 - He has **expressly asked to read the code.** Platform managers here generally want "a few
   lines plus references to well-accepted dependency packages."
 - **He cannot read what exists**: the five main files are **4,633 lines**
