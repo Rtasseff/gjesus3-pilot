@@ -103,9 +103,18 @@ S:\goptical\GOpticalUsers data\AxioScan
 
 ### Cell Observer (`CELL`) and Confocal LSM 900 (`LSM9`)
 
-**No network historical archives.** These will need to be pulled off the operators' **external
-drives** — planned *after* the microscopy GUI is released (operators do the pull). MFB (Jesus's lab)
-does, however, have plenty of **intermediate / current** data not yet moved to external drives:
+**No network historical archives; the history was ingested from the operators' external drives
+(✅ 2026-09-30 to 2026-10-02).** Two one-copy drives (`drive1_FRIO-X6`, `drive2_MFB-Disco-2`) were staged to
+`D:\projects\gjesus3\staging\` and their `.czi` files ingested into `/raw/` as **8,790 acquisitions**
+(3,849 GB): `CELL` 8,061, `LSM9` 387, `ZWSI` 4 and `XMIC` 338, in 16 batches. Every row's `ingest_config` is
+`tools/configs/drives_2026-09/drives_B<NN>.yaml`, and the per-file provenance (drive, path, archive member,
+SHA-256) is in `tasks/drives_ingest_provenance.csv`. **5,055 of them have a blank project:** their paths
+carried no project claim (4,952) or only a claim that was left blank (103, see
+`tasks/drives_blank_project_list.csv`). The plan, rules and batch log are in
+`tasks/drives_ingest_dryrun_review.md` (§11) and `tasks/drives_microscopy_ingest_runbook.md`. **Not part of
+that ingest:** the loose `.tif` / `.lsm` files, derived exports, and the MRI and PET/CT data the drives also
+hold (see the review's §9). MFB (Jesus's lab) does, however, have plenty of **intermediate / current** data
+not yet moved to external drives:
 
 | Instrument | Current MFB data location |
 |---|---|
@@ -122,6 +131,6 @@ the CELL + LSM 900 operator.)
 
 - **NI `gnuclear3`** — request access (the intended standardized long-term store).
 - **MRI credentials** — set up the SSH key (above) on the sync machine; decide key-vs-password.
-- **Microscopy external-drive pull** — sequenced after the GUI release; capture per-operator drive
-  locations as they surface.
+- **Microscopy external-drive pull** — the two staged drives' `.czi` are ingested (above); capture any
+  further per-operator drive locations as they surface.
 - Add a pointer to this file from `equipment/INDEX.md` once the in-flight migration settles.
