@@ -9,6 +9,54 @@ file, marking steps done in place.
 
 ---
 
+## The weekend of 2026-10-03/04: who runs what (Ryan out of office, reachable by Remote Control)
+
+Decided by Ryan on 2026-10-02. Six streams, each in its own worktree with a `HANDOFF.md`. The
+coordinator is this effort's planning session (named `gj3-handoff`). It reviews every dry run,
+serialises production writes, verifies each write, and keeps this file, STATUS, CHANGELOG and
+BACKLOG current.
+
+| # | Stream (Step 5 item) | Branch · worktree under `gjesus3-dev\` | Run by | Model |
+|---|---|---|---|---|
+| A | Non-raw placement into project folders, plus prep for 2b/2c, plus the dot-file `.czi` (items 2, 2b, 2c) | `feat/drives-nonraw-placement` · `drives-nonraw-placement` | a session Ryan opens | Opus |
+| B | The drives' MRI/PET-CT (DICOM) stream (item 4) | `feat/drives-dicom` · `drives-dicom` | a session Ryan opens | Opus |
+| C | `LEONE` (item 5) | `feat/leone-ingest` · `leone-ingest` | a session Ryan opens | Opus |
+| D | Same-timestamp group clean-up: scale bars, thumbnails, then scene splits (item 3) | `feat/drives-r4-cleanup` · `drives-r4-cleanup` | coordinator's subagent | Sonnet |
+| E | Retire tool v2: re-identify (15 mis-coded rows) and content-equivalent duplicates (item 7) | `feat/retire-v2` · `retire-v2` | coordinator's subagent | Opus |
+| F | The 2026-07-10 MRI session, then its 17 orphans (item 1) | `feat/mri-0710-reingest` · `mri-0710-reingest` | coordinator's subagent | Sonnet |
+
+**Who may approve a production write (Ryan, 2026-10-02).**
+
+- **The coordinator may approve, without waiting for Ryan, a write whose dry run matches what Ryan
+  has already decided:**
+  - the 32 twin retirements (Step 3);
+  - the 2026-07-10 MRI session's re-ingest, then its 17 orphan retirements;
+  - creating the already-approved projects (`AE-biomaGUNE-1116`, `-1420`, `-1520`, `Project-0521`,
+    `AE-biomaGUNE-1319`);
+  - copying non-raw files into project folders: copies only, nothing deleted, no registry row
+    changed.
+- **Everything else waits for Ryan's go over Remote Control:**
+  - the `LEONE` ingest;
+  - the drives' DICOM ingest;
+  - the same-timestamp retirements (scale bars, thumbnails);
+  - setting projects on blank rows (2b);
+  - anything that departs from this plan.
+- **One writer at a time.** A stream asks the coordinator for the write window, writes, verifies
+  and reports back. Read-only work (analysis, dry runs) runs in parallel.
+
+**Two placement decisions (Ryan, 2026-10-02).**
+
+- **Where non-raw material goes in a project:**
+  `<project>\working\historical_drives\<drive label>\<original folder path>\`. It goes under
+  `working\`, not `outputs\`. The drive labels are `drive1_FRIO-X6` and `drive2_MFB-Disco-2`, the
+  same as in the holding folder.
+  - *Coordinator's reading:* derivatives of a specific acquisition go to the same place. That
+    covers the 22 R3 files and the retire tool's `derivative` mode in item 3: pass `--subfolder`
+    with that path instead of the tool's default `outputs\derived`.
+- **The 63 `.lsm` files go to the holding folder** (item 2c), not to `/raw/`.
+
+---
+
 ## Where things are (2026-10-02)
 
 | Stream | Branch / worktree | State |
@@ -249,10 +297,9 @@ In rough order:
      human/privacy flag and the DPA reference, come **later**. They are then **back-filled in
      place** on LEONE, the `DTS24` acquisitions (both cohorts) and the Charité `XMIC` files.
      Nothing is deleted, re-ingested or reloaded from source.
-6. **`.tif`/`.lsm`: settled as non-raw** (items 2 and 2c), apart from one small open point. The
-   63 `.lsm` files are LSM 5-series confocal acquisitions from an instrument that is not
-   onboarded, and none has a project. **Default:** the holding folder. Ryan may instead want them
-   in `/raw/` under a code (like `XMIC`).
+6. **`.tif`/`.lsm`: settled as non-raw** (items 2 and 2c). The 63 `.lsm` files are LSM 5-series
+   confocal acquisitions from an instrument that is not onboarded, and none has a project.
+   **✅ Decided (Ryan, 2026-10-02): they go to the holding folder,** not to `/raw/`.
 7. **Backlog leftovers this effort produced:**
    - the project-date recompute and its engine fix;
    - the production `.czi` truncation audit;
