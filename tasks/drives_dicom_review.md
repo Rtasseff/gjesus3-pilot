@@ -188,6 +188,22 @@ Added to all MRI configs before the first real run: `link_filename` (the product
 
 ⚠️ **The shape differs from every other internal-MRI row** (`series/` vs `.data/`; a `dicom` sidecar block, not `mri`). It is the price of no code change. The alternative is a small, reviewed change that lets the ParaVision path accept a `method`-only exam.
 
+### 7d. B07, B08 (approved in principle, 2026-10-02): configs and dry runs
+
+| Batch | Dry-run result |
+|---|---|
+| **B07** phantoms / collab | **133 / 125 / 8** (the 8 never-acquired, excluded before staging) · 28 studies, hard-linked (0 bytes) · `ACQ-20221006…20230719-MRI-*`, 0 dated today · blank project · `sample_type` `phantom` 99 / `material` 26 (bare nanoparticle samples; a judgement) · 7T ×114, 11.7T ×11 (`pr221006`) · link names unique |
+| **B08** Madrid ICON | **363 / 363 / 0** · hard-linked · `ACQ-20240423…26-XMRI-*`, 0 dated today · **instrument `XMRI`**, `Bruker ICON 1T` (`ACQ_station` `ICON`, ¹H 44.69 MHz), `data_source collaborator:Uni-Madrid` (from `ACQ_institution`; confirm wording) · blank project · subject = scanner `SUBJECT_id` (no facility DB) · **one row per scan**, per the BACKLOG 🔺 item, not one archive per session |
+
+**B08 identity flag (for Claudia):** study `20240424_120501_I01Tdnrn01_1_2` is **folder** `nrn01`, but its **subject file** says `I01Tdnrn02` / "Raton-JRC-02". The file's two fields agree, so they are used; the folder was probably created before the subject was corrected. ParaVision folder names derive from the subject at creation.
+
+**No DICOM anywhere in B06, B07 or B08**, plus 2 exams in B04b. ⚠️ **The regen worklist assumes the source can be re-pulled from the platform host, which is false for drive data.** Regeneration must therefore run **from the same scratch staging, before it is deleted** (`backfill_dicom_regen.py` in WSL, with the staging symlinked into its `PV<ver>/<study>/<exam>` layout).
+- **The B04b pair:** a dry run gives `WOULD-REGENERATE 2` (`ACQ-20200304-MRI-001`, `-055`).
+- **Feasibility test** (raw `dicomifier to-dicom` into WSL scratch, no NAS):
+  - **B07:** 3/3 converted.
+  - **B08:** 6/8 converted (`FLASH_Nav`, `MSME_Nav`, user `nmrsuMSME_Nav`). **2/8 failed**: the user sequence `nmrsuFLASH_Nav` (`index -1 is out of bounds`).
+- **Consequence for Ryan:** because `mri_paravision_v2` keeps DICOMs only, a scan whose regeneration fails ends with an empty `.data/` in gjesus3 once the staging and the drives' D: copy are erased. The owners' drive keeps the original. **Option:** keep such scans' ParaVision parameter files + `2dseq` in `/raw/`. That needs a copy-strategy change, so it is not done here.
+
 **Nested `BrEt/OneDrive_1_29-1-2021.zip` (14.2 GB): a byte-identical copy.** Its 4 studies / 67 exams are the same as `BrEt\` (4,269/4,269 common members CRC-32 equal; the only differences are a renamed NIfTI folder and `.DS_Store`). It is the OneDrive download that `BrEt\` was unpacked from, so **nothing new**. Listing: `_analysis\drives-dicom\nested_listings_cardiac_mri.csv`.
 
 ## 8. Questions for Ryan
