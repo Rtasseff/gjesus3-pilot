@@ -122,12 +122,20 @@ OneDrive marks the directories read-only.
 - **D: scratch:** `scratch_nas\`, `scratch_retire\`, `_analysis\catalog_smoke*` and `_repair\`
   can be deleted after Step 1. `_farm\` holds hard links only, so deleting it frees nothing; delete
   it after the merge.
-- **Keep** `_extract\` and `_analysis\` until the non-raw session is done: both feed it.
-- **Do not** delete the staged drive copies, and do not tell the owners their drives are free.
-  - Those copies still feed the non-raw placement, the DICOM stream, the `.tif`/`.lsm` decision
-    and the scale-bar clean-up below.
-  - The NAS has no off-site copy (INFRA-06).
-  - Whether to delete them is Ryan's decision, after all of that.
+- **The staged drive data on D: is erased once we are satisfied that everything from these
+  drives is in gjesus3 production** (Ryan, 2026-10-02). That covers `drive1_…\`, `drive2_…\`,
+  `_extract\`, `_analysis\` and `_farm\`, and the test is that every ingested file has been
+  verified against its drive manifest.
+  - **It is a temporary working copy on Ryan's own drive, not a backup.** D: is not shared lab
+    storage, and this work is for a single lab.
+  - **The owners keep their external drives and the data on them;** they have no intention of
+    removing it.
+  - The lab knows gjesus3 has no off-site backup yet (INFRA-06; Ryan is working on it). gjesus3 is
+    already an improvement on two SSDs.
+  - **Until erased, it feeds the work still to come** (Step 5): the non-raw placement, the DICOM
+    stream and the `.tif`/`.lsm` decision read their sources from it. If D: space is needed before
+    those are done, the alternative is to re-stage only what they need from the owners' drives
+    later. That is Ryan's call.
 
 ## Step 5: the remaining work, each its own worktree and fresh session later
 
