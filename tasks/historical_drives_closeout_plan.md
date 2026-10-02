@@ -137,11 +137,12 @@ OneDrive marks the directories read-only.
     removing it.
   - The lab knows gjesus3 has no off-site backup yet (INFRA-06; Ryan is working on it). gjesus3 is
     already an improvement on two SSDs.
-  - **Until erased, it feeds the work still to come** (Step 5): the non-raw placement, the DICOM
-    stream, `LEONE` and the `.tif`/`.lsm` decision read their sources from it. **There is no
-    rush** (Ryan, 2026-10-02): holding D: for a day, or even a week, is fine. A stream that would
-    hold it much longer should re-stage what it needs from the owners' drives later, rather than
-    keep D: occupied.
+  - **Until erased, it feeds the work still to come** (Step 5): the non-raw placement, the
+    mapping of the no-project groups, the holding folder, the DICOM stream and `LEONE` all read
+    their sources from it.
+  - **Timing (Ryan, 2026-10-02):** there is no fixed week limit. The point is **not an
+    indefinite hold**. Holding D: is fine as long as we are working through this plan towards an
+    end. The erase comes after Step 5's items 2–5 (below) are done.
 
 ## Step 5: the remaining work, each its own worktree and fresh session later
 
@@ -151,12 +152,48 @@ In rough order:
    protocol 1125) from the scanner, through the normal MRI path. Its no-DICOM exams go on the
    regen worklist. **Then** retire the 17 empty `ACQ-20260710-MRI-*` orphans (`--orphan`, list in
    `tasks/retire_lists/`).
-2. **Non-raw placement into project folders:**
-   - the 22 R3 derivatives in `_analysis\ingest\nonraw_derived.csv` (the 18 ROI crops go to `1123`);
-   - analysis outputs, figures and presentations under each claim root;
-   - **create** the paperwork projects `AE-biomaGUNE-1116`, `-1420`, `-1520` and `Project-0521`
-     (with the `0720` documents);
-   - exclude software and the personal/admin hits.
+2. **Non-raw placement into project folders** (Ryan, 2026-10-02):
+   - **What goes in:**
+     - the 22 R3 derivatives in `_analysis\ingest\nonraw_derived.csv`, each tied to its parent
+       ACQ-ID (the 18 ROI crops go to `1123`);
+     - every non-raw file under a claim root: analysis outputs, figures and presentations.
+   - **The `.tif`/`.lsm` files are non-raw here.** About 476 distinct sit under a project claim
+     (155 GB). Most are ZEN exports (the TIFF `Software` tag says ZEN). The TEM camera (`ImageSP`)
+     and gel-imager (`ChemoStar`) images go with the project material, as decided for `.dm4`/EM.
+   - **Create** the paperwork projects `AE-biomaGUNE-1116`, `-1420`, `-1520` and `Project-0521`
+     (with the `0720` documents).
+   - **Excluded:**
+     - installed software, system files and the personal/admin heuristic hits;
+     - **the ~277 `.czi` re-saves.** They are the same acquisition as something already in
+       `/raw/` and linked into its project. Their paths stay in the provenance file (Ryan,
+       2026-10-02: skip them).
+   - **One raw one-off:** the hidden dot-file `.czi` (`Cell observer\Laura\Cell observer\Interaccion-LS-SPN\.LS-SPN-20x-8.czi`)
+     is a real acquisition. It goes into **`/raw/`**, renamed in a copy or as a single-case
+     config, because the engine's glob skips dot-files.
+2b. **Map the no-project groups** (Ryan, 2026-10-02).
+   - **Input:** Ryan's list (blank-project ACQ-IDs with the claim each path carried, from the
+     ingest's runbook §6) plus `_analysis\codes\noclaim_groups.csv` (291 groups).
+   - **Work:** a human maps groups to projects, existing or new (new ones need Ryan's approval).
+   - **For each mapped group:**
+     - set `project_id` on its blank raw rows. This is write-once-if-blank (`set_project_id_if_blank`).
+     - create the project links;
+     - place its non-raw material in the project folder, as in item 2.
+2c. **The holding folder for whatever is still unmapped** (Ryan, 2026-10-02).
+   - **When:** the mapping round closes.
+   - **What:** the remaining non-raw material moves to **`J:\gjesus3-data\staging\historical_drives_unassigned\`**,
+     **in the same directory structure as on the drives** (`drive1_FRIO-X6\…`, `drive2_MFB-Disco-2\…`).
+     The folders themselves may tell people which project something came from.
+   - **Its `README.txt` says plainly:**
+     - where the files came from (the two operator drives, their labels and serials, staged
+       2026-09-22/28);
+     - that they are **not in gjesus3**, because they are not raw data and have not been assigned
+       to a project;
+     - that the originals remain on the owners' external drives;
+     - how to have something placed into a project (ask the Data Office).
+   - **Also include** a manifest CSV (relative path, size, SHA-256, taken from the drive
+     manifests).
+   - **Same exclusions as item 2:** software, system files and personal/admin hits. The holding
+     folder is group-readable.
 3. **Clean up the same-timestamp groups:** BACKLOG "Clean up the drives ingest's same-timestamp
    groups".
    - Scale-bar copies and thumbnails move to the original's project folder through the retire
@@ -192,7 +229,10 @@ In rough order:
      human/privacy flag and the DPA reference, come **later**. They are then **back-filled in
      place** on LEONE, the `DTS24` acquisitions (both cohorts) and the Charité `XMIC` files.
      Nothing is deleted, re-ingested or reloaded from source.
-6. **The `.tif`/`.lsm` decision:** raw or export.
+6. **`.tif`/`.lsm`: settled as non-raw** (items 2 and 2c), apart from one small open point. The
+   63 `.lsm` files are LSM 5-series confocal acquisitions from an instrument that is not
+   onboarded, and none has a project. **Default:** the holding folder. Ryan may instead want them
+   in `/raw/` under a code (like `XMIC`).
 7. **Backlog leftovers this effort produced:**
    - the project-date recompute and its engine fix;
    - the production `.czi` truncation audit;
