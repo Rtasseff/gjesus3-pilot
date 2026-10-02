@@ -54,6 +54,8 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))  # tools/ -> `ingest` package
+sys.path.insert(0, HERE)                   # drive_staging/ -> historical_paths
+import historical_paths as H  # noqa: E402  (THE destination rule: tasks/drives_nonraw_placement_review.md §6)
 
 STAGING = r"D:\projects\gjesus3\staging"
 ANALYSIS = os.path.join(STAGING, "_analysis")
@@ -86,7 +88,7 @@ NESTED_SEP = "!"  # member "<nested archive>!<inner path>" for archives inside a
 MANIFEST_FIELDS = [
     "row", "drive", "drive_label", "relpath", "archive", "member", "size", "sha256", "class", "ext",
     "flag", "claim_id", "verdict", "researcher", "project_name", "project_id", "project_status",
-    "dest_rel", "decision", "reason", "note",
+    "dest_rel", "decision", "reason", "note", "root_key", "shortened",
 ]
 
 
@@ -485,9 +487,11 @@ def cmd_plan(args):
         for k in unused:
             say(f"    unmatched: {k} -> {mapping[k]}")
     annotate_duplicates(rows, say)
+    base_plan = not args.mapping and os.path.normcase(os.path.abspath(out)) == os.path.normcase(OUT_DEFAULT)
+    assign_destinations(rows, projects, args.nas, out, say, load_claim_roots(),
+                        global_index=os.path.join(args.repo, "tasks", "drives_nonraw_index.csv") if base_plan else None)
     check_nas(rows, args.nas, projects, say)
     wcsv(os.path.join(out, "placement_manifest.csv"), MANIFEST_FIELDS, rows)
-    base_plan = not args.mapping and os.path.normcase(os.path.abspath(out)) == os.path.normcase(OUT_DEFAULT)
     write_summaries(rows, out, args.repo if base_plan else None, say, leone)
     with io.open(os.path.join(out, "plan.log"), "a", encoding="utf-8") as f:
         f.write("\n".join(log) + "\n\n")
@@ -510,6 +514,138 @@ def nested_special(n, dedup=None):
         return ("unclear", "Aperio .svs whole-slide scan: instrument not onboarded (question for Ryan; "
                            "default holding unless under a claim)", None)
     return None
+
+
+# ------------------------------------------------------------------- destinations (historical_paths)
+
+HOLDING_BASE = "staging\\historical_drives_unassigned"
+
+
+def tree_base(r, projects):
+    """The tree a row lands in: a project's working\\historical_drives, or the holding folder."""
+    if r["decision"] == "holding":
+        return HOLDING_BASE
+    return "\\".join(["projects", project_folder(r["project_name"], projects), *SUBDIR])
+
+
+def load_claim_roots():
+    """claims.csv -> {normalised claim-root segments: project name}, for every claim that names a
+    project (CONFIRMED, A, B incl. the 0720 fold, and SHADOWED claims with a proposed project --
+    those are often the OUTER folders)."""
+    out = {}
+    for c in it(os.path.join(ANALYSIS, "codes", "claims.csv")):
+        proj = project_for(c["verdict"], c["proposed_project"], c["claim_root"])
+        if not proj and c["verdict"] == "SHADOWED":
+            proj = c["proposed_project"] or None
+        if proj:
+            out[H.claim_root_segments(c["claim_root"])] = proj
+    return out
+
+
+def row_root(r, claim_roots):
+    """The root folder (normalised segment tuple) for a row, or None (keep the full path):
+      - a 2b-mapped row: the folder of its worksheet group (its `series`);
+      - a row placed in a project: the OUTERMOST claim root of THAT project on its path;
+      - holding: None."""
+    if r["decision"] == "holding" or not r.get("project_name"):
+        return None
+    if r.get("root_key") and not r["reason"].startswith("2b mapping"):
+        return None if r["root_key"] == "-" else tuple(r["root_key"].split("|"))  # computed earlier
+    segs = H.logical_segments(r["relpath"], r["archive"], r["member"])
+    names = [H.norm(n) for n, _k in segs]
+    if r["reason"].startswith("2b mapping"):
+        _d, _who, series, _kind = manifest_group(r)
+        if series.startswith("("):
+            return None
+        toks = [H.norm(t) for t in re.split(r"[\\/!]", series) if t]
+        pos = -1
+        for t in toks:                         # the group's folders, in order (gaps allowed)
+            try:
+                pos = names.index(t, pos + 1, len(names) - 1)
+            except ValueError:
+                return None
+        return tuple(names[: pos + 1])
+    for i in range(len(names) - 1):            # outermost first
+        if claim_roots.get(tuple(names[: i + 1])) == r["project_name"]:
+            return tuple(names[: i + 1])
+    return None
+
+
+def plan_tree(base, rows, claim_roots, nas, budget):
+    """Plan one tree with historical_paths. -> (planner, items, {row id: dest})."""
+    p = H.Planner(base, budget=budget)
+    p.load_pathmap(os.path.join(nas, base, H.PATHMAP_NAME))
+    items = []
+    for r in rows:
+        root = row_root(r, claim_roots)
+        r["root_key"] = "|".join(root) if root else "-"
+        items.append(H.Item(id=str(r["row"]), drive=r["drive"], relpath=r["relpath"], archive=r["archive"],
+                            member=r["member"], root=root,
+                            extra={"size": r["size"], "sha256": r["sha256"], "claim_id": r["claim_id"]}))
+    return p, items, p.plan(items)
+
+
+def assign_destinations(rows, projects, nas, out, say, claim_roots, global_index=None):
+    """Replace every placed / closed-project / holding row's dest_rel by the historical_paths rule,
+    tree by tree, and write the index / pathmap / README / origin PREVIEWS under <out>\\trees\\.
+    Reports, per rule, the max length and the count over the budget (on \\\\GJESUS3\\gjesus3\\)."""
+    trees = collections.defaultdict(list)
+    for r in rows:
+        if r["decision"] in ("place", "closed-project", "holding"):
+            trees[tree_base(r, projects)].append(r)
+    def legacy(r):  # the first layout (full path, <stem>_<ext> archive folders), for the R0 line only
+        if r["decision"] == "holding":
+            return holding_rel(r["drive_label"], r["relpath"], r["archive"], r["member"])
+        return dest_rel(project_folder(r["project_name"], projects), r["drive_label"], r["relpath"],
+                        r["archive"], r["member"])
+    stat = {"R0 old layout (full path, archive folders)": [legacy(r) for rs in trees.values() for r in rs]}
+    flat = []
+    for base, rs in sorted(trees.items()):
+        _p, _items, d = plan_tree(base, rs, claim_roots, nas, budget=10 ** 9)
+        flat += list(d.values())
+    stat["R1 root first, high-level folders dropped"] = flat
+    final, failed = [], []
+    gidx = []
+    for base, rs in sorted(trees.items()):
+        try:
+            p, items, d = plan_tree(base, rs, claim_roots, nas, budget=H.BUDGET)
+        except H.BudgetError as e:  # reported, then the run STOPS before any manifest is written
+            failed.append(f"{base}: {e}")
+            continue
+        byid = {str(r["row"]): r for r in rs}
+        for it_ in items:
+            byid[it_.id]["dest_rel"] = d[it_.id]
+            byid[it_.id]["shortened"] = "Y" if it_.extra.get("shortened") else "N"
+            final.append(d[it_.id])
+        tdir = os.path.join(out, "trees", base.replace("\\", "__"))
+        idx = H.index_rows(d, items, base)
+        H.write_index(os.path.join(tdir, H.INDEX_NAME), idx)
+        H.write_pathmap(os.path.join(tdir, H.PATHMAP_NAME), p.pathmap_rows())
+        with io.open(os.path.join(tdir, "_ORIGIN_preview.txt"), "w", encoding="utf-8", newline="\r\n") as f:
+            for folder, origs in sorted(p.origins(items).items()):
+                f.write(f"== {folder}\\{H.ORIGIN_NAME}\n" + H.origin_text(origs).replace("\r\n", "\n") + "\n")
+        gidx += [dict(x, tree=base) for x in idx]
+    stat["R2 + fewest folders shortened (final)"] = final
+    say("\nPATH LENGTH, per rule (UNC \\\\GJESUS3\\gjesus3\\..., budget %d)" % H.BUDGET)
+    for name, dests in stat.items():
+        lens = [H.unc_len(x) for x in dests if x]
+        say(f"  {name:48s} files {len(lens):6d}  max {max(lens) if lens else 0:4d}  "
+            f"> {H.BUDGET}: {sum(1 for x in lens if x > H.BUDGET):5d}  > 259: {sum(1 for x in lens if x > 259):5d}")
+    short = sum(1 for x in gidx if x["shortened"] == "Y")
+    say(f"  shortened (a folder or the file name on the way): {short} files")
+    for f_ in failed:
+        say(f"  !! {f_}")
+    if failed:  # never write a manifest whose destinations break the budget, nor touch decisions
+        raise SystemExit(f"STOPPED: {len(failed)} tree(s) cannot meet the {H.BUDGET}-character budget; "
+                         f"nothing written (see above)")
+    if global_index:
+        # the committed Data Office index: PROJECT trees only, slim columns (the per-tree _INDEX.csv on
+        # the NAS and the D: manifest carry sha256 etc.; the holding folder has its own manifest.csv)
+        gcols = ["project", "new_path", "original_path", "size", "claim_id", "shortened"]
+        prow = [dict(g, project=g["tree"].split("\\")[1]) for g in gidx if g["tree"].startswith("projects\\")]
+        # new_path is relative to <project>\working\historical_drives\
+        wcsv(global_index, gcols, prow)
+        say(f"  global index (project trees): {len(prow)} rows -> {global_index}")
 
 
 def annotate_duplicates(rows, say):
@@ -1222,6 +1358,35 @@ def remap_rows(rows, mapping, projects):
     return out, used
 
 
+def safe_claim_roots():
+    """claims.csv roots if D: still has them; {} otherwise (stored root_keys then carry the rule)."""
+    try:
+        return load_claim_roots()
+    except FileNotFoundError:
+        return {}
+
+
+def cmd_paths(args):
+    """Re-plan the destinations of an existing manifest with the historical_paths rule (no catalog
+    read; seconds instead of minutes). Same decisions; new dest_rel / root_key; previews under
+    <out>\\trees\\. On the record manifest it also rewrites the committed global index."""
+    rows = load_manifest(args.manifest)
+    projects = load_projects(args.nas)
+    log = []
+
+    def say(m):
+        print(m, flush=True)
+        log.append(m)
+    is_record = os.path.normcase(os.path.abspath(args.out)) == os.path.normcase(OUT_DEFAULT)
+    assign_destinations(rows, projects, args.nas, args.out, say, safe_claim_roots(),
+                        global_index=os.path.join(args.repo, "tasks", "drives_nonraw_index.csv") if is_record else None)
+    wcsv(os.path.join(args.out, "placement_manifest.csv"), MANIFEST_FIELDS, rows)
+    write_summaries(rows, args.out, args.repo if is_record else None, say, 0)
+    with io.open(os.path.join(args.out, "plan.log"), "a", encoding="utf-8") as f:
+        f.write(f"paths {dt.datetime.now():%Y-%m-%d %H:%M}\n" + "\n".join(log) + "\n\n")
+    return 0
+
+
 def cmd_remap(args):
     """2b WITHOUT the catalog: apply Ryan's worksheet to a stored manifest (stream A's record
     `placement_manifest.csv`, or its copy kept off D: before the staging is erased). Writes
@@ -1232,6 +1397,9 @@ def cmd_remap(args):
     mapping = load_mapping(args.mapping)
     projects = load_projects(args.nas)
     rows, used = remap_rows(load_manifest(args.manifest), mapping, projects)
+    # destinations by the shared rule; rows placed earlier keep theirs (their root_key is stored and
+    # the NAS _PATHMAP.csv freezes their folders), so no claims.csv / D: is needed here
+    assign_destinations(rows, projects, args.nas, args.out, print, safe_claim_roots())
     wcsv(os.path.join(args.out, "placement_manifest.csv"), MANIFEST_FIELDS, rows)
     unused = [k for k in mapping if not used[k]]
     re_dec = collections.Counter(r["decision"] for r in rows if r["reason"].startswith("2b mapping"))
@@ -1416,6 +1584,8 @@ def main(argv=None):
     ws = sub.add_parser("worksheet")
     ws.add_argument("--manifest", default=None)
     ws.add_argument("--force", action="store_true", help="overwrite a worksheet that has mapped groups")
+    pa = sub.add_parser("paths")
+    pa.add_argument("--manifest", default=None)
     rm = sub.add_parser("remap")
     rm.add_argument("--manifest", default=os.path.join(OUT_DEFAULT, "placement_manifest.csv"),
                     help="the stored manifest (default: stream A's record; its copy off D: once D: is erased)")
@@ -1439,7 +1609,7 @@ def main(argv=None):
     if getattr(args, "manifest", None) is None:
         args.manifest = os.path.join(args.out, "placement_manifest.csv")
     os.makedirs(args.out, exist_ok=True)
-    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "nested-farm": cmd_nested_farm, "worksheet": cmd_worksheet, "apply-raw": cmd_apply_raw, "remap": cmd_remap,"copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
+    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "nested-farm": cmd_nested_farm, "worksheet": cmd_worksheet, "apply-raw": cmd_apply_raw, "remap": cmd_remap, "paths": cmd_paths, "copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
 
 
 if __name__ == "__main__":
