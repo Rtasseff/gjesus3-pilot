@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
-**Last Updated:** 2026-10-02 (**§2.1.3** new default-off `auto_discover.case_table:` — a CSV keyed on `original_name` whose columns become per-case `discovered.<column>` values, so a config can set project / researcher / operator / subject **per file**; built for the historical-drives ingest. New instrument code `XMIC` (external microscope `.czi`) in `ingest/config.py`.) Prior: 2026-10-01 (new **§3.9 `retire_acquisition`** — the Data-Office-only tool that retires an ACQ-ID (duplicate / derivative / orphan) into the tombstone file [06_REGISTRIES §2.9](06_REGISTRIES.md). **§2.1:** the "deliberately no `delete-acquisition` tool" paragraph is amended (intent kept, means changed); the side-effect inventory's *Reverse by* column points at the tool, and gains the two rows it was missing (`pending_dicom_regen.csv`, `pending_links.csv`). **§3.2** `validate_registries` gains four tombstone ERRORs.) Prior: 2026-09-04 (**§5.2** the MRI page's **destination project is token-valued** — "a name I set" is a token field with its own palette, not a text box, so one run can file scans into several projects; the engine was unchanged, only the GUI had withheld it. Preview gains a per-destination breakdown.) Prior: 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
+**Last Updated:** 2026-10-02 (later; branch `feat/retire-v2`) (**§3.9** 🔶 retire tool v2: the `equivalent` disposition — a `.czi` re-save retired when its content is identical — and `reidentified` — a mis-coded acquisition re-registered in place under its correct instrument code, the same file hard-linked into the new id's folder. Built, tested, rehearsed on scratch; not used in production.) Prior: 2026-10-02 (**§2.1.3** new default-off `auto_discover.case_table:` — a CSV keyed on `original_name` whose columns become per-case `discovered.<column>` values, so a config can set project / researcher / operator / subject **per file**; built for the historical-drives ingest. New instrument code `XMIC` (external microscope `.czi`) in `ingest/config.py`.) Prior: 2026-10-01 (new **§3.9 `retire_acquisition`** — the Data-Office-only tool that retires an ACQ-ID (duplicate / derivative / orphan) into the tombstone file [06_REGISTRIES §2.9](06_REGISTRIES.md). **§2.1:** the "deliberately no `delete-acquisition` tool" paragraph is amended (intent kept, means changed); the side-effect inventory's *Reverse by* column points at the tool, and gains the two rows it was missing (`pending_dicom_regen.csv`, `pending_links.csv`). **§3.2** `validate_registries` gains four tombstone ERRORs.) Prior: 2026-09-04 (**§5.2** the MRI page's **destination project is token-valued** — "a name I set" is a token field with its own palette, not a text box, so one run can file scans into several projects; the engine was unchanged, only the GUI had withheld it. Preview gains a per-destination breakdown.) Prior: 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
 
 ---
 
@@ -966,16 +966,20 @@ Companion tools: `tools/backfill_pending_dicom.py` (enrols pre-2026-06-24 placeh
 > **🕗 Built and rehearsed on a scratch copy (branch `feat/retire-acquisition`); no production use yet.**
 > Each production use is its own dry-run-first, approved operation, after the historical-drives ingest is
 > merged. Procedure: [11_OPERATIONS §5.7](11_OPERATIONS.md). Schema: [06_REGISTRIES §2.9](06_REGISTRIES.md).
+> **🔶 v2 (branch `feat/retire-v2`, 2026-10-02): `equivalent` and `reidentified` built, tested and rehearsed on
+> a scratch copy; not used in production.** Ryan's decisions pending: `tasks/retire_v2_review.md` §2.5.
 
 ```
 python tools/retire_acquisition.py --nas-root J:\gjesus3-data --acq-id ACQ-... --reason "..." ^
-    (--duplicate-of ACQ-... | --derivative-of ACQ-... --to-project <name> [--subfolder outputs\derived] | --orphan) ^
+    (--duplicate-of ACQ-... | --equivalent-of ACQ-... | --derivative-of ACQ-... --to-project <name>
+     [--subfolder outputs\derived] | --orphan | --reidentify-as <CODE> [--instrument-model "..."]) ^
     [--execute]
 python tools/retire_acquisition.py --nas-root J:\gjesus3-data --list retire_list.csv [--execute]
 ```
 
 The list is a CSV with the columns `acq_id, disposition, target_acq_id, to_project, reason` (optional
-`subfolder`, `dest_name`). **A list is all-or-nothing:** any refusal stops the run before a write. One backup
+`subfolder`, `dest_name`; for `reidentified`: `new_instrument`, optional `instrument_model`, and no
+`target_acq_id`). **A list is all-or-nothing:** any refusal stops the run before a write. One backup
 per run.
 
 | Disposition | Precondition (refuses otherwise) | What happens to the bytes | Project links to it |
@@ -983,6 +987,14 @@ per run.
 | `duplicate` | the survivor is live; same file set (primary maps to primary); **every file byte-identical by a fresh SHA-256 of both sides** — `checksums.json` is never trusted alone; the survivor's bytes match its own `checksums.json` | deleted, after a re-check right before the delete | re-pointed at the survivor under the same name; removed if the survivor is already linked there |
 | `derivative` | the original is live; the target project exists, its folder exists, it is not `closed` (reopen it first: `reopen_project.py`) | hard-linked into `<project>/<subfolder>/<original name>` (default `outputs\derived`), verified by identity + SHA-256, then removed from `/raw/` | removed from `raw_linked/` (the file now lives in the subfolder) |
 | `orphan` | no registry row; exactly one `/raw/` folder; ≤ 50 MB; no provenance row names it | backed up whole off-NAS, then deleted | none |
+| 🔶 `equivalent` (v2) | both are single-file `.czi`; **not** byte-identical (then use `duplicate`); the metadata XML, every subblock's decoded pixels (position, pixel type, subblock metadata and attachments included) and every attachment's payload identical (`tools/ingest/czi_compare.py`); the survivor's bytes match its own `checksums.json`; nothing else in the retiree's folder | deleted, after a re-check | as `duplicate` |
+| 🔶 `reidentified` (v2) | a single-file `.czi`; the new code is in use in the same ecosystem; **the file's own device fingerprint names the new code** (`tools/reference/microscopy_instruments.yaml`); the primary's fresh SHA-256 is in its `checksums.json`; nothing else in the folder | **kept**: the new folder `…\<new ACQ-ID>\` gets a hard link to the same file; `metadata.json` / `checksums.json` / `README.txt` rewritten byte-exactly except the id and the instrument (`tools/ingest/reidentify.py`); then the old folder is removed | **not touched** (the same file); each gets a provenance event naming the new id; names keep their old prefix |
+
+**Re-identify order:** commit A under the lock (allocate the new id — same date, new code — and append the
+tombstone; the old row stays live) → build the new folder → commit B under the lock (append the new row and
+the carried-over manifest / `pending_*` rows, then remove the old ones byte-exact) → provenance events → the
+old folder removed. The new row is the old row with only `acq_id`, `instrument`, `primary_file_name` and
+`canonical_path` changed. A re-identify is not a re-ingest: the ingest's dedup index is never consulted.
 
 **Always refused:** an id a curated dataset cites (`registry_datasets.csv` and every text file under
 `curated_datasets/`); an id a tombstone names as `superseded_by`; a survivor or original that is itself being
