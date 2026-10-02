@@ -148,12 +148,13 @@ def find_all(buf, needle, limit=5000):
 class Haystack:
     """A (H, W, S) pixel array plus its bytes, built once, so many arrays can be searched in it."""
 
-    def __init__(self, arr):
+    def __init__(self, arr, raw=None):
         import numpy as np
         if arr.ndim != 3:
             raise ValueError("a (H, W, S) array is needed")
         self.arr = np.ascontiguousarray(arr)
-        self.hay = self.arr.tobytes()
+        # `raw`, when the caller has the array's own bytes, saves a copy of the whole tile
+        self.hay = raw if raw is not None and len(raw) == self.arr.nbytes else self.arr.tobytes()
 
     def locate(self, a):
         """Positions (oy, ox) where the array `a` (h, w, S) occurs, byte for byte, inside this array.
@@ -171,7 +172,7 @@ class Haystack:
             return []
         item = a.dtype.itemsize * s
         # the most distinctive row: most distinct values among a few candidates
-        cands = sorted({0, h // 4, h // 2, (3 * h) // 4, h - 1})
+        cands = sorted({0, h // 8, h // 4, (3 * h) // 8, h // 2, (5 * h) // 8, (3 * h) // 4, (7 * h) // 8, h - 1})
         best, best_n = cands[0], -1
         for r in cands:
             n = len(np.unique(a[r]))
@@ -181,6 +182,9 @@ class Haystack:
             return []
         needle = np.ascontiguousarray(a[best]).tobytes()
         stride = ww * item
+        # two more rows to compare before the whole array: a dark image has many near-identical rows, so the
+        # anchor can match thousands of places, and comparing the whole array at each costs about a millisecond
+        checks = sorted({h // 3, (2 * h) // 3, h - 1} - {best})
         hits = []
         for i in find_all(self.hay, needle):
             row, byte_col = divmod(i, stride)
@@ -188,6 +192,8 @@ class Haystack:
                 continue
             oy, ox = row - best, byte_col // item
             if oy < 0 or oy + h > hh or ox + w > ww:
+                continue
+            if any(not np.array_equal(b[oy + r, ox:ox + w], a[r]) for r in checks):
                 continue
             if np.array_equal(b[oy:oy + h, ox:ox + w], a):
                 hits.append((oy, ox))
@@ -318,7 +324,7 @@ def czi_features(path):
             out["channels"] = ";".join((c.get("Name") or "") for c in chs)
             sc = md.findall("Information/Image/Dimensions/S/Scenes/Scene")
             out["scenes_xml"] = len(sc)
-            out["scene_centers"] = ";".join(_tx(s, "CenterPosition") for s in sc)[:400]
+            out["scene_centers"] = ";".join(_tx(s, "CenterPosition") for s in sc)    # all of them: a plate has 50+
             fd = czi.filtered_subblock_directory
             out["n_level0"] = len(fd)
             out["n_entries"] = len(czi.subblock_directory)
@@ -533,6 +539,33 @@ def hash_match(A, B, bidx=None):
             "complete": n_m == n_a and n_a > 0, "maps": maps}
 
 
+def tileset_match(A, B):
+    """Is every tile of A byte-identical to a (distinct) tile of B, wherever it sits?
+
+    ZEN's stitching of a tile scan can keep the tiles and re-place each one by its own small shift, so a
+    stitched copy holds the same tile payloads at different positions: no one offset fits, yet every
+    tile is the original's. Counts each payload (hash and shape) at most as often as B holds it."""
+    cb = collections.Counter((q["hash"], q["w"], q["h"]) for q in B["pieces"])
+    ca = collections.Counter((p["hash"], p["w"], p["h"]) for p in A["pieces"])
+    n_a = len(A["pieces"])
+    matched = sum(min(v, cb.get(k, 0)) for k, v in ca.items())
+    return {"method": "retile", "pieces": n_a, "matched": matched,
+            "area_frac": matched / n_a if n_a else 0.0, "complete": n_a > 0 and matched == n_a}
+
+
+def grid_score(F):
+    """How far a file's tile positions are from a regular grid: the distinct x and y positions per tile
+    (about (columns + rows) / tiles for the acquisition's own grid, about 2 for a stitched file whose
+    tiles were each shifted)."""
+    ps = [p for p in F["pieces"]]
+    if not ps:
+        return 0.0
+    keys = {(p["scene"], p["x"], p["y"]) for p in ps}
+    xs = {(s, x) for (s, x, y) in keys}
+    ys = {(s, y) for (s, x, y) in keys}
+    return (len(xs) + len(ys)) / max(len(keys), 1)
+
+
 class TileReader:
     """Reads uncompressed tile payloads of one .czi (by the offsets in its tile cache) as arrays."""
 
@@ -548,16 +581,26 @@ class TileReader:
     def __exit__(self, *a):
         self.close()
 
-    def read(self, p):
-        import numpy as np
+    def read_raw(self, p):
+        """The tile's payload bytes and its (h, w, s) shape."""
         if any(v != 1 for v in p["stored"][:-3]):
             raise ValueError("a subblock with more than one plane")
         self.fh.seek(p["pos"])
         raw = self.fh.read(p["nbytes"])
         if len(raw) != p["nbytes"]:
             raise IOError(f"short read at {p['pos']}")
-        h, w, s = p["stored"][-3:]
+        return raw, tuple(p["stored"][-3:])
+
+    def read(self, p):
+        import numpy as np
+        raw, (h, w, s) = self.read_raw(p)
         return np.frombuffer(raw, dtype=np.dtype(p["dtype"])).reshape(h, w, s)
+
+    def haystack(self, p):
+        """A Haystack over the tile, sharing the payload bytes (no copy)."""
+        import numpy as np
+        raw, (h, w, s) = self.read_raw(p)
+        return Haystack(np.frombuffer(raw, dtype=np.dtype(p["dtype"])).reshape(h, w, s), raw=raw)
 
 
 def crop_match(A, B, a_path, b_path, hint=None, probes=3):
@@ -628,29 +671,44 @@ def crop_match(A, B, a_path, b_path, hint=None, probes=3):
     return {"method": "crop", "pieces": n_a, "matched": 0, "area_frac": 0.0, "complete": False, "maps": {}}
 
 
+def distinct_sample(arr, n=64):
+    """How many distinct values among about `n` evenly spaced values of an array: a blank (black,
+    saturated or empty-glass) tile has one or two, a tile with image content has dozens."""
+    import numpy as np
+    flat = arr.ravel()
+    return int(len(np.unique(flat[::max(1, flat.size // n)])))
+
+
 def stitch_match(S, T, s_path, t_path, sample=16, frac=0.30):
     """Does the stitched candidate S contain, byte for byte, the interiors of the tiles of T?
 
     ZEN's stitching re-places and blends tiles, so S cannot match T tile for tile; but where one tile
-    alone contributes, S holds that tile's pixels unchanged. For up to `sample` informative tiles of T
-    (evenly spaced), the central `frac` x `frac` patch is searched for in S's pixel data. A found
-    patch is exact equality of every value; the per-tile shifts show the re-placement."""
+    alone contributes, S holds that tile's pixels unchanged. Of the evenly spaced tiles of T, the first
+    `sample` whose central `frac` x `frac` patch carries image content (blank glass is skipped: it cannot
+    be located) are searched for in S's pixel data. A found patch is exact equality of every value, so
+    one hit proves S holds that tile's pixels; the per-tile shifts show the re-placement. `complete`:
+    at least half of the tested tiles are found (the rest sit where S blended or corrected them)."""
     import numpy as np
     tiles = [p for p in T["pieces"] if p["h"] >= 64 and p["w"] >= 64]
     tiles.sort(key=lambda p: (p["scene"], p["y"], p["x"]))
-    step = max(1, len(tiles) // sample)
-    chosen = tiles[::step][:sample]
-    found, shifts = 0, []
+    step = max(1, len(tiles) // (sample * 3))
+    candidates = tiles[::step]
+    found, tested, shifts = 0, 0, []
     with TileReader(t_path) as rt, TileReader(s_path) as rs:
         hays = []                       # S's pixel data, built once
         for sp in S["pieces"]:
             hays.append((sp, Haystack(rs.read(sp))))
-        for tp in chosen:
+        for tp in candidates:
+            if tested >= sample:
+                break
             tarr = rt.read(tp)
             h, w, _ = tarr.shape
             r0, r1 = int(h * (0.5 - frac / 2)), int(h * (0.5 + frac / 2))
             c0, c1 = int(w * (0.5 - frac / 2)), int(w * (0.5 + frac / 2))
             patch = tarr[r0:r1, c0:c1]
+            if distinct_sample(patch) < 8:
+                continue                # blank: nothing to find
+            tested += 1
             hit = None
             for sp, hay in hays:
                 if sp["dtype"] != tp["dtype"] or sp["samples"] != tp["samples"]:
@@ -663,8 +721,242 @@ def stitch_match(S, T, s_path, t_path, sample=16, frac=0.30):
             if hit is not None:
                 found += 1
                 shifts.append(hit)
-    return {"method": "stitch", "sampled": len(chosen), "found": found, "shifts": shifts,
-            "complete": len(chosen) >= 4 and found >= 0.9 * len(chosen)}
+    return {"method": "stitch", "sampled": tested, "found": found, "shifts": shifts,
+            "complete": tested >= 4 and found * 2 >= tested}
+
+
+def cutset_match(A, B, a_path, b_path, max_cached=96, probe=6):
+    """Is every tile of A a byte-exact sub-rectangle of SOME tile of B, each at its own offset?
+
+    ZEN's stitching can fuse the tiles: it trims each one to the part it contributes and re-places it, so
+    a stitched copy's tiles are pieces of the original's tiles at offsets that differ from tile to tile
+    (no one offset fits, and few tiles are whole). Each A tile is looked for in the B tiles that are at
+    least as big, in the same channel / time plane; a hit is exact equality of every value. Whole tiles
+    are found by payload hash first. A trimmed copy has almost every tile found, so once `probe`
+    informative tiles have been searched for in vain the pair is given up (an unrelated pair would
+    otherwise cost a full search per tile)."""
+    import numpy as np
+    byhash = index_by_hash(B)
+    n_a = len(A["pieces"])
+    tot = sum(area(p) for p in A["pieces"]) or 1
+    found, a_found, shifts, tried = 0, 0, [], 0
+    cache = collections.OrderedDict()
+    with TileReader(b_path) as rb, TileReader(a_path) as ra:
+        for pa in A["pieces"]:
+            whole = byhash.get((pa["hash"], pa["w"], pa["h"]))
+            if whole:
+                q = whole[0]
+                found += 1
+                a_found += area(pa)
+                shifts.append((q["x"] - pa["x"], q["y"] - pa["y"]))
+                continue
+            if found == 0 and tried >= probe:
+                break                                       # nothing found in `probe` tries: not related
+            a_arr = ra.read(pa)
+            if distinct_sample(a_arr) < 8:
+                continue                                    # blank: nothing to find
+            tried += 1
+            for qi, q in enumerate(B["pieces"]):
+                if q["w"] < pa["w"] or q["h"] < pa["h"] or q["dtype"] != pa["dtype"] \
+                        or q["samples"] != pa["samples"] or q["key"] != pa["key"]:
+                    continue
+                hay = cache.get(qi)
+                if hay is None:
+                    hay = cache[qi] = rb.haystack(q)
+                    if len(cache) > max_cached:
+                        cache.popitem(last=False)
+                else:
+                    cache.move_to_end(qi)
+                hs = hay.locate(a_arr)
+                if hs:
+                    oy, ox = hs[0]
+                    found += 1
+                    a_found += area(pa)
+                    shifts.append((q["x"] + ox - pa["x"], q["y"] + oy - pa["y"]))
+                    break
+    return {"method": "retrim", "pieces": n_a, "matched": found, "area_frac": a_found / tot,
+            "complete": n_a > 0 and found == n_a, "shifts": shifts}
+
+
+def trim_records(ms, P, complete_pairs, exhaustive=False):
+    """Relation records for re-trimmed tiles (cutset_match) on the pairs no other test fully explained: same
+    pixel size, a stage position in common, and the candidate copy A holds less pixel area than B.
+    `exhaustive` drops the pixel-size and stage-position gates (to validate them on a sample)."""
+    recs = []
+    for ma in ms:
+        for mb in ms:
+            a, b = ma["acq_id"], mb["acq_id"]
+            if a == b or (a, b) in complete_pairs or (b, a) in complete_pairs:
+                continue
+            if sum(area(p) for p in P[a]["pieces"]) >= sum(area(p) for p in P[b]["pieces"]):
+                continue
+            pa, pb = pixel_um(ma["feat"]), pixel_um(mb["feat"])
+            if not exhaustive and pa and pb and abs(pa - pb) / pb > 0.01:
+                continue
+            ca, cb = scene_centers(ma["feat"]), scene_centers(mb["feat"])
+            if not exhaustive and ca and cb and not (ca & cb):
+                continue
+            if len(P[a]["scenes"]) != 1 or len(P[b]["scenes"]) != 1:
+                continue
+            c = cutset_match(P[a], P[b], ma["staged_path"], mb["staged_path"])
+            if c["matched"]:
+                sh = c["shifts"]
+                recs.append({"a": a, "b": b, "kind": "retrim", "complete": c["complete"], "pieces": c["pieces"],
+                             "matched": c["matched"], "area_frac": round(c["area_frac"], 4),
+                             "maps": {"shifts": sh[:6], "distinct_shifts": len(set(sh))},
+                             "n_b": len(P[b]["pieces"]), "n_scenes_b": 1, "n_scenes_a": 1})
+    return recs
+
+
+def region_offset(A, B, ra, rb, seg=96, nrows=32, probes=4):
+    """Where does A's image sit inside B's? Returns (dx, dy) with A(X, Y) = B(X + dx, Y + dy), or None.
+
+    A distinctive stretch (`seg` pixels of one row, confirmed on the `nrows` rows below it) of each of A's
+    `probes` largest informative tiles is searched for in the tiles of B -- each B tile is read once for
+    all the probes. A crop that ZEN re-blocked from its own origin has blocks that straddle the
+    original's, so no whole tile or tile-sized piece of it is found in B; its pixels still are."""
+    import numpy as np
+    needles = []
+    for pa in sorted(A["pieces"], key=lambda q: -area(q)):
+        if len(needles) >= probes:
+            break
+        if pa["w"] < seg + 2 or pa["h"] < nrows + 8:
+            continue
+        a = ra.read(pa)
+        if distinct_sample(a) < 8:
+            continue
+        h, w, sm = a.shape
+        # a different stretch of the tile for each probe: one grid phase must not make every probe straddle
+        # a block boundary of B
+        c0 = int((w - seg) * (0.2 + 0.2 * len(needles)))
+        best, best_n = None, 15
+        for r in sorted({h // 8, h // 4, h // 2, (3 * h) // 4, (7 * h) // 8}):
+            if r + nrows > h:
+                continue
+            n = len(np.unique(a[r, c0:c0 + seg]))
+            if n > best_n:
+                best, best_n = r, n
+        if best is None:
+            continue
+        needles.append({"pa": pa, "c0": c0, "row": best, "item": a.dtype.itemsize * sm,
+                        "bytes": np.ascontiguousarray(a[best, c0:c0 + seg]).tobytes(),
+                        "block": np.ascontiguousarray(a[best:best + nrows, c0:c0 + seg])})
+    if not needles:
+        return None
+    for q in B["pieces"]:
+        todo = [nd for nd in needles if q["dtype"] == nd["pa"]["dtype"] and q["samples"] == nd["pa"]["samples"]
+                and q["key"] == nd["pa"]["key"] and q["w"] >= seg and q["h"] >= nrows]
+        if not todo:
+            continue
+        hay = rb.haystack(q)
+        bh, bw, _ = hay.arr.shape
+        for nd in todo:
+            stride = bw * nd["item"]
+            for i in find_all(hay.hay, nd["bytes"], limit=50):
+                row, byte_col = divmod(i, stride)
+                if byte_col % nd["item"] or byte_col + len(nd["bytes"]) > stride or row + nrows > bh:
+                    continue
+                ox = byte_col // nd["item"]
+                if np.array_equal(hay.arr[row:row + nrows, ox:ox + seg], nd["block"]):
+                    return (q["x"] + ox - (nd["pa"]["x"] + nd["c0"]), q["y"] + row - (nd["pa"]["y"] + nd["row"]))
+    return None
+
+
+def region_compare(A, B, ra, rb, off, cache_max=48):
+    """With A(X, Y) = B(X + off[0], Y + off[1]) assumed: how much of A's image is B's, pixel for pixel?
+
+    Tile by tile: each A tile is compared with the B tiles under it (where B's tiles overlap, equal to any
+    one of them counts). Returns pixel and tile counts, and the same for the informative (non-blank) tiles."""
+    import numpy as np
+    cache = collections.OrderedDict()
+
+    def tile(qi):
+        t = cache.get(qi)
+        if t is None:
+            t = cache[qi] = rb.read(B["pieces"][qi])
+            if len(cache) > cache_max:
+                cache.popitem(last=False)
+        else:
+            cache.move_to_end(qi)
+        return t
+
+    out = {"pixels": 0, "equal": 0, "tiles": 0, "equal_tiles": 0, "informative": 0, "equal_informative": 0}
+    for pa in sorted(A["pieces"], key=lambda q: (str(q["key"]), q["y"], q["x"])):
+        a = ra.read(pa)
+        h, w, _ = a.shape
+        x0, y0 = pa["x"] + off[0], pa["y"] + off[1]
+        ok = np.zeros((h, w), bool)
+        for qi, q in enumerate(B["pieces"]):
+            if q["dtype"] != pa["dtype"] or q["samples"] != pa["samples"] or q["key"] != pa["key"]:
+                continue
+            ix0, iy0 = max(x0, q["x"]), max(y0, q["y"])
+            ix1, iy1 = min(x0 + w, q["x"] + q["w"]), min(y0 + h, q["y"] + q["h"])
+            if ix1 <= ix0 or iy1 <= iy0:
+                continue
+            b = tile(qi)
+            sa = a[iy0 - y0:iy1 - y0, ix0 - x0:ix1 - x0]
+            sb = b[iy0 - q["y"]:iy1 - q["y"], ix0 - q["x"]:ix1 - q["x"]]
+            ok[iy0 - y0:iy1 - y0, ix0 - x0:ix1 - x0] |= (sa == sb).all(axis=-1)
+        e = int(ok.sum())
+        full = e == h * w
+        out["pixels"] += h * w
+        out["equal"] += e
+        out["tiles"] += 1
+        out["equal_tiles"] += int(full)
+        if distinct_sample(a) >= 8:
+            out["informative"] += 1
+            out["equal_informative"] += int(full)
+    return out
+
+
+def region_match(A, B, a_path, b_path):
+    """Is A's whole image a region of B's image, byte for byte (a crop whose blocks are its own)?
+
+    `complete`: every pixel of A equals the pixel of B at one constant offset, and A has content (at
+    least half of its tiles are not blank). A pair whose offset is found but whose pixels equal only in
+    part is returned as a partial match (area_frac = the equal share), so it can be flagged."""
+    with TileReader(a_path) as ra, TileReader(b_path) as rb:
+        off = region_offset(A, B, ra, rb)
+        if off is None:
+            return {"method": "region", "pieces": len(A["pieces"]), "matched": 0, "area_frac": 0.0,
+                    "complete": False, "maps": {}}
+        c = region_compare(A, B, ra, rb, off)
+    frac = c["equal"] / max(c["pixels"], 1)
+    complete = (c["equal"] == c["pixels"] and c["informative"] > 0
+                and c["equal_informative"] * 2 >= c["informative"])
+    return {"method": "region", "pieces": c["tiles"], "matched": c["equal_tiles"], "area_frac": frac,
+            "complete": complete, "maps": {"dx": off[0], "dy": off[1], "equal_share": round(frac, 6),
+                                           "informative": c["informative"]}}
+
+
+def region_records(ms, P, complete_pairs, exhaustive=False):
+    """Relation records for a re-blocked crop (region_match): only for a member that no other test has found
+    contained in anything, against each member that is larger, has the same pixel size and shares a stage
+    position (the same gates as trim_records). `exhaustive` drops the pixel-size and stage-position gates."""
+    recs = []
+    contained = {a for (a, _b) in complete_pairs}
+    for ma in ms:
+        a = ma["acq_id"]
+        if a in contained or len(P[a]["scenes"]) != 1:
+            continue
+        for mb in ms:
+            b = mb["acq_id"]
+            if a == b or (b, a) in complete_pairs or len(P[b]["scenes"]) != 1:
+                continue
+            if sum(area(p) for p in P[a]["pieces"]) >= sum(area(p) for p in P[b]["pieces"]):
+                continue
+            pa, pb = pixel_um(ma["feat"]), pixel_um(mb["feat"])
+            if not exhaustive and pa and pb and abs(pa - pb) / pb > 0.01:
+                continue
+            ca, cb = scene_centers(ma["feat"]), scene_centers(mb["feat"])
+            if not exhaustive and ca and cb and not (ca & cb):
+                continue
+            g = region_match(P[a], P[b], ma["staged_path"], mb["staged_path"])
+            if g["complete"] or g["area_frac"] >= 0.5:
+                recs.append({"a": a, "b": b, "kind": "region", "complete": g["complete"], "pieces": g["pieces"],
+                             "matched": g["matched"], "area_frac": round(g["area_frac"], 4), "maps": g["maps"],
+                             "n_b": len(P[b]["pieces"]), "n_scenes_b": 1, "n_scenes_a": 1})
+    return recs
 
 
 # ---------------------------------------------------------------------------------------------
@@ -761,9 +1053,85 @@ def informative(path, pieces, min_distinct=8, tries=3):
     best = sorted(pieces, key=lambda p: -area(p))[:tries]
     with TileReader(path) as r:
         for p in best:
-            if len(np.unique(r.read(p).ravel()[::997])) >= min_distinct:
+            if distinct_sample(r.read(p)) >= min_distinct:
                 return True
     return False
+
+
+def single_planes(path, F, max_bytes=200 * 10**6):
+    """The image planes of a small single-tile-per-plane file as 2D float arrays (the samples of an RGB
+    plane averaged), or None when the file is large or has several tiles per plane."""
+    import numpy as np
+    if sum(p["nbytes"] for p in F["pieces"]) > max_bytes or len(F["scenes"]) != 1:
+        return None
+    pos = {(p["x"], p["y"], p["w"], p["h"]) for p in F["pieces"]}
+    if len(pos) != 1:
+        return None
+    out = []
+    with TileReader(path) as r:
+        for p in F["pieces"]:
+            out.append(r.read(p).astype(np.float64).mean(axis=2))
+    return out
+
+
+def rank_correlation(a, b):
+    """Spearman correlation of two same-shape 2D arrays (on a 1-in-4 pixel sample)."""
+    import numpy as np
+    x, y = a[::2, ::2].ravel(), b[::2, ::2].ravel()
+    # dense ranks: equal values share a rank, so a flat plane has one rank and no correlation with anything
+    rx = np.unique(x, return_inverse=True)[1].astype(np.float64)
+    ry = np.unique(y, return_inverse=True)[1].astype(np.float64)
+    if rx.std() == 0 or ry.std() == 0:
+        return 0.0
+    return float(np.corrcoef(rx, ry)[0, 1])
+
+
+def pair_similarity(pa, Fa, pb, Fb):
+    """For two small files with planes of the same shape: for each plane of A, the best rank correlation
+    with a plane of B. Returns (min over A's planes of that best value, number of A planes), or None."""
+    A, B = single_planes(pa, Fa), single_planes(pb, Fb)
+    if not A or not B:
+        return None
+    best = []
+    for a in A:
+        vals = [rank_correlation(a, b) for b in B if b.shape == a.shape]
+        if not vals:
+            return None
+        best.append(max(vals))
+    return min(best), len(A)
+
+
+def retile_records(ms, P, complete_pairs):
+    """Relation records for re-placed tiles. A stitched copy that kept its tiles holds the original's tile
+    payloads at positions that no single offset explains. Mutual (the same tiles both ways): the file whose
+    positions are further from a regular grid is the stitched one; if the grids do not tell them apart the
+    pair is undecided (recorded, not complete). `complete_pairs` are the ordered pairs already fully
+    related by any other test. Returns (records, the ordered pairs this adds as complete)."""
+    retile = {}
+    for ma in ms:
+        for mb in ms:
+            a, b = ma["acq_id"], mb["acq_id"]
+            if a == b or (a, b) in complete_pairs or (b, a) in complete_pairs:
+                continue
+            t = tileset_match(P[a], P[b])
+            if t["complete"] and informative(ma["staged_path"], P[a]["pieces"]):
+                retile[(a, b)] = t
+    recs, done = [], set()
+    for (a, b), t in retile.items():
+        ga, gb = grid_score(P[a]), grid_score(P[b])
+        undecided = False
+        if (b, a) in retile:
+            if gb > ga + 0.3:
+                continue                                  # recorded from the other side
+            undecided = not (ga > gb + 0.3)
+        recs.append({"a": a, "b": b, "kind": "retile", "complete": not undecided, "pieces": t["pieces"],
+                     "matched": t["matched"], "area_frac": round(t["area_frac"], 4),
+                     "maps": {"grid": [round(ga, 2), round(gb, 2)]}, "n_b": len(P[b]["pieces"]),
+                     "undecided": undecided, "n_scenes_b": len(P[b]["scenes"]),
+                     "n_scenes_a": len(P[a]["scenes"])})
+        if not undecided:
+            done.add((a, b))
+    return recs, done
 
 
 def group_relations(ms, out, exhaustive=False):
@@ -797,6 +1165,11 @@ def group_relations(ms, out, exhaustive=False):
                              "n_scenes_b": len(P[b]["scenes"]), "n_scenes_a": len(P[a]["scenes"])})
                 if h["complete"]:
                     done_complete.add((a, b))
+    recs, done = retile_records(ms, P, done_complete)
+    rels.extend(recs)
+    done_complete |= done
+    # pairs that the crop and stitch tests below fully explain are not trimmed-tile candidates: run those
+    # tests first, then the trim test on whatever is left (see the end of this function)
     for ma in ms:
         for mb in ms:
             a, b = ma["acq_id"], mb["acq_id"]
@@ -823,6 +1196,10 @@ def group_relations(ms, out, exhaustive=False):
                                  "area_frac": round(s["found"] / max(s["sampled"], 1), 4),
                                  "maps": {"shifts": s["shifts"][:8]}, "n_b": len(P[b]["pieces"]),
                                  "n_scenes_b": len(P[b]["scenes"]), "n_scenes_a": len(P[a]["scenes"])})
+    complete_now = {(r["a"], r["b"]) for r in rels if r["complete"]}
+    rels.extend(trim_records(ms, P, complete_now | done_complete, exhaustive=exhaustive))
+    complete_now = {(r["a"], r["b"]) for r in rels if r["complete"]}
+    rels.extend(region_records(ms, P, complete_now | done_complete, exhaustive=exhaustive))
     return rels
 
 
@@ -838,12 +1215,19 @@ C_CROP = "export: crop"
 C_SUBSET = "export: subset"
 C_SPLIT = "scene split"
 C_STITCHED = "stitched copy"
+C_RENDER = "export: rendering"
 C_AMBIGUOUS = "ambiguous"
-DERIVATIVE_CLASSES = (C_SCALEBAR, C_RESAVE, C_CROP, C_SUBSET, C_SPLIT, C_STITCHED)
+DERIVATIVE_CLASSES = (C_SCALEBAR, C_RESAVE, C_CROP, C_SUBSET, C_SPLIT, C_STITCHED, C_RENDER)
 LIST_A = (C_SCALEBAR,)                     # pixel-identical to the original, with a scale bar
 LIST_R = (C_RESAVE,)                       # pixel-identical to the original, renamed re-save
 LIST_B = (C_CROP, C_SUBSET)                # smaller: a crop or a subset of the original
-PROPOSAL_C = (C_SPLIT, C_STITCHED)         # Ryan decides (scene splits, stitched copies)
+SMALL_EXPORT = 0.05                        # an export under 5% of the original's size is list b;
+                                           # a larger crop (an ROI re-save) is list k, for its own decision
+# Ryan decides: scene splits, stitched copies, and renderings (an 8-bit RGB rendering of a 16-bit image:
+# its pixels are derived, but equal only by correlation, never byte for byte)
+PROPOSAL_C = (C_SPLIT, C_STITCHED, C_RENDER)
+
+BITS = {"Gray8": 8, "Bgr24": 8, "Gray16": 16, "Bgr48": 16}
 
 
 def copy_like(n):
@@ -863,9 +1247,9 @@ def rank_key(n):
 
 def _edge_kind(r):
     """The relation type of a complete record 'A is contained in B'."""
-    if r["kind"] == "stitch":
+    if r["kind"] in ("stitch", "retile", "retrim"):
         return "stitched"
-    if r["kind"] == "crop":
+    if r["kind"] in ("crop", "region"):
         return "crop"
     covered = len(r.get("scenes_b") or [])
     if r.get("n_scenes_b", 1) > 1 and 0 < covered < r["n_scenes_b"]:
@@ -893,6 +1277,19 @@ def evidence_text(rec, parent_name):
         m = next(iter(rec["maps"].values()), {})
         return (f"{rec['matched']}/{rec['pieces']} tiles are byte-exact sub-rectangles of tiles of "
                 f"{parent_name}, one offset ({m.get('dx')}, {m.get('dy')})")
+    if rec["kind"] == "region":
+        m = rec.get("maps", {})
+        return (f"all its pixels equal {parent_name}'s at one offset ({m.get('dx')}, {m.get('dy')}), byte for byte "
+                f"({rec['pieces']} blocks; they are the crop's own, not the original's, so no block is a piece of one)")
+    if rec["kind"] == "retrim":
+        m = rec.get("maps", {})
+        return (f"all {rec['pieces']} tiles are byte-exact sub-rectangles of tiles of {parent_name}, each at its own "
+                f"offset ({m.get('distinct_shifts', '?')} different offsets: stitching trimmed and re-placed them)")
+    if rec["kind"] == "retile":
+        g = rec.get("maps", {}).get("grid", ["?", "?"])
+        return (f"all {rec['pieces']} tiles are byte-identical to tiles of {parent_name} but sit at positions no "
+                f"single offset explains (stitching re-placed them; tile-position irregularity {g[0]} vs {g[1]} "
+                f"for the original)")
     return (f"{rec['matched']}/{rec['pieces']} sampled tile interiors of {parent_name} found byte for byte "
             f"in it (stitched: tiles re-placed)")
 
@@ -965,7 +1362,7 @@ def classify_group(nodes, rels):
                                   by[x]["name"] for x in members if x != m)) if twins else ""}
                 else:
                     r = hc.get((m, rep[c]))
-                    out[m] = {"class": C_SCALEBAR if copy_like(by[m]) else C_RESAVE, "parent": rep[c],
+                    out[m] = {"class": C_SCALEBAR if by[m].get("scalebar") else C_RESAVE, "parent": rep[c],
                               "via": "identical",
                               "evidence": evidence_text(r, by[rep[c]]["name"]) if r else ""}
             continue
@@ -983,12 +1380,20 @@ def classify_group(nodes, rels):
                 _, kind, rec = min(direct, key=lambda t: t[0])
                 via, ev = kind, evidence_text(rec, by[rep[rc]]["name"])
             else:
+                # no relation of its own to the root: it is contained in another derivative, which is
+                # contained in the root. Say so with the member's own first relation.
                 kind = compose([k for (k, _r) in chain])
-                last = chain[-1][1]
-                via = f"{kind} (through {by[last['b']]['name']})"
-                ev = evidence_text(last, by[last["b"]]["name"])
+                first_kind, first = chain[0]
+                own = [(EDGE_RANK[k], r) for (nb, k, r) in edges[c] if nb == cid[first["b"]] and r["a"] == m]
+                if own:
+                    first = min(own, key=lambda t: t[0])[1]
+                mid = by[first["b"]]["name"]
+                via = f"{kind} (through {mid})"
+                ev = evidence_text(first, mid)
+                if len(chain) > 1:
+                    ev += f"; {mid} is in turn {chain[1][0]} of {by[rep[rc]]['name']}"
             if kind == "identical":
-                cls = C_SCALEBAR if copy_like(by[m]) else C_RESAVE
+                cls = C_SCALEBAR if by[m].get("scalebar") else C_RESAVE
             else:
                 cls = {"crop": C_CROP, "subset": C_SUBSET, "split": C_SPLIT, "stitched": C_STITCHED}[kind]
             out[m] = {"class": cls, "parent": rep[rc], "via": via, "evidence": ev}
@@ -1005,9 +1410,12 @@ def classify_group(nodes, rels):
         if out[m]["class"] in (C_DISTINCT, C_ORIGINAL):
             best = max(rs, key=lambda r: r["area_frac"])
             why = ("; the matching tiles carry no image content (blank), so it proves nothing"
-                   if best.get("weak") else " (not complete)")
+                   if best.get("weak") else
+                   "; the same tiles at different positions, and the grids do not say which is the acquisition's own"
+                   if best.get("undecided") else " (not complete)")
             out[m] = {"class": C_AMBIGUOUS, "parent": None, "via": "",
-                      "evidence": (f"{best['kind']} match covers {best['area_frac']:.0%} of its tiles inside "
+                      "evidence": (f"{best['kind']} match covers {best['area_frac']:.0%} of its "
+                                   f"{'pixels' if best['kind'] == 'region' else 'tiles'} inside "
                                    f"{by[best['b']]['name']}{why}")}
     return out
 
@@ -1040,8 +1448,11 @@ def cmd_relations(args):
     sib = sibling_group_keys(mem)
     t0 = time.time()
     todo = []
+    only = [x for x in (args.only or "").split(",") if x]
     for gi, k in enumerate(keys):
         f = os.path.join(rdir, f"{gi:03d}.json")
+        if only and not any(k.startswith(x) for x in only):
+            continue
         if os.path.exists(f) and not args.redo:
             continue
         if not all(os.path.exists(pieces_cache_path(args.out, m["sha256"])) for m in groups[k]):
@@ -1061,7 +1472,8 @@ def cmd_relations(args):
         rels = group_relations(ms, args.out, exhaustive=args.exhaustive)
         tmp = f + ".tmp"
         with io.open(tmp, "w", encoding="utf-8") as fh:
-            json.dump({"group": k, "ids": [m["acq_id"] for m in ms], "rels": rels}, fh)
+            json.dump({"group": k, "ids": [m["acq_id"] for m in ms], "rels": rels, "retile_checked": True,
+                           "stitch_version": 2, "trim_checked": True, "region_checked": True}, fh)
         os.replace(tmp, f)
         return gi
 
@@ -1080,6 +1492,161 @@ def cmd_relations(args):
     for k, e in errs:
         print("  ERROR:", k, e)
     return 1 if errs else 0
+
+
+def cmd_retile(args):
+    """Add the re-placed-tiles records (retile_records) to the relation files made before that test
+    existed. Cheap: tile payload hashes only, plus one tile read per member. Idempotent."""
+    mem = load_members_with_features(args.out)
+    groups = groups_of(mem)
+    rdir = os.path.join(args.out, "relations")
+    n = added = 0
+    for gi, k in enumerate(groups):
+        f = os.path.join(rdir, f"{gi:03d}.json")
+        if not os.path.exists(f):
+            continue
+        with io.open(f, encoding="utf-8") as fh:
+            d = json.load(fh)
+        if d.get("retile_checked") or d.get("gate"):
+            continue
+        ms = groups[k]
+        if not all(os.path.exists(pieces_cache_path(args.out, m["sha256"])) for m in ms):
+            continue
+        P = {m["acq_id"]: load_pieces(args.out, m["sha256"], m["staged_path"]) for m in ms}
+        complete_pairs = {(r["a"], r["b"]) for r in d["rels"] if r["complete"]}
+        recs, _done = retile_records(ms, P, complete_pairs)
+        d["rels"].extend(recs)
+        d["retile_checked"] = True
+        tmp = f + ".tmp"
+        with io.open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(d, fh)
+        os.replace(tmp, f)
+        n += 1
+        added += len(recs)
+    print(f"retile: {n} relation files updated, {added} records added")
+    return 0
+
+
+def cmd_restitch(args):
+    """Re-run the stitched-interiors test (stitch_match, version 2: blank tiles skipped, half the tested
+    tiles is enough) on every gated pair of the relation files made with version 1. Replaces the stitch
+    records of those pairs. Idempotent."""
+    mem = load_members_with_features(args.out)
+    groups = groups_of(mem)
+    rdir = os.path.join(args.out, "relations")
+    n = pairs = 0
+    t0 = time.time()
+    for gi, k in enumerate(groups):
+        f = os.path.join(rdir, f"{gi:03d}.json")
+        if not os.path.exists(f):
+            continue
+        with io.open(f, encoding="utf-8") as fh:
+            d = json.load(fh)
+        if d.get("stitch_version") == 2 or d.get("gate"):
+            continue
+        ms = groups[k]
+        if not all(os.path.exists(pieces_cache_path(args.out, m["sha256"])) for m in ms):
+            continue
+        P = {m["acq_id"]: load_pieces(args.out, m["sha256"], m["staged_path"]) for m in ms}
+        complete_pairs = {(r["a"], r["b"]) for r in d["rels"] if r["complete"] and r["kind"] != "stitch"}
+        keep = [r for r in d["rels"] if r["kind"] != "stitch"]
+        for ma in ms:
+            for mb in ms:
+                a, b = ma["acq_id"], mb["acq_id"]
+                if a == b or (a, b) in complete_pairs or (b, a) in complete_pairs:
+                    continue
+                if not stitch_gate(ma["feat"], mb["feat"], P[a], P[b]):
+                    continue
+                pairs += 1
+                s_ = stitch_match(P[a], P[b], ma["staged_path"], mb["staged_path"])
+                if s_["found"]:
+                    keep.append({"a": a, "b": b, "kind": "stitch", "complete": s_["complete"],
+                                 "pieces": s_["sampled"], "matched": s_["found"],
+                                 "area_frac": round(s_["found"] / max(s_["sampled"], 1), 4),
+                                 "maps": {"shifts": s_["shifts"][:8]}, "n_b": len(P[b]["pieces"]),
+                                 "n_scenes_b": len(P[b]["scenes"]), "n_scenes_a": len(P[a]["scenes"])})
+        d["rels"], d["stitch_version"] = keep, 2
+        tmp = f + ".tmp"
+        with io.open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(d, fh)
+        os.replace(tmp, f)
+        n += 1
+        print(f"  group {gi:03d} {k[:26]}: done ({time.time() - t0:.0f}s)", flush=True)
+    print(f"restitch: {n} relation files, {pairs} gated pairs tested")
+    return 0
+
+
+def cmd_retrim(args):
+    """Add the re-trimmed-tiles records (trim_records) to the relation files made before that test existed.
+    Reads the tiles of the pairs it tests. Idempotent (marks the file `trim_checked`)."""
+    mem = load_members_with_features(args.out)
+    groups = groups_of(mem)
+    rdir = os.path.join(args.out, "relations")
+    n = added = 0
+    t0 = time.time()
+    for gi, k in enumerate(groups):
+        f = os.path.join(rdir, f"{gi:03d}.json")
+        if not os.path.exists(f):
+            continue
+        with io.open(f, encoding="utf-8") as fh:
+            d = json.load(fh)
+        if d.get("trim_checked") or d.get("gate"):
+            continue
+        ms = groups[k]
+        if not all(os.path.exists(pieces_cache_path(args.out, m["sha256"])) for m in ms):
+            continue
+        P = {m["acq_id"]: load_pieces(args.out, m["sha256"], m["staged_path"]) for m in ms}
+        complete_pairs = {(r["a"], r["b"]) for r in d["rels"] if r["complete"]}
+        recs = trim_records(ms, P, complete_pairs)
+        d["rels"] = [r for r in d["rels"] if r["kind"] != "retrim"] + recs
+        d["trim_checked"] = True
+        tmp = f + ".tmp"
+        with io.open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(d, fh)
+        os.replace(tmp, f)
+        n += 1
+        added += len(recs)
+        if recs:
+            print(f"  group {gi:03d} {k[:26]}: {len(recs)} records ({time.time() - t0:.0f}s)", flush=True)
+    print(f"retrim: {n} relation files checked, {added} records added")
+    return 0
+
+
+def cmd_region(args):
+    """Add the re-blocked-crop records (region_records) to the relation files made before that test existed.
+    Reads the tiles of the pairs it tests (few: only members still unrelated to everything). Idempotent
+    (marks the file `region_checked`)."""
+    mem = load_members_with_features(args.out)
+    groups = groups_of(mem)
+    rdir = os.path.join(args.out, "relations")
+    n = added = 0
+    t0 = time.time()
+    for gi, k in enumerate(groups):
+        f = os.path.join(rdir, f"{gi:03d}.json")
+        if not os.path.exists(f):
+            continue
+        with io.open(f, encoding="utf-8") as fh:
+            d = json.load(fh)
+        if d.get("region_checked") or d.get("gate"):
+            continue
+        ms = groups[k]
+        if not all(os.path.exists(pieces_cache_path(args.out, m["sha256"])) for m in ms):
+            continue
+        P = {m["acq_id"]: load_pieces(args.out, m["sha256"], m["staged_path"]) for m in ms}
+        complete_pairs = {(r["a"], r["b"]) for r in d["rels"] if r["complete"]}
+        recs = region_records(ms, P, complete_pairs)
+        d["rels"] = [r for r in d["rels"] if r["kind"] != "region"] + recs
+        d["region_checked"] = True
+        tmp = f + ".tmp"
+        with io.open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(d, fh)
+        os.replace(tmp, f)
+        n += 1
+        added += len(recs)
+        if recs:
+            print(f"  group {gi:03d} {k[:26]}: {len(recs)} records ({time.time() - t0:.0f}s)", flush=True)
+    print(f"region: {n} relation files checked, {added} records added")
+    return 0
 
 
 def cmd_validate(args):
@@ -1107,7 +1674,7 @@ def cmd_validate(args):
         ms = groups[k]
         t0 = time.time()
         ex = group_relations(ms, args.out, exhaustive=True)
-        found = [r for r in ex if r["complete"] and r["kind"] != "hash"]
+        found = [r for r in ex if r["complete"]]
         out.append({"group": k, "members": [m["name"] for m in ms], "gb": sum(int(m["size"]) for m in ms) / 1e9,
                     "complete_found": [(r["kind"], r["a"], r["b"]) for r in found],
                     "partial": [(r["kind"], r["a"], r["b"], r["area_frac"]) for r in ex if not r["complete"]]})
@@ -1146,8 +1713,9 @@ def dims_columns(f):
 
 
 def decide_action(m, c, parent, projects_status):
-    """What the class means for the retire lists: ('a'|'r'|'b'|'c'|'stay'|'waiting'|'conflict'|'closed', note):
-    a = scale-bar copy, r = identical re-save, b = crop/subset, c = Ryan's proposal (splits, stitched)."""
+    """What the class means for the retire lists: ('a'|'r'|'b'|'k'|'c'|'stay'|'waiting'|'conflict'|'closed', note):
+    a = scale-bar copy, r = identical re-save, b = small export (crop/subset under 5% of the original),
+    k = larger crop/subset (an ROI re-save), c = Ryan's proposal (splits, stitched, renderings)."""
     cls = c["class"]
     if cls not in DERIVATIVE_CLASSES:
         return "stay", ""
@@ -1160,7 +1728,12 @@ def decide_action(m, c, parent, projects_status):
         return "conflict", f"its own project {m['project_name']} differs from the original's {pp}"
     if projects_status.get(pp) == "closed":
         return "closed", f"project {pp} is closed: reopen it first"
-    return ("a" if cls in LIST_A else "r" if cls in LIST_R else "b"), ""
+    if cls in LIST_A:
+        return "a", ""
+    if cls in LIST_R:
+        return "r", ""
+    small = int(m["size"]) < SMALL_EXPORT * int(parent["size"])
+    return ("b" if small else "k"), ""
 
 
 ID65 = "ID65_PB_lung_20x_scale.czi"
@@ -1190,18 +1763,69 @@ def id65_row(projects):
             "action_note": "NOT a copy: it is the only record of the ID65 acquisition (BACKLOG expected a scale-bar copy)"}
 
 
+def similarity_pass(ms, cl, out):
+    """Roots of a group that are the same size but share no tile: are they one image rendered twice?
+
+    For every such pair (small files only) the rank correlation of the image planes is computed. At 0.98 or
+    more, the file with the lower bit depth (an 8-bit RGB rendering of a 16-bit image) is an `export:
+    rendering` of the other, whose class becomes `original`. From 0.90, both are `ambiguous` (the same
+    image, differently processed, and nothing says which is the acquisition). Below that, the evidence
+    just records the numbers. Changes `cl` in place."""
+    roots = [m for m in ms if cl[m["acq_id"]]["class"] in (C_DISTINCT, C_ORIGINAL)]
+    for i, m in enumerate(roots):
+        for o in roots[i + 1:]:
+            cm, co = cl[m["acq_id"]], cl[o["acq_id"]]
+            if cm["class"] == C_ORIGINAL and co["class"] == C_ORIGINAL:
+                continue
+            if not m["feat"]["SizeX"] or (m["feat"]["SizeX"], m["feat"]["SizeY"]) != (o["feat"]["SizeX"], o["feat"]["SizeY"]):
+                continue
+            bm, bo = BITS.get(m["feat"]["PixelType"], 0), BITS.get(o["feat"]["PixelType"], 0)
+            lo, hi = (m, o) if bm < bo else (o, m)
+            Fm = load_pieces(out, m["sha256"], m["staged_path"])
+            Fo = load_pieces(out, o["sha256"], o["staged_path"])
+            s1 = pair_similarity(m["staged_path"], Fm, o["staged_path"], Fo)
+            s2 = pair_similarity(o["staged_path"], Fo, m["staged_path"], Fm)
+            if not s1 or not s2:
+                continue
+            rho = min(s1[0], s2[0]) if bm == bo else (s1[0] if lo is m else s2[0])
+            note = (f"same dimensions as {{other}}; rank correlation of the image planes {rho:.2f}")
+            if rho >= 0.98 and bm != bo:
+                cl[lo["acq_id"]] = {"class": C_RENDER, "parent": hi["acq_id"], "via": "rendering",
+                                    "evidence": (note.format(other=hi["name"]) + f": a {BITS[lo['feat']['PixelType']]}-bit "
+                                                 f"rendering of the {BITS[hi['feat']['PixelType']]}-bit image (pixel values "
+                                                 "are display-mapped, so not byte-identical)")}
+                if cl[hi["acq_id"]]["class"] == C_DISTINCT:
+                    cl[hi["acq_id"]] = {"class": C_ORIGINAL, "parent": None, "via": "", "evidence": ""}
+            elif rho >= 0.90:
+                for x, y in ((m, o), (o, m)):
+                    if cl[x["acq_id"]]["class"] == C_DISTINCT:
+                        cl[x["acq_id"]] = {"class": C_AMBIGUOUS, "parent": None, "via": "",
+                                           "evidence": note.format(other=y["name"])
+                                           + ": the same image processed differently, not byte-identical; "
+                                             "nothing says which is the acquisition"}
+            else:
+                for x, y in ((m, o), (o, m)):
+                    if cl[x["acq_id"]]["class"] == C_DISTINCT and not cl[x["acq_id"]]["evidence"]:
+                        cl[x["acq_id"]]["evidence"] = note.format(other=y["name"]) + ": unrelated content"
+
+
 def cmd_classify(args):
     mem = load_members_with_features(args.out)
     groups = groups_of(mem)
     rels = load_relations(args.out)
     missing = [k for k in groups if k not in rels]
-    if missing:
+    if missing and not args.allow_missing:
         print(f"{len(missing)} groups have no relations yet; run `relations` first", file=sys.stderr)
         return 1
+    if missing:
+        print(f"PREVIEW: {len(missing)} groups without relations are left out", file=sys.stderr)
     projects = {r["name"]: r["status"] for r in rcsv(os.path.join(NAS, "registries", "registry_projects.csv"))}
+    sibling = sibling_group_keys(mem)
     rows = []
     weak_checked = {}
     for k, ms in groups.items():
+        if k not in rels:
+            continue
         nodes = []
         for m in ms:
             f = m["feat"]
@@ -1219,8 +1843,15 @@ def cmd_classify(args):
                 if not weak_checked[a["acq_id"]]:
                     r["complete"], r["weak"] = False, True
         cl = classify_group(nodes, rels[k])
+        if k not in sibling:
+            similarity_pass(ms, cl, args.out)
         for m in ms:
             c = cl[m["acq_id"]]
+            if c["class"] == C_DISTINCT and not c["evidence"]:
+                c["evidence"] = (
+                    "a different stage position from every other member (XML scene centre); tiles not compared"
+                    if k in sibling else
+                    "no tile of it is in another member and no tile of another member is in it")
             parent = byid.get(c["parent"]) if c["parent"] else None
             action, note = decide_action(m, c, parent, projects) if parent else \
                 ("stay", "") if c["class"] != C_AMBIGUOUS else ("stay", "ambiguous: stays in /raw/")
@@ -1295,7 +1926,8 @@ def write_list(path, rows):
 
 def cmd_lists(args):
     classified = rcsv(os.path.join(args.out, "classified.csv"))
-    names = {"a": "2026-10_r4_scalebars.csv", "b": "2026-10_r4_exports.csv", "r": "2026-10_r4_resaves.csv"}
+    names = {"a": "2026-10_r4_scalebars.csv", "b": "2026-10_r4_exports.csv", "r": "2026-10_r4_resaves.csv",
+             "k": "2026-10_r4_roi_crops.csv"}
     os.makedirs(args.lists_dir, exist_ok=True)
     held = []
     for action, fn in names.items():
@@ -1307,10 +1939,62 @@ def cmd_lists(args):
         write_list(os.path.join(args.lists_dir, fn), keep)
         ids = {r["acq_id"] for r in keep}
         gb = sum(int(r["size"]) for r in classified if r["acq_id"] in ids) / 1e9
-        print(f"{fn}: {len(keep)} rows, {gb:.1f} GB")
+        # past the classic Windows limit of 259 characters (J:\gjesus3-data\projects\... form): the retire tool
+        # uses long-path forms, but Explorer, Office and older tools on the lab's machines may not
+        long_ = [r for r in keep if len(NAS) + len("\\projects\\") + len(r["to_project"]) + 1 + len(r["subfolder"]) + 1
+                 + len(r["dest_name"]) > 259]
+        print(f"{fn}: {len(keep)} rows, {gb:.1f} GB" + (f"; {len(long_)} destination path(s) over 259 characters" if long_ else ""))
+        for r in long_:
+            print(f"    over 259: {r['acq_id']} {r['dest_name']}")
     for r, iss in held:
         print(f"  HELD (path issue, not listed): {r['acq_id']} {r['dest_name']}: {'; '.join(iss)}")
     return 0
+
+
+def cmd_verify_lists(args):
+    """Read-only checks of the written lists against production, before any dry run: every retiree and
+    original is live in registry_raw; the original's registry project is the row's `to_project`, active;
+    the retiree's own project is blank or the same; no id is both retiree and original; and the SHA-256 in
+    each acquisition's own checksums.json equals the staged file's (so the pixel check was made on the
+    bytes that are in production)."""
+    reg = {r["acq_id"]: r for r in rcsv(os.path.join(NAS, "registries", "registry_raw.csv"))}
+    projs = {r["project_id"]: r for r in rcsv(os.path.join(NAS, "registries", "registry_projects.csv"))}
+    mem = {m["acq_id"]: m for m in rcsv(os.path.join(args.out, "members.csv"))}
+    bad = 0
+    for fn in ("2026-10_r4_scalebars.csv", "2026-10_r4_exports.csv", "2026-10_r4_resaves.csv",
+               "2026-10_r4_roi_crops.csv"):
+        path = os.path.join(args.lists_dir, fn)
+        rows = rcsv(path)
+        retirees = {r["acq_id"] for r in rows}
+        targets = {r["target_acq_id"] for r in rows}
+        problems = []
+        if retirees & targets:
+            problems.append(f"ids both retiree and original: {sorted(retirees & targets)}")
+        shas = 0
+        for r in rows:
+            a, t = reg.get(r["acq_id"]), reg.get(r["target_acq_id"])
+            if not a or not t:
+                problems.append(f"{r['acq_id']}: retiree or original not live")
+                continue
+            pt = projs.get(t["project_id"], {})
+            if pt.get("name") != r["to_project"] or pt.get("status") != "active":
+                problems.append(f"{r['acq_id']}: original's project is {pt.get('name')!r} ({pt.get('status')})")
+            pa = projs.get(a["project_id"], {}).get("name", "")
+            if pa and pa != r["to_project"]:
+                problems.append(f"{r['acq_id']}: own project {pa} differs")
+            for acq, row in ((r["acq_id"], a), (r["target_acq_id"], t)):
+                cj = os.path.join(NAS, row["canonical_path"].strip("/").replace("/", "\\"), "checksums.json")
+                with io.open(cj, encoding="utf-8") as f:
+                    got = json.load(f)["files"].get(row["primary_file_name"])
+                if got != mem[acq]["sha256"]:
+                    problems.append(f"{acq}: production checksums.json {got} != staged {mem[acq]['sha256']}")
+                else:
+                    shas += 1
+        print(f"{fn}: {len(rows)} rows, {len(targets)} originals, {shas} sha256 matches, {len(problems)} problems")
+        for p in problems:
+            print("   PROBLEM:", p)
+        bad += len(problems)
+    return 1 if bad else 0
 
 
 def md_table(header, rows):
@@ -1328,7 +2012,8 @@ def cmd_report(args):
     def gb(rs):
         return f"{sum(int(r['size']) for r in rs) / 1e9:,.1f}"
 
-    cls_order = [C_ORIGINAL, C_DISTINCT, C_SCALEBAR, C_RESAVE, C_CROP, C_SUBSET, C_SPLIT, C_STITCHED, C_AMBIGUOUS]
+    cls_order = [C_ORIGINAL, C_DISTINCT, C_SCALEBAR, C_RESAVE, C_CROP, C_SUBSET, C_SPLIT, C_STITCHED, C_RENDER,
+                 C_AMBIGUOUS]
     t = []
     for c in cls_order:
         rs = [r for r in grouped if r["class"] == c]
@@ -1337,7 +2022,8 @@ def cmd_report(args):
               sum(1 for r in grouped if r["own_project"])))
     out.append("### Members by class\n\n" + md_table(["class", "files", "GB", "groups", "files with a project"], t))
     acts = collections.OrderedDict([("a", "list (a): scale-bar copies"), ("r", "list (a2): identical re-saves"),
-                                    ("b", "list (b): crops and subsets"),
+                                    ("b", "list (b): small exports (crops and subsets under 5% of the original)"),
+                                    ("k", "list (b2): larger crops and subsets (ROI re-saves)"),
                                     ("c", "proposal (c): scene splits, stitched copies"),
                                     ("waiting", "derivative, original has no project"),
                                     ("conflict", "derivative's own project differs from the original's"),
@@ -1350,14 +2036,15 @@ def cmd_report(args):
     t = []
     for c in DERIVATIVE_CLASSES:
         row = [c]
-        for a in ("a", "r", "b", "c", "waiting", "conflict", "closed"):
+        for a in ("a", "r", "b", "k", "c", "waiting", "conflict", "closed"):
             rs = [r for r in grouped if r["class"] == c and r["action"] == a]
             row.append(f"{len(rs)} ({gb(rs)} GB)" if rs else "-")
         t.append(row)
     out.append("### Derivatives: class x action\n\n" + md_table(
-        ["class", "list a", "list a2", "list b", "proposal c", "waiting (no project)", "conflict", "closed project"], t))
+        ["class", "list a", "list a2", "list b", "list b2", "proposal c", "waiting (no project)", "conflict",
+         "closed project"], t))
     t = []
-    for a in ("a", "r", "b"):
+    for a in ("a", "r", "b", "k"):
         byp = collections.defaultdict(list)
         for r in grouped:
             if r["action"] == a:
@@ -1365,6 +2052,25 @@ def cmd_report(args):
         for pn, rs in sorted(byp.items()):
             t.append((a, pn, len(rs), gb(rs)))
     out.append("### List rows by destination project\n\n" + md_table(["list", "project", "files", "GB"], t))
+    # the groups whose original has no project but which hold derivatives: input of the no-project mapping round
+    wait = collections.defaultdict(list)
+    for r in grouped:
+        if r["action"] in ("waiting", "c") and not r["parent_project"]:
+            wait[(r["group"], r["parent_acq_id"], r["parent_name"])].append(r)
+    byid = {r["acq_id"]: r for r in grouped}
+    wrows = []
+    for (g, pid, pname), rs in sorted(wait.items()):
+        par = byid[pid]
+        wrows.append({"group": g, "original_acq_id": pid, "original_name": pname, "instrument": par["instrument"],
+                      "original_folder": par["folder"], "derivatives": len(rs),
+                      "classes": "; ".join(f"{c} {n}" for c, n in sorted(collections.Counter(x["class"] for x in rs).items())),
+                      "derivative_gb": round(sum(int(x["size"]) for x in rs) / 1e9, 2)})
+    wcsv(os.path.join(args.out, "waiting_groups.csv"),
+         ["group", "original_acq_id", "original_name", "instrument", "original_folder", "derivatives", "classes",
+          "derivative_gb"], wrows)
+    out.append(f"### Groups whose original has no project but which hold derivatives\n\n{len(wrows)} groups, "
+               f"{sum(w['derivatives'] for w in wrows)} derivatives, {sum(w['derivative_gb'] for w in wrows):.1f} GB "
+               "(`waiting_groups.csv`)")
     amb = [r for r in rows if r["class"] == C_AMBIGUOUS]
     out.append("### Ambiguous members\n\n" + md_table(
         ["acq_id", "name", "group", "evidence"],
@@ -1387,19 +2093,24 @@ def main(argv=None):
     ap.add_argument("--redo", action="store_true", help="relations: recompute groups already done")
     ap.add_argument("--exhaustive", action="store_true",
                     help="relations: run the crop and stitch tests on every pair (validates the gates)")
+    ap.add_argument("--only", default="", help="relations: only the groups whose key starts with one of these, comma-separated")
+    ap.add_argument("--allow-missing", action="store_true",
+                    help="classify: preview, leaving out the groups whose relations are not computed yet")
     ap.add_argument("--skip-siblings", action="store_true",
                     help="pieces: do not read groups whose members are distinct stage positions")
     ap.add_argument("--sample", type=int, default=20, help="validate: how many gated-out groups to test")
     ap.add_argument("--max-gb", type=float, default=6.0, help="validate: largest group (GB) to test")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("table", "features", "pieces", "check", "relations", "validate", "classify", "lists", "report"):
+    for name in ("table", "features", "pieces", "check", "relations", "retile", "restitch", "retrim", "region", "validate", "classify", "lists",
+                 "verify-lists", "report"):
         sub.add_parser(name)
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
     return {"table": cmd_table, "features": cmd_features, "pieces": cmd_pieces, "check": cmd_check,
-            "relations": cmd_relations,
-            "validate": cmd_validate, "classify": cmd_classify, "lists": cmd_lists,
+            "relations": cmd_relations, "retile": cmd_retile, "restitch": cmd_restitch, "retrim": cmd_retrim, "region": cmd_region,
+            "validate": cmd_validate,
+            "classify": cmd_classify, "lists": cmd_lists, "verify-lists": cmd_verify_lists,
             "report": cmd_report}[args.cmd](args)
 
 

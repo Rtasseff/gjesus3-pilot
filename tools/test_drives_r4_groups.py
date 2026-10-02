@@ -202,6 +202,122 @@ def test_crop_and_stitch():
         check(st["found"] == 0 and not st["complete"], "an unrelated image contains none of the tiles")
 
 
+def test_retile():
+    print("test_retile")
+    with tempfile.TemporaryDirectory() as tmp:
+        t = [img(30, 40, 1) for _ in range(6)]
+        grid = FakeFile(tmp, "grid")
+        shifted = FakeFile(tmp, "shifted")
+        for i, a in enumerate(t):
+            r, c = divmod(i, 3)
+            grid.add(a, c * 36, r * 26)
+            shifted.add(a, c * 36 + 3 * i, r * 26 + 2 * i + 1)       # each tile re-placed by its own shift
+        grid, shifted = grid.done(), shifted.done()
+        check(not R.hash_match(shifted, grid)["complete"], "no single offset fits the re-placed tiles")
+        ts = R.tileset_match(shifted, grid)
+        check(ts["complete"] and ts["matched"] == 6, "but all 6 tile payloads are the grid file's")
+        check(R.tileset_match(grid, shifted)["complete"], "and the other way round (mutual)")
+        check(R.grid_score(grid) < 1.0 < R.grid_score(shifted),
+              f"the regular grid scores low ({R.grid_score(grid):.2f}), the shifted one high ({R.grid_score(shifted):.2f})")
+        other = FakeFile(tmp, "other").add(t[0], 0, 0).add(img(30, 40, 1), 36, 0).done()
+        check(not R.tileset_match(other, grid)["complete"] and R.tileset_match(other, grid)["matched"] == 1,
+              "one tile in common is a partial match")
+        dup = FakeFile(tmp, "dup").add(t[0], 0, 0).add(t[0], 40, 0).done()
+        one = FakeFile(tmp, "one").add(t[0], 0, 0).done()
+        check(not R.tileset_match(dup, one)["complete"], "a payload is not counted more often than B holds it")
+
+
+def test_retrim():
+    print("test_retrim")
+    with tempfile.TemporaryDirectory() as tmp:
+        tiles = [img(80, 100, 3) for _ in range(4)]
+        B = FakeFile(tmp, "orig")
+        for i, t in enumerate(tiles):
+            B.add(t, (i % 2) * 90, (i // 2) * 70)
+        B = B.done()
+        # a fused/stitched copy: every tile trimmed by its own amounts and re-placed
+        A = FakeFile(tmp, "fused")
+        trims = [(0, 10, 0, 8), (5, 0, 3, 0), (0, 0, 12, 4), (7, 3, 1, 1)]       # left, right, top, bottom
+        for i, (t, (l, r, tp, bt)) in enumerate(zip(tiles, trims)):
+            A.add(t[tp:80 - bt, l:100 - r].copy(), (i % 2) * 85 + i, (i // 2) * 66 + 2 * i)
+        A = A.done()
+        c = R.cutset_match(A, B, A["path"], B["path"])
+        check(c["complete"] and c["matched"] == 4, "all 4 trimmed tiles are sub-rectangles of the original's tiles")
+        check(len(set(c["shifts"])) == 4, "each at its own offset (4 different shifts)")
+        check(not R.crop_match(A, B, A["path"], B["path"])["complete"], "no single offset explains them (not a crop)")
+        check(not R.cutset_match(B, A, B["path"], A["path"])["complete"],
+              "the original is not made of pieces of the trimmed copy")
+        other = FakeFile(tmp, "other").add(img(60, 70, 3), 0, 0).done()
+        check(R.cutset_match(other, B, other["path"], B["path"])["matched"] == 0, "an unrelated tile is not found")
+        ms = [{"acq_id": "A", "feat": {"pxX": "6.9E-07", "scene_centers": "1,2"}, "staged_path": A["path"]},
+              {"acq_id": "B", "feat": {"pxX": "6.9E-07", "scene_centers": "1,2"}, "staged_path": B["path"]}]
+        recs = R.trim_records(ms, {"A": dict(A, scenes={0: [0, 0, 1, 1]}), "B": dict(B, scenes={0: [0, 0, 1, 1]})}, set())
+        check(len(recs) == 1 and recs[0]["a"] == "A" and recs[0]["b"] == "B" and recs[0]["complete"],
+              "trim_records: A (the smaller) is trimmed from B, recorded in that direction only")
+        ms[1]["feat"]["scene_centers"] = "9,9"
+        check(R.trim_records(ms, {"A": dict(A, scenes={0: [0, 0, 1, 1]}), "B": dict(B, scenes={0: [0, 0, 1, 1]})}, set()) == [],
+              "files with different stage positions are not tested")
+
+
+def test_region():
+    print("test_region")
+    with tempfile.TemporaryDirectory() as tmp:
+        full = img(520, 640, 3)                                  # the original's whole image
+        B = FakeFile(tmp, "orig")                                # stored in 256 x 256 blocks from its origin
+        for by in range(0, 520, 256):
+            for bx in range(0, 640, 256):
+                B.add(full[by:by + 256, bx:bx + 256].copy(), bx, by)
+        B = B.done()
+        B["scenes"] = {0: [0, 0, 640, 520]}
+
+        def crop(name, x0, y0, w, h, edit=None):
+            sub = full[y0:y0 + h, x0:x0 + w].copy()
+            if edit:
+                edit(sub)
+            f = FakeFile(tmp, name)                              # the crop is re-blocked from its OWN origin
+            for by in range(0, h, 256):
+                for bx in range(0, w, 256):
+                    f.add(sub[by:by + 256, bx:bx + 256].copy(), bx, by)
+            d = f.done()
+            d["scenes"] = {0: [0, 0, w, h]}
+            return d
+
+        A = crop("reblocked", 45, 33, 480, 360)                  # its blocks straddle the original's
+        check(not R.crop_match(A, B, A["path"], B["path"])["complete"], "no block of the crop is a piece of one tile")
+        check(not R.cutset_match(A, B, A["path"], B["path"])["complete"], "nor does the trimmed-tile test find them")
+        g = R.region_match(A, B, A["path"], B["path"])
+        check(g["complete"] and (g["maps"]["dx"], g["maps"]["dy"]) == (45, 33) and g["area_frac"] == 1.0,
+              f"the whole image is found in the original at offset (45, 33): {g['matched']}/{g['pieces']} blocks, "
+              f"{g['area_frac']:.0%}")
+        bad = crop("edited", 45, 33, 480, 360, edit=lambda a: a.__setitem__((100, 200, 1), a[100, 200, 1] ^ 1))
+        g = R.region_match(bad, B, bad["path"], B["path"])
+        check(not g["complete"] and 0.99 < g["area_frac"] < 1.0,
+              "one altered value: found, but not complete, and the share says how close")
+        other = FakeFile(tmp, "other").add(img(200, 300, 3), 0, 0).done()
+        other["scenes"] = {0: [0, 0, 300, 200]}
+        g = R.region_match(other, B, other["path"], B["path"])
+        check(not g["complete"] and g["matched"] == 0 and g["area_frac"] == 0.0, "an unrelated image has no offset at all")
+        flat = FakeFile(tmp, "flat").add(np.zeros((150, 200, 3), np.uint16), 0, 0).done()
+        flat["scenes"] = {0: [0, 0, 200, 150]}
+        flatb = FakeFile(tmp, "flatb").add(np.zeros((520, 640, 3), np.uint16), 0, 0).done()
+        flatb["scenes"] = {0: [0, 0, 640, 520]}
+        check(not R.region_match(flat, flatb, flat["path"], flatb["path"])["complete"], "a blank image proves nothing")
+        ms = [{"acq_id": "A", "feat": {"pxX": "6.9E-07", "scene_centers": "1,2"}, "staged_path": A["path"]},
+              {"acq_id": "B", "feat": {"pxX": "6.9E-07", "scene_centers": "1,2"}, "staged_path": B["path"]}]
+        P = {"A": A, "B": B}
+        recs = R.region_records(ms, P, set())
+        check(len(recs) == 1 and recs[0]["a"] == "A" and recs[0]["b"] == "B" and recs[0]["complete"]
+              and recs[0]["kind"] == "region", "region_records: A (the smaller) is a region of B, in that direction only")
+        check(R.region_records(ms, P, {("A", "B")}) == [], "a member already found contained in something is not tested")
+        ms[1]["feat"]["scene_centers"] = "9,9"
+        check(R.region_records(ms, P, set()) == [], "files with different stage positions are not tested")
+    # the classification: a region record is a crop
+    c = R.classify_group([node("O", "orig.czi"), node("K", "orig_2.czi")],
+                         [dict(rel("K", "O", "region", pieces=6, n_b=12), maps={"dx": 45, "dy": 33})])
+    check(c["K"]["class"] == R.C_CROP and c["O"]["class"] == R.C_ORIGINAL and "(45, 33)" in c["K"]["evidence"],
+          "a region relation classifies the member as a crop of the original, evidence gives the offset")
+
+
 def test_informative():
     print("test_informative")
     with tempfile.TemporaryDirectory() as tmp:
@@ -213,6 +329,27 @@ def test_informative():
         check(R.informative(real["path"], real["pieces"]), "a noisy tile does")
         mixed = FakeFile(tmp, "mixed").add(np.zeros((50, 50, 3), np.uint16), 0, 0).add(img(200, 200), 60, 0).done()
         check(R.informative(mixed["path"], mixed["pieces"]), "one informative tile among the largest is enough")
+
+
+def test_similarity():
+    print("test_similarity")
+    a = RNG.random((60, 80))
+    check(abs(R.rank_correlation(a, a) - 1.0) < 1e-9, "an image has rank correlation 1 with itself")
+    check(abs(R.rank_correlation(a, a ** 3 * 255) - 1.0) < 1e-9, "a monotone re-rendering keeps rank correlation 1")
+    check(abs(R.rank_correlation(a, RNG.random((60, 80)))) < 0.1, "unrelated noise is near 0")
+    check(R.rank_correlation(np.zeros((10, 10)), a[:10, :10]) == 0.0, "a flat plane has no correlation")
+    with tempfile.TemporaryDirectory() as tmp:
+        base = img(100, 120, 1)
+        A = FakeFile(tmp, "a16").add(base, 0, 0, key=(("C", 0),)).done()
+        rgb = np.repeat((base // 257).astype(np.uint8), 3, axis=2)
+        B = FakeFile(tmp, "b8").add(rgb, 0, 0, key=(("C", 0),)).done()
+        sim = R.pair_similarity(B["path"], B, A["path"], A)
+        check(sim is not None and sim[0] > 0.99 and sim[1] == 1, "an 8-bit rendering of a 16-bit plane: correlation > 0.99")
+        C = FakeFile(tmp, "c16").add(img(100, 120, 1), 0, 0).done()
+        sim = R.pair_similarity(C["path"], C, A["path"], A)
+        check(sim is not None and sim[0] < 0.2, "an unrelated plane of the same size: low correlation")
+        D2 = FakeFile(tmp, "tiled").add(img(50, 50, 1), 0, 0).add(img(50, 50, 1), 50, 0).done()
+        check(R.pair_similarity(D2["path"], D2, A["path"], A) is None, "a file with several tiles per plane is not compared")
 
 
 def node(i, name, project="", scalebar=False, creation=None):
@@ -267,6 +404,16 @@ def test_classify():
     ns = [node("T", "tiles.czi"), node("S", "tiles-Stitching-01.czi")]
     c = R.classify_group(ns, [rel("S", "T", "stitch", pieces=16, n_b=200)])
     check(c["S"]["class"] == R.C_STITCHED and c["T"]["class"] == R.C_ORIGINAL, "a stitched copy of the tiled original")
+    r1 = rel("S", "T", "retile", pieces=20, n_b=20)
+    r1["maps"] = {"grid": [2.0, 0.45]}
+    c = R.classify_group(ns, [r1])
+    check(c["S"]["class"] == R.C_STITCHED and c["T"]["class"] == R.C_ORIGINAL and "re-placed" in c["S"]["evidence"],
+          "a stitched copy that kept its tiles (re-placed): stitched, evidence says so")
+    u1, u2 = rel("S", "T", "retile", complete=False, pieces=20, n_b=20), rel("T", "S", "retile", complete=False, pieces=20, n_b=20)
+    u1["undecided"] = u2["undecided"] = True
+    c = R.classify_group(ns, [u1, u2])
+    check(c["S"]["class"] == R.C_AMBIGUOUS and c["T"]["class"] == R.C_AMBIGUOUS and "grids" in c["S"]["evidence"],
+          "same tiles at other positions and the grids cannot tell which is the acquisition: ambiguous, said so")
     # contained in two unrelated roots: ambiguous
     ns = [node("A", "a.czi"), node("B", "b.czi"), node("K", "k.czi")]
     c = R.classify_group(ns, [rel("K", "A", "crop"), rel("K", "B", "crop")])
@@ -294,14 +441,20 @@ def test_rank_key():
 
 def test_lists():
     print("test_lists")
-    parent = {"project_name": "AE-biomaGUNE-0721"}
-    noproj = {"project_name": ""}
-    blank = {"project_name": ""}
-    own = {"project_name": "AE-biomaGUNE-0721"}
-    other = {"project_name": "AE-biomaGUNE-1321"}
+    parent = {"project_name": "AE-biomaGUNE-0721", "size": "1000000"}
+    noproj = {"project_name": "", "size": "1000000"}
+    blank = {"project_name": "", "size": "10000"}
+    own = {"project_name": "AE-biomaGUNE-0721", "size": "10000"}
+    other = {"project_name": "AE-biomaGUNE-1321", "size": "10000"}
+    big = {"project_name": "", "size": "800000"}
     st = {"AE-biomaGUNE-0721": "active", "AE-biomaGUNE-1019": "closed"}
     d = R.decide_action
-    check(d(blank, {"class": R.C_CROP}, parent, st)[0] == "b", "a crop whose original has a project -> list b")
+    check(d(blank, {"class": R.C_CROP}, parent, st)[0] == "b", "a crop under 5% of its original, original has a project -> list b")
+    check(d(big, {"class": R.C_CROP}, parent, st)[0] == "k" and d(big, {"class": R.C_SUBSET}, parent, st)[0] == "k",
+          "a larger crop or subset (an ROI re-save) -> list k, for its own decision")
+    check(d(dict(blank, size="49999"), {"class": R.C_CROP}, parent, st)[0] == "b"
+          and d(dict(blank, size="50000"), {"class": R.C_CROP}, parent, st)[0] == "k",
+          "'under 5%' is strict: the boundary is 5% of the original's size")
     check(d(blank, {"class": R.C_SCALEBAR}, parent, st)[0] == "a", "a scale-bar copy -> list a")
     check(d(own, {"class": R.C_RESAVE}, parent, st)[0] == "r", "an identical re-save, same project -> list r")
     check(d(blank, {"class": R.C_CROP}, noproj, st)[0] == "waiting", "the original has no project -> waiting")
@@ -341,7 +494,8 @@ def test_lists():
 
 def main():
     for t in (test_subfolder_for, test_staged_path, test_haystack, test_hash_match, test_crop_and_stitch,
-              test_informative, test_classify, test_rank_key, test_lists):
+              test_retile, test_retrim, test_region, test_informative, test_similarity, test_classify, test_rank_key,
+              test_lists):
         t()
     print()
     if FAILS:
