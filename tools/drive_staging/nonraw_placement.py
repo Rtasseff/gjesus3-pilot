@@ -673,7 +673,10 @@ def copy_one(r, nas, members, bufsize=8 << 20):
     ddir = os.path.dirname(dest)
     os.makedirs(lp(ddir), exist_ok=True)
     tmp = os.path.join(ddir, f".~nonraw-{r['sha256'][:8]}.part")
-    src = members.open(r) if r["archive"] else open(lp(staged_path(r)), "rb")
+    if r.get("_src"):  # copy --from-holding: the file's copy in the NAS holding folder (bytes re-verified)
+        src = open(lp(r["_src"]), "rb")
+    else:
+        src = members.open(r) if r["archive"] else open(lp(staged_path(r)), "rb")
     h = hashlib.sha256()
     try:
         with src, open(lp(tmp), "wb") as out:
@@ -763,6 +766,19 @@ def cmd_copy(args):
     if args.project:
         rows = [r for r in rows if r["project_name"] in args.project]
     projects = load_projects(args.nas)
+    if args.from_holding:
+        # 2b after the D: staging is gone: a mapped group's files are read from their copy in the NAS
+        # holding folder (filled by `holding --execute`). Rows placed earlier from D: are already at
+        # their destination and are skipped as identical before any source is opened.
+        absent = 0
+        for r in rows:
+            if r["reason"].startswith("2b mapping"):
+                r["_src"] = os.path.join(args.nas, holding_rel(r["drive_label"], r["relpath"], r["archive"], r["member"]))
+                absent += not os.path.exists(lp(r["_src"]))
+        print(f"--from-holding: {sum(1 for r in rows if r.get('_src'))} mapped files read from the holding folder; "
+              f"{absent} of them are NOT there")
+        if absent and args.execute:
+            return 2
     by_proj = collections.defaultdict(list)
     for r in rows:
         by_proj[r["project_name"]].append(r)
@@ -1183,6 +1199,54 @@ def cmd_worksheet(args):
     return 0
 
 
+def remap_rows(rows, mapping, projects):
+    """The pure part of `remap`: holding rows of a mapped group -> place / closed-project / unclear,
+    with the project's dest_rel. Same decision as `plan --mapping`, from a stored manifest."""
+    out, used = [], collections.Counter()
+    for r in rows:
+        r = dict(r)
+        if r["decision"] == "holding" and r["class"] != "lsm":
+            d, who, series, _kind = manifest_group(r)
+            nk = norm_key(key_string(d, who, series))
+            if nk in mapping:
+                used[nk] += 1
+                dec, reason, proj = _project_decision(mapping[nk], {"projects": projects},
+                                                      f"2b mapping ({who} | {series})")
+                prow = projects.get(proj)
+                r.update(decision=dec, reason=reason, project_name=proj,
+                         project_id=prow["project_id"] if prow else "NEW",
+                         project_status=prow["status"] if prow else "not-in-registry")
+                r["dest_rel"] = (dest_rel(project_folder(proj, projects), r["drive_label"], r["relpath"],
+                                          r["archive"], r["member"]) if dec in ("place", "closed-project") else "")
+        out.append(r)
+    return out, used
+
+
+def cmd_remap(args):
+    """2b WITHOUT the catalog: apply Ryan's worksheet to a stored manifest (stream A's record
+    `placement_manifest.csv`, or its copy kept off D: before the staging is erased). Writes
+    <out>\\placement_manifest.csv for `copy` (use `copy --from-holding` once D: is gone)."""
+    if os.path.normcase(os.path.abspath(args.out)) == os.path.normcase(OUT_DEFAULT):
+        print("REFUSED: give a NEW --out folder; the default one holds stream A's record manifest")
+        return 2
+    mapping = load_mapping(args.mapping)
+    projects = load_projects(args.nas)
+    rows, used = remap_rows(load_manifest(args.manifest), mapping, projects)
+    wcsv(os.path.join(args.out, "placement_manifest.csv"), MANIFEST_FIELDS, rows)
+    unused = [k for k in mapping if not used[k]]
+    re_dec = collections.Counter(r["decision"] for r in rows if r["reason"].startswith("2b mapping"))
+    print(f"remap: {len(mapping)} mapped groups; {sum(used.values())} holding files re-decided {dict(re_dec)}; "
+          f"{len(unused)} mapped groups matched no holding file (raw-only, or a stale key)")
+    for k in unused:
+        print(f"    unmatched: {k} -> {mapping[k]}")
+    for r in rows:
+        if r["reason"].startswith("2b mapping") and r["decision"] != "place":
+            print(f"  {r['decision']}: {r['project_name']} ({r['reason'][:80]})")
+            break
+    print(f"-> {os.path.join(args.out, 'placement_manifest.csv')}")
+    return 0
+
+
 def link_names_for(rows, raw_linked_dir, taken=None):
     """acq_id -> a link name unique in this project's raw_linked\\ -- the SAME rule the drives ingest
     used (ingest_plan.py, "link names: unique per project"): `<INSTR>_<name>`, then
@@ -1352,6 +1416,10 @@ def main(argv=None):
     ws = sub.add_parser("worksheet")
     ws.add_argument("--manifest", default=None)
     ws.add_argument("--force", action="store_true", help="overwrite a worksheet that has mapped groups")
+    rm = sub.add_parser("remap")
+    rm.add_argument("--manifest", default=os.path.join(OUT_DEFAULT, "placement_manifest.csv"),
+                    help="the stored manifest (default: stream A's record; its copy off D: once D: is erased)")
+    rm.add_argument("--mapping", required=True, help="Ryan's filled-in worksheet")
     ar = sub.add_parser("apply-raw")
     ar.add_argument("--mapping", required=True, help="Ryan's filled-in worksheet")
     ar.add_argument("--execute", action="store_true")
@@ -1365,11 +1433,13 @@ def main(argv=None):
         s.add_argument("--by", default=f"Data Office ({getpass.getuser()})")
         s.add_argument("--sample", type=float, default=0.02)
         s.add_argument("--seed", type=int, default=20261003)
+        s.add_argument("--from-holding", action="store_true",
+                       help="copy: read 2b-mapped files from the NAS holding folder instead of the D: staging")
     args = ap.parse_args(argv)
     if getattr(args, "manifest", None) is None:
         args.manifest = os.path.join(args.out, "placement_manifest.csv")
     os.makedirs(args.out, exist_ok=True)
-    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "nested-farm": cmd_nested_farm, "worksheet": cmd_worksheet, "apply-raw": cmd_apply_raw, "copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
+    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "nested-farm": cmd_nested_farm, "worksheet": cmd_worksheet, "apply-raw": cmd_apply_raw, "remap": cmd_remap,"copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
 
 
 if __name__ == "__main__":

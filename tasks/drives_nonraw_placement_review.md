@@ -8,12 +8,11 @@
 [`drives_nonraw_mapping_worksheet.csv`](drives_nonraw_mapping_worksheet.csv)
 **Full per-file manifest (on D:):** `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement\placement_manifest.csv`
 
-> **2b in five lines — for Ryan, filling in the worksheet**
-> 1. Open `tasks/drives_nonraw_mapping_worksheet.csv`. One row = one group of files with no project (329 groups, largest first).
-> 2. Each row shows the folder (`researcher` + `series`), file counts, GB, date range, 3 example names, and the blank-project raw acquisitions in the same place (`acq_ids`).
-> 3. Type a project name in `project` (an existing one, or a new one you approve), or leave it blank. Blank means the holding folder.
-> 4. Use `note_for_ryan` for anything a human should know ("only the PPTs", "ask Laura").
-> 5. Return it; the same tool then places the non-raw files and sets the blank raw rows (`set_project_id_if_blank`).
+> **What is left after this placement, and how to do it, is in its own runbook:**
+> [`drives_nonraw_2b_2c_followup.md`](drives_nonraw_2b_2c_followup.md).
+> - **Part 0:** one decision for Ryan first, about *where the files come from*. It decides how long the D: staging must be kept.
+> - **Part 1:** how Ryan fills in the worksheet, `tasks/drives_nonraw_mapping_worksheet.csv` (288 groups). **Only the 62 rows marked `A` matter much:** they hold 190 of 211 GB and 4,855 of 5,055 acquisitions, and blank rows simply go to the holding folder.
+> - **Part 2:** every command the applying session runs, for a session that starts cold, possibly months later.
 
 ---
 
@@ -23,7 +22,7 @@
 2. **Two projects that would receive files are closed** (§5): `AE-biomaGUNE-1519` gets 8,667 files (8.3 GB), almost all stream B's non-raw MRI material from `Cardiac MRI.zip`; `AE-biomaGUNE-0320` gets 14 documents. They are listed, not copied. Reopening them is Ryan's call.
 3. **Decision needed before copying: path length** (§6). 9,522 of the 13,240 destinations would sit at a full network path over 259 characters (the longest is 402). They come from three archives whose own folders nest deeply.
 4. **Holding folder (2c), dry run only:** 32,558 files, 211.6 GB. The README and manifest previews are on D:.
-5. **2b worksheet:** 329 groups of files with no project, which also cover the 5,055 blank-project raw acquisitions.
+5. **2b worksheet:** 288 groups of files with no project, which also cover the 5,055 blank-project raw acquisitions. 62 of them are marked priority `A`. Applying Ryan's answers is fully tooled and was trial-run read-only (`remap`, `apply-raw`, `copy --from-holding`). The runbook is [`drives_nonraw_2b_2c_followup.md`](drives_nonraw_2b_2c_followup.md).
 6. **Raw one-offs, ready to ingest on Ryan's go (§4):**
    - the hidden dot-file `.czi`;
    - **14 new `.czi` found inside a nested archive** (`Drive zuri 170823.zip` > `8583.zip`), which the main ingest never saw.
@@ -152,6 +151,23 @@ Every `.czi` not placed is accounted for by SHA-256: either it is in production,
 | the hidden dot-file `Cell observer\Laura\Cell observer\Interaccion-LS-SPN\.LS-SPN-20x-8.czi` (CELL, 61 MB, no claim, researcher `Laura`) | `tools/configs/drives_2026-10_dotfile/drives_dotfile.yaml` | a hard link named `LS-SPN-20x-8.czi`: it fills the gap in the folder's 1–13 series, and the true name is in `notes` | **1 case, 0 SKIP**; would become `ACQ-20240125-CELL-050` |
 | **14 new `.czi`** in `Drive zuri 170823.zip` > `Proyecto Cav1 CNIC/8583.zip` (CELL, 2023-05-03, no claim, researcher `zuri` like its 253 batch-B05 siblings) | `…/drives_nested.yaml` + `cases_nested.csv` | byte copies (a member cannot be hard-linked), SHA-256 verified | **14 cases, 0 SKIP, 0 failed** |
 
+**To run them (after Ryan's go)**, follow the drives ingest runbook's per-batch procedure ([`drives_microscopy_ingest_runbook.md`](drives_microscopy_ingest_runbook.md), steps a–f): a fresh dated registry backup, a dry run, the run, `validate_registries`, and a re-run that must add 0.
+
+1. **Rebuild the farms if they are gone.** Both live in `D:\projects\gjesus3\scratch_drives-nonraw-placement\`:
+   - `python tools\drive_staging\nonraw_placement.py dotfile-farm`
+   - `python tools\drive_staging\nonraw_placement.py nested-farm` (this one needs `nested_members.csv`, `nested_czi_dedup.csv` and the staged Drive zuri zip).
+2. **Ingest:**
+   ```
+   python tools\ingest_raw.py -c tools\configs\drives_2026-10_dotfile\drives_dotfile.yaml --nas-root "J:\gjesus3-data" --dry-run
+   python tools\ingest_raw.py -c tools\configs\drives_2026-10_dotfile\drives_nested.yaml --nas-root "J:\gjesus3-data" --dry-run
+   ```
+   then the same without `--dry-run`.
+3. **Verify and record by hand.** `ingest_verify.py` only knows the planned batches B01–B16, so it does not fit these one-offs.
+   - **Verify:** select the `registry_raw.csv` rows whose `ingest_config` is one of these two YAMLs; check there are exactly 1 + 14 of them, and that each sidecar checksum equals `drv_sha256` in the case table.
+   - **Record:** append one row each to `tasks/drives_ingest_provenance.csv`. Use the columns `acq_id,batch,drive,relpath,archive,member,sha256,manifest_verified,other_copies,notes`, with batch `DOTFILE` / `NESTED`. For the 14, `archive` = `Drive zuri 170823.zip` and `member` = `<nested zip>!<inner path>`.
+
+   The farms must exist, and must be on D:, until both ingests are done: the engine reads them. Both ingests need the staged D: data, so **do them before the D: erase.**
+
 **How the nested `.czi` were deduplicated** (`tools/drive_staging/nested_czi_dedup.py`; the tests below were applied in order):
 1. by SHA-256 against production and the drives;
 2. by (instrument, acquisition time to the second, lower-cased name) against `registry_raw.csv`.
@@ -224,7 +240,15 @@ The holding folder has 2,489 such paths, out of 32,558.
 ## 9. Phase 2 plan (after the go and inside the write window)
 
 1. **Back up `registry_projects.csv`** to a new folder, `C:\Users\rtasseff\temp\gjesus3_registry_backup_<YYYYMMDD_HHMM>_nonraw\`, with SHA-256 sums.
-2. **Create `AE-biomaGUNE-1116`, `-1420`, `-1520` and `Project-0521`** with `create_project.py` (dry run first; plus `-1319` if the coordinator assigns it to me). Record their PROJ-IDs.
+2. **Create `AE-biomaGUNE-1116`, `-1420`, `-1520` and `Project-0521`** with `create_project.py`. Record their PROJ-IDs. Add `-1319` if the coordinator assigns it here.
+   - **All four dry-ran clean on 2026-10-02.** The ID each shows in a dry run is only the next free one; the real IDs depend on which stream creates first.
+   - **The exact commands** (from `tools\`; add `--dry-run` first):
+   ```
+   python create_project.py --nas-root "J:/gjesus3-data" --name "AE-biomaGUNE-1116" --owner Data-Office --description "Animal protocol AE-biomaGUNE-1116 (Proyecto 1116 Contraste). CEEA paperwork and the MRI database spreadsheet from the Maria Jesus/Irati archive on the historical drives." --notes "Created for the 2026 historical-drives non-raw placement (tasks/drives_nonraw_placement_review.md); approved by Ryan 2026-09-29/10-02. Owner is a placeholder: edit _project.yaml."
+   python create_project.py --nas-root "J:/gjesus3-data" --name "AE-biomaGUNE-1420" --owner Data-Office --description "Animal protocol AE-biomaGUNE-1420 (Proyecto 1420 miRNA). CEEA paperwork from the Maria Jesus/Irati archive on the historical drives." --notes "<same as above>"
+   python create_project.py --nas-root "J:/gjesus3-data" --name "AE-biomaGUNE-1520" --owner Data-Office --description "Animal protocol AE-biomaGUNE-1520 (Proyecto 1520 Fumadores). CEEA paperwork from the Maria Jesus/Irati archive on the historical drives." --notes "<same as above>"
+   python create_project.py --nas-root "J:/gjesus3-data" --name "Project-0521" --owner Data-Office --description "Project 0521 iNO: a CEEA application (AE-biomaGUNE-0521) the animal-facility DB does not hold; includes the documents of its predecessor 'Antiguo proyecto 0720' (no Project-0720, Ryan 2026-10-02). From the Maria Jesus/Irati archive on the historical drives." --notes "<same as above>"
+   ```
 3. **Record the size and mtime** of `registry_raw.csv` and of a `/raw/` sample before the copy.
 4. **Copy:** `python tools/drive_staging/nonraw_placement.py copy --execute [--project …]`.
    - It resumes, skips identical files and never overwrites.
@@ -241,12 +265,20 @@ The copy reads about 229 GB from D:: loose files directly, and archive members v
 ## 10. Proposed wording for STATUS / CHANGELOG / BACKLOG (the coordinator applies it at merge)
 
 **STATUS §2, drives bullet — add:**
-> Non-raw placement (stream A): <N> files / <GB> copied into <P> projects under `working\historical_drives\` (verified: counts + 2% re-hash); projects `AE-biomaGUNE-1116/-1420/-1520`, `Project-0521` created. Waiting on Ryan: path-length option, reopen `1519`/`0320`, the 2b worksheet (`tasks/drives_nonraw_mapping_worksheet.csv`, 329 groups), the raw one-offs (dot-file + 14 nested `.czi`, dry runs clean). Holding folder (2c) prepared, dry run only. Record: `tasks/drives_nonraw_placement_review.md`.
+> Non-raw placement (stream A): <N> files / <GB> copied into <P> projects under `working\historical_drives\` (verified: counts + 2% re-hash); projects `AE-biomaGUNE-1116/-1420/-1520`, `Project-0521` created. **Waiting on Ryan:**
+> - the 2b mapping: `tasks/drives_nonraw_mapping_worksheet.csv`, 288 groups, **62 marked A cover nearly everything**;
+> - **first, Part 0 of `tasks/drives_nonraw_2b_2c_followup.md`**: fill the holding folder now (D: can then be erased early) or after the mapping;
+> - the path-length option;
+> - reopening `1519`/`0320`;
+> - the raw one-offs: the dot-file and the 14 nested `.czi`, both dry-run clean.
+>
+> **Runbook for whoever applies the mapping: `tasks/drives_nonraw_2b_2c_followup.md`.** Record: `tasks/drives_nonraw_placement_review.md`.
 
 **CHANGELOG (new entry, dated the day of the write):**
 > **Historical drives — non-raw material placed into project folders.** <N> files (<GB>) of exports, figures, analysis, documents, EM and stream B's non-raw MRI material copied, byte-verified, into <P> projects under `<project>\working\historical_drives\<drive label>\<original path>` (Ryan, 2026-10-02), with a provenance row each. Four paperwork projects created (`AE-biomaGUNE-1116`, `-1420`, `-1520`, `Project-0521` incl. the old `0720` documents). Found on the way: nested archives were never catalogued (9; 250 `.czi`, of which 14 are new → raw one-off), and the claims pass's `.7z` member paths did not join to the catalog (fixed by a normalised key). Tool: `tools/drive_staging/nonraw_placement.py`; record: `tasks/drives_nonraw_placement_review.md`.
 
 **BACKLOG (new items):**
+> - 🔺 **2b mapping + 2c holding folder (historical drives)**: Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv` (do the 62 `A` rows; blank = holding); a session applies it with `tasks/drives_nonraw_2b_2c_followup.md` (fully tooled: `remap` → `apply-raw` → `copy`, then `holding`). **Decide Part 0 first:** whether the D: staging must be kept until the mapping is done (option A) or the holding folder is filled now so D: can go (option B).
 > - 🔸 **Long paths under `historical_drives\`** (9,522 placed files > 259 chars, all from three deep archives): decide shorten (labels / drop the repeated archive top folder) vs. accept; it is a rename either way.
 > - 🔸 **Aperio `.svs` (15, Drive zuri TUNEL)**: instrument not onboarded; holding by default.
 > - 🔹 **`catalog.py` does not open nested archives**; `nonraw_placement.py nested` is the stopgap. Fold it in if the catalog is reused for another drive.

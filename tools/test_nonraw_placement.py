@@ -202,6 +202,30 @@ def test_link_names():
     check(len(set(v.lower() for v in n.values())) == 3, "all unique")
 
 
+def test_remap():
+    print("2b remap from a stored manifest (no catalog, no D:)")
+    base = {"drive": "D1", "drive_label": "drive1_FRIO-X6", "archive": "", "member": "", "verdict": "",
+            "claim_id": "", "class": "tif", "size": "5", "sha256": "x", "project_name": "", "project_id": "",
+            "project_status": "", "note": ""}
+    rows = [dict(base, relpath="Cell observer\\Laura\\Cell observer\\Gota\\a.tif", researcher="Laura",
+                 decision="holding", reason="no claim", dest_rel="staging\\x"),
+            dict(base, relpath="Cell observer\\Laura\\Cell observer\\Gota\\b.lsm", researcher="Laura",
+                 decision="holding", reason="lsm", dest_rel="staging\\y", **{"class": "lsm"}),
+            dict(base, relpath="Other\\Z\\c.tif", researcher="Z", decision="holding", reason="no claim", dest_rel="s")]
+    rows[1]["class"] = "lsm"
+    gk = N.manifest_group(rows[0])
+    m = {N.norm_key(N.key_string(gk[0], gk[1], gk[2])): "AE-biomaGUNE-1123"}
+    out, used = N.remap_rows(rows, m, PROJECTS)
+    check(out[0]["decision"] == "place" and out[0]["project_name"] == "AE-biomaGUNE-1123", "mapped group -> place")
+    check(out[0]["dest_rel"].startswith("projects\\AE-biomaGUNE-1123\\working\\historical_drives\\drive1_FRIO-X6\\"),
+          f"dest under the project {out[0]['dest_rel'][:70]}")
+    check(out[1]["decision"] == "holding", ".lsm stays in holding even in a mapped group")
+    check(out[2]["decision"] == "holding", "unmapped group untouched")
+    m2 = {N.norm_key(N.key_string(gk[0], gk[1], gk[2])): "AE-biomaGUNE-1519"}
+    check(N.remap_rows(rows, m2, PROJECTS)[0][0]["decision"] == "closed-project", "mapped to a closed project -> listed")
+    check(rows[0]["decision"] == "holding", "input rows are not modified")
+
+
 def _sha(b):
     return hashlib.sha256(b).hexdigest()
 
@@ -248,6 +272,16 @@ def test_copy():
                 check(False, "source/manifest mismatch must fail")
             except RuntimeError:
                 check(not os.path.exists(os.path.join(nas, wrong["dest_rel"])), "mismatch: nothing placed")
+            # --from-holding: the source is the file's copy in the NAS holding folder, still verified
+            hold = os.path.join(nas, N.holding_rel("drive1_X", "a\\h.png"))
+            os.makedirs(os.path.dirname(hold))
+            with open(hold, "wb") as f:
+                f.write(b"held bytes")
+            hr = dict(r, relpath="a\\h.png", sha256=_sha(b"held bytes"), _src=hold,
+                      dest_rel=N.dest_rel("P", "drive1_X", "a\\h.png"))
+            check(N.copy_one(hr, nas, ms) == "copied", "copy from the holding folder")
+            check(open(os.path.join(nas, hr["dest_rel"]), "rb").read() == b"held bytes", "holding bytes in place")
+            check(os.path.exists(hold), "the holding copy is left in place (copies only)")
             ms.close()
             prov = os.path.join(nas, "projects", "P", "provenance.csv")
             from ingest import provenance
@@ -275,6 +309,7 @@ if __name__ == "__main__":
     test_roots()
     test_worksheet_roundtrip()
     test_link_names()
+    test_remap()
     test_copy()
     print(f"\n{'FAILED: ' + str(len(FAILS)) if FAILS else 'all passed'}")
     sys.exit(1 if FAILS else 0)
