@@ -1900,20 +1900,20 @@ absent from the registry are invisible to the Finder — no researcher can be mi
 them. But they are **unaccounted-for data in an immutable area**, and `/raw/` is the one
 place the system promises to be authoritative.
 
-- [ ] **Work out what happened**, then either register them or delete them. The mtime
+- [x] **Work out what happened** *(2026-10-02: the frozen exe's README crash on 2026-07-16, plus a rollback blocked by the operator's write-not-modify ACL; CHANGELOG 2026-07-17. Established from the pattern; no log survives)*, then either register them or delete them. The mtime
   (2026-07-16) coincides with the no-DICOM DICOM-regen backfill drain, so start with that
   session's records and `pending_dicom_regen.csv`. The empty `.data/` says these are the
   no-DICOM placeholder path.
-- [ ] **Decide the rule, not just this case**: should `/raw/` folders without a registry
+- [ ] **Decide the rule, not just this case** *(still open, and now with a second instance: the m6 session's two failed attempts, 2026-10-02)*: should `/raw/` folders without a registry
   row be (a) reported by `validate_registries` as an ERROR, (b) auto-cleaned by a drain
   tool, or (c) tolerated? Today nothing looks for them, which is why these sat unnoticed
   for a month. A **`/raw/`-vs-registry orphan check is the natural companion** to the
   multi-value hygiene item above, and unlike the checks that were dropped on 2026-08-12 it
   is a genuine integrity question — `/raw/` is system-owned, so nothing here depends on
   researcher behaviour (contrast [05_PROJECTS §3a](../mfb-rdm-docs/05_PROJECTS.md)).
-- [ ] If they are deleted, **do not release the reserved ids** — retire them, as
+- [x] *(Done 2026-10-02: 17 tombstones, disposition `orphan`; the counter is untouched at 34.)* If they are deleted, **do not release the reserved ids** — retire them, as
   `PROJ-0054`/`99_test` was on 2026-08-12.
-- [ ] **2026-10-01 — decided (Ryan): retire them, after the session is re-ingested.** They are the
+- [x] *(✅ Done 2026-10-02: the session was re-ingested as `ACQ-20260710-MRI-018…034`, from the scanner's current copy, and the 17 orphan folders were then retired, backed up whole off-NAS; run `RET-20261002-133115-491`; record `tasks/mri_0710_reingest_review.md`.)* **2026-10-01 — decided (Ryan): retire them, after the session is re-ingested.** They are the
   no-DICOM placeholder shape (empty `.data`, a `checksums.json` with no files, no `README.txt`), created
   2026-07-16 09:16 UTC by `ingest_raw.py`, which stopped before the registry append (cause not
   established). Their session **`jrc20260710_m12_1125_bis`** (animal 12, protocol 1125, 17 exams) is
@@ -1921,6 +1921,57 @@ place the system promises to be authoritative.
   no-DICOM exams go to the DICOM-regen worklist (11_OPERATIONS §5.5), with fresh ids from `-018`;
   (2) then `retire_acquisition.py --orphan` with `tasks/retire_lists/2026-10_orphans_20260710_MRI.csv`
   (`tasks/retire_acquisition_review.md` §6c).
+
+## 🔸 MODERATE — 14 MFB animal sessions on the scanner are registered nowhere, including `m6` of 2026-07-06 (2026-10-02)
+
+**What was found.** A read-only reconciliation of `kenia` (`/opt/PV-7.0.0/data/nmr`) against `registry_raw` found **19 unregistered `jrc` studies dated 2026-06-01 or later: 14 animal sessions (232 exam folders) and 5 phantom/QC studies (70)**. Evidence: `tasks/mri_0710_reingest_review.md` §5.1 (the script and the per-study CSV are on D:).
+
+- **The animal sessions:**
+  - protocol **1125**, 9 sessions: m2 and m3 on 2026-07-03; m4, m5, **m6**, m7 and m8 on 07-06; the first m12 study (11:47) and m19 on 07-10;
+  - protocol **1025**, 5 sessions: m25–m28 on 2026-10-01, and m29 on 10-02.
+- **m6 was found first.** Its counter `ACQ-20260706-MRI- = 30` fits two failed attempts of 15 exams, with the same README crash.
+  - It has two NAS pulls, `staging\sftp_20260716_112028` and `_122729`, byte-identical to each other and to the scanner's exam data.
+  - Its dry run gives 15 acquisitions in `PROJ-0021`, with real IDs from `-031`.
+  - The other sessions were never pulled to the NAS.
+- **Since the 2026-06-13/14 bulk load, only m1 (07-03) and the m12 `_bis` session were ingested.** The data is safe on the scanner, which keeps years.
+- **The operators are not established.** ParaVision's `ACQ_operator` is `nmr`, and the facility DB records no operator. For m6, the best-supported answer is `Irene`.
+- These ingests are outside the 2026-10-01 pre-approval, so each needs **Ryan's go**.
+
+- [ ] Decide who ingests them, and how: the Data Office from the scanner, or the operators through the GUI.
+- [ ] Ingest the 9 protocol-1125 sessions, and later the 1025 ones, once each operator is known. Each is a normal `mri-ingest`, run from Windows.
+- [ ] Decide whether the 5 phantom/QC studies belong in gjesus3: `jrc260611_SPION`, `jrc_260612_phantom_SPION_RGD`, `jrc260708_phantom`, `jrc260709_phantom` and `jrc260818_Phantom_MnACC`. Their names carry no `m<animal>_<protocol>`, so the ingest regex does not parse them (the silent skip, STATUS §0 D3).
+- [ ] Run the reconciliation again on a schedule. It is read-only: an SFTP listing plus a registry read.
+- [ ] Confirm that other groups' studies on the shared scanner stay out of scope. Since 2026-06-01 there are 362 of them (1,755 exam folders), from `jl`, `pr`, `sp`, `dan`, `fer` and `aka`; none is MFB, and none is in the registry.
+
+## 🔹 LOW — keep `staging\sftp_20260716_110906` until someone decides on the deleted recon `/2` (2026-10-02)
+
+This folder holds the **only copy of `/2`** (`pdata\2` of 12 exams, 72 files) of session `m12_1125_bis`. The researcher deleted it on the scanner on 2026-07-23, and it is not in `/raw/`: the ingest took `/1,3`.
+
+- The workflow notes say auto-generated reconstructions (`/1`, `/2`) are typically discarded, so this is a retention call, not a loss.
+- **Do not delete any `staging\sftp_20260716_*` folder before the m6 session is ingested;** then decide on this one.
+
+## 🔹 LOW — the dry-run preview ignores `.acq_id_seq.json` (2026-10-02)
+
+`tools/operator/preview.py::_preview_acq_id` calls `generate_acq_id`, which reads only the registry and the tombstones.
+
+- So a preview shows `ACQ-20260710-MRI-001…017` where the real run allocates `-018…-034`.
+- That is harmless once known, but misleading when a plan says "IDs from -018".
+- **Fix:** make the preview take `max(registry, reservation) + 1`, as `allocate_acq_id` does, without writing.
+
+## 🔹 LOW — the anatomy rule gets no signal from Dicomifier-regenerated DICOMs (2026-10-02)
+
+This was seen in the rehearsal of the same 17 exams.
+
+- **With the native Bruker DICOMs,** the rule read "4 chamber", "long axis LV" and "Cine_ 4 chamber", and set `anatomy` = `heart` on three exams.
+- **With Dicomifier-regenerated DICOMs,** the per-DICOM headers in the sidecar carried no `SeriesDescription` or `ProtocolName`, so the rule set nothing.
+- **A likely fix:** `acqp` holds `ACQ_scan_name` (e.g. "4 chamber (E3)") for every exam. Adding it to `anatomy_derive.collect_mri_signals` may give the regenerated exams the same hint. This is unverified beyond the rehearsal, so check it on a regenerated production exam first.
+
+## 🔹 LOW — NIfTI folders next to ParaVision studies (2026-10-02)
+
+The researcher's own conversions sit in the study folder: `NIFTI\`, 30 files (32 MB) for `m12_1125_bis` and 26 files (25 MB) for `m6`.
+
+- The MRI path skips them as a non-exam sibling, and they were left on the scanner by decision.
+- If they should live in a project folder, that is a placement call (`working\`).
 
 ## Metadata database — retire the CSV registries (2026-08-12)
 

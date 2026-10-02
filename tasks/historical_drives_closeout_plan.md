@@ -57,7 +57,18 @@ BACKLOG current.
 
 **Open questions for Ryan.** The coordinator keeps this list current; the newest are last.
 
-1. **A second missing July MRI session: ingest it?** The session is
+1. **Unregistered MFB MRI sessions: who ingests them, and the go.** Stream F's read-only
+   reconciliation of 2026-10-02 found 14 animal sessions (232 exams) and 5 phantom/QC studies
+   (70 exams) on the scanner, in no registry (BACKLOG "14 MFB animal sessions on the scanner").
+   - The 14 animal sessions: protocol 1125 in July, 9 sessions including m6; protocol 1025 this
+     week, 5 sessions.
+   - Since the 2026-06 bulk load, only two sessions were ingested.
+   - **Recommendation:** the Data Office ingests the July 1125 series from the scanner, as `m12`
+     was, once the operator is confirmed (likely Irene). The fresh 1025 sessions belong to the
+     operators' normal workflow, but someone should ask them to ingest.
+   - **The phantoms:** are they in scope?
+
+   *The first finding, kept for the record:* **A second missing July MRI session: ingest it?** The session is
    `20260706_111010_jrc20260703_m6_1125`: 15 exams of animal 6 of protocol 1125
    (`PROJ-0021`), from 2026-07-06.
    - It is in no registry and has no `/raw/` folder. The counter `ACQ-20260706-MRI-` stands at 30,
@@ -265,7 +276,11 @@ OneDrive marks the directories read-only.
 
 In rough order:
 
-1. **Re-ingest the missing MRI session** `jrc20260710_m12_1125_bis` (17 exams, animal 12 of
+1. **✅ DONE 2026-10-02 (stream F, merged `fba7e76`).** The session was re-ingested as
+   `ACQ-20260710-MRI-018…034`, from the scanner's current copy. The 17 orphans were then retired
+   (run `RET-20261002-133115-491`, 17 tombstones, backed up whole). The coordinator verified both
+   writes. Record: `tasks/mri_0710_reingest_review.md`. *The plan as written:* **Re-ingest the
+   missing MRI session** `jrc20260710_m12_1125_bis` (17 exams, animal 12 of
    protocol 1125) from the scanner, through the normal MRI path. Its no-DICOM exams go on the
    regen worklist. **Then** retire the 17 empty `ACQ-20260710-MRI-*` orphans (`--orphan`, list in
    `tasks/retire_lists/`).
