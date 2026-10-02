@@ -349,12 +349,6 @@ are the same acquisition, but not always the same pixels.
       clean-up has to list it by name.
     - Out of `/raw/` already: the gate's R3 derivatives of earlier production scans (22) and the
       re-saves (R1/R2). `.tif`/`.jpg`/`.png` exports were never in this ingest's scope.
-- [ ] **v2 for the retire tool: a "content-equivalent duplicate" mode (2026-10-01, Ryan).** For
-  `.czi`, a duplicate may be retired when its decoded subblocks, metadata XML and attachment payloads
-  are all identical, even though the container bytes differ (a ZEN re-save). The evidence goes in
-  the tombstone. First user: `ACQ-20250915-LSM9-016` (`Prueba/24h_1.czi`), a re-save of `-001`
-  that is information-identical and differs only in container layout. v1 correctly refuses it.
-  Leave it until then.
 - [ ] *(2026-10-01: the retire tool is being built on `feat/retire-acquisition`. With it, the
   duplicates below become a dry-run-first operation, and the 10 `CELL`↔`ZWSI` twins are retired
   as duplicates of their `ZWSI` side. That also fixes 10 of the 23 mis-coded `CELL` rows.
@@ -1881,23 +1875,6 @@ disk, **none of them in `registry_raw.csv`**. Characterised 2026-08-13:
 | `checksums.json` | present |
 | `<ACQ-ID>.data/` | **empty** — the no-DICOM placeholder shape |
 | Size | ~0.2 MB each, **~3.4 MB total** — negligible |
-
-**Update 2026-10-01: decided (Ryan), and the real issue is a missing session.**
-
-- The folders were created **2026-07-16 09:16 UTC** by `ingest_raw.py`. Their `checksums.json`
-  lists **no files**, and there is no `README.txt`. The run stopped before the registry append; the
-  cause is not established.
-- **Their session `jrc20260710_m12_1125_bis` (17 exams) is not in gjesus3 under any ID.**
-  Production has that animal's June MRI, PET/CT and AxioScan slide, but not this session.
-- **Order:**
-  1. Re-ingest the session from the scanner host through the normal MRI path. Its no-DICOM exams
-     go on the DICOM-regen worklist (11_OPERATIONS §5.5).
-  2. Then retire the 17 empty IDs with `tools/retire_acquisition.py --orphan` (branch
-     `feat/retire-acquisition`). Each folder is backed up whole, and no ID is ever reused.
-- Do it after the historical-drives ingest is merged.
-
-- [ ] Re-ingest `jrc20260710_m12_1125_bis` from the scanner (MRI GUI or CLI, `mri_bruker` template).
-- [ ] Then retire `ACQ-20260710-MRI-001…017` (`tasks/retire_lists/2026-10_orphans_20260710_MRI.csv`).
 | mtime | all **2026-07-16 11:16**, identical — one batch |
 | ACQ-ID counter | `.acq_id_seq.json` holds `ACQ-20260710-MRI- = 17` — **the ids are reserved** |
 
