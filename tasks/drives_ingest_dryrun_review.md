@@ -508,3 +508,20 @@ including the source hash and the read-back verify. At that rate a 400 GB batch 
 the remaining B05–B16 (3,830 GB) about **30–35 h**.
 
 **Next: B05**, handed to a fresh session (`HANDOFF_RUN.md` at the worktree root).
+
+---
+
+**Final: B01-B16 complete and verified (2026-09-30 to 2026-10-02).**
+
+- **Ingested:** **8,790 acquisitions** in 16 batches (`CELL` 8,061, `LSM9` 387, `ZWSI` 4, `XMIC` 338; 3,849 GB). The registry went from 16,437 to **25,227 rows**, and `registry_projects.csv` stayed at 59 rows after B02 created `AE-biomaGUNE-0118`.
+- **Blank project:** **5,055** of the new ACQ-IDs (103 whose path claimed a project that was left blank, 4,952 with no claim). The list is `tasks/drives_blank_project_list.csv`, and it matches the registry's blank-project drive rows exactly.
+- **Final `ingest_verify`** over all 16 batches with `--provenance`: **all six checks PASS on 8,790 rows**, and the provenance CSV rewrote identically (8,790 rows plus the one `repair` row).
+- **Full validator with enrichment:** 25,227 rows checked, **10,314 errors, all the known MRI `operator` placeholder** (no new class, none on a drive row). 23,881 warnings: `condition.is_control` null 17,324 (3,435 on drive rows, the expected sentinel), `anatomy.is_whole_body` null 5,980, `subject.source == pending-db` 292, sidecar missing a `subject:` block 146 and a `condition:` block 138. The only drive-set row with a missing-block warning is `ACQ-20251031-CELL-003`, the repaired pre-existing production row.
+- **`metadata_completeness.py`:** 24,207 gaps across 17,488 of 25,244 acquisition folders on disk. The 17 folders beyond the registry's 25,227 rows are the **pre-existing orphans `ACQ-20260710-MRI-001` to `-017`** (`raw/DICOM/2026/2026-07/`, created 2026-07-16; see STATUS and BACKLOG). They are not in the drives provenance and were not touched. 0 duplicate ids on disk, 0 registry rows without a folder.
+- **Notable events:**
+  - B07: the harness reported the task "killed" at its 2 h background limit mid-run; the detached process kept running and finished with every check passing. Later batches were launched with `nohup … & disown`.
+  - B08: stopped at step 0 on check 3c (7 full-size originals matched B05's small export siblings). Resolved by the coordinator's `ANSWER_B08_STOP.md`: a reviewed edit to check 3c only (commit `55a029c`), with the exemptions INFO-listed. B09, B11 and B12 then showed exactly the predicted 11, 4 and 31 exempt files.
+  - B14: 12 files exempt (14 file-to-production matches) against the predicted "14"; no non-exempt hit, so no failure.
+  - B05's small `-scale` / `Untitled5` export siblings stay in `/raw/`; a uniform R4-group clean-up is a BACKLOG item for Ryan.
+- **Left as they were:** the 4 link collisions in `0219`; the project `start_date` / `last_activity` fields (no ingest maintains them); one hidden dot-file `.czi` (a later one-off); `_farm\`, `_extract\` and the staged drive trees (kept until Ryan confirms).
+- **For the coordinator at merge:** the STATUS / CHANGELOG wording (§9, needs updating to the final counts above).
