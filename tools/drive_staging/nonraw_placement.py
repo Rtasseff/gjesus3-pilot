@@ -290,6 +290,13 @@ def project_folder(proj, projects):
     return folder_name(proj)
 
 
+def member_key(member):
+    """Join key between the catalog's and the claims pass's member paths. The claims pass wrote .7z
+    members with backslashes and lost accented characters to U+FFFD (78 Haizpea names), so compare
+    with forward slashes and every non-ASCII character as `?`."""
+    return re.sub(r"[^\x00-\x7f]", "?", member.replace("\\", "/"))
+
+
 def cmd_plan(args):
     out = args.out
     projects = load_projects(args.nas)
@@ -383,7 +390,8 @@ def cmd_plan(args):
     # archive members: claims per member where the claims pass produced them, else the archive's own
     mclaims = {}
     for r in it(os.path.join(ANALYSIS, "codes", "archive_member_claims.csv")):
-        mclaims[(CLAIMS_DRIVE[r["drive"]], r["archive_relpath"], r["member"])] = r
+        # the claims pass wrote .7z member paths with backslashes; the catalog uses forward slashes
+        mclaims[(CLAIMS_DRIVE[r["drive"]], r["archive_relpath"], member_key(r["member"]))] = r
     say(f"member claims: {len(mclaims)}")
     members = []
     leone = 0
@@ -395,13 +403,15 @@ def cmd_plan(args):
             continue
         members.append(m)
     say(f"archive members (excl. LEONE): {len(members)}")
+    hit = sum(1 for m in members if (m["drive"], m["archive_relpath"], member_key(m["member"])) in mclaims)
+    say(f"member claims matched to a catalog member: {hit} of {len(mclaims)} (LEONE has none)")
     for m in members:
         drive = m["drive"]
         arch = archives.get((drive, m["archive_relpath"]))
         if arch is None:
             say(f"!! member of an archive not in files.csv: {drive} {m['archive_relpath']}")
             continue
-        mc = mclaims.get((drive, m["archive_relpath"], m["member"]))
+        mc = mclaims.get((drive, m["archive_relpath"], member_key(m["member"])))
         if mc is None and arch["verdict"] == "ARCHIVE":  # multi-claim archive: no row = no claim
             mc = {"researcher": arch["researcher"]}
         if mc is None:  # inherit the archive file's own claim
@@ -1021,11 +1031,13 @@ def cmd_worksheet(args):
             "files": [], "bytes": 0, "acqs": [], "dates": [g["date_min"], g["date_max"]]}
 
     def grp(drive, researcher, relpath, verdict, claim_id, member=""):
-        if member:  # an archive member: the archive plus its first two folders is the natural unit
-            relpath = relpath + "!" + "/".join(member.replace("\\", "/").split("/")[:2])
         if verdict == "C":
             key = (drive, researcher, f"(C) {claim_id}")
             kind = "(C) claim"
+        elif member:  # an archive member: the archive plus the member's first two folders
+            folders = member.replace("\\", "/").split("/")[:-1][:2]
+            key = (drive, researcher, relpath + ("!" + "/".join(folders) if folders else ""))
+            kind = "no claim"
         else:
             key = (drive, researcher, series_of(relpath, researcher))
             kind = "no claim"

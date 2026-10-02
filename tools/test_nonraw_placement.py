@@ -66,6 +66,8 @@ def test_layout():
                    "Drive zuri 170823/Proyecto Cav1 CNIC/KI67 cav1 190423.zip!a/b.tif")
     check(d.endswith("L\\Drive zuri 170823_zip\\Drive zuri 170823\\Proyecto Cav1 CNIC\\KI67 cav1 190423_zip\\a\\b.tif"),
           f"nested-archive member dest {d}")
+    check(N.member_key("H_2020\\p0420\\Modificaci�n 0420.doc") == N.member_key("H_2020/p0420/Modificación 0420.doc"),
+          "member key: backslash + lost accent match the catalog's form")
     h = N.holding_rel("drive2_MFB-Disco-2", "a\\b.txt")
     check(h == "staging\\historical_drives_unassigned\\drive2_MFB-Disco-2\\a\\b.txt", f"holding {h}")
 

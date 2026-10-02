@@ -1,0 +1,18 @@
+project_name,project_id,project_status,decision,files,bytes,gb,by_class
+AE-biomaGUNE-0118,PROJ-0060,active,place,21,8696843,0.01,analysis:11; document:8; figure:2
+AE-biomaGUNE-0219,PROJ-0017,active,place,61,31063231647,31.06,analysis:3; document:3; tif:46; volume:9
+AE-biomaGUNE-0320,PROJ-0007,closed,closed-project,14,1502292,0.00,analysis:4; document:9; figure:1
+AE-biomaGUNE-0420,PROJ-0012,active,place,3920,13965999510,13.97,analysis:45; document:102; figure:42; other:1765; tif:1237; video:18; volume:711
+AE-biomaGUNE-0619,PROJ-0004,active,place,1241,3040043570,3.04,analysis:105; document:66; figure:4; other:991; volume:75
+AE-biomaGUNE-0721,PROJ-0010,active,place,2872,6421211557,6.42,analysis:54; document:153; figure:1352; tif:92; volume:1221
+AE-biomaGUNE-1019,PROJ-0006,active,place,4119,7267448653,7.27,analysis:1263; document:194; figure:98; other:2242; tif:299; video:6; volume:17
+AE-biomaGUNE-1022,PROJ-0019,active,place,367,56114945598,56.11,analysis:58; document:3; figure:72; other:118; tif:116
+AE-biomaGUNE-1116,NEW,approved-new,place,4,1860265,0.00,analysis:2; document:2
+AE-biomaGUNE-1123,PROJ-0014,active,place,278,55876324407,55.88,czi-raw:18; figure:108; tif:152
+AE-biomaGUNE-1319,NEW,approved-new,place,25,192462896,0.19,analysis:9; document:8; figure:4; volume:4
+AE-biomaGUNE-1321,PROJ-0018,active,place,300,54662642344,54.66,analysis:11; document:5; figure:12; tif:192; volume:80
+AE-biomaGUNE-1420,NEW,approved-new,place,3,1248783,0.00,document:3
+AE-biomaGUNE-1519,PROJ-0008,closed,closed-project,8667,8284885630,8.28,analysis:86; bruker:16; document:21; other:2766; volume:5778
+AE-biomaGUNE-1520,NEW,approved-new,place,2,2585125,0.00,document:2
+Project-0521,NEW,approved-new,place,23,14527961,0.01,document:23
+laura,PROJ-0045,active,place,4,10001216,0.01,czi-raw:4
