@@ -74,6 +74,7 @@ scale bar or pyramids are saved, so its sha256 changes and content dedup lets it
 | B11 `CELL` 1123, 1321 | 2026-10-01 18:05–20:56 | 153 / 153 | 10,255 s | all PASS | 10,314 | 0 | `…_20261001_drives_B11` (registry 22,501 → 22,654; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS with 4 files exempt under the 3c rule, as predicted) |
 | B12 `CELL` 1321 | 2026-10-01 21:08–23:55 | 138 / 138 | 9,988 s | all PASS | 10,314 | 0 | `…_20261001_drives_B12` (registry 22,654 → 22,792; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS with 31 files exempt under the 3c rule, as predicted) |
 | B13 `CELL` 0420 0423 0424 0522 0619 0721 | 2026-10-02 00:15–03:12 | 1,235 / 1,235 | 10,654 s | all PASS | 10,314 | 0 | `…_20261002_drives_B13` (registry 22,792 → 24,027; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS, 0 exemptions) |
+| B14 `CELL` no project | 2026-10-02 03:54–06:43 | 801 / 801 | 10,168 s | all PASS | 10,314 | 0 | `…_20261002_drives_B14` (registry 24,027 → 24,828; projects unchanged at 59; 0 WARN lines; step 0 = 9/9 PASS with **12 files** exempt under the 3c rule (14 file-to-production matches; the coordinator's answer predicted "14", evidently matches rather than files; no non-exempt hit, so no FAIL)) |
 | B06 | 274 / 327.6 | 235 / 257.0 | 1321, 1422 |
 | B07 | 1,584 / 393.4 | 1,519 / 393.2 | — |
 | B08 | 1,232 / 396.9 | 1,050 / 398.1 | 0721, 1022, 1123 |
