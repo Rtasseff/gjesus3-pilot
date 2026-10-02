@@ -56,6 +56,18 @@ file's animal exists in both protocols, the DB's own dates decide: the one proto
 procedure on that animal within 3 days of the acquisition, else the one whose animal was already
 born; otherwise C. Dates checked are raw-imaging only (`is_data`): paperwork legitimately predates.
 
+TIE-BREAK FOR HISTOLOGY (Ryan, 2026-09-29, approved reading of the (C) cases). For a microscopy
+file (`HISTOLOGY_EXT`) whose animal exists in several protocols, and which the two rules above do
+not separate, the DB decides if EXACTLY ONE candidate's animal has a terminal procedure (`Organ
+sampling` or `Perfusion`, `TERMINAL_PROC_RE`) dated on or before the file date: a slide is cut
+after the tissue is taken. The born-by-date rule is then re-checked, and a disagreement between
+the two leaves the file (C). The rule only ever CONFIRMS the file's nearest claim, never
+overrules it: the DB logs sampling unevenly, so a missing terminal procedure is not evidence
+(1321's animals 98-101 have slides on the drives and no sampling logged). It is NOT applied to in-vivo data (MRI/PET/CT/NIfTI): there a
+prior perfusion is evidence AGAINST an animal, which is how the four `jrc220622_m*_1321` studies
+inside `Cursosurf_0219` were decided. Procedure dates before 1990 are ignored (the DB holds
+`0023-08-07`-style typos).
+
 The researcher is the innermost whole-segment person-named folder (hub brief 8.7); names embedded
 in longer folder names are flagged, not assigned; operator initials (AUA, MBC, MJS) are never
 mapped to a person. Findings and the reasoning behind every rule: tasks/drives_project_codes_findings.md
@@ -582,6 +594,10 @@ DOC_EXT = {"doc", "docx", "pdf", "xls", "xlsx", "xlsm", "ppt", "pptx", "txt", "m
 RAW_EXT = {"czi", "lsm", "tif", "tiff", "dcm", "ima", "nii", "gz", "mhd", "raw", "img", "hdr", "nd2", "lif",
            "oib", "oir", "vsi", "svs", "ndpi", "dm4", "dm3", "jcamp", "mnova"}
 BRUKER_FILES = {"2dseq", "fid", "ser", "acqp", "acqus", "method", "visu_pars", "reco", "subject", "procs"}
+# Ex-vivo microscopy (slides / sections) and their image exports: the only files for which a
+# terminal procedure on a candidate animal is evidence FOR that animal (tie_break, rule 2).
+HISTOLOGY_EXT = {"czi", "lsm", "tif", "tiff", "png", "jpg", "jpeg", "bmp"}
+TERMINAL_PROC_RE = re.compile(r"organ sampling|perfusion", re.I)
 
 
 def is_data(fname):
@@ -1022,24 +1038,43 @@ def main():
     def tie_break(codes, num, it):
         """Animal `num` exists in several protocols. Decide only on the facility DB's own dates:
         (1) exactly one protocol logs a procedure on this animal within 3 days of the acquisition;
-        else (2) exactly one protocol's animal was already born by the acquisition date."""
+        else (2) histology only: exactly one protocol's animal had a terminal procedure (organ
+        sampling / perfusion) on or before the acquisition date, and rule (3) does not disagree;
+        else (3) exactly one protocol's animal was already born by the acquisition date."""
         d, src = acq_date(it)
         if not d:
             return None, "no acquisition date"
-        near, alive = [], []
+        near, alive, terminal = [], [], []
         for code in codes:
             r = db.lookup(code, num)
             procs = [iso_date(p[0]) for p in r.get("procs", [])]
             if any(p and abs((p - d).days) <= 3 for p in procs):
                 near.append(code)
+            if any(t and t.year >= 1990 and t <= d and TERMINAL_PROC_RE.search(ty or "")
+                   for t, ty in ((iso_date(p[0]), p[1]) for p in r.get("procs", []))):
+                terminal.append(code)
             dob = iso_date(r.get("dob"))
             if dob and dob <= d:
                 alive.append(code)
         if len(near) == 1:
             return near[0], f"decided {near[0]}: only it logs a procedure on animal {num} within 3 days of {d} ({src} date)"
+        ext = it["fname"].rsplit(".", 1)[-1].lower() if "." in it["fname"] else ""
+        if ext in HISTOLOGY_EXT and len(terminal) == 1:
+            if terminal[0] != codes[0]:
+                # The DB logs sampling unevenly (1321's animals 98-101 have slides on the drive but
+                # no sampling logged), so a MISSING terminal procedure is not evidence. The rule may
+                # confirm the file's own nearest claim; it never overrules it.
+                return None, (f"terminal procedure only on the outer {terminal[0]}'s animal {num} by {d} "
+                              f"({src}); the rule never overrules the nearest claim {codes[0]}")
+            if len(alive) == 1 and alive[0] != terminal[0]:
+                return None, (f"terminal procedure on {terminal[0]} but only {alive[0]}'s animal {num} "
+                              f"was born by {d} ({src}) -- the rules disagree")
+            return terminal[0], (f"decided {terminal[0]}: only its animal {num} had organ sampling/perfusion "
+                                 f"on or before {d} ({src} date; histology)")
         if len(alive) == 1:
             return alive[0], f"decided {alive[0]}: only its animal {num} was born by {d} ({src} date)"
-        return None, f"procedure-date match {near or 'none'}, born-by-date {alive or 'none'} on {d} ({src})"
+        return None, (f"procedure-date match {near or 'none'}, terminal-by-date {terminal or 'none'}, "
+                      f"born-by-date {alive or 'none'} on {d} ({src})")
 
     # ---- per item final decision (conflicts) -----------------------------------------------------
     item_decision = []

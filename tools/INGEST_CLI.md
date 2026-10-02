@@ -1,6 +1,6 @@
 # `ingest_raw.py` — CLI Reference
 
-*Last Updated: 2026-06-26*
+*Last Updated: 2026-09-30*
 
 One-page reference for the raw-data ingest tool. For the master map of every tool in this directory, see [`tools/INDEX.md`](INDEX.md). For the operational ("when do I run this, what do I do next") view, see [`mfb-rdm-docs/11_OPERATIONS.md §3.2`](../mfb-rdm-docs/11_OPERATIONS.md). For the full config-schema specification, see [`mfb-rdm-docs/10_TOOLS.md §2.1`](../mfb-rdm-docs/10_TOOLS.md).
 
@@ -60,7 +60,7 @@ Every config has up to four top-level blocks (three required + one optional, plu
 | Block | Required? | Purpose |
 |-------|-----------|---------|
 | `ingest:` | Yes | Pipeline control flags. Not registry columns. Keys: `delete_source_after_ingest`, `auto_create_projects`, `acquisition_layout` (`file` \| `archive` \| `folder`; round-6 added — `archive` implemented 2026-06-02 to store the source `.zip`/`.rar` as the primary), `archive_primary_from` (directory of source archives; required with `acquisition_layout: archive`; 2026-06-02), `reconstructions` (`all` \| int \| list; MRI-specific), `copy_strategy` (`mri_paravision_v2` \| `ni_molecubes` \| legacy `paravision_exam`; round-6 v2 added), `auto_regenerate_dicom` (`true` \| `false`, MRI-specific Phase 2 2026-06-01 — see [Dicomifier opt-in](#dicomifier-opt-in-for-no-dicom-mri-exams) below). |
-| `auto_discover:` | Yes | How to find cases inside `staging_dir` and what variables to extract. Supports `filename_parse:` (positional `separator:` + `fields:` OR named-group `regex:`; optional `source: name \| parent_name`) and `path_parse:` (named path levels between staging_dir and the match). Each case's parsed values land in `discovered.<name>`. |
+| `auto_discover:` | Yes | How to find cases inside `staging_dir` and what variables to extract. Supports `filename_parse:` (positional `separator:` + `fields:` OR named-group `regex:`; optional `source: name \| parent_name`), `path_parse:` (named path levels between staging_dir and the match) and `case_table:` (a CSV keyed on `original_name` whose columns become per-file `discovered.<column>` values — [below](#per-file-values-from-a-table--case_table)). Each case's parsed values land in `discovered.<name>`. |
 | `registry:` | Yes | Explicit per-column mapping. Values: literal (`MFB`), bare reference (`discovered.operator`), interpolation (`"${discovered.stain} at ${discovered.czi_objective_mag}x"`), or `NA`. New DRAFT columns since round 6: `session_id` (ISA "study" grouping) and `primary_kind` (auto, set by pipeline). |
 | `auto_create_project:` | Optional | First-time project-creation metadata (owner / description / notes), resolver-evaluated. First-write-wins. |
 | `link_filename:` (top-level string, NEW 2026-05-22) | Optional | Template for the project link name placed under `/projects/<proj>/raw_linked/` (a hard link since 2026-06-02 — used verbatim, no extension). Context = `discovered.*` + resolved registry fields + `${acq_id}` + `${acq_date}`. Per-instrument templates ship recommended defaults. Falls back to `original_name` when unset (backward-compatible with rounds 1-2/4/5). See [10_TOOLS §2.1.5](../mfb-rdm-docs/10_TOOLS.md). |
@@ -81,6 +81,23 @@ registry:
   researcher:   "<set per batch / GUI>"          # registry person column (renamed from operator 2026-06-09)
 operator:       discovered.operator              # SIDECAR-ONLY top-level key (the tech) -> "MBC"
 ```
+
+### Per-file values from a table — `case_table:`
+
+For a Data-Office batch where project / researcher / operator / subject were decided **per file** beforehand (the historical-drives ingest, 2026-09-30). Default off.
+
+```yaml
+auto_discover:
+  case_table:
+    file: cases_B03.csv        # relative to this config file; column `original_name` + any others
+    on_missing: error          # error (default) aborts the batch if a file has no row; or skip
+registry:
+  project_name: discovered.drv_project
+  researcher:   discovered.drv_researcher
+operator: discovered.drv_operator
+```
+
+`original_name` is the path relative to `staging_dir`, with forward slashes. A table value beats any filename/path value of the same name; a blank cell stays blank. Full rules: [`10_TOOLS §2.1.3`](../mfb-rdm-docs/10_TOOLS.md).
 
 ### Auto-populated columns (do NOT list in `registry:`)
 

@@ -1110,6 +1110,15 @@ share nests exams as `<study>/Other data/<exam>`, so `parent_name` reads the lit
 and the regex never matches — 24 cases became 0. Worked around by staging the study flattened
 (0.70 GB); a `grandparent_name` source would remove the need, but that too is a code change.
 
+**Also same class — a file whose name starts with `.` is never globbed (found 2026-09-30).** Python's
+`glob` does not match leading-dot names, so `expand_batch` never sees such a file: no SKIP line, no
+error. The historical-drives `.czi` dry run caught one
+(`Cell observer\Laura\Cell observer\Interaccion-LS-SPN\.LS-SPN-20x-8.czi`, a real 61 MB acquisition)
+only because it compared the engine's cases with an independent plan, and because the new
+`case_table` reports rows that matched no file. It was excluded from that ingest and listed. Do
+**not** switch `include_hidden` on globally: that would also ingest macOS `._*` AppleDouble files. The
+report-the-unseen fix above covers it too, if the report compares the glob with a plain directory walk.
+
 ## 🔺 HIGH — `jrc260224_m39_0525` is probably animal 37, not 39 (2026-08-21)
 
 **19 production acquisitions** (`ACQ-20260224-MRI-020` … `-038`) may carry the wrong subject.

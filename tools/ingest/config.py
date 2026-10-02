@@ -1,5 +1,6 @@
 """Configuration loading and validation for ingest_raw."""
 
+import csv
 import os
 import re
 import glob as globmod
@@ -111,8 +112,9 @@ def get_embedded_extractor(ecosystem, disco=None):
 VALID_INSTRUMENTS = {
     # Internal
     "ZWSI", "CELL", "LSM9", "PET", "SPECT", "CT", "MRI",
-    # Collaborator / external (X-prefix)
-    "XMRI", "XCT", "XPET", "XSPECT",
+    # Collaborator / external (X-prefix). XMIC = an external microscope's
+    # .czi (first: the Charité Axio Imager.Z2, 2026-09-30); MICROSCOPY ecosystem.
+    "XMRI", "XCT", "XPET", "XSPECT", "XMIC",
 }
 
 # Map instrument code → data ecosystem
@@ -128,6 +130,7 @@ INSTRUMENT_ECOSYSTEM = {
     "XCT": "DICOM",
     "XPET": "DICOM",
     "XSPECT": "DICOM",
+    "XMIC": "MICROSCOPY",
 }
 
 # Map DICOM Modality tag values → our X-prefix codes
@@ -150,7 +153,69 @@ def load_config(config_path):
         cfg = yaml.safe_load(f)
     if cfg is None:
         raise ValueError(f"Empty config file: {config_path}")
+    # Where relative paths inside the config (auto_discover.case_table.file)
+    # resolve from. Configs built in memory (the operator GUI) have none and
+    # resolve from the CWD.
+    cfg["_config_dir"] = os.path.dirname(os.path.abspath(config_path))
     return cfg
+
+
+CASE_TABLE_KEYS = {"file", "key", "on_missing"}
+
+
+def load_case_table(block, config_dir=None):
+    """Load the optional `auto_discover.case_table:` block -> (rows, on_missing).
+
+    A per-case override table (10_TOOLS §2.1.3): a CSV with one row per
+    acquisition, keyed on the case's `original_name` (the staging-relative path
+    expand_batch assigns, forward slashes). Every other column becomes a
+    `discovered.<column>` value for that case, so a `registry:` / `operator:` /
+    `subject_lookup:` / `link_filename:` expression can set a field PER FILE
+    where the rest of a config sets it per batch. OFF unless the block is given.
+
+    Built for the one-time historical-drives ingest (2026-09-30), where project,
+    researcher, operator and subject id were decided per file beforehand and a
+    filename parse could only approximate them.
+
+        case_table:
+          file: cases_B01.csv      # relative -> the config file's directory
+          key: original_name       # the only key supported
+          on_missing: error        # error (abort the batch) | skip (WARN + skip)
+
+    Returns ({original_name: {column: value}}, on_missing), or (None, None) when
+    the block is absent. Raises ValueError on a malformed block or table.
+    """
+    if not block:
+        return None, None
+    if not isinstance(block, dict):
+        raise ValueError("auto_discover.case_table: must be a mapping")
+    unknown = set(block) - CASE_TABLE_KEYS
+    if unknown:
+        raise ValueError(
+            f"auto_discover.case_table: unknown key(s) {sorted(unknown)}; "
+            f"allowed {sorted(CASE_TABLE_KEYS)}")
+    key = block.get("key", "original_name")
+    if key != "original_name":
+        raise ValueError("auto_discover.case_table.key: only 'original_name' is supported")
+    on_missing = block.get("on_missing", "error")
+    if on_missing not in ("error", "skip"):
+        raise ValueError("auto_discover.case_table.on_missing: 'error' or 'skip'")
+    path = block.get("file") or ""
+    if not path:
+        raise ValueError("auto_discover.case_table.file is required")
+    if not os.path.isabs(path) and config_dir:
+        path = os.path.join(config_dir, path)
+    rows = {}
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        if key not in (reader.fieldnames or []):
+            raise ValueError(f"case_table {path}: no '{key}' column")
+        for r in reader:
+            k = (r.pop(key) or "").replace("\\", "/")
+            if k in rows:
+                raise ValueError(f"case_table {path}: duplicate {key} {k!r}")
+            rows[k] = {c: (v or "") for c, v in r.items()}
+    return rows, on_missing
 
 
 def is_batch_config(cfg):
@@ -397,6 +462,11 @@ def expand_batch(cfg, nas_root=None):
         if nas_root else None
     )
     existing_keys = _build_dedupe_index(registry_path)
+
+    # Optional per-case override table (default off) -- see load_case_table.
+    case_table, case_table_missing = load_case_table(
+        disco.get("case_table"), cfg.get("_config_dir"))
+    case_table_used = set()
 
     # Discover cases (allow both files and directories).
     # recursive=True is harmless for non-"**" patterns and enables
@@ -655,6 +725,20 @@ def expand_batch(cfg, nas_root=None):
                 if parsed.get("phantom"):
                     discovered["phantom"] = "yes"
 
+        # case_table: the explicit per-case values win over every discovered
+        # source above (they were decided per file, on more evidence).
+        if case_table is not None:
+            row = case_table.get(case["original_name"])
+            if row is None:
+                msg = (f"{case['original_name']} has no row in "
+                       f"auto_discover.case_table")
+                if case_table_missing == "error":
+                    raise ValueError(msg)
+                print(f"[expand_batch] SKIP {msg}")
+                continue
+            case_table_used.add(case["original_name"])
+            discovered.update(row)
+
         case["discovered"] = discovered
         case["ecosystem_section"] = eco_section
         if eco_section_name_override:
@@ -690,6 +774,12 @@ def expand_batch(cfg, nas_root=None):
             continue
 
         cases.append(case)
+
+    if case_table is not None:
+        unused = len(case_table) - len(case_table_used)
+        if unused:
+            print(f"[expand_batch] WARN: {unused} case_table row(s) matched no "
+                  f"file under {staging_dir}")
 
     if not cases:
         print(

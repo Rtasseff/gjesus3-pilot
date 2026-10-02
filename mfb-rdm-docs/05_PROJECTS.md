@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 Draft — except **§2a (Project Reference Model)** and **§3a (Project-folder ownership)**, which are ✅ DECIDED.
-**Last Updated:** 2026-08-12 (new **§3a — project folders are researcher-owned**, ✅ DECIDED: the system creates, populates, documents and teaches, but mandates nothing; researchers may reorganise or delete anything inside their project folder, **including hard links**, so **no system-of-record fact may be derived from a project folder's contents**. `/raw/` + `registries/` are the system of record and are self-sufficient without `/projects/`. Pairs with [06_REGISTRIES §2.3b](06_REGISTRIES.md) — an acquisition is registered to exactly one project. Same day, earlier: **§3** — the recommended subfolders `raw_linked/` · `working/` · `outputs/` · `metadata/` are now created by every tool that makes a project and were backfilled onto the existing ones; the 🕗 note is **narrowed** from "`metadata/` does not exist" to "the directory exists, its *contents* stay deferred". **§7** states which copy is authoritative. **§10** records the ✅ 2026-08-11 decision that anyone with access may create a project — through the system — and names the Project Manager GUI. Prior: 2026-08-02 (new **§2a Project Reference Model** — the owning section for how a project is referred to: `project_id` + `name`, case-insensitive resolution, **folder == name verbatim**, one construction site. Retires the "project hint" vocabulary and the `proj-` folder prefix; §9 now covers the naming *convention* only. Prior: 2026-06-26.)
+**Last Updated:** 2026-09-30 (new **§4.y — reopening a closed project** with `tools/reopen_project.py`, ✅ DECIDED case by case; new **§2a.7 — `Project-NNNN`**, ✅ DECIDED 2026-09-29: a 4-digit group project id that is not an animal protocol becomes a project named `Project-` + the code as written. Prior: 2026-08-12, new **§3a — project folders are researcher-owned**, ✅ DECIDED: the system creates, populates, documents and teaches, but mandates nothing; researchers may reorganise or delete anything inside their project folder, **including hard links**, so **no system-of-record fact may be derived from a project folder's contents**. `/raw/` + `registries/` are the system of record and are self-sufficient without `/projects/`. Pairs with [06_REGISTRIES §2.3b](06_REGISTRIES.md) — an acquisition is registered to exactly one project. Same day, earlier: **§3** — the recommended subfolders `raw_linked/` · `working/` · `outputs/` · `metadata/` are now created by every tool that makes a project and were backfilled onto the existing ones; the 🕗 note is **narrowed** from "`metadata/` does not exist" to "the directory exists, its *contents* stay deferred". **§7** states which copy is authoritative. **§10** records the ✅ 2026-08-11 decision that anyone with access may create a project — through the system — and names the Project Manager GUI. Prior: 2026-08-02 (new **§2a Project Reference Model** — the owning section for how a project is referred to: `project_id` + `name`, case-insensitive resolution, **folder == name verbatim**, one construction site. Retires the "project hint" vocabulary and the `proj-` folder prefix; §9 now covers the naming *convention* only. Prior: 2026-06-26.)
 
 ---
 
@@ -143,6 +143,15 @@ is **not accepted** (no deprecated alias): it raises the resolver's unknown-key
 error listing the allowed keys, so a stale config fails loudly. Migration record:
 [CHANGELOG.md](../CHANGELOG.md), 2026-08-02.
 
+### 2a.7 `Project-NNNN`: a group project id that is not an animal protocol
+
+> **✅ DECIDED (2026-09-29, Ryan).** When data is filed under a **4-digit project id that is not an animal protocol in the facility DB** (the DB does not hold it, and it is clearly not a typo of one that it does), its project is named **`Project-` + the code as written**, e.g. `Project-0521`. Such a project has **no animal-facility link**: no subject ids resolve through it.
+
+- **Why the prefix.** An animal protocol is named `AE-biomaGUNE-NNNN` (§9). A bare `0521` would be a legal name, but it would read as a protocol and could collide with one later. `Project-` makes the difference visible in the folder list.
+- **Accepted resemblance.** `Project-0521` looks like the machine key `PROJ-0521` (§2a.1). The two are never confused by the system: the name is resolved case-insensitively against `name`, and the literal `PROJ-XXXX` form is matched only as an id (§2a.3). The resemblance to people was accepted as the price of a readable name.
+- **As written.** The code keeps the digits it was filed under. No correction is applied: a typo of a real protocol is an (A) correction to `AE-biomaGUNE-NNNN` instead, decided on DB evidence.
+- **First use:** the historical-drives classification (`tasks/drives_project_codes_findings.md` §3). `Project-0521` was approved on 2026-09-29, with its predecessor number `0720`'s documents folded in. Its folder holds a CEEA application for `AE-biomaGUNE-0521` that the facility DB does not have, so it cannot take the `AE-biomaGUNE-` name. It is created by the session that places the drives' non-raw material.
+
 ---
 
 ## 3. Directory Structure
@@ -231,6 +240,26 @@ Mechanism (intended; tracked in [tasks/BACKLOG.md](../tasks/BACKLOG.md)):
 4. After both writes verify, the project folder is deleted.
 
 Until this tool exists, projects should not be deleted — pause them indefinitely if needed, and flag the Data Mgmt Lead.
+
+### 4.y Reopening a closed project (2026-09-30)
+
+> **✅ DECIDED (Ryan, 2026-09-30):** a `closed` project is **reopened case by case** when new data for it turns up. *"I probably should not have closed those projects… this may happen a few times."*
+
+**Why it happens.** The 2026-07-14 retention close-out ([CHANGELOG](../CHANGELOG.md)) set 8 projects to `closed` (newest acquisition older than 3 years) and deleted their folders' contents; the registry rows stayed. But **closed projects keep receiving data**: the ingest does not check `status`, so an operator's AxioScan run filed 18 sections into `AE-biomaGUNE-1019` on 2026-09-29, and the historical drives carry more for `0219` and `1019`. The folders came back (an ingest re-creates `raw_linked/` for its own links), while the links removed at close-out did not, and `generate_index.py` skips `closed` projects, so their Finder pages go stale.
+
+**Procedure** — `tools/reopen_project.py`, dry run first:
+
+```
+python tools/reopen_project.py --nas-root "J:\gjesus3-data" --project AE-biomaGUNE-0219 --dry-run
+python tools/reopen_project.py --nas-root "J:\gjesus3-data" --project AE-biomaGUNE-0219 --reason "<why>"
+```
+
+1. The dry run may show only: the project's own `registry_projects.csv` row changing (`status`, `notes`, the dates); links, `_project.yaml`, `provenance.csv` rows and `index.html` added **inside that project's folder**; and **no deletion anywhere**. Anything else: stop.
+2. The run backs up `registry_projects.csv` and the project's `provenance.csv` / `_project.yaml` to a fresh dated off-NAS folder (SHA-256-verified); ensures the subfolder skeleton; restores a missing `_project.yaml` from the close-out backup (else `create_project`'s template); recreates every missing link to the project's registered acquisitions under its original name (from provenance) and gives each a provenance row; then sets `status = active`, appends `Reopened YYYY-MM-DD (<reason>)` to `notes`, recomputes `start_date` / `last_activity` from the acquisition dates, and regenerates the project's `index.html`.
+3. It never deletes or replaces anything. A link name already taken by another file, or wanted by two acquisitions (e.g. two sessions of one animal on one day under the MRI link template), is **reported** and left alone.
+4. Re-running it is a no-op (the project is `active`). If linking fails part-way, the status stays `closed` and a re-run resumes.
+
+Recreating links does not contradict §3a: those links were removed by the **system's** close-out, not by a researcher.
 
 ---
 
@@ -323,6 +352,7 @@ See [06_REGISTRIES](06_REGISTRIES.md) Section 4 for full schema. Key fields:
 > |--------------------|----------------------------------|--------|
 > | AxioScan 7 (round-4) | `AE-biomaGUNE-NNNN` (animal-project code) | 🔶 Reasonable interim — animal-project codes are durable units |
 > | Cell Observer (round-5 cells-mode) | `${researcher}-${experiment}` (e.g. `itziar-alphasma`) | ⚠️ **Stopgap only** — experiment is not a project |
+> | Group project id that is not an animal protocol | `Project-NNNN` (code as written) | ✅ DECIDED 2026-09-29 — see [§2a.7](#2a7-project-nnnn-a-group-project-id-that-is-not-an-animal-protocol) |
 >
 > **Required next step:** Convene the relevant project-lead users to converge on a real naming convention before the pilot scales out. Only the project-lead users can decide what's meaningful for organizing *their* work; the data office cannot make this call for them. The system's value compounds once a consistent convention is in place — researchers will find their raw data, intermediates, and projects via these names, so the name needs to bear real meaning. Tracked as an open question in [00_INDEX.md](00_INDEX.md).
 

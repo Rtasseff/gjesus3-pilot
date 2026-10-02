@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-06-26 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `discovered.czi_*` / `discovered.mri_*` field tables re-verified against `tools/ingest/czi_metadata.py` and `tools/ingest/paravision_metadata.py` `EXPOSED_FIELDS` (in sync — 21 CZI + 22 MRI fields); `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
+**Last Updated:** 2026-09-30 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `XMIC` code for an external microscope's `.czi` (§1.6, first use the Charité Axio Imager.Z2); `discovered.czi_*` / `discovered.mri_*` field tables re-verified against `tools/ingest/czi_metadata.py` and `tools/ingest/paravision_metadata.py` `EXPOSED_FIELDS` (in sync — 21 CZI + 22 MRI fields); `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
 
 ---
 
@@ -268,6 +268,20 @@ These come from `tools/ingest/ni_metadata.py::EXPOSED_FIELDS`, parsed out of `pr
 | `ni_recons_present` | Comma-separated list of `recon_<idx>` subfolders kept on gjesus3 (e.g. `0,1,2` for CT, `0` for PET) | derived from `reconstructions/recon_*/` directory listing |
 
 The structured form of all the above plus DICOM header summaries + parsed XML aux files + verbatim `protocol.txt` is in the sidecar's `ni:` block — see [08_METADATA §4.3](08_METADATA.md). Round-8 ingest config: [`tools/configs/ni_jesus_archive_2025_TEST.yaml`](../tools/configs/ni_jesus_archive_2025_TEST.yaml). Per-batch convention + per-recon detail: [`equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](../equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md).
+
+
+### 1.6 External Microscopy — collaborator `.czi` (`XMIC`)
+
+> **✅ DECIDED (2026-09-29, Ryan):** a `.czi` acquired on a microscope **outside** the institute enters as external data under its own `X`-code, `XMIC`, following the `XMRI` pattern ([03_RAW_STORAGE §3.2](03_RAW_STORAGE.md)). It is not onboarded as a local instrument.
+
+| Attribute | Value |
+|-----------|-------|
+| **Code** | `XMIC` (ecosystem `MICROSCOPY`, primary = the single `.czi`, like §1.1–1.3) |
+| **First instance** | Zeiss **Axio Imager.Z2** (device serial `784053`) at Charité, Berlin: 338 `.czi` of the `Ferritas` project, acquired 2024-09-27 → 2024-11-07, found on the historical drives (`tasks/drives_catalog_findings.md`). The same project's local histology is `CELL`. |
+| **How it is recognised** | By the `.czi`'s own device serial, never its folder: `tools/reference/microscopy_instruments.yaml` fingerprints it as `EXTERNAL:AxioImagerZ2`, which the ingest maps to `XMIC`. |
+| **Registry** | `instrument_model` written literally (`Axio Imager.Z2`, the value the file carries); `data_source` = `collaborator:<origin>` — `collaborator:Charite` for the first batch. |
+| **Embedded metadata** | The same 21 `discovered.czi_*` fields as §1.1 (same extractor). |
+| **Status** | ✅ Code live in `tools/ingest/config.py` (2026-09-30). Operators do not ingest external data, so the operator GUI does not offer it; a Data-Office config does. |
 
 ---
 
