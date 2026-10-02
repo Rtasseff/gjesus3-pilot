@@ -361,6 +361,20 @@ are the same acquisition, but not always the same pixels.
   Re-coding the other 15 waits for v2's re-identify.)* Decide how to retire the 32 duplicate registrations and re-code the 25 rows with
   the wrong instrument (23 `CELL` rows that are AxioScan files, 2 `LSM9` rows that are
   Cell Observer files). Keep the older ACQ-ID of each pair? Tombstone the other?
+  **2026-10-01 — decided (Ryan):** keep what the project uses; on a tie, the older. Two operations,
+  each dry first, **after the drives ingest is merged**: the 22 `ZWSI` twins
+  (`tasks/retire_lists/2026-10_sha256_twins_zwsi.csv`), then the 10 `CELL` rows (`…_cell.csv`). Per-pair
+  table and commands: `tasks/retire_acquisition_review.md` §6a.
+- [ ] **v2 of the retire tool: a "content-equivalent duplicate" mode for `.czi` (2026-10-01).** A
+  duplicate may be retired when the decoded subblocks, the metadata XML and the attachment payloads are
+  all identical, even though the bytes differ (ZEN rewrote the container). Record the evidence in the
+  tombstone. First user: **`ACQ-20250915-LSM9-016`**, a re-save of `-001` that is information-identical
+  but 1 MB smaller (`-001` carries a 472 KB `DELETED` segment from an in-place metadata rewrite).
+  **Ryan: leave the pair until this exists.** Evidence: `tasks/retire_acquisition_review.md` §6b.
+- [ ] **v2 of the retire tool: re-identify a mis-coded acquisition** (retire + re-register under the
+  right instrument code, e.g. the remaining 15 mis-coded rows). **It must not be blocked by its own
+  tombstone:** the ingest dedup index deliberately includes retired rows (Ryan, 2026-10-01), so a
+  re-identify has to bypass that for the id it is replacing.
 - [ ] Re-rate this item's priority in the light of the production evidence.
 
 ## Person/role rename — residual cleanup (core done 2026-06-09)
@@ -1912,6 +1926,14 @@ place the system promises to be authoritative.
   researcher behaviour (contrast [05_PROJECTS §3a](../mfb-rdm-docs/05_PROJECTS.md)).
 - [ ] If they are deleted, **do not release the reserved ids** — retire them, as
   `PROJ-0054`/`99_test` was on 2026-08-12.
+- [ ] **2026-10-01 — decided (Ryan): retire them, after the session is re-ingested.** They are the
+  no-DICOM placeholder shape (empty `.data`, a `checksums.json` with no files, no `README.txt`), created
+  2026-07-16 09:16 UTC by `ingest_raw.py`, which stopped before the registry append (cause not
+  established). Their session **`jrc20260710_m12_1125_bis`** (animal 12, protocol 1125, 17 exams) is
+  **not in gjesus3 under any ID**. Order: (1) a normal MRI ingest of the session from the scanner host —
+  no-DICOM exams go to the DICOM-regen worklist (11_OPERATIONS §5.5), with fresh ids from `-018`;
+  (2) then `retire_acquisition.py --orphan` with `tasks/retire_lists/2026-10_orphans_20260710_MRI.csv`
+  (`tasks/retire_acquisition_review.md` §6c).
 
 ## Metadata database — retire the CSV registries (2026-08-12)
 

@@ -32,6 +32,19 @@ WHAT IT CHECKS
       — every null-alias protocol collapses onto the same id and the subjects
       table then merges two different animals into one row.
 
+  retired_acquisitions.csv (the tombstone file; 06_REGISTRIES §2.9) -- only when it exists
+    - header EXACTLY equals ingest.retired.RETIRED_FIELDS.
+    - no id is both live (registry_raw) and retired. ERROR -- also the signature of a
+      retire run that crashed mid-commit: re-run retire_acquisition.py to finish it.
+    - every superseded_by (blank only for an orphan) names a LIVE acquisition. ERROR.
+    - no curated dataset (registry_datasets.csv + the text files under
+      curated_datasets/) cites a retired id. ERROR.
+    - a retired id's /raw/ folder no longer exists. ERROR -- a retire run that
+      stopped before its bytes step; re-run it.
+    The /raw/ "folder exists" check above only walks LIVE rows, so retired ids
+    are never reported as missing folders; nothing here looks for unregistered
+    /raw/ folders (BACKLOG, "17 orphan acquisition folders").
+
   registry_subjects.csv
     - project_alias is never the literal "None"/"null", and never blank for a
       facility_id that IS a canonical `<n>-AE-biomaGUNE-<NNNN>` id. A blank
@@ -68,6 +81,7 @@ if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
 from ingest import registry  # noqa: E402  (after sys.path tweak)
+from ingest import retired  # noqa: E402
 # Aliased: the local variable `project_ids` in check_registry_raw is the SET of
 # known ids, and would shadow the module.
 from ingest import project_ids as proj_id_cell  # noqa: E402
@@ -327,6 +341,44 @@ def check_subjects_registry(registries_dir, issues):
     return len(rows)
 
 
+# ---- Retired-acquisition (tombstone) checks (ERROR-level) ----------------
+
+def check_retired(nas_root, registries_dir, live_ids, issues):
+    """ERROR-level checks of registries/retired_acquisitions.csv against the live registry.
+
+    A no-op when the file does not exist (nothing has ever been retired), so the
+    validator's output on a registry without retirements is unchanged.
+    """
+    path = retired.retired_path(registries_dir)
+    if not os.path.exists(path):
+        return 0
+    header, _rows = _read_csv_rows(path)
+    if header != retired.RETIRED_FIELDS:
+        issues.error(f"{retired.RETIRED_FILENAME} header does not match RETIRED_FIELDS: {header}")
+        return 0
+    tombs = retired.read_retired(path)
+    for acq, t in tombs.items():
+        if acq in live_ids:
+            issues.error("is both live (registry_raw.csv) and retired "
+                         f"({retired.RETIRED_FILENAME}) -- a retire run stopped mid-commit? "
+                         "re-run retire_acquisition.py to finish it", acq)
+        sup = (t.get("superseded_by") or "").strip()
+        if sup and sup not in live_ids:
+            issues.error(f"retired, superseded_by {sup}, which is not a live acquisition"
+                         + (" (it is retired too)" if sup in tombs else ""), acq)
+        elif not sup and (t.get("disposition") or "").strip() != "orphan":
+            issues.error(f"retired as {t.get('disposition')!r} with no superseded_by", acq)
+        old = (t.get("original_canonical_path") or "").strip()
+        if old.startswith("/raw/") and os.path.isdir(_acq_folder_on_disk(nas_root, old)):
+            issues.error(f"retired, but its /raw/ folder still exists ({old}) -- a retire run "
+                         "stopped before deleting it; re-run retire_acquisition.py", acq)
+    if tombs:
+        cites = retired.curated_citations(nas_root)
+        for acq in sorted(set(cites) & set(tombs)):
+            issues.error(f"retired, but cited by curated dataset(s): {'; '.join(cites[acq])}", acq)
+    return len(tombs)
+
+
 # ---- Sidecar enrichment check (Phase 3, WARN-level) ----------------------
 
 def check_enrichment(acq_id, sample_type, folder, issues):
@@ -492,6 +544,9 @@ def validate(nas_root, check_enrich=True):
 
     # 11. registry_subjects.csv null-alias detector (ERROR).
     check_subjects_registry(registries_dir, issues)
+
+    # 12. the tombstone file (ERROR) -- only when it exists.
+    check_retired(nas_root, registries_dir, set(seen_acq), issues)
 
     return issues, len(rows)
 

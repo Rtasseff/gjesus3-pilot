@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
-**Last Updated:** 2026-09-04 (**§5.2** the MRI page's **destination project is token-valued** — "a name I set" is a token field with its own palette, not a text box, so one run can file scans into several projects; the engine was unchanged, only the GUI had withheld it. Preview gains a per-destination breakdown.) Prior: 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
+**Last Updated:** 2026-10-01 (new **§3.9 `retire_acquisition`** — the Data-Office-only tool that retires an ACQ-ID (duplicate / derivative / orphan) into the tombstone file [06_REGISTRIES §2.9](06_REGISTRIES.md). **§2.1:** the "deliberately no `delete-acquisition` tool" paragraph is amended (intent kept, means changed); the side-effect inventory's *Reverse by* column points at the tool, and gains the two rows it was missing (`pending_dicom_regen.csv`, `pending_links.csv`). **§3.2** `validate_registries` gains four tombstone ERRORs.) Prior: 2026-09-04 (**§5.2** the MRI page's **destination project is token-valued** — "a name I set" is a token field with its own palette, not a text box, so one run can file scans into several projects; the engine was unchanged, only the GUI had withheld it. Preview gains a per-destination breakdown.) Prior: 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
 
 ---
 
@@ -495,16 +495,20 @@ One acquisition touches all of the following. Everything up to the registry appe
 | 2 | `registries/.acq_id_seq.json` — high-water bumped for the `ACQ-<YYYYMMDD>-<INST>-` prefix (hidden dotfile; skipped by `*.csv` globs) | Step 5 | always | **not auto-freed.** The seq stays reserved even after the row is deleted — **ids are never reused by design** (a removed acq leaves a gap). To fully reset a removed *test* so the id can be reused, delete that prefix key by hand (safe only once the acq is fully purged) |
 | 3 | `registries/registry_raw.csv` — **one row** (this is the **commit point**) | Step 11 | always | remove the `acq_id` row |
 | 4 | `registries/ingest_manifest.csv` — one row (`acq_id, original_name, canonical_path`) | Step 12 | always | remove the `acq_id` row |
-| 5 | `registries/registry_subjects.csv` — one subject row **upserted** (created new, or gap-merged into an existing subject; one row per subject, `last_updated` bumped) | Step 10b | `sample_type ∈ {organism, tissue}` **and** a subject resolves (DB lookup or an operator `subject:` block) | remove the row **only if it was newly created** — a subject shared with other acqs must stay |
+| 5 | `registries/registry_subjects.csv` — one subject row **upserted** (created new, or gap-merged into an existing subject; one row per subject, `last_updated` bumped) | Step 10b | `sample_type ∈ {organism, tissue}` **and** a subject resolves (DB lookup or an operator `subject:` block) **never:** subjects are never deleted ([06 §2.8.3](06_REGISTRIES.md)); a retirement leaves the subject row |
 | 6 | `registries/pending_subject_metadata.csv` — one recovery row (subject `source: pending-db`) | Step 8.4 | **only** on a DB miss / no-credentials | remove the `acq_id` row |
 | 7 | `projects/<name>/raw_linked/<link_filename>` — hard link (a file, or a real folder of per-file hard links for a `.data` primary) | Step 12 | `--project` / `registry.project_name` resolves to an **existing** project | delete the link |
 | 8 | `projects/<proj>/provenance.csv` — one `FILE-NNNN` row for the link (`input_refs=<acq_id>`) | Step 12 | as #7 | remove that row |
 | 9 | `projects/<proj>/index.html` — targeted per-project regenerate | Step 14 | opt-in on the CLI (`--refresh-index projects`); **automatic in the operator GUI** | regenerate after removal: `generate_index.py --nas-root … --project <PROJ-ID>` |
+| 11 | `registries/pending_dicom_regen.csv` — one worklist row | Step 8 (folder copy) | **only** an MRI exam ingested with no DICOM where Dicomifier was unavailable (the no-DICOM placeholder) | remove the `acq_id` row |
+| 12 | `registries/pending_links.csv` — one row (+ a `.PENDING-LINK.txt` stand-in in `raw_linked/`) | Step 12 | **only** when `os.link` is unsupported on the ingesting mount (the NI Mac) | remove the `acq_id` row |
 | 10 | **NEW** `projects/<name>/` folder + `_project.yaml` + a `registry_projects.csv` row | Step 9.5 | first ingest only, **and** `registry.project_name` names a **non-existent** project **and** `ingest.auto_create_projects` is on | remove the folder + the `registry_projects` row (a much larger side effect — avoid it by targeting an existing project) |
 
 The **global** `registries/index.html` is **not** written per-ingest — a scheduled job owns it ([`tools/FINDER.md`](../tools/FINDER.md)). `--delete-source` (opt-in, post-commit) removes the *staging source*, not a NAS write.
 
-> **Reversing a committed acquisition** (e.g. a temporary test) is a **Data-Office manual, backup-first** operation — there is deliberately **no `delete-acquisition` tool** (see the "Don't hand-edit registries" rule in [`INGEST_CLI.md`](../tools/INGEST_CLI.md)). Snapshot the touched files off-NAS first, then reverse the rows above that apply, matched by `acq_id` (and the link name), using byte-exact line removal so the other rows are untouched; verify every count returns to baseline. Row #2 (the reservation prefix) is the one step that is optional and a deliberate deviation from the never-reuse rule — reset it only for a full *test* reversion, never for a real acquisition.
+> **Retiring a committed acquisition — amended 2026-10-01 (Ryan).** The intent of the rule below is kept: **no casual deletion**, nothing an operator or researcher can run. The means changed: a byte-identical duplicate, a derivative or an orphan `/raw/` folder is now retired by the **Data-Office-only** [`tools/retire_acquisition.py`](../tools/retire_acquisition.py) (§3.9) — dry run by default, backup first, never inside an ingest's window — which automates rows #1, #3, #4, #6–#9 and #11–#12 of the inventory above and moves the row to the tombstone file ([06_REGISTRIES §2.9](06_REGISTRIES.md)) instead of deleting it. Row #2 is never touched (ids are never reused), nor is row #5 (subjects are never deleted); row #10 (a project the ingest created) is out of scope.
+>
+> **Reversing a committed acquisition by hand** (e.g. a temporary test) is a **Data-Office manual, backup-first** operation — there is deliberately **no `delete-acquisition` tool** (see the "Don't hand-edit registries" rule in [`INGEST_CLI.md`](../tools/INGEST_CLI.md)). Snapshot the touched files off-NAS first, then reverse the rows above that apply, matched by `acq_id` (and the link name), using byte-exact line removal so the other rows are untouched; verify every count returns to baseline. Row #2 (the reservation prefix) is the one step that is optional and a deliberate deviation from the never-reuse rule — reset it only for a full *test* reversion, never for a real acquisition.
 
 **Lightweight Mode (`--lightweight`) — per acquisition:**
 1. Load + validate config (fewer required fields)
@@ -832,6 +836,7 @@ python tools/backfill_project_subfolders.py --nas-root J:/gjesus3-data
 - `project_id`, when set and matching `PROJ-XXXX`, exists in `registries/registry_projects.csv`.
 - **`subject_ids` carries no null-alias facility id** — `<animal_code>-AE-biomaGUNE-None` (or `null`, or a bare stem with nothing after it). ERROR rather than WARN because the alias is what makes the id *unique*: every null-alias protocol collapses onto the same id, so two different animals share one subject and the `registry_subjects` upsert merges them into one row. The packed `;` cell is checked id-by-id, so a multi-animal NI scan reports the offending member.
 - **`registry_subjects.csv`** — `project_alias` is never the literal `"None"` / `"null"`, and never blank for a `facility_id` that names an animal protocol. A blank alias on a **non**-facility id is legitimate and is not reported: the DTS24 human subjects (`LEONE_1.01`, `source=dicom-header`) have no animal protocol. Root cause and the repair plan: `tasks/BACKLOG.md` *"Facility-DB null project alias"*.
+- **`retired_acquisitions.csv`** (only when the file exists — [06_REGISTRIES §2.9](06_REGISTRIES.md), added 2026-10-01): its header equals `ingest.retired.RETIRED_FIELDS`; no id is both live and retired (also the signature of a retire run that stopped mid-commit — re-run it); every `superseded_by` is a live acquisition (blank only for an orphan); no curated dataset cites a retired id; no retired id's `/raw/` folder still exists. Live-row checks never see retired ids, so they are not reported as missing folders.
 
 **Phase 3 enrichment checks (WARN-level — never affect exit code):** for `sample_type ∈ {organism, tissue}`, the sidecar must carry a `subject:` + `condition:` block (and `anatomy:` for organism); the explicit "unknown" sentinels (`subject.source == "pending-db"`, `condition.is_control == null`, `anatomy.is_whole_body == null`) are WARNs, legitimate under the non-blocking model ([08_METADATA §4.7](08_METADATA.md)). `--no-enrichment` skips these.
 
@@ -930,6 +935,51 @@ PYTHONPATH=tools python tools/backfill_dicom_regen.py --apply --mark-no-source
 ```
 
 Companion tools: `tools/backfill_pending_dicom.py` (enrols pre-2026-06-24 placeholders into the worklist; invariant check = *no DICOM-less acquisition without a worklist row*, `--dry-run` reporting 0-to-add means it holds) · `tools/pull_pending_dicom_sources.py` (stages the pending studies read-only from the platform host) · `tools/relink_mri_regen.py` (rebuilds project hard-links from Windows after a WSL run) · `tools/validate_dicomifier_pixelspacing.py` (standalone re-check).
+
+### 3.9 `retire_acquisition` — retire an ACQ-ID (Data Office only)
+
+> **✅ DECIDED 2026-10-01 (Ryan)** — tombstone file, delete once verified, v1 = duplicate + derivative.
+> **🕗 Built and rehearsed on a scratch copy (branch `feat/retire-acquisition`); no production use yet.**
+> Each production use is its own dry-run-first, approved operation, after the historical-drives ingest is
+> merged. Procedure: [11_OPERATIONS §5.7](11_OPERATIONS.md). Schema: [06_REGISTRIES §2.9](06_REGISTRIES.md).
+
+```
+python tools/retire_acquisition.py --nas-root J:\gjesus3-data --acq-id ACQ-... --reason "..." ^
+    (--duplicate-of ACQ-... | --derivative-of ACQ-... --to-project <name> [--subfolder outputs\derived] | --orphan) ^
+    [--execute]
+python tools/retire_acquisition.py --nas-root J:\gjesus3-data --list retire_list.csv [--execute]
+```
+
+The list is a CSV with the columns `acq_id, disposition, target_acq_id, to_project, reason` (optional
+`subfolder`, `dest_name`). **A list is all-or-nothing:** any refusal stops the run before a write. One backup
+per run.
+
+| Disposition | Precondition (refuses otherwise) | What happens to the bytes | Project links to it |
+|---|---|---|---|
+| `duplicate` | the survivor is live; same file set (primary maps to primary); **every file byte-identical by a fresh SHA-256 of both sides** — `checksums.json` is never trusted alone; the survivor's bytes match its own `checksums.json` | deleted, after a re-check right before the delete | re-pointed at the survivor under the same name; removed if the survivor is already linked there |
+| `derivative` | the original is live; the target project exists, its folder exists, it is not `closed` (reopen it first: `reopen_project.py`) | hard-linked into `<project>/<subfolder>/<original name>` (default `outputs\derived`), verified by identity + SHA-256, then removed from `/raw/` | removed from `raw_linked/` (the file now lives in the subfolder) |
+| `orphan` | no registry row; exactly one `/raw/` folder; ≤ 50 MB; no provenance row names it | backed up whole off-NAS, then deleted | none |
+
+**Always refused:** an id a curated dataset cites (`registry_datasets.csv` and every text file under
+`curated_datasets/`); an id a tombstone names as `superseded_by`; a survivor or original that is itself being
+retired in the same run; any run while `registries/.registry.lock` exists or `registry_raw.csv` changed in the
+last 15 minutes (an ingest may be mid-batch; the tool's own last write does not count).
+
+**Order — a crash anywhere is finished by re-running the same command; a re-run after success is a no-op:**
+plan (read-only, hashes) → backup (registries + `.acq_id_seq.json`, the sidecars, touched `provenance.csv`,
+SHA-256-verified) → derivative placed → **commit under the registry lock** (tombstone first, then the
+`registry_raw`, manifest and `pending_*` rows removed — never a `registry_subjects` row — **byte-exact**: every other byte,
+line ending and quote is kept, and the file is read back) → links → `/raw/` bytes → provenance events
+(appended; written *before* each link action so a resumed run never misreports what it did) → per-project
+`index.html` → self-check + report (`<backup>\RET-…_report.csv` + `.log`).
+
+**Links.** Found through every project's `provenance.csv` (`input_refs`). Identity is the file id
+(`os.path.samefile`, reliable over this SMB share — link counts are not); content is SHA-256. A link a
+researcher already deleted or renamed is reported, never an error (05_PROJECTS §3a). A file at a link path
+whose bytes are not the acquisition's is left alone and reported.
+
+**Side effects outside this tool:** the global Finder page (`registries/index.html`) is rebuilt by the daily
+03:00 job ([11_OPERATIONS §5.6](11_OPERATIONS.md)); until then it still lists the retired id.
 
 ---
 

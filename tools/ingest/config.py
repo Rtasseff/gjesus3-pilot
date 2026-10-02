@@ -195,6 +195,16 @@ def _build_dedupe_index(registry_path):
     (date, original_name) key is sufficient.
     """
     rows = registry.read_registry(registry_path) if registry_path else []
+    # RETIRED acquisitions keep blocking re-ingest (2026-10-01): a duplicate or
+    # derivative the Data Office retired must not come back under a new id when
+    # the same batch is re-run. Their original rows live, verbatim, in
+    # registries/retired_acquisitions.csv (06_REGISTRIES §2.9).
+    if registry_path:
+        from . import retired
+        tombs = retired.read_retired(retired.retired_path(
+            os.path.dirname(os.path.abspath(registry_path))))
+        rows = list(rows) + [retired.original_row(t, registry.REGISTRY_FIELDS)
+                             for t in tombs.values()]
     keys = set()
     for r in rows:
         oname = (r.get("original_name") or "").strip()

@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** ✅ DECIDED — the `registry_raw.csv` schema (28 columns) is finalized and live in true production; subjects/projects registries are live. (Some forward-looking refinements remain 🔶 Draft, flagged inline and in the Open Questions table.)
-**Last Updated:** 2026-08-12 (**`registry_raw.project_id` records exactly ONE project and is write-once** — **§2.3b**, ✅ DECIDED 2026-08-12, superseding the one-day-old 2026-08-11 decision that made it a semicolon list. Sharing an acquisition across projects is supported at the filesystem level (link + the destination project's provenance) but is **not registered**; the registry records what ingest established. The multi-value *readers* were kept — a single value is a length-1 list — so only the writer policy changed. Mirror: `tools/ingest/project_ids.py`. Also: `registry_projects.csv` gained a locked/atomic writer (`ingest/projects_registry.py`, §4).) Prior: 2026-08-02 (project reference model — `registry_raw.project_hint` → **`project_id`** (header-only rename; the column always held resolved ids) and `registry_projects.short_name` → **`name`** (case-preserved, == the folder). Model in [05_PROJECTS §2a](05_PROJECTS.md); mirror kept exact with `resolver.py`/`registry.py`.) Prior: 2026-06-26 (doc refactor: corrected the §2.5 example to the real 28-column schema — every example row had been short an `operator` value plus the three enrichment columns; documented `registry_subjects.csv` (§2.8); moved the Publications registry to 🕗 Planned/empty; promoted the settled schema to ✅ DECIDED). Prior: 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
+**Last Updated:** 2026-10-01 (**retired acquisitions** — new **§2.9** `registries/retired_acquisitions.csv`, the tombstone file. ✅ DECIDED 2026-10-01 (Ryan): a retired ACQ-ID's row **leaves** `registry_raw.csv` and is appended there verbatim, by the Data-Office-only `tools/retire_acquisition.py`; **ids are never reused** (§7.1). 🕗 Built and rehearsed on a scratch copy; the file does not exist on the NAS until the first approved production retirement. Mirror: `tools/ingest/retired.py`. Update-rule row added to §2.6. A retirement never removes a `registry_subjects.csv` row (§2.8.3 stands).) Prior: 2026-08-12 (**`registry_raw.project_id` records exactly ONE project and is write-once** — **§2.3b**, ✅ DECIDED 2026-08-12, superseding the one-day-old 2026-08-11 decision that made it a semicolon list. Sharing an acquisition across projects is supported at the filesystem level (link + the destination project's provenance) but is **not registered**; the registry records what ingest established. The multi-value *readers* were kept — a single value is a length-1 list — so only the writer policy changed. Mirror: `tools/ingest/project_ids.py`. Also: `registry_projects.csv` gained a locked/atomic writer (`ingest/projects_registry.py`, §4).) Prior: 2026-08-02 (project reference model — `registry_raw.project_hint` → **`project_id`** (header-only rename; the column always held resolved ids) and `registry_projects.short_name` → **`name`** (case-preserved, == the folder). Model in [05_PROJECTS §2a](05_PROJECTS.md); mirror kept exact with `resolver.py`/`registry.py`.) Prior: 2026-06-26 (doc refactor: corrected the §2.5 example to the real 28-column schema — every example row had been short an `operator` value plus the three enrichment columns; documented `registry_subjects.csv` (§2.8); moved the Publications registry to 🕗 Planned/empty; promoted the settled schema to ✅ DECIDED). Prior: 2026-06-12 (NI-LIVE-08: renamed the Auto column `subject_id` → packed **`subject_ids`** — `;`-joined, always-a-list; code + sandbox header migrated, production born with it). Prior: 2026-06-10 (true-production restart: added `sample_organism` + `subject_id` + `anatomical_entity` columns — REG-01/REG-07/META-09, all Auto projections of the enrichment blocks; fresh header at 28 cols, no migration since the quasi-prod registry was purged). Prior: 2026-06-09 (`operator` re-added alongside `researcher` — decision #4.2, §2.3a-bis; 24→25 cols).
 
 ---
 
@@ -29,6 +29,7 @@ Registries are **CSV files** that serve as indexes (manifests) for each storage 
 | Projects Registry | `/gjesus3/registries/registry_projects.csv` | Indexes all project folders | ✅ Live (~50 rows) |
 | Publications Registry | `/gjesus3/registries/registry_publications.csv` | Indexes all publication folders | 🕗 Planned (empty — publications deferred) |
 | Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets | 🔶 DRAFT — **deployed 2026-08-21** (header-only; pilot) |
+| Retired Acquisitions | `/gjesus3/registries/retired_acquisitions.csv` | Tombstones: every ACQ-ID retired from `registry_raw.csv`, with its row verbatim (§2.9) | 🕗 PLANNED — tool built 2026-10-01; the file is created by the first production retirement |
 
 The `registries/` directory also holds a few **generated / bookkeeping artifacts** that are NOT registries and NOT hand-edited sources of truth:
 
@@ -269,6 +270,7 @@ ACQ-20220118-MRI-001,2026-06-13T07:05:18Z,2022-01-18T10:21:42.100+01:00,DICOM,MR
 | Add new entry | ✅ Yes | Operator (via deposit) | At deposit time |
 | Correct metadata | ✅ Yes | Admin | If error discovered (log correction) |
 | Delete entry | ❌ No | — | Entries are permanent |
+| Retire entry | ⚠️ Data Office only | `tools/retire_acquisition.py` | A byte-identical duplicate, a derivative (not an acquisition) or an orphan `/raw/` folder. The row **moves verbatim** to `retired_acquisitions.csv` (§2.9) — it is not deleted, and the id is never reused |
 | Modify after deposit | ⚠️ Limited | Admin | Only to fix errors, not change facts |
 
 ### 2.7 Concurrency, locking & CSV-append safety (2026-06-11)
@@ -321,6 +323,65 @@ facility_id,animal_code,project_alias,species,strain,sex,date_of_birth,genotype,
 | Refresh fields | ✅ Yes | Enrichment writer | On later re-resolution (`last_updated` bumped) |
 | Correct a field | ⚠️ Limited | Admin | Only to fix errors (e.g. a DB correction) |
 | Delete a subject | ❌ No | — | Rows are permanent |
+
+### 2.9 Retired Acquisitions (`retired_acquisitions.csv`) — the tombstone file
+
+**File:** `/gjesus3/registries/retired_acquisitions.csv`
+
+> **✅ DECIDED 2026-10-01 (Ryan) — mechanism.** A retired ACQ-ID's row **leaves** `registry_raw.csv` and
+> is appended here, verbatim. **ACQ-IDs are never reused.** Only the Data Office retires, and only through
+> [`tools/retire_acquisition.py`](../tools/retire_acquisition.py) ([10_TOOLS §3.9](10_TOOLS.md),
+> procedure in [11_OPERATIONS §5.7](11_OPERATIONS.md)) — never by hand.
+> **🔶 DRAFT — schema** (below). **🕗 Not deployed:** the file is created by the first approved production
+> retirement. **❓ To revisit (BACKLOG, MEDIUM):** a `status` column in `registry_raw.csv` instead of a
+> separate file, so the registry stays the single source of truth. The schema is therefore a superset of
+> what that column would need: the original row verbatim plus every other row the retirement removed.
+
+**What can be retired (v1).** `duplicate` — a second registration of bytes another *live* acquisition
+(the survivor) already holds, verified byte-identical file by file, fresh from disk, before the bytes are
+deleted. `derivative` — a scale-bar copy, thumbnail or export that is not an acquisition; its bytes move to
+the original's project folder as non-raw material. `orphan` — a `/raw/` folder whose registry row was never
+written. **Not v1:** re-identifying a mis-coded acquisition under its correct instrument code (retire +
+re-register) — the `disposition` vocabulary is left open for it.
+
+#### 2.9.1 Schema
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `acq_id` | String | The retired ACQ-ID. Unique key. |
+| `retired_at` | ISO DateTime (UTC) | When the retirement committed. |
+| `disposition` | Enum | `duplicate` · `derivative` · `orphan`. |
+| `superseded_by` | String | The **live** ACQ-ID it duplicates or derives from. Blank only for `orphan`. |
+| `reason` | String | Free text, required. |
+| `bytes_fate` | Enum | `deleted` (duplicate, after verification; orphan, after an off-NAS backup) · `moved` (derivative). |
+| `moved_to` | String | Derivative: the NAS-relative path of the bytes' new home (e.g. `/projects/<name>/outputs/derived/<file>`). Else blank. |
+| `sha256` | String | SHA-256 of the primary, hashed fresh from disk at retirement. A folder primary: the SHA-256 of its sorted `relpath<TAB>sha256` list. |
+| `original_canonical_path` | String | Where the acquisition lived in `/raw/`. |
+| `retired_by` | String | Who ran the retirement (Data Office). Deliberately **not** `operator`, which means who ran the equipment (§2.3a-bis) — and the original row carries that value. |
+| `run_id` | String | The retire run (`RET-<date>-<time>`); names its report and log. |
+| `backup_dir` | String | The off-NAS backup taken before the run. |
+| `registry_raw_row` | String | The removed `registry_raw.csv` record, **verbatim** (no line terminator), in that file's column order at `retired_at`. Blank for an orphan. |
+| `other_rows_removed` | JSON | `{file: [verbatim records]}` — the acquisition's `ingest_manifest`, `pending_subject_metadata`, `pending_dicom_regen` and `pending_links` rows. **Never** a `registry_subjects` row: subjects are never deleted (§2.8.3) — an animal existed whether or not gjesus3 keeps its acquisition. |
+
+Like every registry file: UTF-8, no BOM, CRLF line endings.
+
+#### 2.9.2 Rules
+
+- **Never reused.** The ACQ-ID allocator counts tombstoned ids as well as live rows and `.acq_id_seq.json`
+  (§7.1), so the rule does not rest on the hidden reservation file alone.
+- **Live or retired, never both.** `validate_registries` reports an id in both files as an **ERROR** — it is
+  also the signature of a retire run that stopped mid-commit (re-run the tool to finish it). Also ERRORs: a
+  `superseded_by` that is not live; a curated dataset citing a retired id; a retired id whose `/raw/` folder
+  still exists.
+- **No chains.** The tool refuses to retire an id that a tombstone names as `superseded_by`, or one a curated
+  dataset cites ([12_CURATED_DATASETS](12_CURATED_DATASETS.md)).
+- **Permanent.** Nothing edits or deletes a tombstone row.
+- **Re-ingest stays blocked.** The ingest's dedup index includes retired rows, so re-running the batch that
+  produced a retired duplicate does not register it again.
+- **Lookups.** `registry.resolve_acq_id()` returns the live row, or the tombstone with its `superseded_by`
+  (followed to the live id). Use it wherever an ACQ-ID arrives from outside the live registry: a dataset
+  citation, a researcher's notes, an old provenance row. `find_acq.py <ACQ-ID>` reports a retired id and
+  what replaced it.
 
 ---
 
@@ -514,6 +575,8 @@ Registries are critical metadata. Consider:
 Pattern: `ACQ-<YYYYMMDD>-<INST>-<SEQ>`
 
 Generation: Scripted (preferred) or manual with lookup of current day's highest sequence.
+
+**Never reused** (✅ DECIDED; restated 2026-10-01). The next sequence is the maximum over the live registry, the **retired** ids (§2.9) and the `.acq_id_seq.json` reservation, plus one. A failed ingest or a retirement leaves a gap.
 
 ### 7.2 Publication IDs
 
