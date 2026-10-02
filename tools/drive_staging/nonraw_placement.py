@@ -59,6 +59,7 @@ STAGING = r"D:\projects\gjesus3\staging"
 ANALYSIS = os.path.join(STAGING, "_analysis")
 OUT_DEFAULT = os.path.join(ANALYSIS, "drives-nonraw-placement")
 NAS_DEFAULT = r"J:\gjesus3-data"
+SCRATCH_DEFAULT = r"D:\projects\gjesus3\scratch_drives-nonraw-placement"
 SEVENZIP = r"C:\Program Files\7-Zip\7z.exe"
 
 DRIVES = {  # catalog code -> (drive label used on the NAS, staged root)
@@ -592,7 +593,7 @@ class MemberSource:
                 key = (ap, nested)
                 nz = self._zips.get(key)
                 if nz is None:
-                    nz = self._zips[key] = zipfile.ZipFile(z.open(nested))
+                    nz = self._zips[key] = zipfile.ZipFile(lp(extract_nested(ap, nested, self.scratch)))
                 return nz.open(inner)
             return z.open(r["member"])
         root = self._extracted.get(ap)
@@ -889,6 +890,23 @@ NESTED_FIELDS = ["drive", "archive", "nested", "inner", "size", "sha256", "class
 NESTED_SKIP_OUTER = {LEONE, "Cardiac MRI.zip"}  # streams C and B list their own
 
 
+def extract_nested(outer, member, scratch):
+    """Copy a nested archive out of its outer zip into scratch ONCE, then read it from disk.
+    zipfile on top of an outer member stream re-reads the outer from the start on every backward
+    seek -- quadratic, and it stalled on a 2.3 GB nested zip (2026-10-02)."""
+    tag = hashlib.sha1(f"{outer}!{member}".encode("utf-8")).hexdigest()[:10]
+    dst = os.path.join(scratch, "nested", f"{tag}_{os.path.basename(member)}")
+    with zipfile.ZipFile(lp(outer)) as oz:
+        size = oz.getinfo(member).file_size
+        if os.path.exists(lp(dst)) and os.path.getsize(lp(dst)) == size:
+            return dst
+        os.makedirs(lp(os.path.dirname(dst)), exist_ok=True)
+        with oz.open(member) as src, open(lp(dst + ".part"), "wb") as out:
+            shutil.copyfileobj(src, out, 8 << 20)  # zipfile checks the member's CRC at EOF
+    os.replace(lp(dst + ".part"), lp(dst))
+    return dst
+
+
 def cmd_nested(args):
     """The catalog never opened archives INSIDE archives. List, hash and classify every nested
     archive's members (outside LEONE.zip and Cardiac MRI.zip) with the catalog's own rules: class
@@ -906,7 +924,8 @@ def cmd_nested(args):
             print(f"  !! not zip-in-zip, not listed: {m['archive_relpath']} ! {m['member']}")
             tally["not-zip"] += 1
             continue
-        with zipfile.ZipFile(lp(outer)) as oz, oz.open(m["member"]) as nf, zipfile.ZipFile(nf) as iz:
+        local = extract_nested(outer, m["member"], args.scratch)
+        with zipfile.ZipFile(lp(local)) as iz:
             infos = [i for i in iz.infolist() if not i.is_dir()]
             print(f"  {m['archive_relpath']} ! {m['member']}: {len(infos)} members", flush=True)
             for zi in infos:
@@ -1071,14 +1090,14 @@ def main(argv=None):
     sp.add_argument("--from-b", default=os.path.join(ANALYSIS, "drives-dicom", "nonraw_for_A.csv"))
     sp.add_argument("--nested", default=os.path.join(OUT_DEFAULT, "nested_members.csv"))
     sub.add_parser("dotfile-farm")
-    sub.add_parser("nested")
+    sub.add_parser("nested").add_argument("--scratch", default=SCRATCH_DEFAULT)
     sub.add_parser("worksheet").add_argument("--manifest", default=None)
     for name in ("copy", "verify", "holding"):
         s = sub.add_parser(name)
         s.add_argument("--manifest", default=None)
         s.add_argument("--project", nargs="*")
         s.add_argument("--execute", action="store_true")
-        s.add_argument("--scratch", default=r"D:\projects\gjesus3\scratch_drives-nonraw-placement")
+        s.add_argument("--scratch", default=SCRATCH_DEFAULT)
         s.add_argument("--by", default=f"Data Office ({getpass.getuser()})")
         s.add_argument("--sample", type=float, default=0.02)
         s.add_argument("--seed", type=int, default=20261003)
