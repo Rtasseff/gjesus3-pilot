@@ -76,6 +76,7 @@ scale bar or pyramids are saved, so its sha256 changes and content dedup lets it
 | B13 `CELL` 0420 0423 0424 0522 0619 0721 | 2026-10-02 00:15–03:12 | 1,235 / 1,235 | 10,654 s | all PASS | 10,314 | 0 | `…_20261002_drives_B13` (registry 22,792 → 24,027; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS, 0 exemptions) |
 | B14 `CELL` no project | 2026-10-02 03:54–06:43 | 801 / 801 | 10,168 s | all PASS | 10,314 | 0 | `…_20261002_drives_B14` (registry 24,027 → 24,828; projects unchanged at 59; 0 WARN lines; step 0 = 9/9 PASS with **12 files** exempt under the 3c rule (14 file-to-production matches; the coordinator's answer predicted "14", evidently matches rather than files; no non-exempt hit, so no FAIL)) |
 | B15 `CELL` 1019 | 2026-10-02 07:02–07:16 | 260 / 260 | 834 s | all PASS | 10,314 | 0 | `…_20261002_drives_B15` (registry 24,828 → 25,088; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS, 0 exemptions; target `AE-biomaGUNE-1019` active) |
+| B16 `CELL` 0219 | 2026-10-02 07:32–09:08 | 139 / 139 | 5,710 s | all PASS | 10,314 | 0 | `…_20261002_drives_B16` (registry 25,088 → 25,227; projects unchanged at 59; WARNs only the is_control / region sentinels; step 0 = 9/9 PASS, 0 exemptions; target `AE-biomaGUNE-0219` active). **Last batch.** |
 | B06 | 274 / 327.6 | 235 / 257.0 | 1321, 1422 |
 | B07 | 1,584 / 393.4 | 1,519 / 393.2 | — |
 | B08 | 1,232 / 396.9 | 1,050 / 398.1 | 0721, 1022, 1123 |
