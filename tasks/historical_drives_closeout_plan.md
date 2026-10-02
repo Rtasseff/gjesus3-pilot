@@ -135,9 +135,12 @@ Do these after Steps 2–3. Read `memory/onedrive_worktree_delete_lock.md` befor
 OneDrive marks the directories read-only.
 
 - **Worktrees:**
-  - ✅ **Done 2026-10-02:** `drives-catalog` and `drives-project-codes` (their folders were already
-    gone, so the stale records were pruned) and `retire-acquisition` (removed). Their branches
-    are deleted locally and on GitHub. **Left:** `drives-microscopy-ingest`, after its merge;
+  - ✅ **Done 2026-10-02:** all four effort worktrees are gone (`drives-catalog`,
+    `drives-project-codes`, `retire-acquisition`, `drives-microscopy-ingest`), and their branches
+    are deleted locally and on GitHub;
+  - ✅ **D: scratch done 2026-10-02:** `_farm\` (hard links only, verified on a sample of 40),
+    `_repair\`, `catalog_smoke*`, `scratch_nas\` and `scratch_retire\` are deleted, reclaiming
+    ~40 GB. The staged trees are untouched: 43,121 / 35,718 / 347 files before and after.
   - delete the merged branches, local and remote;
   - **never** touch `ni-live-hardening` or `code-review-2026-08`, which belong to other sessions;
   - update `gjesus3-dev\README.md`.
