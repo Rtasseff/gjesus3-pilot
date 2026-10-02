@@ -220,6 +220,8 @@ def decide(rec, ctx):
     if cls == "archive" and not rec["archive"] and (rec.get("from_b") is not None or not rec.get("imaging_root")):
         # an archive outside B's roots, or one B handed over whole: its members decide
         return "expanded", "archive: its members are decided one by one", None
+    if rec.get("nmr"):  # a TopSpin experiment (B's nmr_list.csv): spectrometer data, not imaging
+        return "holding", "NMR (TopSpin) experiment: holding folder (Ryan, 2026-10-02)", None
     if rec.get("from_b") is not None:  # stream B's own non-raw list (nonraw_for_A.csv), its project
         proj = rec["from_b"] or None
         if cls == "archive":  # B lists a nested archive whole; its inner content comes in B's v2 list
@@ -234,7 +236,7 @@ def decide(rec, ctx):
     if cls == "archive" and not rec["archive"]:
         return "expanded", "archive: its members are decided one by one", None
     if cls == "czi-unreadable":
-        return "unclear", "czi-unreadable with bytes: a damaged acquisition or not? (not ingested)", None
+        return "holding", "czi-unreadable with bytes: holding folder (Ryan, 2026-10-02)", None
     if cls == "lsm":
         return "holding", "lsm -> holding folder (Ryan, 2026-10-02)", None
     proj = project_for(rec["verdict"], rec["proposed_project"], where)
@@ -267,6 +269,44 @@ def load_imaging_roots(path):
             (r["path_prefix"].strip("\\/"), f"{r['kind']}: {r['archive'] if r['archive'] != '-' else ''}"
                                              f"{'!' if r['archive'] != '-' else ''}{r['path_prefix'] or '(whole archive)'}"))
     return roots
+
+
+NMR_DEFAULT = os.path.join(ANALYSIS, "drives-dicom", "nmr_list.csv")
+
+
+def folder_view(archive, member):
+    """A member path as stream B writes it (nmr_list.csv): a nested archive is a FOLDER named by its
+    stem, and the nested archive's own repeated top folder is not repeated. Normalised segments."""
+    chunks = member.replace("\\", "/").split(NESTED_SEP)
+    out = []
+    for i, chunk in enumerate(chunks):
+        segs = [s for s in chunk.split("/") if s]
+        if i < len(chunks) - 1:            # this chunk ends in a nested archive: use its stem
+            segs[-1] = os.path.splitext(segs[-1])[0]
+        elif i > 0 and segs and out and H.norm(segs[0]) == out[-1]:
+            segs = segs[1:]                # the nested archive's repeated top folder
+        out += [H.norm(s) for s in segs]
+    return tuple(out)
+
+
+def load_nmr(path):
+    """B's TopSpin experiments: {(drive, archive or '-'): set of normalised experiment folders}."""
+    out = collections.defaultdict(set)
+    if not os.path.exists(path):
+        return out
+    for r in it(path):
+        segs = tuple(H.norm(s) for s in re.split(r"[\\/]", r["path"]) if s)
+        out[(r["drive"], r["archive"] or "-")].add(segs)
+    return out
+
+
+def is_nmr(nmr, drive, archive, path):
+    """True if `path` (loose relpath, or a member path) lies in one of B's TopSpin experiments."""
+    exps = nmr.get((drive, archive or "-"))
+    if not exps:
+        return False
+    segs = folder_view(archive, path) if archive else tuple(H.norm(s) for s in path.split("\\") if s)
+    return any(segs[:k] in exps for k in range(1, len(segs)))
 
 
 def imaging_root(roots, drive, archive, path):
@@ -334,6 +374,8 @@ def cmd_plan(args):
 
     # stream B's imaging roots (drives-dicom/imaging_roots.csv), in place of the directory rule
     roots = load_imaging_roots(args.roots)
+    nmr = load_nmr(args.nmr)
+    say(f"NMR experiments (B's nmr_list): {sum(len(v) for v in nmr.values())} from {args.nmr}")
     say(f"imaging roots: {sum(len(v) for v in roots.values())} from {args.roots}")
     mapping = load_mapping(args.mapping) if args.mapping else {}
     mapping_used = collections.Counter()
@@ -356,7 +398,7 @@ def cmd_plan(args):
 
     def add(base, rec):
         dec, reason, proj = decide(rec, {"projects": projects})
-        if dec == "holding" and mapping and base["class"] != "lsm":  # 2b: Ryan's group -> project
+        if dec == "holding" and mapping and mappable(reason):  # 2b: Ryan's group -> project
             d, who, series, _kind = manifest_group(base)
             nk = norm_key(key_string(d, who, series))
             if nk in mapping:
@@ -390,6 +432,7 @@ def cmd_plan(args):
                 "researcher": c.get("researcher", "")}
         rec = dict(base, proposed_project=c.get("proposed_project", ""),
                    imaging_root=imaging_root(roots, drive, "-", f["relpath"]),
+                   nmr=is_nmr(nmr, drive, "", f["relpath"]),
                    excluded_reason=excluded.get(f["relpath"]),
                    ingested=f["relpath"] in ingested_loose,
                    derived=derived.get((drive, f["relpath"])),
@@ -439,6 +482,7 @@ def cmd_plan(args):
         installer = bool(INSTALLER_ARCHIVE_RE.search(win(m["archive_relpath"])))
         rec = dict(base, proposed_project=mc.get("proposed_project", ""),
                    imaging_root=imaging_root(roots, drive, m["archive_relpath"], m["member"]),
+                   nmr=is_nmr(nmr, drive, m["archive_relpath"], m["member"]),
                    excluded_reason=None,
                    ingested=(m["archive_relpath"], m["member"]) in ingested_member,
                    derived=None,
@@ -467,6 +511,7 @@ def cmd_plan(args):
                 "researcher": arch["researcher"]}
         rec = dict(base, proposed_project=fclaims.get((drive, n["archive"]), {}).get("proposed_project", ""),
                    imaging_root=imaging_root(roots, drive, n["archive"], os.path.splitext(n["nested"])[0] + "/x"),
+                   nmr=is_nmr(nmr, drive, n["archive"], n["nested"] + NESTED_SEP + n["inner"]),
                    excluded_reason=None, ingested=False, derived=None, from_b=None)
         rec["special"] = nested_special(n, nested_dedup.get((drive, n["nested"], n["inner"])))
         add(base, rec)
@@ -476,7 +521,9 @@ def cmd_plan(args):
         if a["status"] not in ("ok",) and not INSTALLER_ARCHIVE_RE.search(win(a["archive_relpath"])):
             for r in rows:
                 if not r["archive"] and r["relpath"] == a["archive_relpath"] and r["decision"] == "expanded":
-                    r["decision"], r["reason"] = "unclear", f"archive could not be listed ({a['status']} {a['err']})"
+                    r["decision"], r["reason"] = "exclude", (
+                        f"not copied: truncated archive ({a['status']}), {gb(int(a['size']))} GB, remains on the "
+                        f"owner's drive (Ryan, 2026-10-02); listed in the holding README and manifest")
 
     for i, r in enumerate(rows, 1):
         r["row"] = i
@@ -511,8 +558,8 @@ def nested_special(n, dedup=None):
         return ("raw-oneoff", "czi-raw inside a nested archive: never seen by the .czi ingest -> /raw/ "
                               "one-off (dedup against production first)", None)
     if n["ext"].lower() == ".svs":
-        return ("unclear", "Aperio .svs whole-slide scan: instrument not onboarded (question for Ryan; "
-                           "default holding unless under a claim)", None)
+        return ("holding", "Aperio .svs whole-slide scan (instrument not onboarded): holding folder "
+                           "(Ryan, 2026-10-02)", None)
     return None
 
 
@@ -621,8 +668,11 @@ def assign_destinations(rows, projects, nas, out, say, claim_roots, global_index
         idx = H.index_rows(d, items, base)
         H.write_index(os.path.join(tdir, H.INDEX_NAME), idx)
         H.write_pathmap(os.path.join(tdir, H.PATHMAP_NAME), p.pathmap_rows())
+        origins = p.origins(items)
+        wcsv(os.path.join(tdir, "_ORIGINS.csv"), ["folder", "original"],
+             [{"folder": k, "original": o} for k, v in sorted(origins.items()) for o in v])
         with io.open(os.path.join(tdir, "_ORIGIN_preview.txt"), "w", encoding="utf-8", newline="\r\n") as f:
-            for folder, origs in sorted(p.origins(items).items()):
+            for folder, origs in sorted(origins.items()):
                 f.write(f"== {folder}\\{H.ORIGIN_NAME}\n" + H.origin_text(origs).replace("\r\n", "\n") + "\n")
         gidx += [dict(x, tree=base) for x in idx]
     stat["R2 + fewest folders shortened (final)"] = final
@@ -835,8 +885,18 @@ def copy_one(r, nas, members, bufsize=8 << 20):
     return "copied"
 
 
+_VERSION = []
+
+
+def provenance_version():
+    """`nonraw_placement.py (gjesus3-pilot tools) @ <sha>` -- computed once (it runs git)."""
+    if not _VERSION:
+        from ingest import provenance
+        _VERSION.append(provenance.software_version_string("nonraw_placement.py"))
+    return _VERSION[0]
+
+
 def prov_entry(r, run_id, by, today):
-    from ingest import provenance
     proj_root = "\\".join(r["dest_rel"].split("\\")[:2])
     out_rel = r["dest_rel"][len(proj_root) + 1:].replace("\\", "/")
     src = f"{r['drive_label']}/{r['relpath'].replace(chr(92), '/')}"
@@ -853,7 +913,7 @@ def prov_entry(r, run_id, by, today):
                 "Copied by nonraw_placement.py from the historical operator drive "
                 f"{r['drive_label']} (staged 2026-09-22/28): non-raw project material "
                 f"(class {r['class']}; {r['reason']}). Byte-verified against the drive manifest."),
-            "software_version": provenance.software_version_string("nonraw_placement.py"),
+            "software_version": provenance_version(),
             "parameters_ref": run_id, "lab_notebook_ref": "",
             "notes": f"sha256:{r['sha256']}" + (f"; claim {r['claim_id']}" if r["claim_id"] else "")}
 
@@ -929,15 +989,19 @@ def cmd_copy(args):
             return 2
     log_path = os.path.join(args.out, f"copy_{run_id}.csv")
     if not args.execute:
-        long_paths = sum(1 for r in rows if len("\\\\GJESUS3\\gjesus3\\" + r["dest_rel"]) > 259)
-        exists = 0
+        lens = [H.unc_len(r["dest_rel"]) for r in rows]
+        exists = ndocs = 0
         for p, rs in by_proj.items():
-            root = os.path.join(args.nas, "projects", project_folder(p, projects), *SUBDIR)
-            if os.path.isdir(lp(root)):
+            base = "\\".join(["projects", project_folder(p, projects), *SUBDIR])
+            if os.path.isdir(lp(os.path.join(args.nas, base))):
                 exists += sum(1 for r in rs if os.path.exists(lp(os.path.join(args.nas, r["dest_rel"]))))
+            nd = len(publish_tree(args.nas, args.manifest, base, execute=False))
+            ndocs += nd
             print(f"  {p:28s} {len(rs):6d} files {gb(sum(int(r['size']) for r in rs)):>8s} GB"
-                  f"  -> {os.path.join('projects', project_folder(p, projects), *SUBDIR)}")
-        print(f"destinations already present: {exists}; UNC paths over 259 chars: {long_paths}")
+                  f"  + {nd:3d} index documents  -> {base}")
+        print(f"destinations already present: {exists}; longest UNC path {max(lens) if lens else 0} "
+              f"(budget {H.BUDGET}); over budget: {sum(1 for x in lens if x > H.BUDGET)}; "
+              f"index documents to write: {ndocs}")
         return 0
     by = args.by
     today = dt.date.today().isoformat()
@@ -970,6 +1034,22 @@ def cmd_copy(args):
                     print(f"  {proj}: {i}/{len(rs)} {dict(stats)}", flush=True)
             append_provenance(prov_path, pending)
             print(f"  {proj}: done {len(rs)}", flush=True)
+            if stats["COLLISION"]:
+                print(f"  {proj}: collisions -- index documents NOT published", flush=True)
+                continue
+            base = "\\".join(["projects", project_folder(proj, projects), *SUBDIR])
+            docs = publish_tree(args.nas, args.manifest, base, execute=True)
+            proj_root = "\\".join(base.split("\\")[:2]) + "\\"
+            append_provenance(prov_path, [{
+                "output_path": rel[len(proj_root):].replace("\\", "/"),
+                "output_name": rel.split("\\")[-1], "file_type": os.path.splitext(rel)[1],
+                "date_created": today, "creator": by, "input_refs": "",
+                "process_description": "Index / README / origin note for the historical-drive material in "
+                                       "working/historical_drives (nonraw_placement.py; rule: historical_paths.py)",
+                "software_version": provenance_version(), "parameters_ref": run_id, "lab_notebook_ref": "",
+                "notes": "tool-owned document; rewritten when more material is added"} for rel, _w in docs])
+            print(f"  {proj}: {len(docs)} index documents published "
+                  f"({sum(1 for _r, w in docs if w)} written, the rest unchanged)", flush=True)
     members.close()
     print(f"{run_id} finished: {dict(stats)}  log: {log_path}")
     return 1 if stats["COLLISION"] else 0
@@ -1017,10 +1097,11 @@ Historical operator drives -- unassigned material
 
 What this is
   Files from two operator external drives that were staged on 2026-09-22/28:
-    drive1_FRIO-X6       (serial 2322E4A111E7)
-    drive2_MFB-Disco-2   (serial 2322E4A112BD)
+    FRIO-X6       (drive1_FRIO-X6, serial 2322E4A111E7)
+    MFB-Disco-2   (drive2_MFB-Disco-2, serial 2322E4A112BD)
   The folders below keep the drives' own directory structure, so a folder name may
-  tell you which study or person a file came from.
+  tell you which study or person a file came from. A .zip or .7z archive became a
+  normal folder named like Manon_zip.
 
 Why it is here and not in gjesus3
   These files are NOT part of the gjesus3 archive. They are not raw data (the raw
@@ -1030,53 +1111,143 @@ Why it is here and not in gjesus3
   Left out on purpose: installed software, system files, and personal or
   administrative documents.
 
+Some folder names were shortened
+  Windows cannot open very long paths, so a few long folder or file names were
+  cut to 24 (sometimes 12) characters plus a short code, for example
+  Comparasion expiration v~3f2a. Nothing was lost: every file is a byte-for-byte
+  copy, and manifest.csv gives each file's full original path.
+
+Not copied
+  Simu_2_V_XYZ.zip (drive FRIO-X6, 97 GB): the archive is truncated and cannot be
+  opened, so it was not copied. It remains on the owner's drive.
+
 The originals
   The originals remain on the owners' external drives.
 
 If you need something placed in a project
   Ask the Data Office. Tell us the file or folder and the project it belongs to.
 
-manifest.csv lists every file here: relative path, size and SHA-256 (taken from
-the drive manifests when the drives were staged).
+manifest.csv lists every file here: its path here (new_path), where it was on
+the drive (original_path), size and SHA-256 (taken from the drive manifests when
+the drives were staged). Open it in Excel and use Search (Ctrl+F) or a filter.
+_PATHMAP.csv is for the Data Office; please do not edit it.
 """
 
 
+def write_if_changed(path, data):
+    """Tool-owned documents only (index, README, pathmap, origin) -- never a data file. Writes via a
+    temp file + replace, and only when the bytes differ. -> True if written."""
+    p = lp(path)
+    if os.path.exists(p):
+        with open(p, "rb") as f:
+            if f.read() == data:
+                return False
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    tmp = p + ".~nonraw.tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, p)
+    return True
+
+
+def tree_preview_dir(manifest, base):
+    return os.path.join(os.path.dirname(manifest), "trees", base.replace("\\", "__"))
+
+
+def tree_documents(manifest, base, holding=False, extra_index_rows=()):
+    """{path relative to the NAS root: bytes} for one tree, from `plan`'s previews (so what was
+    reviewed is exactly what is published)."""
+    tdir = tree_preview_dir(manifest, base)
+    docs = {}
+    rows = rd(os.path.join(tdir, H.INDEX_NAME)) + list(extra_index_rows)
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=H.INDEX_FIELDS, extrasaction="ignore", lineterminator="\r\n")
+    w.writeheader()
+    w.writerows(rows)
+    docs[f"{base}\\{'manifest.csv' if holding else H.INDEX_NAME}"] = buf.getvalue().encode("utf-8-sig")
+    with open(os.path.join(tdir, H.PATHMAP_NAME), "rb") as f:
+        docs[f"{base}\\{H.PATHMAP_NAME}"] = f.read()
+    readme = README_TXT if holding else H.PROJECT_README
+    docs[f"{base}\\{H.README_NAME}"] = readme.replace("\n", "\r\n").encode("utf-8")
+    origins = collections.defaultdict(list)
+    op = os.path.join(tdir, "_ORIGINS.csv")
+    if os.path.exists(op):
+        for r in rd(op):
+            origins[r["folder"]].append(r["original"])
+    for folder, origs in origins.items():
+        docs[f"{base}\\{folder}\\{H.ORIGIN_NAME}"] = H.origin_text(origs).encode("utf-8")
+    return docs
+
+
+def publish_tree(nas, manifest, base, execute, holding=False, extra_index_rows=()):
+    """Write a tree's documents to the NAS (or, dry run, list them). -> [(rel path, written?)]"""
+    out = []
+    for rel, data in sorted(tree_documents(manifest, base, holding, extra_index_rows).items()):
+        full = os.path.join(nas, rel)
+        if len("\\\\GJESUS3\\gjesus3\\" + rel) > H.BUDGET:
+            raise SystemExit(f"document path over budget: {rel}")
+        out.append((rel, write_if_changed(full, data) if execute else None))
+    return out
+
+
+def not_copied_rows(manifest_rows):
+    """Index rows for material deliberately NOT copied but listed (Ryan, 2026-10-02): Simu_2_V_XYZ.zip."""
+    out = []
+    for r in manifest_rows:
+        if r["decision"] == "exclude" and r["reason"].startswith("not copied:"):
+            out.append({"new_path": "", "drive": r["drive_label"], "archive": "",
+                        "original_path": H.original_display(r["drive"], r["relpath"]),
+                        "size": r["size"], "sha256": r["sha256"], "claim_id": r["claim_id"],
+                        "shortened": "N",
+                        "note": "not copied: truncated archive, 97 GB, remains on the owner's drive"})
+    return out
+
+
 def cmd_holding(args):
-    rows = [r for r in load_manifest(args.manifest) if r["decision"] == "holding"]
-    root = os.path.join(args.nas, "staging", "historical_drives_unassigned")
+    """2c: copy every `holding` row into staging\\historical_drives_unassigned\\ (same verified copy as
+    the projects), then publish README.txt, manifest.csv (every file's new + original path, size,
+    sha256, plus the not-copied archive) and _PATHMAP.csv. Dry run unless --execute."""
+    allrows = load_manifest(args.manifest)
+    rows = [r for r in allrows if r["decision"] == "holding"]
+    root = os.path.join(args.nas, HOLDING_BASE)
     n = sum(int(r["size"]) for r in rows)
     print(f"{'EXECUTE' if args.execute else 'DRY RUN'}: {len(rows)} files, {gb(n)} GB -> {root}")
     by = collections.Counter((r["drive_label"], r["class"]) for r in rows)
     for k, c in sorted(by.items()):
         print(f"  {k[0]:20s} {k[1]:16s} {c:7d}")
-    members_n = sum(1 for r in rows if r["archive"])
-    print(f"  of which archive members: {members_n}")
-    print(f"  UNC paths over 259 chars: "
-          f"{sum(1 for r in rows if len(chr(92) * 2 + 'GJESUS3' + chr(92) + 'gjesus3' + chr(92) + r['dest_rel']) > 259)}")
+    print(f"  by reason: {dict(collections.Counter(r['reason'].split(':')[0][:40] for r in rows))}")
+    print(f"  of which archive members: {sum(1 for r in rows if r['archive'])}")
+    lens = [H.unc_len(r["dest_rel"]) for r in rows]
+    print(f"  longest UNC path {max(lens) if lens else 0} (budget {H.BUDGET}); over budget: "
+          f"{sum(1 for x in lens if x > H.BUDGET)}")
     print(f"  existing holding folder: {os.path.isdir(lp(root))}")
-    man = [{"relative_path": r["dest_rel"].split("\\", 2)[2], "size": r["size"], "sha256": r["sha256"]}
-           for r in rows]
-    wcsv(os.path.join(args.out, "holding_manifest_preview.csv"), ["relative_path", "size", "sha256"], man)
-    with io.open(os.path.join(args.out, "holding_README_preview.txt"), "w", encoding="utf-8", newline="\r\n") as f:
-        f.write(README_TXT)
+    extra = not_copied_rows(allrows)
+    docs = tree_documents(args.manifest, HOLDING_BASE, holding=True, extra_index_rows=extra)
+    for rel, data in docs.items():  # previews of exactly what will be published
+        name = rel[len(HOLDING_BASE) + 1:].replace("\\", "__")
+        with open(os.path.join(args.out, "holding_preview__" + name), "wb") as f:
+            f.write(data)
+    print(f"  documents: {len(docs)} (README.txt, manifest.csv incl. {len(extra)} not-copied row, _PATHMAP.csv); "
+          f"previews: {args.out}\\holding_preview__*")
     if not args.execute:
-        print(f"previews: {args.out}\\holding_manifest_preview.csv, holding_README_preview.txt")
         return 0
     members = MemberSource(args.scratch)
     for ap, mems in sorted(_sevenzip_members(rows).items()):
         members.prepare_7z(ap, mems)
     stats = collections.Counter()
-    for r in rows:
+    for i, r in enumerate(rows, 1):
         try:
             stats[copy_one(r, args.nas, members)] += 1
         except Collision as e:
             stats["COLLISION"] += 1
             print(f"  COLLISION (untouched): {e}")
+        if i % 1000 == 0:
+            print(f"  {i}/{len(rows)} {dict(stats)}", flush=True)
     members.close()
-    os.makedirs(lp(root), exist_ok=True)
-    with io.open(lp(os.path.join(root, "README.txt")), "w", encoding="utf-8", newline="\r\n") as f:
-        f.write(README_TXT)
-    wcsv(os.path.join(root, "manifest.csv"), ["relative_path", "size", "sha256"], man)
+    if not stats["COLLISION"]:
+        written = publish_tree(args.nas, args.manifest, HOLDING_BASE, execute=True, holding=True,
+                               extra_index_rows=extra)
+        print(f"  documents published: {sum(1 for _r, w in written if w)} written")
     print(dict(stats))
     return 1 if stats["COLLISION"] else 0
 
@@ -1192,6 +1363,15 @@ WORKSHEET_FIELDS = ["group", "priority", "project", "note_for_ryan", "drive", "r
                     "example_1", "example_2", "example_3", "acq_ids", "group_key"]
 
 
+MAPPABLE_REASONS = ("no claim", "(C) claim", "B->A non-raw, no project")
+
+
+def mappable(reason):
+    """A holding row Ryan may map in 2b. NOT the ones whose holding is a decision of its own (Ryan,
+    2026-10-02): .lsm, Aperio .svs, TopSpin NMR, unreadable .czi."""
+    return reason in MAPPABLE_REASONS
+
+
 def group_key(drive, researcher, relpath, verdict, claim_id, member=""):
     """THE 2b group of a file or a blank-project acquisition -> (drive, researcher, series, kind).
 
@@ -1293,7 +1473,7 @@ def cmd_worksheet(args):
         return groups[key]
 
     for r in rows:
-        if r["decision"] != "holding" or r["class"] == "lsm":  # .lsm: holding by decision, not mapped
+        if r["decision"] != "holding" or not mappable(r["reason"]):  # decided holding: not mapped
             continue
         g = grp(manifest_group(r))
         g["files"].append(r["member"] or r["relpath"])
@@ -1341,7 +1521,7 @@ def remap_rows(rows, mapping, projects):
     out, used = [], collections.Counter()
     for r in rows:
         r = dict(r)
-        if r["decision"] == "holding" and r["class"] != "lsm":
+        if r["decision"] == "holding" and mappable(r["reason"]):
             d, who, series, _kind = manifest_group(r)
             nk = norm_key(key_string(d, who, series))
             if nk in mapping:
@@ -1571,6 +1751,7 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     sp = sub.add_parser("plan")
     sp.add_argument("--roots", default=ROOTS_DEFAULT)
+    sp.add_argument("--nmr", default=NMR_DEFAULT)
     sp.add_argument("--from-b", default=os.path.join(ANALYSIS, "drives-dicom", "nonraw_for_A.csv"))
     sp.add_argument("--nested", default=os.path.join(OUT_DEFAULT, "nested_members.csv"))
     sp.add_argument("--nested-dedup", default=os.path.join(OUT_DEFAULT, "nested_czi_dedup.csv"))

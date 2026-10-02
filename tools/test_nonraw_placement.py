@@ -107,7 +107,16 @@ def test_decide():
     inst = "2025-10-02 - Toshiba EXT (Backup)\\Origin\\OriginPro_2019b.part1_Downloadly.ir.rar"
     check(D(relpath=inst, **{"class": "archive"})[0] == "exclude", "installer archive excluded")
     check(D(relpath="x\\Manon.zip", **{"class": "archive"})[0] == "expanded", "archive -> expanded")
-    check(D(**{"class": "czi-unreadable"}, size="5")[0] == "unclear", "unreadable czi with bytes -> unclear")
+    check(D(**{"class": "czi-unreadable"}, size="5")[0] == "holding", "unreadable czi with bytes -> holding (Ryan)")
+    check(D(**{"class": "bruker"}, imaging_root="nmr: x", nmr=True)[0] == "holding", "TopSpin NMR -> holding (Ryan)")
+    exps = N.load_nmr("/nonexistent")
+    exps[("D1", "-")].add(("former students", "lydia", "nmr", "zblm 1", "1"))
+    exps[("D1", "Drive zuri 170823.zip")].add(("drive zuri 170823", "muestras hospital clinic 180723", "zb.11", "1"))
+    check(N.is_nmr(exps, "D1", "", r"Former students\Lydia\NMR\ZBLM 1\1\acqus"), "loose experiment file matched")
+    check(not N.is_nmr(exps, "D1", "", r"Former students\Lydia\NMR\ZBLM 1\10\acqus"), "a sibling experiment is not")
+    check(N.is_nmr(exps, "D1", "Drive zuri 170823.zip",
+                   "Drive zuri 170823/Muestras hospital clinic 180723.zip!Muestras hospital clinic 180723/ZB.11/1/acqu"),
+          "nested-archive experiment matched in B's folder view")
     # stream B's non-raw list overrides the imaging root and the imaging class
     r = D(**{"class": "volume"}, imaging_root="mri: x", from_b="AE-biomaGUNE-1123")
     check(r[0] == "place" and r[2] == "AE-biomaGUNE-1123", "B->A row with a project -> place")
@@ -123,7 +132,7 @@ def test_decide():
     n = {"nested": "Z/Proyecto Cav1 CNIC/8583.zip", "class": "czi-raw", "ext": ".czi"}
     check(N.nested_special(n)[0] == "raw-oneoff", "nested czi-raw -> raw one-off")
     n = {"nested": "Z/PAPERS/T.zip", "class": "other", "ext": ".svs"}
-    check(N.nested_special(n)[0] == "unclear", ".svs -> question")
+    check(N.nested_special(n)[0] == "holding", ".svs -> holding (Ryan)")
     check(D(special=("raw-oneoff", "x", None), **{"class": "czi-raw"})[0] == "raw-oneoff", "special wins over czi-raw")
 
 
@@ -226,6 +235,44 @@ def test_remap():
     check(rows[0]["decision"] == "holding", "input rows are not modified")
 
 
+def test_publish():
+    print("publishing a tree's index documents (what was previewed is what lands)")
+    import historical_paths as H
+    tmp = tempfile.mkdtemp(prefix="nonraw_pub_")
+    try:
+        out, nas = os.path.join(tmp, "out"), os.path.join(tmp, "nas")
+        manifest = os.path.join(out, "placement_manifest.csv")
+        base = r"projects\P\working\historical_drives"
+        tdir = N.tree_preview_dir(manifest, base)
+        os.makedirs(tdir)
+        H.write_index(os.path.join(tdir, H.INDEX_NAME), [{"new_path": r"FRIO-X6\S\a.tif", "drive": "drive1_FRIO-X6",
+                      "archive": "", "original_path": r"drive1_FRIO-X6\X\S\a.tif", "size": "1", "sha256": "x",
+                      "claim_id": "CL-1", "shortened": "N", "note": ""}])
+        H.write_pathmap(os.path.join(tdir, H.PATHMAP_NAME), [{"node_key": r"D1:X\S", "rendered": r"FRIO-X6\S"}])
+        N.wcsv(os.path.join(tdir, "_ORIGINS.csv"), ["folder", "original"],
+               [{"folder": r"FRIO-X6\S", "original": r"drive1_FRIO-X6\X\S"}])
+        res = N.publish_tree(nas, manifest, base, execute=True)
+        names = sorted(os.path.basename(r) for r, _w in res)
+        check(names == ["README.txt", "_INDEX.csv", "_ORIGIN.txt", "_PATHMAP.csv"], f"documents {names}")
+        check(all(w for _r, w in res), "first run writes them all")
+        check(os.path.exists(os.path.join(nas, base, "FRIO-X6", "S", "_ORIGIN.txt")), "_ORIGIN.txt inside the study folder")
+        check(open(os.path.join(nas, base, "_INDEX.csv"), "rb").read()[:3] == b"\xef\xbb\xbf", "_INDEX.csv has a BOM (Excel)")
+        check(not any(w for _r, w in N.publish_tree(nas, manifest, base, execute=True)), "a re-run writes nothing")
+        # holding: manifest.csv instead of _INDEX.csv, plus the not-copied row
+        hdir = N.tree_preview_dir(manifest, N.HOLDING_BASE)
+        os.makedirs(hdir)
+        shutil.copy(os.path.join(tdir, H.INDEX_NAME), hdir)
+        shutil.copy(os.path.join(tdir, H.PATHMAP_NAME), hdir)
+        extra = N.not_copied_rows([{"decision": "exclude", "reason": "not copied: truncated", "drive_label": "drive1_FRIO-X6",
+                                    "drive": "D1", "relpath": "Simu_2_V_XYZ.zip", "size": "97", "sha256": "", "claim_id": ""}])
+        docs = N.tree_documents(manifest, N.HOLDING_BASE, holding=True, extra_index_rows=extra)
+        man = docs[N.HOLDING_BASE + "\\manifest.csv"].decode("utf-8-sig")
+        check("Simu_2_V_XYZ.zip" in man and "not copied" in man, "holding manifest lists the not-copied archive")
+        check("Simu_2_V_XYZ.zip" in docs[N.HOLDING_BASE + "\\README.txt"].decode("utf-8"), "holding README says so too")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _sha(b):
     return hashlib.sha256(b).hexdigest()
 
@@ -310,6 +357,7 @@ if __name__ == "__main__":
     test_worksheet_roundtrip()
     test_link_names()
     test_remap()
+    test_publish()
     test_copy()
     print(f"\n{'FAILED: ' + str(len(FAILS)) if FAILS else 'all passed'}")
     sys.exit(1 if FAILS else 0)

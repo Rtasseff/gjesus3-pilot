@@ -170,6 +170,13 @@ python tools\drive_staging\nonraw_placement.py --out <same new folder> apply-raw
 
 ### 2.5 The non-raw half — copy the mapped groups (copies only; pre-approved class)
 
+**Where files land: one shared rule** (Ryan, 2026-10-02), [`tools/drive_staging/historical_paths.py`](../tools/drive_staging/historical_paths.py). Review §6 explains it in full.
+- The layout is `<project>\working\historical_drives\<FRIO-X6|MFB-Disco-2>\<study folder>\…`, with every path at most 240 characters.
+- Each tree carries `_INDEX.csv`, `README.txt`, `_ORIGIN.txt` and `_PATHMAP.csv`.
+- **`remap` and `plan` load the tree's `_PATHMAP.csv` from the NAS, so folders placed earlier keep their names.** A mapped group's study folder is the group's own folder (its `series`).
+- `copy` publishes the updated index documents after the files.
+- If a tree cannot fit the budget without renaming a placed folder, the run **stops** ("cannot bring under 240"): nothing is written, and a human decides.
+
 ```
 python tools\drive_staging\nonraw_placement.py copy --manifest <new out>\placement_manifest.csv                 (dry run)
 python tools\drive_staging\nonraw_placement.py copy --manifest <new out>\placement_manifest.csv --execute       (option A: from D:)
@@ -237,6 +244,9 @@ python tools\drive_staging\nonraw_placement.py holding --manifest <latest manife
 ---
 
 ## Traps (each one has already happened in this effort)
+
+- **Never re-plan with a destination rule other than `historical_paths.py`,** and never place drive material without loading the tree's NAS `_PATHMAP.csv`. Otherwise placed folders get a second, differently shortened twin.
+- **An error handler must never rewrite decisions in the record manifest.** A budget failure once marked 37,000 rows `unclear` before the fail-stop was added. The tool now stops instead; if you add code, keep it that way.
 
 - **Never join on the `G001…` numbers.** They change when the worksheet is regenerated. The tool joins on `group_key`.
 - **Never regenerate the worksheet over Ryan's answers.** `worksheet` refuses if any `project` cell is filled; don't pass `--force` unless the answers are saved elsewhere.

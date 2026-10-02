@@ -19,9 +19,9 @@
 ## Summary
 
 1. **13,240 files, 228.6 GB, are ready to copy into 15 projects.** That is 10 existing projects plus 5 projects that are approved but not yet created (`AE-biomaGUNE-1116`, `-1420`, `-1520`, `-1319`, `Project-0521`). The copies only add files: nothing is deleted, no registry row changes, and nothing goes under `/raw/`. **The dry run passes:** none of the 13,240 destinations exists, and none of the content is already in `/raw/`.
-2. **Two projects that would receive files are closed** (§5): `AE-biomaGUNE-1519` gets 8,667 files (8.3 GB), almost all stream B's non-raw MRI material from `Cardiac MRI.zip`; `AE-biomaGUNE-0320` gets 14 documents. They are listed, not copied. Reopening them is Ryan's call.
-3. **Decision needed before copying: path length** (§6). 9,522 of the 13,240 destinations would sit at a full network path over 259 characters (the longest is 402). They come from three archives whose own folders nest deeply.
-4. **Holding folder (2c), dry run only:** 32,558 files, 211.6 GB. The README and manifest previews are on D:.
+2. **Two projects that would receive files are closed** (§5): `AE-biomaGUNE-1519` gets 8,667 files (8.3 GB), almost all stream B's non-raw MRI material from `Cardiac MRI.zip`; `AE-biomaGUNE-0320` gets 14 documents. **Ryan: reopen both.** The coordinator runs the reopen; a re-run of `copy` then places them.
+3. **Path length is solved** (§6). Every destination is at most 240 characters (it was up to 402) under one shared rule: the study folder first, the high-level folders dropped, the fewest names shortened. A per-tree `_INDEX.csv`, `README.txt` and `_ORIGIN.txt` record every file's original path.
+4. **Holding folder (2c), dry run only:** 53,762 files, 218.6 GB. That includes, per Ryan, NMR (21,186 small files), `.svs` and the damaged `.czi`. `Simu_2_V_XYZ.zip` is listed as not copied. README and manifest previews are on D:.
 5. **2b worksheet:** 288 groups of files with no project, which also cover the 5,055 blank-project raw acquisitions. 62 of them are marked priority `A`. Applying Ryan's answers is fully tooled and was trial-run read-only (`remap`, `apply-raw`, `copy --from-holding`). The runbook is [`drives_nonraw_2b_2c_followup.md`](drives_nonraw_2b_2c_followup.md).
 6. **Raw one-offs, ready to ingest on Ryan's go (§4):**
    - the hidden dot-file `.czi`;
@@ -54,16 +54,20 @@
 
 ## 2. Destination layout — three real examples
 
+The rule and its effect are in §6. All three examples come from the final plan.
+
 ```
 loose file      drive1  Cell observer\AINHIZE\1123\Biodistribución 1123 FeMn\HE\ID 110_HE_lung_20x.tif
-            ->  \\GJESUS3\gjesus3\projects\AE-biomaGUNE-1123\working\historical_drives\drive1_FRIO-X6\Cell observer\AINHIZE\1123\Biodistribución 1123 FeMn\HE\ID 110_HE_lung_20x.tif
+            ->  \\GJESUS3\gjesus3\projects\AE-biomaGUNE-1123\working\historical_drives\FRIO-X6\1123\Biodistribución 1123 FeMn\HE\ID 110_HE_lung_20x.tif
 
 archive member  drive1  Drive Maria Jesus and Irati 20211209.zip ! Drive Maria Jesus and Irati 20211209/Pili y Mili/Proyecto 0521 iNO/Antiguo proyecto 0720/0720MNS01-21.doc
-            ->  \\GJESUS3\gjesus3\projects\Project-0521\working\historical_drives\drive1_FRIO-X6\Drive Maria Jesus and Irati 20211209_zip\Drive Maria Jesus and Irati 20211209\Pili y Mili\Proyecto 0521 iNO\Antiguo proyecto 0720\0720MNS01-21.doc
+            ->  \\GJESUS3\gjesus3\projects\Project-0521\working\historical_drives\FRIO-X6\Proyecto 0521 iNO\Antiguo proyecto 0720\0720MNS01-21.doc
 
 R3 derivative   drive2  CELL OBSERVER 2\AINHIZE\AXIOSCAN\AINHIZE-ITZIAR TM\Prueba jpeg\ID205\MFB_AUA_1123_ID205Lu_TM_10x_ROI lobulo 1.czi   (ROI crop of ACQ-20260416-ZWSI-…)
-            ->  \\GJESUS3\gjesus3\projects\AE-biomaGUNE-1123\working\historical_drives\drive2_MFB-Disco-2\CELL OBSERVER 2\AINHIZE\AXIOSCAN\AINHIZE-ITZIAR TM\Prueba jpeg\ID205\MFB_AUA_1123_ID205Lu_TM_10x_ROI lobulo 1.czi
+            ->  \\GJESUS3\gjesus3\projects\AE-biomaGUNE-1123\working\historical_drives\MFB-Disco-2\ID205\MFB_AUA_1123_ID205Lu_TM_10x_ROI lobulo 1.czi
 ```
+
+A file with no claim root keeps its full path below the drive tag. The 4 scale-bar copies in `laura` are an example: `MFB-Disco-2\2025-10-02 - Toshiba EXT (Backup)\CELL OBSERVER\Laura\…`.
 
 Each placed file gets a row in its project's `provenance.csv` with these fields:
 - `input_refs` = `<drive label>/<path>` (archive members as `archive!member`). The 22 R3 derivatives also carry their parent ACQ-ID.
@@ -185,32 +189,96 @@ Correction to stream B's note: `Fotos confocales cdh5 jagged2.zip` nested inside
 
 Stream B's DICOM ingest also needs `1519` reopened (close-out plan Step 5 item 4), so **one reopen would serve both streams.**
 
-## 6. ⚠️ Decision needed before copying: path length
+## 6. Path length — solved by the shared destination rule (Ryan, 2026-10-02)
 
-The layout puts the whole original path below `historical_drives\<drive label>\`. For three archives that is very deep:
+**Ryan's decision:**
+- **No:** paths that throw errors, and zips (researchers must browse).
+- **Instead:** drop the high-level folders, shorten where needed, and keep an index so nothing is lost.
 
-| Source | Placed files over 259 chars |
-|---|---:|
-| `Drive Maria Jesus and Irati 20211209.zip` (1019, 0320, …) | 5,144 |
-| `Haizpea_2020-2022.7z` (0420) | 2,285 |
-| `PR-0721-Biod-May23.zip` (0721) | 932 |
-| loose files | 1,146 |
-| `Cardiac MRI.zip` | 15 |
-| **total** | **9,522 of 13,240** (longest 402) |
+**The rule.** Built as one function for every stream, [`tools/drive_staging/historical_paths.py`](../tools/drive_staging/historical_paths.py) (tests: `tools/test_historical_paths.py`). It is also used by stream D (derivative retirements), stream C (LEONE into DTS24), 2b and 2c.
 
-The holding folder has 2,489 such paths, out of 32,558.
+```
+<project>\working\historical_drives\<FRIO-X6 | MFB-Disco-2>\<study folder>\<path below it>\<file>
+```
 
-**Why it matters:**
-- **SMB and the NAS are fine** with these paths, and the copy tool writes with `\\?\` long-path prefixes.
-- **Windows Explorer and many applications** fail to open, copy or delete files past 260 characters unless long-path support is enabled on the researcher's machine.
+- **The study folder** is the *outermost claim root of the file's own project* on its path, for example `Proyecto 1019 Envejecimiento y dieta`.
+  - Everything above it is dropped: the drive's wrapper folders, the person folders, an archive's name and its repeated top folder.
+  - Two different roots with the same name get ` (2)`.
+  - The holding folder has no study folder: it keeps the drive's full structure.
+- **Below the study folder,** an archive becomes a folder `<stem>_<ext>`.
+- **Budget:** the full `\\GJESUS3\gjesus3\…` path is at most **240** characters (19 of headroom under Windows' 259), and no component is over 255.
+- **Shortening, only where needed:** a global greedy that removes the most excess per cut.
+  - Folders are cut to 24, then to 12 characters + `~` + 4 hex of a hash of the full name.
+  - A study folder is cut only ever to 24, because its name carries the protocol number.
+  - A folder is cut for everything in it, never file by file.
+  - File names are cut only after folders.
+  - Destinations are checked unique, case-insensitively.
+- **Nothing is lost.** Each tree gets these documents, written UTF-8 with a BOM where Excel opens them:
 
-**Options (Ryan's call):**
-- **(a) Keep the agreed layout.** Accept long paths, and tell researchers that deep files may need 7-Zip or an Explorer with long paths enabled.
-- **(b) Drop the archive's repeated top folder** (`…20211209_zip\…20211209\…` → `…20211209_zip\…`). This keeps the structure, and **9,522 → 6,998** paths stay over 259 characters.
-- **(c) Short labels:** `D1`/`D2` for the drive label, `A1`… for archive folders (dropping the repeated top folder too), plus a `README.txt` mapping in `historical_drives\`. **9,522 → 4,039** stay over 259. The folder names become less self-explanatory, and the deep folders inside the archives remain.
-- **(d) Keep the three deep archives whole.** Copy the `.zip`/`.7z` file itself into each project that has claims in it, instead of extracting. This needs no extraction, but the multi-project archive would be copied whole into several projects (8.4 GB + 37 GB).
+  | Document | What it holds |
+  |---|---|
+  | `_INDEX.csv` | new path → full original path, size, SHA-256, claim, shortened Y/N |
+  | `README.txt` | plain language: what the folder is, how names were shortened, how to find a file's origin |
+  | `_ORIGIN.txt` | in every study folder: the full original path that was dropped above it |
+  | `_PATHMAP.csv` | every folder's original → rendered name |
 
-**Recommendation: (a) for this weekend.** No relabelling removes the problem, because the depth is in the researchers' own folders inside the archives. A later move to (b) or (c) is a rename on the NAS; nothing has to be re-copied.
+  A later run reads `_PATHMAP.csv` from the NAS, so **a folder already placed is never renamed** (it is frozen). The Data Office's global index is [`drives_nonraw_index.csv`](drives_nonraw_index.csv): 21,921 rows for the project trees.
+
+**Effect, on all 75,683 destinations** (placed + closed-project + holding):
+
+| Rule | Longest | > 240 | > 259 |
+|---|---:|---:|---:|
+| R0, the first layout (full path, archive folders) | 402 | 24,515 | 18,396 |
+| R1, study folder first, high-level folders dropped | 362 | 11,853 | 4,919 |
+| **R2, + the fewest names shortened (final)** | **240** | **0** | **0** |
+
+**What the shortening cost:**
+- **Folders:** 759 of 8,347 were shortened: 337 kept 24 characters, 362 kept 12, 48 kept 11 and 12 kept 6.
+- **Study folders:** all are kept whole except `Proyecto 1019 Envejecimi~c3e8` (it still shows the number). In holding, the two drive-root wrappers were cut (`Drive Maria Jesus and Ir~d7b8`, `2025-10-02 - Toshiba EXT~c41f`).
+- **File names:** 363 placed and 141 holding file names were shortened (stem only, extension kept).
+
+**Examples (before → after):**
+
+```
+[1019, the worst: 331 -> 228]
+drive1_FRIO-X6\Drive Maria Jesus and Irati 20211209.zip!Drive Maria Jesus and Irati 20211209\Pili y Mili\Proyecto 1019 Envejecimiento y dieta\Modificación proyecto\Procedimiento 4\Nuevo proyecto\Documentos para presentar\Documentos para la1ª subsanacion\for-ep-10v04_formulario_uso_de_roedores_modificados_geneticamente_mpv17.docx
+\\GJESUS3\gjesus3\projects\AE-biomaGUNE-1019\working\historical_drives\FRIO-X6\Proyecto 1019 Envejecimi~c3e8\Modificació~8033\Procedimiento 4\Nuevo proyecto\Documentos p~21d2\Documentos p~ef5f\for-ep-10v04_formulario_~a351.docx
+
+[0619: 291 -> 240]
+drive1_FRIO-X6\Drive Maria Jesus and Irati 20211209.zip!…\Pili y Mili\Proyecto 0619 Ratones PAH\PAH y 2-DG Marzo 2021  Machos\MRI\Splits Ratones 2-DG marzo 2021\20210312_122905_jrc210312_m110_0619_1_1\Time_10_rat_20210312_122905_jrc210312_m110_0619_1_1.raw
+\\GJESUS3\gjesus3\projects\AE-biomaGUNE-0619\working\historical_drives\FRIO-X6\Proyecto 0619 Ratones PAH\PAH y 2-DG M~53b9\MRI\Splits Raton~c015\20210312_122905_jrc210312_m110_0619_1_1\Time_10_rat_20210312_122905_jrc210312_m110_0619_1_1.raw
+
+[0420: 7z member, one folder cut]
+drive1_FRIO-X6\Haizpea_2020-2022.7z!Haizpea_2020-2022\project0420\20210610_0420_2.1\20211025_picosirius\id15_patch20x_half-Stitching-20.tiff_files\id15_…tiff_metadata.xml
+\\GJESUS3\gjesus3\projects\AE-biomaGUNE-0420\working\historical_drives\FRIO-X6\project0420\20210610_0420_2.1\20211025_picosirius\id15_patch20x_half-Stitc~14d6\id15_…tiff_metadata.xml
+
+[1123: loose, nothing cut]
+drive1_FRIO-X6\Cell observer\AINHIZE\1123\Biodistribución 1123 FeMn\HE\ID 110_HE_lung_20x.tif
+\\GJESUS3\gjesus3\projects\AE-biomaGUNE-1123\working\historical_drives\FRIO-X6\1123\Biodistribución 1123 FeMn\HE\ID 110_HE_lung_20x.tif
+
+[Project-0521: archive above the study folder dropped]
+drive1_FRIO-X6\Drive Maria Jesus and Irati 20211209.zip!…\Pili y Mili\Proyecto 0521 iNO\Antiguo proyecto 0720\0720MNS01-21.doc
+\\GJESUS3\gjesus3\projects\Project-0521\working\historical_drives\FRIO-X6\Proyecto 0521 iNO\Antiguo proyecto 0720\0720MNS01-21.doc
+```
+
+**One consequence to know about: scattering.** Where a project's claims sit at animal or session level, with no claim at the study level, each becomes its own top-level folder.
+
+| Project | Top-level folders | Examples |
+|---|---:|---|
+| `0721` | 58 | ParaVision session folders |
+| `1123` | 24 | `HE`, `ID205`, … |
+| `1019` | 16 | `General`, `ID 22`, … |
+| `1321` | 12 | — |
+| most others | 1–6 | — |
+
+Each one's `_ORIGIN.txt` says where it was. **An option, not applied** because it changes the agreed rule: when the outermost claim root is an animal- or session-level folder, use its parent as the study folder.
+
+## 6b. Previews (what will be written)
+
+- **Per tree,** under `D:\…\drives-nonraw-placement\trees\<tree>\`: `_INDEX.csv`, `_PATHMAP.csv`, `_ORIGINS.csv`, and `_ORIGIN_preview.txt` (every `_ORIGIN.txt` in one file).
+- **Holding:** `D:\…\drives-nonraw-placement\holding_preview__README.txt` and `holding_preview__manifest.csv` (with the not-copied `Simu_2_V_XYZ.zip` row).
+- **The project README** is `historical_paths.PROJECT_README`.
+- **`copy --execute`** publishes exactly these files after a project's files are copied and verified (`publish_tree`; it writes only what changed and never touches a data file), and adds provenance rows for them.
 
 ## 7. Oddities and how they were handled
 
@@ -222,20 +290,24 @@ The holding folder has 2,489 such paths, out of 32,558.
 - **Stream B's NMR list** (`nmr_list.csv`) covers 671 TopSpin experiments: 18,539 files, 1.15 GB, mainly Nicola's chem lab (207), Ana B's NMR (94 + 24), Peio (90), Amaia (59) and `Proyecto 1019` HR-MAS (23). Not placed this weekend; the default pending Ryan is the holding folder, or project material where the files sit under a claim.
 - **Finder:** `tools/generate_index.py` lists only `raw_linked\` entries, so `index.html` does not need regenerating after this copy (handoff step 9: skip).
 
-## 8. Open questions (for the coordinator / Ryan)
+## 8. Questions — Ryan's answers (2026-10-02, relayed by the coordinator)
 
-1. **Path length** (§6): which option?
-2. **Reopen `AE-biomaGUNE-1519`** (8,667 files, shared with stream B) **and `AE-biomaGUNE-0320`** (14 documents)?
-3. **`AE-biomaGUNE-1319`:** who creates it, me or stream B, and when?
-4. **15 Aperio `.svs` whole-slide scans** (4.15 GB, `Drive zuri 170823.zip` > `PAPERS/TUNEL 230123 CDH5 JAGGED2/TUNEL 230123-…-001/-002.zip`, animals 7846–8237): the instrument is not onboarded. The default by analogy with `.lsm` is the holding folder; they have no claim.
-5. **`Simu_2_V_XYZ.zip`** (97 GB, drive 1 root): it cannot be opened as a zip (truncated or not a zip). Nothing is listed, so nothing is placed. Is it a simulation output to keep or drop?
-6. **Three `.czi` that are unreadable but not empty:**
-   - `Cell observer\Marta\Ekine\HE_10x_Brain\ID7B_0423_HE10x.czi` (1.5 GB, no metadata segment);
-   - `CELL OBSERVER 2\Marta\Irene\…\MFB_MBC_0525_ID38H_WGA_10x.czi` (106 MB, no ZISRAW header);
-   - `Haizpea…/20211025_picosirius/id4_normal.czi` (21 KB).
+| Question | Answer | Applied |
+|---|---|---|
+| Path length | Neither long paths nor zips: drop high-level folders, shorten, index | §6, the shared rule |
+| Reopen `1519` / `0320` | Yes; the coordinator runs it after stream B's write window | the 8,681 rows wait as `closed-project`; a re-run of `copy` places them once reopened |
+| `AE-biomaGUNE-1319` | Stream B's N03 ingest creates it | the 25 files are copied after B has created it |
+| Aperio `.svs` (15, 4.15 GB) | Holding folder (2c, later) | `holding` |
+| NMR, TopSpin (B's `nmr_list.csv`: 671 experiments; 21,186 files, 1.26 GB as matched here) | Holding folder (2c, later) | `holding`, not mappable in 2b |
+| 3 unreadable `.czi` with bytes (1.62 GB) | Holding folder (2c, later) | `holding` |
+| `Simu_2_V_XYZ.zip` (97 GB, truncated) | Not copied; listed in the holding README and manifest | `exclude`, plus a `not copied` row in the holding `manifest.csv` |
+| AppleDouble `._` stubs | Excluding them is fine | `exclude` |
+| Raw one-offs: the dot-file and the 14 nested `.czi` | Approved into `/raw/`, the 14 with a **blank** project | prepared and dry-run clean (§4) |
+| CEEA documents filed in another protocol's folder (findings §4.2) | — | still (C) → holding; mappable in 2b |
 
-   They are probably damaged acquisitions. Leave them on the drives (the default), or keep them as non-raw in their projects (0423, 0525, 0420)?
-7. **CEEA documents filed in another protocol's folder** (findings §4.2, the "2 + 2 + 1" row) are (C) and go to holding. The findings doc says either project folder is fine; should they follow their containing folder instead?
+**Still open:**
+- the stream B v2 contents of the nested `OneDrive_1_29-1-2021.zip` (`Cardiac MRI.zip`, 14.2 GB);
+- the scattering option in §6.
 
 ## 9. Phase 2 plan (after the go and inside the write window)
 
@@ -254,10 +326,17 @@ The holding folder has 2,489 such paths, out of 32,558.
    - It resumes, skips identical files and never overwrites.
    - A collision stops that project and is listed.
    - Provenance rows go in batches under the lock.
+   - **After a project's files are in place, it publishes that tree's `_INDEX.csv`, `README.txt`, `_PATHMAP.csv` and every `_ORIGIN.txt`** (the previews, unchanged), with provenance rows.
+   - **Order (the coordinator's):**
+     1. the 4 projects;
+     2. the copies, leaving out `AE-biomaGUNE-1319` until stream B's N03 has created it;
+     3. `1519`/`0320` once the coordinator has reopened them: the same command, re-run;
+     4. the two raw one-offs, each as its own step (§4).
 5. **Verify:**
    - run `verify`: per-project count and bytes from the NAS, plus a 2% random re-hash;
-   - compare one placed file's ACL with an ingest-made file's in the same project;
-   - check that `registry_raw.csv` and `/raw/` are unchanged.
+   - check the **ACL**: a placed file inherits `working\`'s ACL. The baseline for `1123` is `GJesus` Modify plus the admin accounts, all inherited (saved in `D:\…\drives-nonraw-placement\acl_baseline_1123_working.txt`). A `raw_linked\` hard link carries `/raw/`'s read-only ACL by design, so it is *not* the comparison;
+   - open one project's `_INDEX.csv` in Excel and check that the accents show;
+   - check that `registry_raw.csv` and `/raw/` are unchanged (size and mtime before and after).
 6. Report to the coordinator.
 
 The copy reads about 229 GB from D:: loose files directly, and archive members via `zipfile` or one `7z` call per `.7z`, extracting only the listed members to D: scratch (3,919 Haizpea members, 14.0 GB, deleted after the copy). At roughly 60 MB/s to the NAS that is **about 1–1.5 h of transfer**.
