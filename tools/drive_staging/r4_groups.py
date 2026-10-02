@@ -369,6 +369,9 @@ def czi_pieces(path):
             sh = dict(zip(e.dims, e.shape))
             seg = e.read_segment_data(czi)
             raw = seg.data(raw=True)
+            expect = int(e.stored_shape[-3]) * int(e.stored_shape[-2]) * int(e.stored_shape[-1]) * e.dtype.itemsize
+            if len(raw) != expect:            # a truncated file reads short without raising
+                raise ValueError(f"short or long tile payload in {path}: {len(raw)} bytes, expected {expect}")
             pieces.append({
                 "scene": max(int(e.scene_index), 0), "m": int(e.mosaic_index),
                 "key": [[k, int(d[k])] for k in e.dims if k not in ("X", "Y", "S")],
@@ -399,8 +402,61 @@ def load_pieces(out, sha, path):
     return data
 
 
+def sibling_group_keys(mem):
+    """Groups whose members all carry a stage position (XML scene centre) and no two coincide: the files
+    are different scenes of one acquisition, so no member can be a copy, crop or stitch of another
+    (derived files keep their parent's scene centre; checked on every relation found). The crop and
+    stitch gates skip them; `pieces --skip-siblings` does not read them."""
+    g = collections.defaultdict(list)
+    for m in mem:
+        g[m["group"]].append(scene_centers(m["feat"]))
+    return {k for k, cs in g.items()
+            if len(cs) > 1 and all(cs) and not any(a & b for i, a in enumerate(cs) for b in cs[i + 1:])}
+
+
+def cmd_check(args):
+    """Every tile cache: parses, holds as many tiles as the file's directory has, matches the file's
+    size, and every payload has exactly the bytes its shape needs and lies inside the file."""
+    import numpy as np
+    mem = load_members_with_features(args.out)
+    n = bad = missing = 0
+    for m in mem:
+        p = pieces_cache_path(args.out, m["sha256"])
+        if not os.path.exists(p):
+            missing += 1
+            continue
+        n += 1
+        try:
+            with io.open(p, encoding="utf-8") as f:
+                d = json.load(f)
+            probs = []
+            if len(d["pieces"]) != int(m["feat"]["n_level0"]):
+                probs.append(f"{len(d['pieces'])} tiles, directory has {m['feat']['n_level0']}")
+            if d["size"] != int(m["size"]):
+                probs.append("size differs from the plan's")
+            for pc in d["pieces"]:
+                h, w, sm = pc["stored"][-3:]
+                if pc["nbytes"] != h * w * sm * np.dtype(pc["dtype"]).itemsize:
+                    probs.append("a payload is short or long")
+                    break
+            if d["pieces"] and max(pc["pos"] + pc["nbytes"] for pc in d["pieces"]) > d["size"]:
+                probs.append("a payload runs past the end of the file")
+        except Exception as e:     # counted and reported
+            probs = [f"{type(e).__name__}: {e}"]
+        if probs:
+            bad += 1
+            print("  BAD:", m["name"], "; ".join(probs))
+    print(f"tile caches: {n} checked, {bad} bad, {missing} not built")
+    return 1 if bad else 0
+
+
 def cmd_pieces(args):
     rows = rcsv(os.path.join(args.out, "members.csv"))
+    if args.skip_siblings:
+        mem = load_members_with_features(args.out)
+        sib = sibling_group_keys(mem)
+        rows = [r for r in rows if r["group"] not in sib]
+        print(f"skipping the {len(sib)} sibling groups (distinct stage positions)")
     todo = [r for r in rows if not os.path.exists(pieces_cache_path(args.out, r["sha256"]))]
     print(f"{len(rows)} members, {len(todo)} to hash ({sum(int(r['size']) for r in todo) / 1e9:.0f} GB)")
     t0, done, errs = time.time(), 0, []
@@ -552,9 +608,9 @@ def crop_match(A, B, a_path, b_path, hint=None, probes=3):
                     "complete": n_m == n_a, "maps": {0: {"to_scene": sb, "dx": dx, "dy": dy, "n": n_m, "of": n_a}}}
 
         if hint is not None:
+            # whole tiles already pinned the offset: take the verdict at that offset, however partial
             n_m, a_m = verify(hint)
-            if n_m * 2 >= n_a:
-                return result(hint, n_m, a_m)
+            return result(hint, n_m, a_m)
         a_sorted = sorted(range(n_a), key=lambda i: -area(A["pieces"][i]))
         for ia in a_sorted[:probes]:
             pa = A["pieces"][ia]
@@ -660,10 +716,15 @@ def max_tile(F):
 
 
 def crop_gate(FA, FB, PA, PB):
-    """Cheap preconditions for 'A is a crop of B' -- no pixels read: some B tile is at least as big as
-    A's largest tile, the same pixel size (1%), and the same stage position when both files say one."""
+    """Cheap preconditions for 'A is a crop of B' -- no pixels read: A's canvas is strictly smaller than
+    one of B's scenes (a file cannot be a crop of a smaller or an equal one; equal ones are the hash
+    test's), some B tile is at least as big as A's largest tile, the same pixel size (1%), and the
+    same stage position when both files say one."""
     aw, ah = max_tile(PA)
     if not any(q["w"] >= aw and q["h"] >= ah for q in PB["pieces"]):
+        return False
+    a_area = max((b[2] * b[3] for b in PA["scenes"].values()), default=0)
+    if not any(b[2] * b[3] > a_area for b in PB["scenes"].values()):
         return False
     pa, pb = pixel_um(FA), pixel_um(FB)
     if pa and pb and abs(pa - pb) / pb > 0.01:
@@ -693,6 +754,18 @@ def stitch_gate(FA, FB, PA, PB):
     return True
 
 
+def informative(path, pieces, min_distinct=8, tries=3):
+    """Does at least one of the `tries` largest tiles of a file carry image content? A black or saturated
+    tile is byte-identical to every other black tile, so a match made only of such tiles proves nothing."""
+    import numpy as np
+    best = sorted(pieces, key=lambda p: -area(p))[:tries]
+    with TileReader(path) as r:
+        for p in best:
+            if len(np.unique(r.read(p).ravel()[::997])) >= min_distinct:
+                return True
+    return False
+
+
 def group_relations(ms, out, exhaustive=False):
     """Pixel relations between the members of one group.
 
@@ -712,8 +785,12 @@ def group_relations(ms, out, exhaustive=False):
             if a == b:
                 continue
             h = hres[(a, b)] = hash_match(P[a], P[b], bidx[b])
+            if h["complete"] and not informative(ma["staged_path"], P[a]["pieces"]):
+                h = dict(h, complete=False, weak=True)       # only blank tiles match: proves nothing
+                hres[(a, b)] = h
             if h["matched"]:
                 rels.append({"a": a, "b": b, "kind": "hash", "complete": h["complete"], "pieces": h["pieces"],
+                             "weak": bool(h.get("weak")),
                              "matched": h["matched"], "area_frac": round(h["area_frac"], 4),
                              "maps": h["maps"], "n_b": len(P[b]["pieces"]),
                              "scenes_b": sorted({v["to_scene"] for v in h["maps"].values() if "to_scene" in v}),
@@ -763,7 +840,8 @@ C_SPLIT = "scene split"
 C_STITCHED = "stitched copy"
 C_AMBIGUOUS = "ambiguous"
 DERIVATIVE_CLASSES = (C_SCALEBAR, C_RESAVE, C_CROP, C_SUBSET, C_SPLIT, C_STITCHED)
-LIST_A = (C_SCALEBAR, C_RESAVE)            # pixel-identical to the original
+LIST_A = (C_SCALEBAR,)                     # pixel-identical to the original, with a scale bar
+LIST_R = (C_RESAVE,)                       # pixel-identical to the original, renamed re-save
 LIST_B = (C_CROP, C_SUBSET)                # smaller: a crop or a subset of the original
 PROPOSAL_C = (C_SPLIT, C_STITCHED)         # Ryan decides (scene splits, stitched copies)
 
@@ -920,14 +998,17 @@ def classify_group(nodes, rels):
     for r in rels:
         # a partial hit between files that are fully related (either way) is just the container's
         # share of the contained file; only a partial relation with no complete one is a finding
-        if not r["complete"] and r.get("area_frac", 0) >= 0.5                 and (r["a"], r["b"]) not in complete_pairs and (r["b"], r["a"]) not in complete_pairs:
+        if (not r["complete"] and r.get("area_frac", 0) >= 0.5
+                and (r["a"], r["b"]) not in complete_pairs and (r["b"], r["a"]) not in complete_pairs):
             partial[r["a"]].append(r)
     for m, rs in partial.items():
         if out[m]["class"] in (C_DISTINCT, C_ORIGINAL):
             best = max(rs, key=lambda r: r["area_frac"])
+            why = ("; the matching tiles carry no image content (blank), so it proves nothing"
+                   if best.get("weak") else " (not complete)")
             out[m] = {"class": C_AMBIGUOUS, "parent": None, "via": "",
                       "evidence": (f"{best['kind']} match covers {best['area_frac']:.0%} of its tiles inside "
-                                   f"{by[best['b']]['name']} (not complete)")}
+                                   f"{by[best['b']]['name']}{why}")}
     return out
 
 
@@ -956,6 +1037,7 @@ def cmd_relations(args):
     rdir = os.path.join(args.out, "relations")
     os.makedirs(rdir, exist_ok=True)
     keys = list(groups)
+    sib = sibling_group_keys(mem)
     t0 = time.time()
     todo = []
     for gi, k in enumerate(keys):
@@ -963,7 +1045,12 @@ def cmd_relations(args):
         if os.path.exists(f) and not args.redo:
             continue
         if not all(os.path.exists(pieces_cache_path(args.out, m["sha256"])) for m in groups[k]):
-            continue                              # tile cache not finished for this group yet
+            if k in sib:
+                # different stage positions throughout: related by no gate, tiles deliberately not read
+                with io.open(f, "w", encoding="utf-8") as fh:
+                    json.dump({"group": k, "ids": [m["acq_id"] for m in groups[k]], "rels": [],
+                               "gate": "sibling: distinct stage positions, tiles not read"}, fh)
+            continue                              # else: tile cache not finished for this group yet
         todo.append((gi, k, f))
     print(f"{len(keys)} groups, {len(todo)} to do now")
     errs = []
@@ -995,6 +1082,43 @@ def cmd_relations(args):
     return 1 if errs else 0
 
 
+def cmd_validate(args):
+    """Validate the crop/stitch gates: on a sample of groups where the gates skipped every pair (stage
+    positions that never coincide), run the crop and stitch tests on ALL pairs; any complete relation
+    this finds that the gated run did not is a gate false negative."""
+    mem = load_members_with_features(args.out)
+    groups = groups_of(mem)
+    rels = load_relations(args.out)
+    cands = []
+    for k, ms in groups.items():
+        if k not in rels or any(r["complete"] for r in rels[k]) or len(ms) < 2:
+            continue
+        cs = [scene_centers(m["feat"]) for m in ms]
+        if not all(cs) or any(a & b for i, a in enumerate(cs) for b in cs[i + 1:]):
+            continue                      # a member without a stage position, or two that coincide: not gated out
+        cands.append((sum(int(m["size"]) for m in ms), k))
+    cands.sort()
+    cands = [c for c in cands if c[0] <= args.max_gb * 1e9]
+    step = max(1, len(cands) // args.sample)
+    chosen = [k for _, k in cands[::step][:args.sample]]
+    print(f"{len(cands)} gated-out groups under {args.max_gb} GB; validating {len(chosen)}")
+    out = []
+    for k in chosen:
+        ms = groups[k]
+        t0 = time.time()
+        ex = group_relations(ms, args.out, exhaustive=True)
+        found = [r for r in ex if r["complete"] and r["kind"] != "hash"]
+        out.append({"group": k, "members": [m["name"] for m in ms], "gb": sum(int(m["size"]) for m in ms) / 1e9,
+                    "complete_found": [(r["kind"], r["a"], r["b"]) for r in found],
+                    "partial": [(r["kind"], r["a"], r["b"], r["area_frac"]) for r in ex if not r["complete"]]})
+        print(f"  {k[:30]}  n={len(ms)}  {out[-1]['gb']:.1f} GB  complete relations found: {len(found)}  ({time.time() - t0:.0f}s)", flush=True)
+    with io.open(os.path.join(args.out, "gate_validation.json"), "w", encoding="utf-8") as f:
+        json.dump(out, f, indent=1)
+    miss = sum(len(o["complete_found"]) for o in out)
+    print(f"gate false negatives: {miss} in {len(out)} groups")
+    return 1 if miss else 0
+
+
 def load_relations(out):
     rdir = os.path.join(out, "relations")
     res = {}
@@ -1007,12 +1131,23 @@ def load_relations(out):
 
 
 CLASS_COLS = ["group", "group_n", "acq_id", "name", "folder", "drive", "size", "instrument", "acquisition_datetime",
+              "size_x", "size_y", "scenes", "channels", "tiles", "pyramid", "pixel_type",
               "class", "parent_acq_id", "parent_name", "via", "evidence", "own_project", "parent_project",
               "parent_project_status", "has_scalebar", "creation_date", "action", "action_note"]
 
 
+def dims_columns(f):
+    """The dimension columns of the group table, from a features row."""
+    return {"size_x": f.get("SizeX", ""), "size_y": f.get("SizeY", ""),
+            "scenes": len([x for x in (f.get("scenes_dir") or "").split(";") if x]),
+            "channels": f.get("SizeC", ""), "tiles": f.get("n_level0", ""),
+            "pyramid": "Y" if int(f.get("n_entries") or 0) > int(f.get("n_level0") or 0) else "N",
+            "pixel_type": f.get("PixelType", "")}
+
+
 def decide_action(m, c, parent, projects_status):
-    """What the class means for the retire lists: ('a'|'b'|'c'|'stay'|'waiting'|'conflict'|'closed', note)."""
+    """What the class means for the retire lists: ('a'|'r'|'b'|'c'|'stay'|'waiting'|'conflict'|'closed', note):
+    a = scale-bar copy, r = identical re-save, b = crop/subset, c = Ryan's proposal (splits, stitched)."""
     cls = c["class"]
     if cls not in DERIVATIVE_CLASSES:
         return "stay", ""
@@ -1025,7 +1160,34 @@ def decide_action(m, c, parent, projects_status):
         return "conflict", f"its own project {m['project_name']} differs from the original's {pp}"
     if projects_status.get(pp) == "closed":
         return "closed", f"project {pp} is closed: reopen it first"
-    return ("a" if cls in LIST_A else "b"), ""
+    return ("a" if cls in LIST_A else "r" if cls in LIST_R else "b"), ""
+
+
+ID65 = "ID65_PB_lung_20x_scale.czi"
+
+
+def id65_row(projects):
+    """The one file the BACKLOG names that has no group flag. Its timestamp is unique in the plan AND in
+    production (any instrument), so no other record of the acquisition exists: the file is the
+    acquisition, its scale bar a metadata overlay. It is not a copy of anything, so it stays."""
+    reg = rcsv(os.path.join(NAS, "registries", "registry_raw.csv"))
+    hit = [r for r in reg if r["original_name"].endswith("/" + ID65)]
+    if len(hit) != 1:
+        raise SystemExit(f"{ID65}: {len(hit)} registry rows")
+    r = hit[0]
+    ts = r["acquisition_datetime"][:19]
+    same_ts = [x["acq_id"] for x in reg if x["acquisition_datetime"][:19] == ts]
+    pid = {x["project_id"]: x["name"] for x in rcsv(os.path.join(NAS, "registries", "registry_projects.csv"))}
+    return {"group": "(no group flag)", "group_n": "", "acq_id": r["acq_id"], "name": ID65,
+            "folder": dirname(r["original_name"]), "drive": "D1", "size": str(int(float(r["file_size_mb"]) * 1e6)),
+            "instrument": r["instrument"], "acquisition_datetime": r["acquisition_datetime"],
+            "class": C_ORIGINAL, "parent_acq_id": "", "parent_name": "", "via": "",
+            "evidence": (f"no other record of this acquisition: {len(same_ts)} registry row at {ts} (any instrument), "
+                         "no file of the same name without _scale on either drive; a ScaleBar overlay is in its XML, "
+                         "90 tiles, written at the end of the scan"),
+            "own_project": pid.get(r["project_id"], ""), "parent_project": "", "parent_project_status": "",
+            "has_scalebar": "True", "creation_date": "", "action": "stay",
+            "action_note": "NOT a copy: it is the only record of the ID65 acquisition (BACKLOG expected a scale-bar copy)"}
 
 
 def cmd_classify(args):
@@ -1038,14 +1200,25 @@ def cmd_classify(args):
         return 1
     projects = {r["name"]: r["status"] for r in rcsv(os.path.join(NAS, "registries", "registry_projects.csv"))}
     rows = []
+    weak_checked = {}
     for k, ms in groups.items():
         nodes = []
         for m in ms:
             f = m["feat"]
             nodes.append({"id": m["acq_id"], "name": m["name"], "project": m["project_name"],
                           "scalebar": f.get("has_scalebar") == "True", "creation": parse_dt(f.get("CreationDate"))})
-        cl = classify_group(nodes, rels[k])
         byid = {m["acq_id"]: m for m in ms}
+        for r in rels[k]:
+            # a whole-tile match made only of blank tiles proves nothing (relations run before this guard
+            # existed did not apply it): demote it
+            if r["kind"] == "hash" and r["complete"] and not r.get("weak"):
+                a = byid[r["a"]]
+                if a["acq_id"] not in weak_checked:
+                    weak_checked[a["acq_id"]] = informative(
+                        a["staged_path"], load_pieces(args.out, a["sha256"], a["staged_path"])["pieces"])
+                if not weak_checked[a["acq_id"]]:
+                    r["complete"], r["weak"] = False, True
+        cl = classify_group(nodes, rels[k])
         for m in ms:
             c = cl[m["acq_id"]]
             parent = byid.get(c["parent"]) if c["parent"] else None
@@ -1054,6 +1227,7 @@ def cmd_classify(args):
             rows.append({"group": k, "group_n": m["group_n"], "acq_id": m["acq_id"], "name": m["name"],
                          "folder": m["folder"], "drive": m["drive"], "size": m["size"],
                          "instrument": m["instrument"], "acquisition_datetime": m["acquisition_datetime"],
+                         **dims_columns(m["feat"]),
                          "class": c["class"], "parent_acq_id": c["parent"] or "",
                          "parent_name": parent["name"] if parent else "", "via": c["via"],
                          "evidence": c["evidence"], "own_project": m["project_name"],
@@ -1061,6 +1235,7 @@ def cmd_classify(args):
                          "parent_project_status": projects.get(parent["project_name"], "") if parent else "",
                          "has_scalebar": m["feat"].get("has_scalebar", ""), "creation_date": m["feat"].get("CreationDate", ""),
                          "action": action, "action_note": note})
+    rows.append(id65_row(projects))
     wcsv(os.path.join(args.out, "classified.csv"), CLASS_COLS, rows)
     cnt = collections.Counter(r["class"] for r in rows)
     print("classes:", dict(cnt))
@@ -1087,6 +1262,28 @@ def list_rows(classified, action):
 
 
 LIST_COLS = ["acq_id", "disposition", "target_acq_id", "to_project", "reason", "subfolder", "dest_name"]
+RESERVED = {"con", "prn", "aux", "nul"} | {f"com{i}" for i in range(1, 10)} | {f"lpt{i}" for i in range(1, 10)}
+
+
+def path_issues(project, subfolder, name):
+    """Things on the destination path that Windows / SMB / QNAP could refuse or mangle (empty when none):
+    an illegal character, a trailing space or dot, a reserved device name, a component over 255
+    characters, a total path over 600 (the NAS folder prefix included)."""
+    issues = []
+    comps = [c for c in subfolder.split("\\") if c] + [name]
+    for c in comps:
+        if any(ch in c for ch in '<>:"|?*'):
+            issues.append(f"illegal character in {c!r}")
+        if c != c.rstrip(" .") or c != c.lstrip(" "):
+            issues.append(f"leading/trailing space or dot in {c!r}")
+        if c.split(".")[0].lower() in RESERVED:
+            issues.append(f"reserved name {c!r}")
+        if len(c) > 255:
+            issues.append(f"component over 255 characters: {c[:40]!r}...")
+    total = len(NAS) + len("\\projects\\") + len(project) + 1 + len(subfolder) + 1 + len(name)
+    if total > 600:
+        issues.append(f"path of {total} characters")
+    return issues
 
 
 def write_list(path, rows):
@@ -1098,13 +1295,83 @@ def write_list(path, rows):
 
 def cmd_lists(args):
     classified = rcsv(os.path.join(args.out, "classified.csv"))
-    names = {"a": "2026-10_r4_scalebars.csv", "b": "2026-10_r4_exports.csv"}
+    names = {"a": "2026-10_r4_scalebars.csv", "b": "2026-10_r4_exports.csv", "r": "2026-10_r4_resaves.csv"}
     os.makedirs(args.lists_dir, exist_ok=True)
+    held = []
     for action, fn in names.items():
         rows = list_rows(classified, action)
-        write_list(os.path.join(args.lists_dir, fn), rows)
-        gb = sum(int(r["size"]) for r in classified if r["action"] == action) / 1e9
-        print(f"{fn}: {len(rows)} rows, {gb:.1f} GB")
+        keep = []
+        for r in rows:
+            iss = path_issues(r["to_project"], r["subfolder"], r["dest_name"])
+            (held if iss else keep).append((r, iss) if iss else r)
+        write_list(os.path.join(args.lists_dir, fn), keep)
+        ids = {r["acq_id"] for r in keep}
+        gb = sum(int(r["size"]) for r in classified if r["acq_id"] in ids) / 1e9
+        print(f"{fn}: {len(keep)} rows, {gb:.1f} GB")
+    for r, iss in held:
+        print(f"  HELD (path issue, not listed): {r['acq_id']} {r['dest_name']}: {'; '.join(iss)}")
+    return 0
+
+
+def md_table(header, rows):
+    out = ["| " + " | ".join(header) + " |", "|" + "|".join("---" for _ in header) + "|"]
+    out += ["| " + " | ".join(str(c) for c in r) + " |" for r in rows]
+    return "\n".join(out)
+
+
+def cmd_report(args):
+    """Markdown tables for the review doc, from classified.csv: counts and GB per class and per action."""
+    rows = rcsv(os.path.join(args.out, "classified.csv"))
+    grouped = [r for r in rows if r["group"] != "(no group flag)"]
+    out = []
+
+    def gb(rs):
+        return f"{sum(int(r['size']) for r in rs) / 1e9:,.1f}"
+
+    cls_order = [C_ORIGINAL, C_DISTINCT, C_SCALEBAR, C_RESAVE, C_CROP, C_SUBSET, C_SPLIT, C_STITCHED, C_AMBIGUOUS]
+    t = []
+    for c in cls_order:
+        rs = [r for r in grouped if r["class"] == c]
+        t.append((c, len(rs), gb(rs), len({r["group"] for r in rs}), sum(1 for r in rs if r["own_project"])))
+    t.append(("**all**", len(grouped), gb(grouped), len({r["group"] for r in grouped}),
+              sum(1 for r in grouped if r["own_project"])))
+    out.append("### Members by class\n\n" + md_table(["class", "files", "GB", "groups", "files with a project"], t))
+    acts = collections.OrderedDict([("a", "list (a): scale-bar copies"), ("r", "list (a2): identical re-saves"),
+                                    ("b", "list (b): crops and subsets"),
+                                    ("c", "proposal (c): scene splits, stitched copies"),
+                                    ("waiting", "derivative, original has no project"),
+                                    ("conflict", "derivative's own project differs from the original's"),
+                                    ("closed", "original's project is closed"), ("stay", "stays in /raw/")])
+    t = []
+    for a, lab in acts.items():
+        rs = [r for r in grouped if r["action"] == a]
+        t.append((lab, len(rs), gb(rs)))
+    out.append("### What each class means for the lists\n\n" + md_table(["action", "files", "GB"], t))
+    t = []
+    for c in DERIVATIVE_CLASSES:
+        row = [c]
+        for a in ("a", "r", "b", "c", "waiting", "conflict", "closed"):
+            rs = [r for r in grouped if r["class"] == c and r["action"] == a]
+            row.append(f"{len(rs)} ({gb(rs)} GB)" if rs else "-")
+        t.append(row)
+    out.append("### Derivatives: class x action\n\n" + md_table(
+        ["class", "list a", "list a2", "list b", "proposal c", "waiting (no project)", "conflict", "closed project"], t))
+    t = []
+    for a in ("a", "r", "b"):
+        byp = collections.defaultdict(list)
+        for r in grouped:
+            if r["action"] == a:
+                byp[r["parent_project"]].append(r)
+        for pn, rs in sorted(byp.items()):
+            t.append((a, pn, len(rs), gb(rs)))
+    out.append("### List rows by destination project\n\n" + md_table(["list", "project", "files", "GB"], t))
+    amb = [r for r in rows if r["class"] == C_AMBIGUOUS]
+    out.append("### Ambiguous members\n\n" + md_table(
+        ["acq_id", "name", "group", "evidence"],
+        [(r["acq_id"], r["name"], r["group"][:24], r["evidence"]) for r in amb]))
+    with io.open(os.path.join(args.out, "report_tables.md"), "w", encoding="utf-8") as f:
+        f.write("\n\n".join(out) + "\n")
+    print("\n\n".join(out))
     return 0
 
 
@@ -1120,14 +1387,20 @@ def main(argv=None):
     ap.add_argument("--redo", action="store_true", help="relations: recompute groups already done")
     ap.add_argument("--exhaustive", action="store_true",
                     help="relations: run the crop and stitch tests on every pair (validates the gates)")
+    ap.add_argument("--skip-siblings", action="store_true",
+                    help="pieces: do not read groups whose members are distinct stage positions")
+    ap.add_argument("--sample", type=int, default=20, help="validate: how many gated-out groups to test")
+    ap.add_argument("--max-gb", type=float, default=6.0, help="validate: largest group (GB) to test")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("table", "features", "pieces", "relations", "classify", "lists"):
+    for name in ("table", "features", "pieces", "check", "relations", "validate", "classify", "lists", "report"):
         sub.add_parser(name)
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
-    return {"table": cmd_table, "features": cmd_features, "pieces": cmd_pieces, "relations": cmd_relations,
-            "classify": cmd_classify, "lists": cmd_lists}[args.cmd](args)
+    return {"table": cmd_table, "features": cmd_features, "pieces": cmd_pieces, "check": cmd_check,
+            "relations": cmd_relations,
+            "validate": cmd_validate, "classify": cmd_classify, "lists": cmd_lists,
+            "report": cmd_report}[args.cmd](args)
 
 
 if __name__ == "__main__":

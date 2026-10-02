@@ -202,6 +202,19 @@ def test_crop_and_stitch():
         check(st["found"] == 0 and not st["complete"], "an unrelated image contains none of the tiles")
 
 
+def test_informative():
+    print("test_informative")
+    with tempfile.TemporaryDirectory() as tmp:
+        blank = FakeFile(tmp, "blank").add(np.zeros((200, 200, 3), np.uint16), 0, 0).done()
+        check(not R.informative(blank["path"], blank["pieces"]), "an all-black tile carries no image content")
+        sat = FakeFile(tmp, "sat").add(np.full((200, 200, 3), 65535, np.uint16), 0, 0).done()
+        check(not R.informative(sat["path"], sat["pieces"]), "a saturated tile carries none either")
+        real = FakeFile(tmp, "real").add(img(200, 200), 0, 0).done()
+        check(R.informative(real["path"], real["pieces"]), "a noisy tile does")
+        mixed = FakeFile(tmp, "mixed").add(np.zeros((50, 50, 3), np.uint16), 0, 0).add(img(200, 200), 60, 0).done()
+        check(R.informative(mixed["path"], mixed["pieces"]), "one informative tile among the largest is enough")
+
+
 def node(i, name, project="", scalebar=False, creation=None):
     return {"id": i, "name": name, "project": project, "scalebar": scalebar,
             "creation": creation or dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)}
@@ -279,9 +292,56 @@ def test_rank_key():
           "'scale' / 'escala' in the name, or an overlay, make a file copy-like")
 
 
+def test_lists():
+    print("test_lists")
+    parent = {"project_name": "AE-biomaGUNE-0721"}
+    noproj = {"project_name": ""}
+    blank = {"project_name": ""}
+    own = {"project_name": "AE-biomaGUNE-0721"}
+    other = {"project_name": "AE-biomaGUNE-1321"}
+    st = {"AE-biomaGUNE-0721": "active", "AE-biomaGUNE-1019": "closed"}
+    d = R.decide_action
+    check(d(blank, {"class": R.C_CROP}, parent, st)[0] == "b", "a crop whose original has a project -> list b")
+    check(d(blank, {"class": R.C_SCALEBAR}, parent, st)[0] == "a", "a scale-bar copy -> list a")
+    check(d(own, {"class": R.C_RESAVE}, parent, st)[0] == "r", "an identical re-save, same project -> list r")
+    check(d(blank, {"class": R.C_CROP}, noproj, st)[0] == "waiting", "the original has no project -> waiting")
+    check(d(other, {"class": R.C_CROP}, parent, st)[0] == "conflict", "own project differs from the original's -> conflict")
+    check(d(blank, {"class": R.C_CROP}, {"project_name": "AE-biomaGUNE-1019"}, st)[0] == "closed",
+          "the original's project is closed -> not listed")
+    check(d(blank, {"class": R.C_SPLIT}, parent, st)[0] == "c" and d(blank, {"class": R.C_STITCHED}, noproj, st)[0] == "c",
+          "scene splits and stitched copies are Ryan's proposal, never listed")
+    check(d(blank, {"class": R.C_ORIGINAL}, None, st)[0] == "stay"
+          and d(blank, {"class": R.C_DISTINCT}, None, st)[0] == "stay", "an original / distinct member stays")
+    row = {"group": "CELL|2023-06-02T07:11:34.7133079Z", "acq_id": "ACQ-20230602-CELL-002", "class": R.C_CROP,
+           "parent_acq_id": "ACQ-20230602-CELL-005", "parent_name": "0721-M113-Kidney-PB-20X.czi",
+           "parent_project": "AE-biomaGUNE-0721", "evidence": "4/4 tiles ...", "action": "b",
+           "folder": "drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/P/Histologias", "name": "Kidney-PB.czi"}
+    rows = R.list_rows([row, dict(row, acq_id="ACQ-X", action="stay")], "b")
+    check(len(rows) == 1 and rows[0]["disposition"] == "derivative" and rows[0]["target_acq_id"] == "ACQ-20230602-CELL-005"
+          and rows[0]["to_project"] == "AE-biomaGUNE-0721" and rows[0]["dest_name"] == "Kidney-PB.czi",
+          "a list row: derivative of the original, into the original's project, under the file's own name")
+    check(rows[0]["subfolder"] == r"working\historical_drives\drive2_MFB-Disco-2\2025-10-02 - Toshiba EXT (Backup)\P\Histologias",
+          "the subfolder mirrors the drive folder")
+    check("export: crop of 0721-M113-Kidney-PB-20X.czi (ACQ-20230602-CELL-005)" in rows[0]["reason"],
+          "the reason names the class and the original")
+    with tempfile.TemporaryDirectory() as tmp:
+        p = os.path.join(tmp, "l.csv")
+        R.write_list(p, rows)
+        raw = open(p, "rb").read()
+        check(raw.startswith(b"acq_id,disposition,target_acq_id,to_project,reason,subfolder,dest_name\n")
+              and b"\r" not in raw and not raw.startswith(b"\xef\xbb\xbf"),
+              "the list has the retire tool's header (+ subfolder, dest_name), LF endings, no BOM")
+    pi = R.path_issues
+    check(pi("P", r"working\historical_drives\d1\a b", "x'y].czi") == [], "apostrophe, bracket and spaces are fine")
+    check(pi("P", r"working\d1\a ", "x.czi") != [], "a trailing space on a folder is reported")
+    check(pi("P", r"working\d1", "a:b.czi") != [] and pi("P", r"working\con", "x.czi") != [],
+          "an illegal character or a reserved name is reported")
+    check(pi("P", "w\\" + "x" * 300, "a.czi") != [], "a 300-character component is reported")
+
+
 def main():
     for t in (test_subfolder_for, test_staged_path, test_haystack, test_hash_match, test_crop_and_stitch,
-              test_classify, test_rank_key):
+              test_informative, test_classify, test_rank_key, test_lists):
         t()
     print()
     if FAILS:
