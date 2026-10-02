@@ -1,0 +1,2 @@
+acq_id,disposition,target_acq_id,to_project,reason
+ACQ-20250915-LSM9-016,equivalent,ACQ-20250915-LSM9-001,,"re-save of -001 in a test folder (Prueba/24h_1.czi): the same image data, metadata and attachments in a compact container; -001 is kept (older, linked, not in a test folder)"

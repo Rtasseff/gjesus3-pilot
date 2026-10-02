@@ -1,0 +1,16 @@
+acq_id,disposition,target_acq_id,to_project,reason,new_instrument
+ACQ-20240625-LSM9-001,reidentified,,,"Cell Observer file by its own device metadata (no device serial, stand key Inverted only); ingested as LSM9 because it sat in the LSM 900 folder of lsm900_bestguess_itziar-lipofectamine-mcherry.yaml",CELL
+ACQ-20240625-LSM9-002,reidentified,,,"Cell Observer file by its own device metadata (no device serial, stand key Inverted only); ingested as LSM9 because it sat in the LSM 900 folder of lsm900_bestguess_itziar-lipofectamine-mcherry.yaml",CELL
+ACQ-20260422-CELL-001,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260422-CELL-002,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260422-CELL-003,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-011,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-012,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-013,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-014,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-015,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-016,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-017,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-018,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-019,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI
+ACQ-20260507-CELL-020,reidentified,,,AxioScan 7 file (device serial 4661000718) ingested as CELL by cellobs_bestguess_claudia.yaml (instrument taken from the K: CELL OBSERVER folder),ZWSI

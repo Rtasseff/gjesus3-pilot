@@ -1,0 +1,3 @@
+acq_id,disposition,target_acq_id,to_project,reason,new_instrument
+ACQ-20240625-LSM9-001,reidentified,,,"Cell Observer file by its own device metadata (no device serial, stand key Inverted only); ingested as LSM9 because it sat in the LSM 900 folder of lsm900_bestguess_itziar-lipofectamine-mcherry.yaml",CELL
+ACQ-20240625-LSM9-002,reidentified,,,"Cell Observer file by its own device metadata (no device serial, stand key Inverted only); ingested as LSM9 because it sat in the LSM 900 folder of lsm900_bestguess_itziar-lipofectamine-mcherry.yaml",CELL
