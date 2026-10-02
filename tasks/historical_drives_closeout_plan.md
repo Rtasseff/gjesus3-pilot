@@ -14,7 +14,7 @@ file, marking steps done in place.
 | Stream | Branch / worktree | State |
 |---|---|---|
 | `.czi` ingest | `feat/drives-microscopy-ingest` · `gjesus3-dev\drives-microscopy-ingest` | B01–B04 by Opus (2026-09-30); **B05–B16 by a Sonnet session from `HANDOFF_RUN.md`**, nearly done. Plan frozen at `c5f7fff`: **8,790 files, 3.85 TB.** Not merged. |
-| Retire tool | `feat/retire-acquisition` · `gjesus3-dev\retire-acquisition` | Built and approved. Its session is applying the one change: **never delete subject rows** (`ANSWERS_2026-10-01.md`). Not merged; never run on production. |
+| Retire tool | `feat/retire-acquisition` · `gjesus3-dev\retire-acquisition` | **✅ Merged to `main` 2026-10-02** (`361387f`), with the subject change made (subject rows are never deleted). Never run on production yet; its first uses are Step 3. |
 | Analysis branches | `feat/drives-catalog`, `feat/drives-project-codes` | Merged 2026-09-29. Their worktrees are safe to remove. |
 
 **The key files** are all on the ingest branch unless noted:
@@ -75,11 +75,15 @@ Do this when Ryan says B16 is done. Read before writing.
 
 The order is either, but the conflicts are known.
 
-- **Retire tool:** first review the session's subject change. It is small: the tool, test 6, the
-  revert of the 06 §2.8.3 row, and 10_TOOLS inventory row #5. Then run all tests, merge
-  `--no-ff`, and push.
-  - Safe even mid-ingest: shared-code changes do nothing until `retired_acquisitions.csv` exists,
-    and the tool refuses to run while the registry is changing.
+- **Retire tool: ✅ MERGED 2026-10-02** (`361387f`, pushed; backlog duplicates consolidated in
+  `516b3b8`).
+  - The subject change was reviewed: `registry_subjects.csv` is never touched, and the ✅ §2.8.3
+    table is identical to `main`. The twin list is split into `…_zwsi.csv` (22) and `…_cell.csv`
+    (10).
+  - 27/27 test suites pass at the branch tip and on the merged `main`.
+  - The scratch rehearsal was not re-run, because the change only removed a behaviour.
+  - The tool is not yet used in production.
+  - Its worktree `gjesus3-dev\retire-acquisition` is done, and goes in the Step 4 clean-up.
 - **Ingest branch,** after Step 1 passes: merge `--no-ff`. **Expect conflicts:**
   - `tools/ingest/config.py`: both branches touch it. **Keep both** the `case_table` block and the
     retired-rows dedup.
