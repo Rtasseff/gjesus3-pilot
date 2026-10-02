@@ -43,7 +43,7 @@ auto_discover:
   case_table:
     file:       cases_dicom_B05b_0420_haizpea_s22.csv
     key:        original_name
-    on_missing: error
+    on_missing: skip
   subject_from_db: true
   subject_lookup:
     project_alias: "${discovered.project_code}"
