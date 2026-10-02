@@ -128,6 +128,25 @@ Every unmatched study is missing from production, whatever its date. Among them 
 
 **Proposed:** the ingest configs set `instrument_model` explicitly, so no code change is needed for this stream. A one-line fix goes to the BACKLOG: treat a station number ≥ 200 as MHz, or prefer the `PVM_FrqRef` path. It touches shared ingest code, so it is a separate, reviewed change.
 
+## 7a. Phase 2: configs and dry runs (read-only, approved by the coordinator 2026-10-02)
+
+**Configs:** `tools/configs/drives_2026-09/dicom/` (one per batch, plus a `*_sibling_dedup.yaml` per family, plus `cases_<config>.csv`).
+
+- **Every MRI exam gets an explicit datetime.** The case table supplies `drv_acq_datetime`: `visu_pars.VisuCreationDate`, the value production uses, else the scanner-written `acqp.ACQ_time`. **Why:** B06's first dry run gave 8 exams with no `visu_pars` **today's** date (`ACQ-20261002-MRI-*`), the soft fallback the handoff warns about. With the table, `on_missing: error` stops a batch on any exam without a row.
+- **Every dry run is bracketed by a size+mtime check of `registry_raw.csv`.** All so far: unchanged.
+
+**One line per batch.** Format: expected / listed / skipped-with-reason · dedup rehearsal · IDs · project · model.
+
+| Batch | Dry-run result |
+|---|---|
+| **N03** `1319` PET/CT | **8 / 8 / 0** · sibling `ACQ-20230808-CT-001` staged the same way: **skipped (already in registry)**, 0 listed · `ACQ-20210514-PET-*` ×4, `-CT-*` ×4 (the dry run previews `-001` for every case because it reserves nothing; a real run allocates `-001`…`-004`) · `AE-biomaGUNE-1319`, auto-created (pre-approved) · `Molecubes (PET/SPECT/CT)` · DB subject keys `29…32-AE-biomaGUNE-1319` |
+| **B06** `1019` MRS | **66 / 58 / 8**. The 8 are never-acquired `2_Localized_shim` setup scans (no `ACQ_time`, no `fid`, empty `pdata`), listed in `excluded_dicom_B06_1019_mrs_2021.csv` · sibling: pending · `ACQ-20210128…20210302-MRI-*`, **0 dated today** · blank project (Q2) · `Bruker BioSpec 11.7T` |
+| B04a / B04b `0619` | pending: staging out of `Cardiac MRI.zip` (20.1 GB) |
+| B05a / B05b `0420` | pending: extract of the two MRI folders from the `.7z` (~15 GB) |
+| B02 / B03 `1519` | configs written; staging waits on the coordinator (it would take my scratch past 50 GB) and on Q1 |
+
+**Nested `BrEt/OneDrive_1_29-1-2021.zip` (14.2 GB): a byte-identical copy.** Its 4 studies / 67 exams are the same as `BrEt\` (4,269/4,269 common members CRC-32 equal; the only differences are a renamed NIfTI folder and `.DS_Store`). It is the OneDrive download that `BrEt\` was unpacked from, so **nothing new**. Listing: `_analysis\drives-dicom\nested_listings_cardiac_mri.csv`.
+
 ## 8. Questions for Ryan
 
 | # | Question | Recommendation | Why it matters |

@@ -39,6 +39,14 @@ auto_discover:
   filename_parse:
     source: parent_name
     regex: '(?P<jrc_id>(?P<pi_initials>jrc)\d{6}_m(?P<animal_num>\d+)(?:MB|LV)mrs)'
+  # Per-exam acquisition datetime (cases_<config>.csv, keyed on original_name):
+  # visu_pars VisuCreationDate, the value production uses, else the scanner-written
+  # acqp ACQ_time. Without it an exam with no visu_pars would get TODAY as its
+  # date (the ingest's soft fallback; found in this stream's B06 dry run).
+  case_table:
+    file:       cases_dicom_B06_1019_mrs_2021.csv
+    key:        original_name
+    on_missing: skip
   subject_from_db: true
   subject_lookup:
     project_alias: "1019"
@@ -54,7 +62,7 @@ registry:
   sample_id:            "m${discovered.animal_num}_1019"
   sample_type:          organism
   session_id:           "${discovered.jrc_id}"
-  acquisition_datetime: discovered.mri_acquisition_datetime
+  acquisition_datetime: discovered.drv_acq_datetime
   project_name:         ""
   notes:                "Internal MRS/MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol 1019 from folder claim); recons kept: ${discovered.mri_recon_indices}; historical drives (drive 1 Drive Maria Jesus and Irati 20211209.zip), predates the kenia retention horizon"
 
