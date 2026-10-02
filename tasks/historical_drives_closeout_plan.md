@@ -39,7 +39,20 @@ truncated original, 3.4 GB), `scratch_nas\` and `scratch_retire\`. The staged dr
 
 ---
 
-## Step 1: verify the finished `.czi` ingest
+## Step 1: verify the finished `.czi` ingest (✅ DONE 2026-10-02)
+
+**Result: every check passed.**
+
+- **Rows:** 8,790 drives rows; 0 blank dates; 5,055 blank project, matching Ryan's list.
+- **Duplicates:** 12,304 microscopy `checksums.json` read. Duplicate content is only the known
+  32 pairs, and re-saves only the known 23 groups; none touches a new row.
+- **The integrity chain:** 8,791 of 8,791 provenance rows are in production's `checksums.json`,
+  and 50 of 50 sampled rows match the drive manifests.
+- **The repair:** `ACQ-20251031-CELL-003` and its `claudia` link both re-hash to the drive
+  copy, and they are the same file.
+- **The validator** (from `main`) is at 10,314 errors, all the known placeholder.
+
+*The checklist that was used:*
 
 Do this when Ryan says B16 is done. Read before writing.
 
@@ -71,7 +84,11 @@ Do this when Ryan says B16 is done. Read before writing.
 6. **Ryan's list** exists: blank-project ACQ-IDs (about 5,055) with the claim each path carried.
    Hand it to Ryan.
 
-## Step 2: merge both branches
+## Step 2: merge both branches (✅ DONE 2026-10-02)
+
+The ingest was merged in `0f052d5`. Only the two "Last Updated" lines (`00_INDEX`, `10_TOOLS`)
+conflicted, and they were combined, newest first. `config.py` auto-merged with both changes
+kept. 29 of 29 test suites pass on the merged tree.
 
 The order is either, but the conflicts are known.
 

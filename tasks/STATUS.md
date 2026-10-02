@@ -94,7 +94,7 @@ production care.
 
 | | |
 |---|---|
-| Acquisitions in `/raw/` | **17,306 on 2026-10-01** (+62 operator AxioScan on 2026-09-29, then **+869** from the historical drives' first four batches; §2). Earlier history: **16,375** (all checksummed + `metadata.json` sidecar'd) — 15,474 until 2026-08-21, then **+854** from the 2021 `Proyecto 1019` recovery, **+24** from the G1 session, and **+23** from a routine operator AxioScan ingest on 2026-08-26 (`PROJ-0059`). Also — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) and the **1,508** from the `S:\gnuclear` NI backfill (§3) |
+| Acquisitions in `/raw/` | **25,227 on 2026-10-02**, after **+8,790** historical `.czi` from the operators' external drives (§2). Before that: 16,437 on 2026-09-30, after +62 operator AxioScan on 2026-09-29. Earlier history: **16,375** (all checksummed + `metadata.json` sidecar'd) — 15,474 until 2026-08-21, then **+854** from the 2021 `Proyecto 1019` recovery, **+24** from the G1 session, and **+23** from a routine operator AxioScan ingest on 2026-08-26 (`PROJ-0059`). Also — includes the **75 human** cardiac-MRI acquisitions of `DTS24` (§2) and the **1,508** from the `S:\gnuclear` NI backfill (§3) |
 | Projects | **58 registered** — 50 active + **8 `closed`** (rows retained; 3 folders deleted 2026-07-14, 5 still present). Every live folder carries the four subfolders since the 2026-08-12 backfill. **Folder name == project name** since 2026-08-02 (no `proj-` prefix) — see §2. |
 | Subjects (`registry_subjects.csv`) | **1,165** (one row per subject; 1,124 until the 2026-08-21 ingests added the 2021 animals) — was 1,146 until the 2026-08-16 `-None` subject-id repair, which dropped 65 ambiguous rows and added back 43 real ones (see 2). The 2026-08-19 PROJ-0056 repair left the total unchanged (3 rows dropped, 3 added). |
 | Curated datasets (`registry_datasets.csv`) | **4** — `DS-SEG-0001`…`0004`, segmentation, DICOM ecosystem. Area deployed 2026-08-21 as a pilot (`CDS-01` decided). Provenance traceability verified **100% on all four**. |
@@ -157,7 +157,15 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **Historical microscopy on external drives: 🔶 INGEST NEARLY DONE (2026-10-02).** **The remaining steps live in [`historical_drives_closeout_plan.md`](historical_drives_closeout_plan.md):** verify, merge, first retirements, clean-up, remaining work. Resume from there. The record below is the history up to now.
+- **Historical microscopy on external drives: ✅ `.czi` INGEST DONE IN TRUE PRODUCTION, verified and merged (2026-10-02, `0f052d5`).**
+  - **8,790 acquisitions, 3.85 TB:** `CELL` 8,061, `LSM9` 387, `ZWSI` 4, `XMIC` 338. The registry went 16,437 → **25,227**.
+  - **Projects:** one created (`AE-biomaGUNE-0118` = PROJ-0060); `0219` and `1019` reopened. **5,055 acquisitions have a blank project:** Ryan's list, `tasks/drives_blank_project_list.csv`.
+  - **The coordinator's verification:**
+    - no new duplicate content (only the known 32) and no new re-save (only the known 23 groups);
+    - all 8,791 provenance rows match production's `checksums.json`, and a sample of 50 matches the drive manifests;
+    - the repaired `ACQ-20251031-CELL-003` and its project link re-hash to the drive copy;
+    - the validator is at the known 10,314 errors, with no new class.
+  - **Still open:** the first retirements, the non-raw placement, the no-project mapping and holding folder, `LEONE`, the drives' DICOM stream, and the missing July MRI session. **All of it is in [`historical_drives_closeout_plan.md`](historical_drives_closeout_plan.md) (Steps 3–5); resume from there.** The record below is the history up to now.
   **Staged data on D: (Ryan, 2026-10-02):** it is **erased once everything from these drives is in production and verified** against the drive manifests. It is a temporary working copy on Ryan's own drive, not a backup. The owners keep their external drives and the data on them, and the lab knows gjesus3 has no off-site backup yet (INFRA-06).
   *(Original heading, 2026-09-29:)* **🔶 STAGED + VERIFIED + ASSESSED, nothing ingested yet.** Both one-copy drives are on `D:\projects\gjesus3\staging\drive<N>_<label>_<id>\` (copied with [`tools/drive_staging/`](../tools/drive_staging/README.md)): **drive 1 `FRIO X6`** 43,121 files / 3,776 GB and **drive 2 `MFB Disco 2`** 35,718 files / 2,445 GB, both copied with 0 errors and `VERIFY PASS` on every checksum (drive 2's 11 unreadable entries are other users' `$RECYCLE.BIN`, no data). The drives are back with their owners, who were asked not to wipe them. **D: is not backed up**, so until ingest the staged copy plus the owners' SSDs are the only copies. The hub's brief, with Ryan's decisions of 2026-09-28/29 folded in, is `...\DataInfra\gjesus3-archive\historical-microscopy-drives\HANDOFF.md` (outside this repo).
   **Measured here 2026-09-29, and it changes that brief** (read-only, scripts not kept):
