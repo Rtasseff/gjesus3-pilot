@@ -2,9 +2,9 @@
 
 **Date:** 2026-10-02 · **Stream F** of the weekend close-out
 ([`historical_drives_closeout_plan.md`](historical_drives_closeout_plan.md), Step 5 item 1) · **Status:**
-✅ **the re-ingest is DONE IN PRODUCTION and verified** (2026-10-02, 13:10–13:18 local): 17 acquisitions,
-`ACQ-20260710-MRI-018…034`, from the scanner's current copy of the session. 🔶 **The 17 orphan folders are not yet
-retired**: that waits for the coordinator's window (§7.2).
+✅ **both production writes are DONE and verified** (2026-10-02): the re-ingest (13:10–13:18 local; 17 acquisitions
+`ACQ-20260710-MRI-018…034`, from the scanner's current copy of the session) and then the retirement of the 17
+orphan folders (13:31–13:32; 17 tombstones). **Ready to merge.**
 
 Run by a subagent of the coordinator (`gj3-handoff`). Evidence (all regenerable): `D:\projects\gjesus3\staging\_analysis\mri-0710-reingest\`.
 
@@ -20,8 +20,9 @@ Run by a subagent of the coordinator (`gj3-handoff`). Evidence (all regenerable)
 | Three other pulls checked for registration. **One more session is missing (m6)** | ✅ (§5) |
 | Dry runs against production, both sources; full rehearsals on scratch, both sources | ✅ 17/17, 0 failed checks (§4) |
 | **Production re-ingest** | ✅ **17 / 17, 0 failed, 0 failed checks** (§7.1) |
-| Orphan retirement, `--quick` dry run against production | ✅ 17 × `orphan-candidate`, no refusals (§7.2) |
-| **Production retirement of the 17 orphans** | ⏳ waiting for the coordinator's window |
+| Orphan retirement: `--quick` and full dry runs against production | ✅ exactly the 17 orphans, no refusals (§7.2) |
+| **Production retirement of the 17 orphans** | ✅ **17 tombstones, 17 folders gone and backed up whole, 0 problems** (§7.2) |
+| Scanner-vs-registry reconciliation (read-only) | ✅ 419 studies; **19 MFB (`jrc`) studies unregistered**, 14 of them animal sessions (§5.1) |
 
 ## 2. What the NAS holds (measured 2026-10-02)
 
@@ -160,6 +161,54 @@ so it is the same person's login. **That makes `Irene` the best-supported attrib
 sentence from her settles it** (as for STATUS §0 D2). `mri-ingest` refuses an empty `--operator`, so the follow-up
 needs a value; the project's rule for an unconfirmed fact is blank, and the tool would have to allow it.
 
+### 5.1 Scanner-vs-registry reconciliation (read-only, 2026-10-02)
+
+**Method.** SFTP listings only: nothing downloaded, nothing written on the scanner or on `J:`. Both data roots of
+`kenia`: `/opt/PV-7.0.0/data/nmr` (3,043 study folders, folder-name dates 2024-01-05…2026-10-02) and
+`/opt/PV6.0.1/data/nmr` (147 study folders, none dated after 2025-09-26: **0 selected**). Selected: every study
+**dated 2026-06-01 or later by the date in its folder name** (400), plus 19 older-named folders modified since
+(16 are the May `jrc` sessions, all registered). For each, the exam folders (children holding `acqp` + `method`)
+were counted and matched against `registry_raw.original_name` (`<study>/<exam>`), with a fallback on session or sample
+id and date. **419 studies, 2,646 exam folders:**
+
+| | studies | exam folders |
+|---|---|---|
+| Registered in full | 34 (18 dated June or later, 16 older-named) | 589 |
+| Registered in part | 0 | 0 |
+| **Not registered** | **381** | **2,057** |
+| No exam folder (aborted) | 4 | 0 |
+
+**By group** (the initials in the folder name). Only MFB `jrc` is in `pi_group_lookup.yaml`, and **all 11,225 MRI
+rows of the registry are `jrc`**:
+
+- **`jrc` (MFB): 53 studies, 34 registered, 19 not (302 exam folders):**
+  - **14 animal sessions (232 exam folders).** Protocol **1125**, 9 sessions (141 exams): m2 and m3 (2026-07-03), m4
+    to m8 (07-06; **m6 is the case in §5**), **m12 of 07-10 11:47 (the first study of that day; the one ingested is
+    its `_bis`)** and m19 (07-10). Protocol **1025**, 5 sessions (91 exams): m25 to m28 (2026-10-01) and m29 (acquired
+    this morning). Twelve of the 14 have a facility-DB `MRI 7T` procedure on the study date. The exceptions are the
+    two 07-10 sessions (m12, m19; for m12 the DB logs Organ sampling and Perfusion that day instead) and m29 (acquired
+    today, not yet logged).
+  - **5 phantom / QC studies (70 exam folders):** `jrc260611_SPION`, `jrc_260612_phantom_SPION_RGD`,
+    `jrc260708_phantom` (42 exams), `jrc260709_phantom`, `jrc260818_Phantom_MnACC`. Their names carry no
+    `m<animal>_<protocol>`, so the ingest regex does not parse them: the silent skip of STATUS §0 D3, were anyone to
+    point the tool at them.
+- **Other groups on the shared scanner, not MFB: 366 studies, 362 not registered (1,755 exam folders):** `jl` 268
+  (930 exams), `pr` 76 (612), `sp` 8 (97), `dan` 8 (38), `fer` 4 (63), `aka` 2 (15). Out of gjesus3's MFB scope as
+  configured; listed for completeness.
+
+**Known cases:** m6 (2026-07-06) **not registered, 15 exams**; m12 `_bis` registered 17/17 (this stream); m1
+(2026-07-03) 16/16; m4 (2026-06-04) 17/17. **One correction to the tool's own output:** the fallback flagged the first
+m12 study of 07-10 (`20260710_114705_…`, 17 exams, acquired 11:58–12:55) as a "token match" to my new `_bis` rows (same
+animal, same day). It is **not registered**: no registry MRI row that day has a time before 13:19. It was never pulled
+to staging either.
+
+**What it shows.** Since the bulk load of 2026-06-13/14, the only MFB studies registered are m1 (07-03, ingested
+2026-07-17 by the fixed GUI) and m12 `_bis` (this stream). **The whole July protocol-1125 series (9 sessions) and the
+October 1025 series were never ingested**: the operator self-service path has produced one session since the exe fix.
+The data is safe on the scanner (it keeps years), so this is a process finding for Ryan, not a loss.
+Evidence: `kenia_reconciliation_since_20260601.csv` (one row per study), `kenia_reconciliation_summary.txt`,
+`kenia_reconciliation_breakdown.txt`, `kenia_unregistered_jrc_times_and_db.txt`, `kenia_toplevel_listing.csv`.
+
 ## 6. Why the folders were orphaned (the July failure)
 
 **Established by the pattern, not by a log** (no GUI log survives on the NAS). On 2026-07-16 the frozen
@@ -189,41 +238,55 @@ day (counter 30) are the same failure. Fixed and redeployed 2026-07-17; the m1 s
 | Validator, the 17 new rows alone (mini root) | `--no-enrichment`: 0 errors, 0 warnings. Full (sidecar checks): 0 errors, 31 WARNs = 17 × `condition.is_control` + 14 × `anatomy.is_whole_body` unknown-sentinel (known classes) |
 | Finder | `python tools\generate_index.py --nas-root J:\gjesus3-data --project PROJ-0021`: only the project's `index.html` rewritten (433,536 → 456,375 bytes), lists all 17 new ids and none of the orphans; the global `registries\index.html` untouched (the 03:00 job refreshes it) |
 
-### 7.2 The orphan retirement: NOT YET RUN
+### 7.2 The orphan retirement: DONE (2026-10-02, 13:31–13:32 local; window granted by the coordinator)
 
-`python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_orphans_20260710_MRI.csv --quick`
-was dry-run against production before and was clean: 17 × `[orphan-candidate]`, 2 files and 0.10–0.15 MB each, no
-refusals. The plan's preconditions: no registry row, exactly one `/raw/` folder, no provenance reference, ≤ 50 MB.
-Still to do, on the coordinator's window: the full dry run, then `--execute`, then verify (17 tombstones with
-disposition `orphan`, the 17 folders gone and backed up whole off-NAS, the counter untouched at 34, the 17 new rows
-and links unchanged, the validator unchanged). **The tool refuses an `--execute` within 15 minutes of a registry
-write** (the last one was the ingest, 13:15); `--allow-recent-registry-writes` is not to be used.
+| Step | Result |
+|---|---|
+| Guard | The tool refuses an `--execute` within 15 min of a registry write (the last was the ingest, 13:15:37). Waited until the registry was 911 s old; `--allow-recent-registry-writes` **not** used. No lock file |
+| Dry runs | `--quick` earlier, then the **full** dry run (hashing from disk): **exactly** `ACQ-20260710-MRI-001…017`, each `[orphan-candidate]` with one action, "delete orphan folder (backed up first)"; no other id, no `REFUSED`, no `WARN`, no link, row or provenance action; "17 item(s): 17 with work, 0 already done" |
+| Before-images | A manifest of the 17 folders (34 files, 34 directories, 2,312,211 bytes, every file's SHA-256), and my own fresh registry backup `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261002_mri0710_orphans_pre\` (11 files, SHA-256-verified) |
+| Execute | `python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_orphans_20260710_MRI.csv --retired-by "rtasseff (Data Office; stream F subagent under Ryan's 2026-10-02 pre-approval)" --execute`. Run `RET-20261002-133115-491`, 13:31:15–13:32:03, **exit 0, "self-check: OK for 17 item(s)"**, no warning |
+| The tool's own backup | `C:\Users\rtasseff\temp\gjesus3_retire_backup_20261002-133115-491\`: 43 files, every copy SHA-256-verified (9 registry files + the 34 orphan files), with `backup_manifest.csv` and `RET-…_report.csv` |
+| Tombstones | `retired_acquisitions.csv` 32 → **49** rows (36,422 → 45,041 bytes): the 32 earlier tombstones are an **exact byte prefix**, **17 lines appended**, BOM-free. The 17 are `ACQ-20260710-MRI-001…017`, `disposition` = `orphan`, `bytes_fate` = `deleted`, no `superseded_by`, `moved_to` or registry row (they never had one), `original_canonical_path` correct, a tree SHA-256 each, one run id and one backup dir |
+| Folders | `raw\DICOM\2026\2026-07\ACQ-20260710-MRI-001…017` gone; **no orphan left**. `raw\` holds exactly `-018…-034` for 2026-07-10 |
+| Backed up whole | **all 34 files are in the off-NAS backup, each equal in size and SHA-256 to the before-image.** (The 17 empty `<ACQ-ID>.data\` directories hold nothing and are not copied.) |
+| Registries | `registry_raw.csv` (25,212 rows), `ingest_manifest.csv`, `registry_subjects.csv`, `registry_projects.csv`, `registry_datasets.csv`, `pending_dicom_regen.csv`, `pending_subject_metadata.csv` and **`.acq_id_seq.json` (counter 34)**: all **byte-identical** to the pre-retirement backup. No `pending_links.csv`, no lock |
+| The 17 new acquisitions | re-verified after the retirement: **0 failed checks** (393 files, `checksums.json` == disk, SHA-256 == pull manifest, 17 / 17 link folders by `samefile`) |
+| Validator (`--no-enrichment`, production, 13:33) | **25,212 rows, 10,314 errors, all the known `operator` placeholder, 0 warnings**; no tombstone error; nothing on any `ACQ-20260710-MRI` id. No new class, count unchanged |
+| Idempotence and lookup | The same command as a dry run: "17 item(s): 0 with work, 17 already done", "no-op: already fully retired" ×17. `find_acq.py ACQ-20260710-MRI-005` → "RETIRED (2026-10-02, orphan)" |
+| Finder | Nothing to refresh: the orphans were never registered, so never in any index |
 
 ## 8. Open questions
 
-1. **m6 operator** (§5): confirm with Irene. And whether the follow-up ingest of m6 is its own stream, after Ryan.
+1. **m6 operator** (§5): confirm with Irene. The coordinator is taking the finding to Ryan for his go; **m6 is not
+   ingested.**
 2. **A BACKLOG rule question stays open:** should `/raw/` folders with no registry row be a validator ERROR? Two such
    failures (this and m6) sat unnoticed for months.
-3. **Next, read-only, when told (coordinator, 2026-10-02):** a scanner-vs-registry reconciliation. List every study
-   folder in `/opt/PV-7.0.0/data/nmr` dated 2026-06-01 or later and match each against `registry_raw` (`original_name`
-   / study tokens); report any unregistered. Not started.
+3. **The reconciliation (§5.1) widens the m6 question from one session to fourteen.** For Ryan: do the Data Office
+   ingest the 1125 July series (m2–m8, m12's first study, m19: 9 sessions, 141 exams; the operator must be named) and
+   the 1025 October series (m25–m29, from the last two days); are operators asked to use the GUI; and should a
+   read-only reconciliation like this one run on a schedule? (It is an SFTP listing and a registry read; the script is
+   in the evidence folder.)
+4. **Five `jrc` phantom / QC studies** (70 exams) do not parse and are not in the registry: in scope for gjesus3?
+5. **The first m12 study of 2026-07-10** (`20260710_114705_…`, 17 exams) belongs with the `_bis` session already
+   ingested; it was never pulled to staging.
 
 ## 9. Proposed wording for STATUS, CHANGELOG, BACKLOG and the plan
 
-*The re-ingest wording is final. Fill the bracketed retirement facts in after §7.2.*
+*Final: both writes are done (2026-10-02). The coordinator applies this at merge; I have not touched these four files.*
 
 ### `tasks/STATUS.md`
 
 In §2's drives bullet, replace the "**A missing MRI session:** …" sentence and the "then the 17 empty orphan folders…" approved-use line with:
 
-> - **✅ The missing 2026-07-10 MRI session is in production (2026-10-02).** `jrc20260710_m12_1125_bis` (animal 12 of protocol 1125, 17 exams) was re-ingested **from the scanner's current copy** as `ACQ-20260710-MRI-018…034` (recons `1,3`, 393 native Bruker DICOMs, project `AE-biomaGUNE-1125`, `researcher` = `operator` = `Irene`). The NAS staging pull of 2026-07-16 is **a week older** than the researcher's finished session (her `/3` and DICOM export date from 2026-07-23) and was not used. [**The 17 empty orphan folders `-001…-017` were retired on <date>:** 17 tombstones, disposition `orphan`, backed up whole.] Record: [`mri_0710_reingest_review.md`](mri_0710_reingest_review.md).
-> - **A second MRI session is missing the same way:** `jrc20260703_m6_1125` (study folder `20260706_111010_…`, 15 exams, 2026-07-06) is registered nowhere and has no `/raw/` folder. Both NAS pulls (`staging\sftp_20260716_112028`, `_122729`) are complete and byte-identical to the scanner's exam data; ingest is Ryan's call; its operator is not established (BACKLOG).
+> - **✅ The missing 2026-07-10 MRI session is in production (2026-10-02).** `jrc20260710_m12_1125_bis` (animal 12 of protocol 1125, 17 exams) was re-ingested **from the scanner's current copy** as `ACQ-20260710-MRI-018…034` (recons `1,3`, 393 native Bruker DICOMs, project `AE-biomaGUNE-1125`, `researcher` = `operator` = `Irene`). The NAS staging pull of 2026-07-16 is **a week older** than the researcher's finished session (her `/3` and DICOM export date from 2026-07-23) and was not used. **The 17 empty orphan folders `-001…-017` were then retired (2026-10-02):** 17 tombstones, disposition `orphan`, the ids stay reserved, the folders backed up whole off-NAS. Record: [`mri_0710_reingest_review.md`](mri_0710_reingest_review.md).
+> - **A scanner-vs-registry reconciliation (read-only, 2026-10-02) found more unregistered MFB sessions.** Of 419 study folders on the scanner dated 2026-06-01 or later, 34 are registered. For MFB (`jrc`, the only group in the registry) **19 are not: 14 animal sessions (232 exams) and 5 phantom/QC studies (70 exams).** The animal sessions are protocol 1125 (9: m2, m3 on 07-03, m4–m8 on 07-06 **including m6**, the first m12 study and m19 on 07-10) and protocol 1025 (5: m25–m29, 2026-10-01/02). Since the 2026-06-13/14 bulk load only m1 and the m12 `_bis` session were ingested. The data is safe on the scanner. **Ryan decides** how to ingest them and who the operator is (m6's is not established; best-supported `Irene`). Other groups' studies on the shared scanner (362, `jl`/`pr`/`sp`/`dan`/`fer`/`aka`) are out of MFB scope (BACKLOG).
 
-In §1, "Acquisitions in `/raw/`": add "**+17** from the re-ingested 2026-07-10 MRI session". In §0, no new decision row is needed unless Ryan wants the m6 ingest tracked there.
+In §1, "Acquisitions in `/raw/`": add "**+17** from the re-ingested 2026-07-10 MRI session" (25,195 → 25,212 on 2026-10-02, after the 32 twin retirements). In §0, add a decision row for the unregistered MFB sessions if Ryan wants them tracked there.
 
 ### `CHANGELOG.md` (one dated row, newest first)
 
-> | 2026-10-02 | R. Tasseff | **The 2026-07-10 MRI session that a failed ingest left unregistered is in production, ingested from the scanner's current copy; a second missing session was found.** `jrc20260710_m12_1125_bis` (animal 12 of protocol 1125, 17 exams) is `ACQ-20260710-MRI-018…034`, project `AE-biomaGUNE-1125`, `researcher` = `operator` = `Irene`. **Source:** the scanner, not the NAS staging pull of 2026-07-16, because the researcher finished the session a week later (2026-07-23: her own `/3` reconstruction, a Bruker DICOM export, NIfTI conversions; `/2` deleted). That is Ryan's own 2026-10-01 decision ("ingest the session from the scanner host"). **393 native DICOMs, recons `1,3`; 17 / 17, 0 failed.** Verified: `checksums.json` equals the disk and every file equals the pull's SHA-256 manifest; 17 per-file hard-link folders by file identity; `registry_raw` and `ingest_manifest` appended only (+17 lines each), counter 17 → 34, every other registry file byte-identical; the validator unchanged at 10,314 errors, all the `operator` placeholder. A scratch rehearsal of both sources (scanner pull; NAS copy with Dicomifier) came first. **Cause of the July orphans:** the frozen GUI exe's README crash (2026-07-17 entry) plus a rollback blocked by the operator's write-not-modify ACL. **Found on the way:** the m6 session of 2026-07-06 (15 exams) is registered nowhere (counter `ACQ-20260706-MRI- = 30`, no folders); not ingested, outside the pre-approval. **Kept deliberately:** `staging\sftp_20260716_110906` holds the only copy of the recon `/2` the researcher deleted on the scanner (72 files). [Orphans retired <date>: 17 tombstones.] |
+> | 2026-10-02 | R. Tasseff | **The 2026-07-10 MRI session that a failed ingest left unregistered is in production, ingested from the scanner's current copy; a second missing session was found.** `jrc20260710_m12_1125_bis` (animal 12 of protocol 1125, 17 exams) is `ACQ-20260710-MRI-018…034`, project `AE-biomaGUNE-1125`, `researcher` = `operator` = `Irene`. **Source:** the scanner, not the NAS staging pull of 2026-07-16, because the researcher finished the session a week later (2026-07-23: her own `/3` reconstruction, a Bruker DICOM export, NIfTI conversions; `/2` deleted). That is Ryan's own 2026-10-01 decision ("ingest the session from the scanner host"). **393 native DICOMs, recons `1,3`; 17 / 17, 0 failed.** Verified: `checksums.json` equals the disk and every file equals the pull's SHA-256 manifest; 17 per-file hard-link folders by file identity; `registry_raw` and `ingest_manifest` appended only (+17 lines each), counter 17 → 34, every other registry file byte-identical; the validator unchanged at 10,314 errors, all the `operator` placeholder. A scratch rehearsal of both sources (scanner pull; NAS copy with Dicomifier) came first. **Cause of the July orphans:** the frozen GUI exe's README crash (2026-07-17 entry) plus a rollback blocked by the operator's write-not-modify ACL. **The 17 orphan folders were then retired** (`retire_acquisition.py --orphan`, run `RET-20261002-133115-491`): 17 tombstones appended (the 32 earlier ones an exact prefix), the folders deleted after a SHA-256-verified off-NAS backup of all 34 files, every other registry file byte-identical, counter untouched at 34, validator unchanged. **Found on the way:** the m6 session of 2026-07-06 (15 exams) is registered nowhere (counter `ACQ-20260706-MRI- = 30`, no folders), and a read-only reconciliation of the scanner against the registry found **19 unregistered MFB studies dated 2026-06-01 or later (14 animal sessions, 5 phantom/QC)**: the July protocol-1125 series and the October 1025 series were never ingested. Nothing of that was ingested: outside the pre-approval. **Kept deliberately:** `staging\sftp_20260716_110906` holds the only copy of the recon `/2` the researcher deleted on the scanner (72 files). |
 
 ### `tasks/BACKLOG.md`
 
@@ -231,15 +294,18 @@ In §1, "Acquisitions in `/raw/`": add "**+17** from the re-ingested 2026-07-10 
 
 > - [x] **Work out what happened** — 2026-10-02: the frozen exe's README crash on 2026-07-16 plus a rollback the operator's write-not-modify ACL blocked (CHANGELOG 2026-07-17). Established by the pattern, not a log.
 > - [ ] **Decide the rule, not just this case** — unchanged, and now with a second instance (m6, below).
-> - [x] **If they are deleted, do not release the reserved ids — retire them** — [done <date>: 17 tombstones, disposition `orphan`; the ids stay reserved].
-> - [x] **2026-10-01 — retire them after the session is re-ingested** — the session was re-ingested 2026-10-02 as `ACQ-20260710-MRI-018…034`; [retired <date>].
+> - [x] **If they are deleted, do not release the reserved ids — retire them** — done 2026-10-02: 17 tombstones, disposition `orphan`; the ids stay reserved (the counter is untouched at 34).
+> - [x] **2026-10-01 — retire them after the session is re-ingested** — the session was re-ingested 2026-10-02 as `ACQ-20260710-MRI-018…034` (from the scanner's current copy), then the 17 orphan folders were retired the same day, backed up whole off-NAS.
 
 **New items:**
 
-> ## 🔸 MODERATE — a second MRI session, `m6` of 2026-07-06 (15 exams), is registered nowhere (2026-10-02)
-> Found while checking the other 2026-07-16 pulls. Study `20260706_111010_jrc20260703_m6_1125_…` (animal 6 of protocol 1125): in no registry file, no `/raw/` folder; counter `ACQ-20260706-MRI- = 30` (two failed attempts of 15, same README crash). Sources: `staging\sftp_20260716_112028` and `_122729`, byte-identical to each other and to the scanner's exam data. Dry run: 15 acquisitions, `PROJ-0021`, real IDs from `-031`. **Operator not established** (ParaVision `ACQ_operator` = `nmr`; the facility DB records none; best-supported: `Irene`; see `mri_0710_reingest_review.md` §5) — ask her. Outside the 2026-10-01 pre-approval: Ryan's go.
-> - [ ] Ingest from the NAS pull (a normal `mri-ingest`, Windows) once the operator is known.
-> - [ ] Related: scanner-vs-registry reconciliation of every study dated 2026-06-01 or later (report only).
+> ## 🔸 MODERATE — 14 MFB animal sessions on the scanner are registered nowhere, including `m6` of 2026-07-06 (2026-10-02)
+> A read-only reconciliation of `kenia` (`/opt/PV-7.0.0/data/nmr`) against `registry_raw` found **19 unregistered `jrc` studies dated 2026-06-01 or later: 14 animal sessions (232 exam folders) and 5 phantom/QC studies (70)**. Animal sessions: protocol **1125**, 9 (m2, m3 on 2026-07-03; m4, m5, **m6**, m7, m8 on 07-06; the first m12 study (11:47) and m19 on 07-10); protocol **1025**, 5 (m25–m28 on 2026-10-01, m29 on 10-02). m6 was found first (counter `ACQ-20260706-MRI- = 30`, which fits two failed attempts of 15 exams with the same README crash); it has NAS pulls `staging\sftp_20260716_112028` and `_122729`, byte-identical to each other and to the scanner's exam data (dry run: 15 acquisitions, `PROJ-0021`, real IDs from `-031`). The others were never pulled to the NAS. Since the 2026-06-13/14 bulk load only m1 (07-03) and the m12 `_bis` session were ingested. The data is safe on the scanner, which keeps years. **Operators are not established** (ParaVision `ACQ_operator` = `nmr`; the facility DB records none); best-supported for m6: `Irene` (see `mri_0710_reingest_review.md` §5). Outside the 2026-10-01 pre-approval: Ryan's go.
+> - [ ] Decide who ingests them and how: the Data Office from the scanner, or the operators through the GUI.
+> - [ ] Ingest the 9 protocol-1125 sessions (and later the 1025 ones) once the operator is known; each is a normal `mri-ingest`, from Windows.
+> - [ ] Decide whether the 5 phantom/QC studies (`jrc260611_SPION`, `jrc_260612_phantom_SPION_RGD`, `jrc260708_phantom`, `jrc260709_phantom`, `jrc260818_Phantom_MnACC`) belong in gjesus3: their names carry no `m<animal>_<protocol>`, so the ingest regex does not parse them (the silent skip, STATUS §0 D3).
+> - [ ] Run the reconciliation again on a schedule (read-only: an SFTP listing plus a registry read).
+> - [ ] Other groups' studies on the shared scanner (`jl`, `pr`, `sp`, `dan`, `fer`, `aka`: 362 studies, 1,755 exam folders since 2026-06-01) are not MFB and not in the registry; confirm they stay out of scope.
 >
 > ## 🔹 LOW — keep `staging\sftp_20260716_110906` until someone decides on the deleted recon `/2` (2026-10-02)
 > It holds the **only copy of `/2`** (`pdata\2` of 12 exams, 72 files) of session `m12_1125_bis`, which the researcher deleted on the scanner on 2026-07-23. It is not in `/raw/` (the ingest took `/1,3`). `/2` is ParaVision's auto-duplicate and the workflow notes call it discardable, so this is a retention call, not a loss. Do not delete any `staging\sftp_20260716_*` folder before the m6 session is ingested; then decide on this one.
@@ -255,4 +321,4 @@ In §1, "Acquisitions in `/raw/`": add "**+17** from the re-ingested 2026-07-10 
 
 ### `tasks/historical_drives_closeout_plan.md`
 
-Step 5 item 1: mark **✅ re-ingest done 2026-10-02** (`ACQ-20260710-MRI-018…034`, from the scanner; [orphans retired <date>]). Add a Step 5 item: the **m6 session** (Ryan) and the **scanner-vs-registry reconciliation** (read-only, 2026-06-01 onwards).
+Step 5 item 1: mark **✅ done 2026-10-02**: re-ingested as `ACQ-20260710-MRI-018…034` from the scanner's current copy, then the 17 orphans retired (17 tombstones, backed up whole). Add a Step 5 item: **the unregistered MFB sessions on the scanner** (14 animal sessions including m6, and 5 phantom/QC studies; Ryan's go and the operators needed), from the reconciliation of 2026-10-02 (BACKLOG).
