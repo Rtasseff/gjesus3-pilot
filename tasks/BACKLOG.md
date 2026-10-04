@@ -1973,6 +1973,18 @@ The researcher's own conversions sit in the study folder: `NIFTI\`, 30 files (32
 - The MRI path skips them as a non-exam sibling, and they were left on the scanner by decision.
 - If they should live in a project folder, that is a placement call (`working\`).
 
+## 🔸 MODERATE — existing MRI rows that fall outside the 2026-10-04 line (2026-10-04)
+
+Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is registered only with a reconstructed image stored as DICOM. Spectroscopy and calibration exams are not registered, and neither are reconstructions that cannot be converted to DICOM.
+
+**The conflict:** production already holds MRI rows registered as empty placeholders before the line existed. The 2026-07-16 drain of the DICOM-regen worklist (10_TOOLS §3.8) left **365 rows `not-applicable`** (spectroscopy/calibration: STEAM/PRESS/WOBBLE) and **94 `no-source`**.
+
+- [ ] Count them afresh, from `registries/pending_dicom_regen.csv` and from `/raw/` folders with an empty `.data\`.
+- [ ] **Decide (Ryan):**
+  - retire them with the retire tool (which disposition? a new `not-an-image`, or `derivative`?), keeping any recoverable files as other data in the project folder;
+  - or leave them, with the line applying only from 2026-10-04 on.
+- [ ] Live ingest: should the MRI path stop registering spectroscopy and calibration exams at ingest? Today it registers them as `not-applicable` placeholders.
+
 ## Metadata database — retire the CSV registries (2026-08-12)
 
 Context: all of this is **metadata** — CSV rows pointing at acquisition data and at more
