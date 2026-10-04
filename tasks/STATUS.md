@@ -169,6 +169,14 @@ The genuinely in-flight items (kept tight — everything else is in
   - **2026-10-04, Ryan's decisions and the day's writes:** see the close-out plan's "Decisions of 2026-10-04".
     - **Written and verified:** +578 drives MRI/PET-CT rows; 4 paperwork projects (`PROJ-0062`…`0065`); `1519` and `0320` reopened; retire v2 merged.
     - **Approved and queued:** the non-raw copies (short-path layout with an index), the holding folder, `LEONE`'s new content into `DTS24`'s folder, D's 153 retirements, and the dot-file plus 14 nested `.czi`.
+  - **🔶 The same-timestamp clean-up (gate rule R4, stream D): 3 of the 4 approved lists are done (2026-10-04).** Review: `tasks/drives_r4_cleanup_review.md`.
+    - **The analysis:** of the 819 files in 247 groups, 469 are derivatives (251.8 GB) and 350 stay in `/raw/`. `ID65_PB_lung_20x_scale.czi` also stays: it is the only record of its acquisition.
+    - **Done:** scale bars 3, re-saves 9 and exports 60 were retired as derivatives into their originals' projects, using stream A's short-path layout, with each project's `_INDEX.csv` merged.
+      - All 114 checks passed and the validator is unchanged.
+      - The coordinator verified them independently.
+      - 27 of the 90 `raw_linked` links are gone.
+    - **⚠️ On hold:** `roi_crops` (81 acquisitions, 184 GB). The permission system refused its `--execute`. Ryan's go stands; he allows it, or runs the six steps in review §14c.
+    - **Waiting, with no list:** 61 derivatives whose original has no project (item 2b), and 255 scene splits, stitched copies and one rendering (proposal (c), 39.4 GB).
   - **✅ The drives' non-raw material is done (stream A, 2026-10-03/04).** Record: `tasks/drives_nonraw_placement_review.md`; the runbook for the mapping round is `tasks/drives_nonraw_2b_2c_followup.md`.
     - **Placed:** 27,547 files (237.73 GB) in 17 projects, under `<project>\working\historical_drives\<FRIO-X6|MFB-Disco-2>\<study folder>\…`. Every path is at most 240 characters (the rule in `tools/drive_staging/historical_paths.py`), and each tree has `_INDEX.csv`, `README.txt`, `_ORIGIN.txt` and `_PATHMAP.csv`.
     - **Created:** `AE-biomaGUNE-1116`, `-1420`, `-1520` and `Project-0521` (`PROJ-0062`…`0065`).

@@ -487,7 +487,12 @@ In rough order:
      manifests).
    - **Same exclusions as item 2:** software, system files and personal/admin hits. The holding
      folder is group-readable.
-3. **Clean up the same-timestamp groups:** BACKLOG "Clean up the drives ingest's same-timestamp
+3. **🔶 Clean up the same-timestamp groups (stream D, merged):**
+   - **Done 2026-10-04:** 3 of 4 lists, 72 acquisitions, verified.
+   - **⚠️ `roi_crops` (81) is on hold:** the permission system refused it, and it waits for Ryan (review §14c has the six steps).
+   - **Waiting:** the 61 no-project derivatives and proposal (c).
+
+   *The plan as written:* **Clean up the same-timestamp groups:** BACKLOG "Clean up the drives ingest's same-timestamp
    groups".
    - Scale-bar copies and thumbnails move to the original's project folder through the retire
      tool's `derivative` mode.
