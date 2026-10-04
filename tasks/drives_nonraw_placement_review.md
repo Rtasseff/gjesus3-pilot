@@ -1,6 +1,6 @@
 # Historical drives: the non-raw material — placement review (Phase 1, read-only)
 
-**Status:** 🔶 IN PROGRESS — projects created and 27,534 files placed and verified (§9b); holding fill and raw one-offs pending · **Date:** 2026-10-02 ·
+**Status:** 🔶 IN PROGRESS — placement, holding fill and the 1519 not-registered placement done and verified (§9b); step 4 (raw one-offs) pending · **Date:** 2026-10-02 ·
 **Branch:** `feat/drives-nonraw-placement` (stream A of the weekend close-out, plan Step 5 items 2 / 2b / 2c)
 **Tool:** [`tools/drive_staging/nonraw_placement.py`](../tools/drive_staging/nonraw_placement.py) · tests
 [`tools/test_nonraw_placement.py`](../tools/test_nonraw_placement.py) · per-project summary
@@ -351,8 +351,10 @@ All the steps below ran inside a write window the coordinator (`gj3-handoff`) gr
 | 2a | 2026-10-04, run `NONRAW-20261004-084951` | 5,671 files / 104.42 GB into 11 projects | 5,671 copied, 0 collisions |
 | 2c | 2026-10-04, run `NONRAW-20261004-094913` | 8,681 files / 8.29 GB into `1519` and `0320`, after the coordinator reopened them | 8,681 copied, 0 collisions |
 | 2b + v2 top-up | 2026-10-04, run `NONRAW-20261004-100718` | the regrouped `0721` / `1019` / `1123` / `1321` (Ryan, "group under the parent") + stream B's v2 NIfTI for `0619` / `0320` | 13,182 copied + 1,255 skipped as identical, 0 collisions |
+| 3 holding | 2026-10-04, detached process (log `…-v3b\holding_step3.out`) | 54,721 files / 218.89 GB into `staging\historical_drives_unassigned\` (B's v3; Ryan chose option B, fill now) + 26 documents | 54,721 copied, 0 collisions; list_sha256 `b64958a0…` reproduced from the NAS walk; 1,094/1,094 re-hash |
+| 1519 not registered | 2026-10-04, run `NONRAW-20261004-142020` | 13 not-registered MRI files (`m35_week3/35`) + `README_not_registered.txt`; `_INDEX`/`_PATHMAP` republished as a merge | 13 copied (13/13 full re-hash), 8,667 skipped-identical |
 
-**Placed in total: 27,534 files, 237.73 GB, in 17 projects.** The per-project counts, bytes and list hashes are in `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement\step2_expected_per_project.csv` and `…-v2b\step2b_expected_per_project.csv`.
+**Placed in total: 27,547 files, 237.73 GB, in 17 projects; holding: 54,721 files, 218.89 GB.** The per-project counts, bytes and list hashes are in `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement\step2_expected_per_project.csv` and `…-v2b\step2b_expected_per_project.csv`.
 
 **Verification, every step:**
 - **The copy itself:** every file was re-hashed from the NAS before its rename.
@@ -369,27 +371,52 @@ All the steps below ran inside a write window the coordinator (`gj3-handoff`) gr
 
 **Use the current one for every later step** (holding, 2b mapping). Copy it off D: before the staging is erased (runbook §2.6).
 
-**Still to do:**
-- step 3, the holding fill: after stream B's `nonraw_for_A` v3 (not-registered MRI), re-planned against the frozen path maps;
-- step 4, the two raw one-offs (§4).
+**A `/raw/` check that fired (step 3), and why it was fine.** My before/after sample of 40 `/raw/` month folders (excluding stream B's) showed 3 MICROSCOPY month folders that lost acquisitions during the window: `2021-11` 22→21, `2025-04` 155→153, `2025-09` 215→214. Stream A writes nothing under `/raw/` (the tool has no `/raw/` path). **Verified against the tombstones** by the coordinator: all were approved retirements, namely `ACQ-20250915-LSM9-016` (the coordinator's content-equivalent retirement `RET-20261004-135015-801`), `ACQ-20250415-CELL-003` and `-010`, and `ACQ-20211105-CELL-021` (stream D's derivative retirements).
+
+**Still to do:** step 4, the two raw one-offs (§4), in a registry window. Both dry runs were clean against production on 2026-10-04 14:35, and none of the 15 is in the registry; re-run them before the write.
 
 ## 10. Proposed wording for STATUS / CHANGELOG / BACKLOG (the coordinator applies it at merge)
 
+*Final for the stream as of 2026-10-04. Fill in step 4's two ACQ-ID ranges once it has run.*
+
 **STATUS §2, drives bullet — add:**
-> Non-raw placement (stream A): <N> files / <GB> copied into <P> projects under `working\historical_drives\` (verified: counts + 2% re-hash); projects `AE-biomaGUNE-1116/-1420/-1520`, `Project-0521` created. **Waiting on Ryan:**
-> - the 2b mapping: `tasks/drives_nonraw_mapping_worksheet.csv`, 288 groups, **62 marked A cover nearly everything**;
-> - **first, Part 0 of `tasks/drives_nonraw_2b_2c_followup.md`**: fill the holding folder now (D: can then be erased early) or after the mapping;
-> - the path-length option;
-> - reopening `1519`/`0320`;
-> - the raw one-offs: the dot-file and the 14 nested `.czi`, both dry-run clean.
+> **Non-raw material (stream A, 2026-10-03/04): done.**
+> - **Placed:** 27,547 files, 237.73 GB, into 17 projects under `<project>\working\historical_drives\<FRIO-X6|MFB-Disco-2>\<study folder>\…`. Every path is at most 240 characters (the shared rule `tools/drive_staging/historical_paths.py`), and each tree carries `_INDEX.csv`, `README.txt`, `_ORIGIN.txt` and `_PATHMAP.csv`.
+> - **Created:** `AE-biomaGUNE-1116/-1420/-1520`, `Project-0521` (PROJ-0062..0065).
+> - **Holding:** 54,721 unassigned files (218.89 GB) are in `staging\historical_drives_unassigned\`, with `README.txt` and `manifest.csv`. That includes the `.lsm`, `.svs`, NMR, unreadable `.czi` and not-registered MRI (each exam folder with a `README_not_registered.txt`).
+> - **Verified:** every file was re-hashed at copy time, and an independent NAS walk found 0 missing and 0 extra; the coordinator re-verified it.
+> - **Raw one-offs:** the dot-file `.czi` and 14 nested `.czi` were ingested as `<ACQ-IDs>` *(step 4)*.
+> - **Waiting on Ryan:**
+>   - the 2b mapping worksheet (`tasks/drives_nonraw_mapping_worksheet.csv`; the 62 `A` rows cover nearly everything);
+>   - whether the holding folder should be group read-only (it inherits `staging\`'s Modify).
+> - **Runbook for the 2b round:** `tasks/drives_nonraw_2b_2c_followup.md`. **Record:** `tasks/drives_nonraw_placement_review.md`.
+
+**CHANGELOG (new entry, 2026-10-04):**
+> **Historical drives — non-raw material placed in projects, the rest in a holding folder (stream A).**
+> - **Placed:** 27,547 files (237.73 GB) of exports, figures, documents, analysis, EM, stream B's non-raw MRI and 13 not-registered MRI files. They are copied, byte-verified, into 17 projects under `<project>\working\historical_drives\` (Ryan, 2026-10-02), with a provenance row each.
+> - **Projects created:** `AE-biomaGUNE-1116`, `-1420`, `-1520` and `Project-0521` (with the old `0720` documents), as PROJ-0062..0065. `1519` and `0320` were reopened by the coordinator for this.
+> - **Path rule (Ryan):** no paths that throw errors and no zips. The answer is one shared rule, `historical_paths.py`:
+>   - the study folder first, everything above it dropped;
+>   - `<stem>_<ext>` folders for archives;
+>   - every path at most 240 characters, the fewest names shortened (`…~3f2a`);
+>   - an index so nothing is lost.
 >
-> **Runbook for whoever applies the mapping: `tasks/drives_nonraw_2b_2c_followup.md`.** Record: `tasks/drives_nonraw_placement_review.md`.
+>   On 82,268 destinations the longest path went from 402 to 240. Folders and files already placed are frozen, so a later run never renames them, and republishing an index merges with other streams' rows (stream D).
+> - **"Group under the parent" (Ryan):** in `0721`/`1019`/`1123`/`1321`, session- and animal-level folders sit under their parent: 58→10, 16→7, 24→4 and 12→6 top-level folders.
+> - **Holding:** 54,721 files (218.89 GB) in `staging\historical_drives_unassigned\` (Ryan: fill now, map later), with `README.txt` and `manifest.csv` (original paths, a `why` column, and the two archives deliberately not copied).
+> - **Not-registered MRI (Ryan):** spectroscopy or no reconstruction is kept as other data, beside a plain README whose wording was agreed with stream B.
+> - **Found on the way:**
+>   - nested archives were never catalogued (9 archives; 250 `.czi`, of which 14 are new);
+>   - the claims pass's `.7z` member paths did not join the catalog (backslashes, lost accents);
+>   - file-name shortenings are recorded only in `_INDEX.csv`, so placed files are now pinned to it.
+> - **Tools:** `tools/drive_staging/nonraw_placement.py`, `historical_paths.py`. **Record:** `tasks/drives_nonraw_placement_review.md`.
 
-**CHANGELOG (new entry, dated the day of the write):**
-> **Historical drives — non-raw material placed into project folders.** <N> files (<GB>) of exports, figures, analysis, documents, EM and stream B's non-raw MRI material copied, byte-verified, into <P> projects under `<project>\working\historical_drives\<drive label>\<original path>` (Ryan, 2026-10-02), with a provenance row each. Four paperwork projects created (`AE-biomaGUNE-1116`, `-1420`, `-1520`, `Project-0521` incl. the old `0720` documents). Found on the way: nested archives were never catalogued (9; 250 `.czi`, of which 14 are new → raw one-off), and the claims pass's `.7z` member paths did not join to the catalog (fixed by a normalised key). Tool: `tools/drive_staging/nonraw_placement.py`; record: `tasks/drives_nonraw_placement_review.md`.
-
-**BACKLOG (new items):**
-> - 🔺 **2b mapping + 2c holding folder (historical drives)**: Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv` (do the 62 `A` rows; blank = holding); a session applies it with `tasks/drives_nonraw_2b_2c_followup.md` (fully tooled: `remap` → `apply-raw` → `copy`, then `holding`). **Decide Part 0 first:** whether the D: staging must be kept until the mapping is done (option A) or the holding folder is filled now so D: can go (option B).
-> - 🔸 **Long paths under `historical_drives\`** (9,522 placed files > 259 chars, all from three deep archives): decide shorten (labels / drop the repeated archive top folder) vs. accept; it is a rename either way.
-> - 🔸 **Aperio `.svs` (15, Drive zuri TUNEL)**: instrument not onboarded; holding by default.
+**BACKLOG:**
+> - 🔺 **2b mapping (historical drives).**
+>   - Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv` (the 62 `A` rows; blank = stays in holding).
+>   - A session applies it with `tasks/drives_nonraw_2b_2c_followup.md`: `remap` → `apply-raw` (blank-project raw rows) → `copy --from-holding`. The holding folder is already filled (option B), so D: is not needed.
+>   - Before the D: staging is erased, keep the record manifest off D: (runbook §2.6). The current manifest is `…\drives-nonraw-placement-v3b\placement_manifest.csv`.
+> - 🔸 **Holding folder ACL:** it inherits `staging\` (`GJesus` Modify). Decide whether it should be group read-only.
+> - 🔸 **Aperio `.svs` (15, Drive zuri TUNEL) and TopSpin NMR (671 experiments):** held, because the instruments are not onboarded / the data is not imaging. Revisit if either is ever registered.
 > - 🔹 **`catalog.py` does not open nested archives**; `nonraw_placement.py nested` is the stopgap. Fold it in if the catalog is reused for another drive.
+> - 🔹 **`historical_paths.py` is now the destination rule for any drive material placed on gjesus3** (streams A, C, D). Consider promoting it into `05_PROJECTS` (a spec change, so the Data Office decides).
