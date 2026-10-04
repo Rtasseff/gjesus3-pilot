@@ -17,6 +17,10 @@ When a backlog item becomes a blocker for delivery, promote it to `STATUS.md`.
 
 ## 🔺 HIGH (top) — a registry flag for human, privacy-restricted data (2026-10-02)
 
+> **Scope addition (2026-10-04, `LEONE`):** the backfill must also reach `projects\DTS24\working\historical_drives\FRIO-X6\LEONE\`, 7,161 files whose DICOM headers carry full identifiers (`PatientBirthDate` on ~91%).
+> - These are **project-folder files, not acquisitions**, so a registry-level flag will not reach them on its own.
+> - Echo pixels **may carry burned-in identifiers**, even though their headers declare `BurnedInAnnotation = NO`; nobody has checked the pixels.
+
 **Raised by Ryan, 2026-10-02, at the highest priority; to discuss before building.** Human data is
 in the system (DTS24, 75 acquisitions), and more is coming (`LEONE`, from the historical drives).
 There is a species column (`sample_organism` = `Homo sapiens`), but, in Ryan's words, *"since
@@ -42,6 +46,8 @@ boolean. Not sure, but it seems worthwhile; open to suggestions."*
   `DTS24` (both cohorts, 75) and `LEONE`, which is copied first (Ryan, 2026-10-02).
 
 ## 🔺 HIGH (top) — record the data processing agreement (DPA) for every external dataset (2026-10-02)
+
+> **Scope addition (2026-10-04):** add `DTS24`'s `working\historical_drives\FRIO-X6\LEONE\` (7,161 project-folder files, not acquisitions) to the backfill, beside the `DTS24` acquisitions and the Charité `XMIC` files.
 
 **Raised by Ryan, 2026-10-02, at the highest priority; to discuss before building.** External data
 should say which **data processing agreement** covers it. Acceptable forms:
@@ -915,6 +921,8 @@ touching it again:
   verification instruction that would have missed the 2026-07-17 crash.
 
 ## 🔺 HIGH — external collaborator archives are one row per EXAM, not per series (2026-08-14)
+
+> **For the re-shape (2026-10-04):** consider promoting `LEONE`'s `mr_supplements` (case 3.02's 3D QFlow series, plus the raw-data objects) into the matching `DTS24` exams. Also consider the 36 echo exams for `/raw/`, once an external-echo instrument code exists. Ryan's 2026-10-04 ruling placed them in `DTS24`'s project folder as files for now.
 
 The 75 external cardiac-MRI acquisitions in `DTS24` (`XMRI`; LIONS ×42, HPIC ×33) are each
 stored as **one archive standing for a whole exam**. Every internal dataset is separated by

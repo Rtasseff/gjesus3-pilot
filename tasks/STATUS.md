@@ -169,6 +169,11 @@ The genuinely in-flight items (kept tight — everything else is in
   - **2026-10-04, Ryan's decisions and the day's writes:** see the close-out plan's "Decisions of 2026-10-04".
     - **Written and verified:** +578 drives MRI/PET-CT rows; 4 paperwork projects (`PROJ-0062`…`0065`); `1519` and `0320` reopened; retire v2 merged.
     - **Approved and queued:** the non-raw copies (short-path layout with an index), the holding folder, `LEONE`'s new content into `DTS24`'s folder, D's 153 retirements, and the dot-file plus 14 nested `.czi`.
+  - **✅ `LEONE` done (2026-10-04, stream C).** `LEONE.zip` was compared with `DTS24` member by member: 553,241 of its 560,402 DICOM instances are already in `DTS24`, as a pixel-identical re-export of the LIONS cohort.
+    - Per Ryan, nothing duplicate is ingested, and there is no new project or registry row.
+    - The new content is 36 echocardiography exams, 5,063 MR supplement instances and 72 derived objects: 7,161 files, 59.15 GB.
+    - It is copied to `projects\DTS24\working\historical_drives\FRIO-X6\LEONE\{echo,mr_supplements,derived}\`, with an index that gives each file's original path and header case id.
+    - Verified by the stream and checked independently by the coordinator. Record: `tasks/leone_ingest_review.md`.
   - **Six streams run over the weekend of 2026-10-03/04** (the close-out plan's weekend section; Ryan away, reachable by Remote Control): non-raw placement, the drives' DICOM, `LEONE`, the same-timestamp clean-up, retire v2, and the July MRI session.
   - **Still open:** the non-raw placement, the no-project mapping and holding folder, `LEONE`, the drives' DICOM stream, and the missing July MRI session. **All of it is in [`historical_drives_closeout_plan.md`](historical_drives_closeout_plan.md) (Steps 3–5); resume from there.** The record below is the history up to now.
   **Staged data on D: (Ryan, 2026-10-02):** it is **erased once everything from these drives is in production and verified** against the drive manifests. It is a temporary working copy on Ryan's own drive, not a backup. The owners keep their external drives and the data on them, and the lab knows gjesus3 has no off-site backup yet (INFRA-06).
