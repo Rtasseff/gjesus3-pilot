@@ -2,8 +2,9 @@
 
 **Date:** 2026-10-04 · **Stream F, second task** (the first was [`mri_0710_reingest_review.md`](mri_0710_reingest_review.md)) ·
 **Status:** 🔶 the read-only phase is done: every study pulled and hashed, every dry run read, every ingest rehearsed on
-scratch copies. **No production write has happened.** The writes wait for the coordinator's window (streams A and C are
-copying).
+scratch copies. **No production write has happened.** The coordinator answered all six questions on 2026-10-04 (§8), and the
+write is **queued after stream B's B03 → B02 ingest into `1519`** (stream A is copying in parallel); the coordinator will give
+the window. The order holds: m19 before m12's first study, the 07-08 phantom before the 07-09 one.
 
 **Scope (Ryan's go, 2026-10-04, relayed by the coordinator).** The Data Office ingests, from the scanner, **9 unregistered
 protocol-1125 sessions** (operator `Irene`) and **5 `jrc` phantom/QC studies** (blank project). **Not** the 5
@@ -38,11 +39,12 @@ today, no link name repeats within a study, 0 per-case warnings. **The preview i
 
 Phantoms: five scoped configs (§5), previewed with the operator-core `preview_batch` and dry-run from WSL
 (`ingest_raw.py --config tools/configs/mri_july_1125/<file> --nas-root /mnt/gjesus3/gjesus3-data --dry-run`), all against
-production. `sample_type` `phantom`, blank project, `researcher` and `operator` `NA` (stored blank, as for G1), 7T.
+production. `sample_type` by stream B's B07 rule (**`phantom` for four, `material` for `jrc260611.SPION`**, §2.2), blank
+project, `researcher` and `operator` `NA` (stored blank, as for G1), 7T.
 
 | Study | Exam folders → listed | DICOM | **Real IDs** | Note |
 |---|---|---|---|---|
-| `jrc260611.SPION` `20260611_190513_…` | 5 → 5 | **none**: regenerated at ingest | `ACQ-20260611-MRI-001…005` | |
+| `jrc260611.SPION` `20260611_190513_…` | 5 → 5 | **none**: regenerated at ingest | `ACQ-20260611-MRI-001…005` | `sample_type` **material** (§2.2) |
 | `jrc-260612_phantom_SPION_RGD` `20260612_141006_…` | 7 → 7 | **none**: regenerated at ingest | `ACQ-20260612-MRI-001…007` | |
 | `jrc260708_phantom` `20260708_184152_…` | 42 → **41** (+1 excluded) | native ×41 | `ACQ-20260708-MRI-001…033` and `ACQ-20260709-MRI-001…008` | the run crosses midnight; **exam 66 excluded** (§2.3) |
 | `jrc260709-phantom` `20260709_151028_…` | 10 → 10 | native ×10 | `ACQ-20260709-MRI-009…018` | after the 07-08 study's eight 07-09 IDs |
@@ -55,7 +57,7 @@ before m12's first study (09:08 before 11:47), and the 07-08 phantom before the 
 FcFLASH 37, MSME 10, UTE 4, RAREVTR 3, B1Map 2, RARE 1. **One exam has no reconstructed image of any kind** (exam 66 of the
 07-08 phantom, §2.3) and is excluded. The scanner keeps it.
 
-## 2. Read this first: three things that need a decision
+## 2. The findings behind the decisions (all decided by the coordinator, 2026-10-04)
 
 ### 2.1 The first m12 study collides with the `_bis` session's project links, and the hazard is old
 
@@ -73,7 +75,8 @@ otherwise. Reproduced on a scratch copy that holds production's `_bis` state (it
 | standard operator CLI | **9 of 17**: eight hold only `_bis` files, one is a mix | **1 of 17** (gained the first study's files) |
 | scoped config, `link_filename` + `_study1147` | **0 of 17** | 0 of 17 |
 
-**Proposed:** run this one study through `tools/configs/mri_july_1125/mri_m12_first_irene.yaml`. It is the operator template
+**Decided (coordinator, 2026-10-04): yes.** It prevents the silent merge into the `_bis` links. This one study runs through
+`tools/configs/mri_july_1125/mri_m12_first_irene.yaml`. It is the operator template
 with the same overrides the CLI applies (`--operator Irene --model 7T`), written out, with **one deliberate change**: the link
 name gets the suffix `_study1147` (the study's start time), and one precaution (`auto_create_projects: false`). Compared with
 the CLI path on the same input, every registry column and sidecar field is identical except `ingest_config`,
@@ -85,15 +88,24 @@ only explanation. By project: `AE-biomaGUNE-0721` 153 of 294, `-1022` 53 of 179,
 acquisitions from 6 studies and 21 link folders. At file level, for `PROJ-0017`, `m23_0219`, 2022-01-24: 10 acquisitions, 7
 link folders, and only 5 of the 10 acquisitions have any file in any of them. **`/raw/` and the registry are intact; the damage
 is the project links, which researchers browse.** (Provenance cannot show it: its append is idempotent on `output_path`, so a
-second acquisition on a shared path leaves no row.) A BACKLOG item is proposed in §9. **No repair is proposed here.**
+second acquisition on a shared path leaves no row.) **The coordinator takes this to Ryan**; the BACKLOG HIGH item and the
+evidence paths are in §9. **No repair is proposed or attempted here.**
 
-### 2.2 Phantom `sample_type`: `phantom` for all five, or B07's split?
+### 2.2 Phantom `sample_type`: stream B's B07 rule (decided)
 
-You asked for `phantom`, and I used it for all five. **Stream B's B07 rule** is `phantom` when the study name says phantom,
-else `material` (bare nanoparticle samples). Under that rule four of mine are `phantom` and `jrc260611.SPION` (no "phantom"
-in its name) would be `material`. Its scans are the same protocol as the two other nanoparticle studies (localizers, T1_FLASH,
-T2map_MSME, T1map_RARE), and the same material series continues the next day as `phantom_SPION_RGD`, which is why I kept `phantom`. **No `phantom` or
-`material` row exists in production yet, so whichever stream writes first sets the precedent.**
+**Decided (coordinator, 2026-10-04): follow stream B's rule, so the precedent is consistent.** `phantom` for an imaging test
+object (named or built as a phantom); `material` for a bare sample of a material under study (06_REGISTRIES §2.4). Applied:
+
+| Study | `sample_type` |
+|---|---|
+| `jrc260611.SPION` | **`material`**: a bare nanoparticle sample (its name does not say phantom), scanned with the same protocol as the next day's study |
+| `jrc-260612_phantom_SPION_RGD` | `phantom` |
+| `jrc260708_phantom`, `jrc260709-phantom` | `phantom` |
+| `jrc260818_Phantom_MnACC` | `phantom` |
+
+(I had first used `phantom` for all five as asked, and flagged the one case; the five configs now carry the rule in their
+headers, and their `notes` say "material sample" or "phantom sample", as B07's do.) **No `phantom` or `material` row exists in
+production yet, so these ingests and stream B's B07 set the precedent together, and they agree.**
 
 ### 2.3 Exam 66 of the 07-08 phantom is excluded
 
@@ -102,6 +114,7 @@ T2map_MSME, T1map_RARE), and the same material series continues the next day as 
 no acquisition date, so the ingest would register it with today's date** (`ACQ-20261004-MRI-…`), the soft fallback stream B hit
 on its B06 setup scans. The config carries an allow-list case table (`cases_mri_phantom_0708.csv`, 41 rows) with
 `on_missing: skip`; the exclusion is recorded in `excluded_mri_phantom_0708.csv`. It was the only such exam in the 14 studies.
+**Decided (coordinator, 2026-10-04): excluded**, the same as stream B's never-acquired exclusions.
 
 ## 3. The pulls
 
@@ -151,7 +164,9 @@ config (`tools/configs/mri_july_1125/mri_phantom_<study>.yaml`), scoped by a stu
 takes its identity from ParaVision's own `SUBJECT_id`, so **no filename regex is needed at all**.
 
 - `sample_id` = `session_id` = the `SUBJECT_id`, verbatim: `jrc260611.SPION`, `jrc-260612_phantom_SPION_RGD`,
-  `jrc260708_phantom`, `jrc260709-phantom`, `jrc260818_Phantom_MnACC` (one has a `.`, two have `-`; B07 also used the label as typed).
+  `jrc260708_phantom`, `jrc260709-phantom`, `jrc260818_Phantom_MnACC` (one has a `.`, two have `-`). **Decided (coordinator,
+  2026-10-04): keep the typed `SUBJECT_id`; we record what the scanner says and never normalise it.**
+- `sample_type`: `material` for `jrc260611.SPION`, `phantom` for the other four (§2.2).
 - `project_name` blank, `auto_create_projects: false`, `subject_from_db: false` (no animal), `researcher` and `operator` `NA`
   (**nothing in the data names an operator**: `ACQ_operator`, `OWNER` and `SUBJECT_referral` are `nmr`, remarks empty),
   `instrument_model` derived (`Biospec 70/30` → 7T).
@@ -171,8 +186,8 @@ takes its identity from ParaVision's own `SUBJECT_id`, so **no filename regex is
   registry writes are all done in one pass there.
 
 **Rehearsal** (the five configs from WSL, chronological, into a scratch root on D:): **69 / 69, 0 failed; 509 DICOM files (51
-native, 18 regenerated); IDs equal to the oracle per exam; `sample_type` phantom, no project, `researcher` blank, no today-dated
-row; counters `…0611` 0 → 5, `…0612` 0 → 7, `…0708` 0 → 33, `…0709` 0 → 18, `…0818` 0 → 6; `registry_raw` and `ingest_manifest`
+native, 18 regenerated); IDs equal to the oracle per exam; `sample_type` `material` ×5 and `phantom` ×64, no project, `researcher`
+blank, no today-dated row; counters `…0611` 0 → 5, `…0612` 0 → 7, `…0708` 0 → 33, `…0709` 0 → 18, `…0818` 0 → 6; `registry_raw` and `ingest_manifest`
 append-only (+69 each); the worklist, subjects, projects and tombstones byte-identical; no link, no `pending_links.csv`.**
 
 ## 6. The production write: order and checks (not run)
@@ -180,7 +195,8 @@ append-only (+69 each); the worklist, subjects, projects and tombstones byte-ide
 1. **Preflight** (`prod_preflight_july.py`, read-only; passed today 09:42): no lock, registry quiet; counters at 16 / 30 / 34 and
    0 for the five phantom prefixes; none of the 14 studies registered; `PROJ-0021` active; **none of the 141 link names exists
    in `raw_linked`**; no unregistered MRI folder on disk; all 8,423 pulled files at their manifest size and all 3,527 DICOM and
-   `2dseq` files re-hashed. Rerun immediately before the write.
+   `2dseq` files re-hashed. **Rerun immediately before the write: stream B is writing now** (counters, link names, unregistered
+   folders and "registry quiet" are all re-read).
 2. **Backup** to a fresh dated folder under `C:\Users\rtasseff\temp\` (registries, `.acq_id_seq.json`, `PROJ-0021`'s
    `_project.yaml` and `provenance.csv`), SHA-256-verified.
 3. **Sessions, Windows,** in this order, from the repo root:
@@ -205,24 +221,25 @@ append-only (+69 each); the worklist, subjects, projects and tombstones byte-ide
   (`jrc20260710_m12_1125`: the shared regex drops `_bis`); `original_name` keeps them apart.
 - **m3's folder holds another group's whole study:** `20260707_094320_jl260707_1225_m26_…` (13 exams, 274 files, 358 MB, protocol
   1225, started 2026-07-07 09:43), **nested inside it, and not present anywhere else on the scanner.** The `<study>/*` scope lists
-  it as a skipped non-scan folder and does not descend, so nothing of it is ingested. It is outside MFB scope.
+  it as a skipped non-scan folder and does not descend, so nothing of it is ingested. **Decided (coordinator, 2026-10-04): not
+  ours, not ingested; the coordinator passes it to Ryan as an FYI for the `jl` group.**
 - **The 07-08 phantom crosses midnight** (18:51 → 08:29), so its IDs span two date prefixes.
 - **`researcher: "NA"` is stored blank**, in the registry and the sidecar (as for G1); `modalities_in_study` comes out `MR`.
 - **`NIFTI\` folders** sit in 13 of the 14 studies (all but the 08-18 phantom; the researchers' own conversions) and are skipped as
   non-scan siblings, as decided on 10-02. The 07-09 phantom also has a `Mapshim` folder; skipped the same way.
 
-## 8. Questions
+## 8. Decisions (all answered by the coordinator, 2026-10-04) and what is open
 
-1. **§2.1: the `_study1147` suffix for m12's first study.** Yes? (The alternative is no project links for its nine colliding
-   exams, which loses their links.)
-2. **§2.2: `phantom` for `jrc260611.SPION`, or `material` by B07's rule?** I recommend `phantom` for all five. Which stream
-   writes first sets the precedent, so agree the rule with B.
-3. **§2.3: exam 66 excluded.** Yes?
-4. **Phantom sample ids** keep the `.` and `-` of the typed `SUBJECT_id`. Yes, or normalise?
-5. **The nested `jl` study in m3** is the only copy of that `jl` data anywhere on the scanner. Out of scope here; should someone
-   tell its group?
-6. **The window:** about 25 minutes for the 210 acquisitions (the ingests are seconds each; the WSL phantoms about 3 minutes),
-   plus verification.
+1. **The `_study1147` suffix for m12's first study: yes** (§2.1). Recorded.
+2. **`sample_type` follows stream B's rule: `jrc260611.SPION` = `material`, the other four `phantom`** (§2.2). Recorded in the configs.
+3. **Exam 66 (never acquired): excluded** (§2.3).
+4. **Phantom sample ids keep the typed `SUBJECT_id`; never normalised** (§5).
+5. **The nested `jl` study in m3 is not ours:** passed to Ryan as an FYI; not ingested (§7).
+6. **The window:** queued after stream B's B03 → B02 ingest into `1519`. The coordinator will message. About 25 minutes for the
+   210 acquisitions plus verification; sequence and commands in §6.
+
+**Open, for Ryan (the coordinator carries it):** the production link-collision hazard, and whether and how to repair the 209
+acquisitions that have no link folder of their own (§2.1, §9). It is not part of this write.
 
 ## 9. Proposed wording for STATUS, CHANGELOG, BACKLOG and the plan
 
@@ -237,7 +254,11 @@ append-only (+69 each); the worklist, subjects, projects and tombstones byte-ide
 > standard MRI link name `MRI_<sample>_<date>_<exam>_<recons>` has no per-study part. **It has already happened:** on 44
 > multi-study animal-days (483 acquisitions) **209 have no link folder of their own (43.3%, against 2.65% on single-study
 > days)**: `AE-biomaGUNE-0721` 153 of 294, `-1022` 53 of 179, `-0219` 3 of 10. `/raw/` and the registry are intact. Provenance
-> cannot show it (idempotent on `output_path`). Evidence: `tasks/mri_july_1125_review.md` §2.1.
+> cannot show it (idempotent on `output_path`). **Evidence:** `tasks/mri_july_1125_review.md` §2.1; the scripts and their output in
+> `D:\projects\gjesus3\staging\_analysis\mri-july-1125\`: `audit_link_folders.txt` (the 209 of 483 and the single-study baseline),
+> `collision_A_result.txt` and `collision_B_result.txt` (the reproduction, standard path vs scoped config), `audit_link_collisions.txt`
+> (the provenance view, which cannot see it), and `scripts\audit_link_folders.py`, `scripts\collision_check.py`. Taken to Ryan by the
+> coordinator.
 > - [ ] **Code:** `create_hardlink` must refuse (raise) when an existing file in the destination is not the same file
 >   (`os.path.samefile`), instead of skipping it. Test with two acquisitions of one name.
 > - [ ] **Template:** give the MRI `link_filename` a per-study part (the study start time, or the ACQ-ID), so a same-day repeat cannot collide.
@@ -254,7 +275,8 @@ append-only (+69 each); the worklist, subjects, projects and tombstones byte-ide
 > ## 🔹 LOW — phantom and QC studies need a scoped config until the regex has a phantom branch (2026-10-04)
 > Names without `m<animal>_<protocol>` match neither shared regex (D3). The five `jrc` phantom studies are ingested through
 > `tools/configs/mri_july_1125/mri_phantom_*.yaml`, which take the sample label from ParaVision's `SUBJECT_id`. A durable fix is
-> an explicit phantom path in the MRI template, decided together with stream B's B07 (`phantom` / `material` rule).
+> an explicit phantom path in the MRI template. The `phantom` / `material` rule is decided (2026-10-04): `phantom` for an imaging
+> test object, `material` for a bare sample of a material under study.
 
 > ## 🔹 LOW — another group's study lives inside m3's folder on the scanner (2026-10-04)
 > `20260707_094320_jl260707_1225_m26_…` (13 exams, 358 MB) exists only nested in `…_m3_1125_…`. Not MFB; not ingested. Someone
@@ -268,7 +290,7 @@ sessions and the 5 phantom studies; the 5 protocol-1025 sessions stay with the o
 > - **[✅ after the writes] The July protocol-1125 series is in production, ingested from the scanner (2026-10-04).** 9 sessions
 >   (m2, m3, m4–m8 including m6, the first m12 study, m19), 141 acquisitions, `ACQ-20260703-MRI-017…047`,
 >   `ACQ-20260706-MRI-031…105`, `ACQ-20260710-MRI-035…069`, all native DICOMs, `PROJ-0021`, `Irene`. The five `jrc` phantom/QC
->   studies, 69 acquisitions with a blank project and `sample_type` `phantom` (18 regenerated at ingest). The protocol-1025 sessions
+>   studies, 69 acquisitions with a blank project, `sample_type` `phantom` ×64 and `material` ×5 (stream B's rule; 18 regenerated at ingest). The protocol-1025 sessions
 >   of 10-01/02 stay with the operators. The m12 first study needed its own link names (BACKLOG HIGH: link collisions).
 
 ### `CHANGELOG.md` (one dated row, newest first)

@@ -1,6 +1,9 @@
-# Scoped config: MFB phantom / QC study 'jrc-260612_phantom_SPION_RGD' on the internal 7T MRI, registered from the scanner (kenia).
+# Scoped config: MFB phantom/QC study 'jrc-260612_phantom_SPION_RGD' on the internal 7T MRI, registered from the scanner (kenia).
 # Decided by Ryan 2026-10-04 (relayed by the coordinator): the five unregistered `jrc` phantom/QC studies are
 # ingested by the Data Office with a BLANK project. 7 exams, no DICOM: regenerated at ingest.
+#
+# sample_type = phantom, by stream B's B07 rule (coordinator, 2026-10-04): `phantom` for an imaging test object
+# (named or built as a phantom), `material` for a bare sample of a material under study (06_REGISTRIES 2.4).
 #
 # WHY A SCOPED CONFIG: a phantom's study name carries no `m<animal>_<protocol>`, so the shared MRI regex
 # (`..._m(?P<animal_num>\d+)_(?P<project_code>\d{4})`) parses nothing and the study would be dropped with no error
@@ -19,6 +22,7 @@
 #
 # NOTHING NAMES AN OPERATOR: ParaVision records only the shared login `nmr` (ACQ_operator / OWNER / SUBJECT_referral),
 # the remarks are empty. researcher and operator are therefore NA (as G1 and B07). No animal: subject_from_db is off.
+# The sample label is the SUBJECT_id exactly as the scanner records it (coordinator, 2026-10-04: never normalise it).
 
 ingest:
   delete_source_after_ingest: false
@@ -49,6 +53,6 @@ registry:
   session_id:           "${discovered.mri_animal_id}"
   acquisition_datetime: discovered.mri_acquisition_datetime
   project_name:         ""
-  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, phantom ${discovered.mri_animal_id}; recons kept: ${discovered.mri_recon_indices}"
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, phantom sample ${discovered.mri_animal_id}; recons kept: ${discovered.mri_recon_indices}"
 operator: "NA"
 link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
