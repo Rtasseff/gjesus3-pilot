@@ -251,6 +251,40 @@ coordinator:**
 
 ---
 
+## Where the weekend ended (2026-10-04, evening)
+
+**All six streams are merged to `main`, and their branches are deleted.**
+- The empty folders of A, B and C go once Ryan closes those sessions.
+- The registry is at **27,115** rows, with 137 tombstones. The validator shows the known 10,314 errors, all the MRI `operator` placeholder, and no new class.
+- Every production write was verified by its stream and checked independently by the coordinator.
+
+**Still open, waiting on Ryan:**
+
+1. **`roi_crops` (81 ROI re-saves, 184 GB):** the last of stream D's approved lists. The permission system refused its `--execute`. Ryan either tells the coordinator to run the six steps in `tasks/drives_r4_cleanup_review.md` §14c, or runs them himself.
+2. **The link-folder merge** (BACKLOG 🔺): 209 acquisitions on multi-study animal-days have no project link folder of their own. Ryan decides on the audit and repair.
+3. **The 2b mapping worksheet** (BACKLOG 🔺): `tasks/drives_nonraw_mapping_worksheet.csv`, 62 `A` rows. The runbook is `tasks/drives_nonraw_2b_2c_followup.md`.
+4. **Smaller decisions:**
+   - the holding-folder ACL;
+   - the 365 + 94 legacy MRI placeholders (BACKLOG);
+   - this week's protocol-1025 sessions (the operators should ingest them);
+   - Claudia's nrn01/02 (Q8);
+   - the `jl` group's study nested in m3;
+   - Lucia (the `0118` animal links);
+   - the hub's stand-name reading.
+
+**The D: erase (Step 4). Ryan's go is needed: it is his drive, and it cannot be undone.**
+Everything from the drives is now in gjesus3 or accounted for: ingested, placed, held, or deliberately excluded with a reason. Two exceptions: `roi_crops` (still in `/raw/` as live acquisitions, so nothing is lost), and the 61 derivatives plus proposal (c), which are in `/raw/` too.
+
+Before the erase:
+- **(a) Keep off D:** the records that later work needs.
+  - The two drive `manifest.csv` files, plus `inventory.csv`, `summary.txt` and `verify.log` for each drive: the SHA-256 of every staged file.
+  - The `_analysis\catalog\` and `_analysis\codes\` tables.
+  - Stream A's record manifest (`_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`, which the 2b round needs; runbook §2.6).
+  - The review evidence folders (`_analysis\drives-dicom\`, `drives-r4-cleanup\`, `mri-0710-reingest\`, `mri-july-1125\`, and `leone-ingest\` **minus its identifier files**).
+  - Proposed destination: a Data Office records folder on the NAS (e.g. `J:\gjesus3-data\staging\historical_drives_records\`), copied with SHA-256 verification.
+- **(b) Delete outright, not keep:** `_analysis\leone-ingest\scan\*_identifiers.csv` (patient DOBs; the privacy grep is done).
+- **(c) Then erase** `D:\projects\gjesus3\staging\`: the drive trees, `_extract\`, `_analysis\` (after (a)) and `_tools\`. Record the freed space.
+
 ## Where things are (2026-10-02)
 
 | Stream | Branch / worktree | State |
