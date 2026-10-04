@@ -116,6 +116,7 @@ The streams that ingested on 2026-10-04 checked every planned link name first, a
 - [ ] **Template:** give the MRI `link_filename` a per-study part (the study start time, or the ACQ-ID), so a same-day repeat cannot collide.
 - [ ] **Audit and repair (Ryan's decision):** list the affected acquisitions (an inode check of each link folder), then add the missing links under distinct names. Additive only: project folders are researcher-owned (05_PROJECTS §3a).
 - [x] The first m12 study of 2026-07-10 avoided it with a scoped config (a `_study1147` suffix).
+- [x] Stream B's drive batches (2026-10-04) were guarded by `tools/drive_staging/check_link_collisions.py` before writing and `verify_links_strict.py` after. All of B's links are exact.
 
 ## 🔺 HIGH — port gjesus3 RDM production onto Box A (2026-09-04)
 
@@ -2048,6 +2049,18 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
 - The five phantom configs (69 acquisitions, 509 files) took 31 minutes from WSL to `/mnt/gjesus3`, against 84 s on D: scratch: roughly 2 s per small file over the 9p/SMB path.
 - 11_OPERATIONS §5.5 already notes that WSL cannot hard-link there.
 - Plan a window by file count. A native-DICOM study with no project could be written from Windows instead.
+
+## 🔸 MODERATE — the drives' DICOM stream: follow-ups (stream B, 2026-10-04)
+
+- [ ] **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T.
+  - Production is unaffected: the 11.7T rows stream B ingested set `instrument_model` explicitly.
+  - Fix it before any 11.7T ingest relies on auto-derivation.
+- [ ] 🔺 **Re-pull from kenia the sessions the regex skipped, before the retention horizon passes them.** That means the `0721` `_biod` sessions (May 2023) and any other unparsed study. It depends on STATUS §0 D3(a).
+- [ ] **Ask the `S:\gnuclear` owner about 18 Molecubes `FDK` reconstructions** of Marina's `1321` CTs (Aug 2023). They are in the snapshot but not in production (`drives_dicom_review.md` Q6).
+- [ ] **The DICOM-regen worklist assumes a re-pull from the platform host.** That is false for data from external drives, so convert before ingest, from the staging (`tools/drive_staging/convert_staged_exams.py`).
+- [ ] Low: **about 83 `1519` sessions from 2020 survive only as derivatives.** Check `K:\gjesus\MRI` once, off-peak.
+- [ ] Low: **ask Claudia about B08's `20240424_120501_I01Tdnrn01_1_2`.** Its folder says mouse 01, but its subject file says 02 (Q8).
+- [ ] Low: **the 3 X1 rows use the generic-DICOM shape** (`series/` plus a `dicom` block). Their project link mirrors the whole acquisition folder, sidecar included (§7b).
 
 ## Metadata database — retire the CSV registries (2026-08-12)
 

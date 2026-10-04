@@ -487,7 +487,7 @@ In rough order:
      tool's `derivative` mode.
    - Scene splits and stitched copies get a per-group pixel check first.
    - `ID65_PB_lung_20x_scale.czi` has no group flag.
-4. **The drives' DICOM stream:**
+4. **✅ DONE 2026-10-04 (stream B, merged):** +1,764 acquisitions, verified (`tasks/drives_dicom_review.md` §7b). Open: Claudia's Q8, and the BACKLOG items. *The plan as written:* **The drives' DICOM stream:**
    - `Cardiac MRI.zip` (`1519`, `0619`; **`1519` is closed**, so reopen it case by case);
    - Laura's Bruker MRI (`0721`, `1321`);
    - Haizpea's `project0420`;
