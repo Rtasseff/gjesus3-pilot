@@ -1,6 +1,8 @@
 # The drives' same-timestamp groups (gate rule R4): pixel check, classes, retire lists
 
-**Status:** 🔶 analysis done 2026-10-02, **four retire lists written and dry-run, none executed.** Waiting for Ryan's go.
+**Status:** 🔶 analysis done 2026-10-02. **Ryan approved all four lists on 2026-10-04**, and the destination layout became
+stream A's short-path rule the same day. The lists are regenerated and dry-run (quick and full), **none executed**: they
+wait for the coordinator's write window.
 **Author:** stream D of the weekend close-out (Sonnet), branch `feat/drives-r4-cleanup`, for the coordinator (`gj3-handoff`).
 **What this is:** close-out plan Step 5 item 3, "Clean up the same-timestamp groups". Read-only throughout: the staged
 copies on D: and production were only read; nothing was written to the NAS.
@@ -25,12 +27,19 @@ the original's project folder; a file stays flagged only when it is genuinely am
 | Proposal (c), Ryan decides | 255 | 39.4 | 182 scene splits, 72 stitched copies, 1 rendering. No list (§7) |
 | **Derivatives in all** | **469** | **251.8** | 57% of the files, 34% of the bytes |
 
+- **Ryan's decisions, 2026-10-04:** all four lists are approved (153); `ID65` stays in `/raw/`; the 90 `raw_linked` links
+  may go; proposal (c) and the 61 no-project derivatives wait, with no list. **One change before any write: the
+  destination layout.** Ryan rejected long paths and zips, so every destination now comes from stream A's short-path rule
+  (§6): `<project>\working\historical_drives\<FRIO-X6 | MFB-Disco-2>\<study folder>\<path below>`, at most 240 characters on
+  `\\GJESUS3\gjesus3\`. The five ROI paths that were over 259 are now 236 to 240.
 - **The four lists are 153 acquisitions, 200.1 GB, into six active projects** (`1321` 90, `1123` 35, `0721` 13, `0219` 12,
   `0420` 2, `1019` 1). **Nothing is deleted: a derivative is hard-linked into the original's project under
   `working\historical_drives\…`** and only then its ACQ-ID is retired (§6). Every list passed `verify-lists`
-  against production (0 problems) and a `--quick` dry run (exit 0, nothing written).
+  against production (0 problems, destinations included) and a `--quick` dry run (exit 0, nothing written).
   Every list also passed a **full** dry run (the file to be moved is hashed over SMB and checked against its
-  `checksums.json`): 153 of 153 items with work, 0 already done, no warning, refusal or error; the ROI list took 28 minutes.
+  `checksums.json`), with the retire tool as it is on `main` (v2): 153 of 153 items with work, 0 already done, no warning,
+  refusal or error, "nothing written", and **the tool's own plan equals every list row (153 of 153 destinations)**. The ROI
+  list took 28 minutes.
 - **The conflict and closed-project cases are empty:** no derivative has a project different from its original's (0), and
   no original's project is closed (0).
 - **`ID65_PB_lung_20x_scale.czi` is not a scale-bar copy and stays** (§9). The BACKLOG expected it to be listed by name;
@@ -46,8 +55,10 @@ the original's project folder; a file stays flagged only when it is genuinely am
   4. A composite-image comparison would have been wrong: it depends on the paste order in the tile overlaps (§4 example A).
   5. Six plate groups (the "Herida" and "ROS" series of June and July 2024, on drive 2) hold **211 of the 294 derivatives**
      that wait for a project (§8). Mapping those six groups unblocks most of the rest.
-- **Ten questions for Ryan are in §11**, each with a recommendation. The ones that change what runs: where the file lands
-  (Q1), whether the 184 GB ROI list goes with the others (Q3), proposal (c) (Q5), and 5 paths past 259 characters (Q8).
+- **§11 has the ten questions of 2026-10-02 with Ryan's answers, and the one that is left:** 50 `1321` files have no study
+  folder near them, so they keep their drive path (shortened where needed) instead of a study folder.
+- **After the retire run, one more step:** `r4_groups.py index` merges a row per retired derivative into each project's
+  `_INDEX.csv` (§6). It is prepared and dry-run; it refuses to write until the files are at their destinations.
 
 ---
 
@@ -269,9 +280,47 @@ two-scene acquisition; they are two scenes of it whose master is not on the driv
 
 Row format (`tools/retire_acquisition.py --list`): `acq_id,disposition,target_acq_id,to_project,reason,subfolder,dest_name`.
 `disposition` is `derivative`; `target_acq_id` is the original; `to_project` is **the original's project**; `reason` names
-the class, the original and the pixel evidence; `subfolder` is
-`working\historical_drives\<drive label>\<the file's own folder on the drive>` (labels `drive1_FRIO-X6`,
-`drive2_MFB-Disco-2`; an archive member keeps the archive's own name as a folder); `dest_name` is the file's own name.
+the class, the original and the pixel evidence; `subfolder` and `dest_name` are where the file lands (next subsection).
+
+### Where each file lands: stream A's short-path rule (Ryan, 2026-10-04)
+
+Ryan rejected long paths and zips. Stream A built one rule for every file from the drives
+(`tools/drive_staging/historical_paths.py`, branch `feat/drives-nonraw-placement`) and has copied non-raw material into all
+six target projects, so each has a frozen `_PATHMAP.csv` and an `_INDEX.csv`. `tools/drive_staging/r4_destinations.py` only
+calls A's functions (A's worktree is imported read-only, without writing bytecode):
+
+```
+<project>\working\historical_drives\<FRIO-X6 | MFB-Disco-2>\<study folder>\<path below>\<file>
+```
+
+- **The study folder** is the outermost claim root of the file's project on its drive path (A's `row_root`, with A's "group
+  under the parent" for session and animal folders in `0721`, `1019`, `1123`, `1321`). Everything above it is dropped; an archive
+  becomes a folder `<stem>_<ext>`.
+- **The budget** is 240 characters on `\\GJESUS3\gjesus3\`. Only where needed, the fewest folders are cut to 24 or 12
+  characters plus `~` and 4 hex of a hash (for everything in the folder); a file name is cut only after the folders.
+  **Frozen folders are never renamed, so a derivative lands in the same folder A used for the other files of its drive
+  folder: for the 78 rows whose drive folder A has already placed, all 78 agree and 0 differ.**
+- **Result for the 153:** longest 240 (238 in the `J:\gjesus3-data\` form), none over; 38 with a shortened folder (all in
+  `1321`, below); no file name cut; all destinations unique (case-insensitive), none on the NAS yet and none in a tree's
+  `_INDEX.csv`. **The five ROI paths that were 262 to 266 characters in the first layout are now 236 to 240.**
+- **61 of the 153 have no claim of their project on their own path** (50 in `1321`, 11 in `0721`), so no study folder of
+  their own. **The 11 in `0721`** sit in the very folder (`…\LP+IONP\Histologias`) that is the (promoted) study folder of
+  two of their siblings, so all 13 `0721` files share `MFB-Disco-2\Histologias\…`. **The 50 in `1321`** have no study
+  folder near them, so A's rule keeps their drive path, as the holding folder does; 38 of them had to be shortened
+  (`MFB-Disco-2\2025-10-02 - Toshiba EXT~c41f\Proyectos_La~46dc\Lung-surfactant\…\Histologias-~21ee\alphaSMA\…`). That is
+  the one choice left to Ryan (§11, Q11).
+- **A weakness of A's `load_claim_roots`, worked around:** it keeps ONE project per claimed folder (the last), so a folder
+  claimed by two projects (each from a file-name token) looks root-less to the other. The `0219` files of
+  `PR REPETICIÓN\Grupo B` and `Grupo D` are such. `r4_destinations.py` keeps every project's claim and then calls A's
+  `row_root` unchanged; those files land in the folders A already froze for them.
+- **A weakness of A's planner for a derivative, worked around, and why it matters for the write window:** A renders a folder
+  once per file that walks through it, and the last file wins in `_PATHMAP.csv`. A file with no study folder can sit in
+  the folder that is another file's study folder (the `0721` case above), and then that folder is rendered two ways, and a
+  re-plan after the folders are frozen **moves** files (found in the rehearsal below: 2 of 153). `plan_destinations`
+  therefore (1) renders a folder that is the study folder of any file as a study folder for everything in it, and (2)
+  re-plans with every decision frozen until nothing changes (a fixed point). **Re-planning after any of the index merges gives
+  the 153 listed destinations again** (checked against the real trees and against the rehearsal's merged copy: 0 differ), and
+  the index step freezes the folders of the whole plan at its first run.
 
 | list | rows | GB | originals | projects | links removed |
 |---|---:|---:|---:|---|---:|
@@ -292,33 +341,41 @@ so nothing is copied.
 **Checks before any dry run** (`r4_groups.py verify-lists`): every retiree and original is live in `registry_raw`; the
 original's registry project is the row's `to_project` and is active; the retiree's own project is blank or the same; no
 id is both a retiree and an original; and each acquisition's `checksums.json` SHA-256 equals the staged file's, so the pixel
-check was made on the bytes that are in production. **153 rows, 306 SHA-256 matches, 0 problems.** Across the four lists
-the 153 ACQ-IDs are distinct, no retiree is another row's original (no chain), and no two rows share a destination
-(case-insensitive).
+check was made on the bytes that are in production. **153 rows, 306 SHA-256 matches, 0 problems.** It also **re-plans the
+destinations against the NAS as it is now** and requires them to equal the lists, to fit 240, to be unique, free, and in the
+folder A used (0 problems). Across the four lists the 153 ACQ-IDs are distinct, no retiree is another row's original (no
+chain), and no two rows share a destination (case-insensitive).
 
-**Dry runs** (read-only, logs in `D:\projects\gjesus3\staging\_analysis\drives-r4-cleanup\dryruns\`, one list at a time):
+**Dry runs** (2026-10-04, read-only, one list at a time, with the retire tool as it is on `main` at `7f5e8b5`, i.e. v2, which
+is what will run; logs in `D:\projects\gjesus3\staging\_analysis\drives-r4-cleanup\dryruns\`):
 
 | list | `--quick` | full |
 |---|---|---|
-| scalebars | 3 items with work, exit 0 | 3 items with work, exit 0 (5 s) |
-| resaves | 9 items with work, exit 0 | 9 items with work, exit 0 (133 s) |
-| exports | 60 items with work, exit 0 | 60 items with work, exit 0 (33 s) |
-| roi_crops | 81 items with work, exit 0 | 81 items with work, exit 0 (1,667 s; 184 GB hashed) |
+| scalebars | 3 items with work, exit 0 (26 s) | 3 items with work, exit 0 (5 s) |
+| resaves | 9 items with work, exit 0 (6 s) | 9 items with work, exit 0 (138 s) |
+| exports | 60 items with work, exit 0 (22 s) | 60 items with work, exit 0 (52 s) |
+| roi_crops | 81 items with work, exit 0 (38 s) | 81 items with work, exit 0 (1,693 s; 184 GB hashed) |
 
-No warning, refusal or error in any log. The lists' SHA-256 (first 16 hex): scalebars `e2b1b5748a681a82`, resaves
-`a23430f7f0ec8071`, exports `2d9f6a6d92d6f947`, roi_crops `5d5b506313d4c534`.
+Each log has the same ACQ-IDs as its list, plans a hard link, a `/raw/` deletion and the registry rows for every item
+(1 + 8 + 18 + 63 = 90 `raw_linked` links to remove), warns nothing, refuses nothing, and ends "nothing written". The
+hard-link target in the tool's own text equals the list's project, subfolder and name for all 153. (The earlier runs, with
+the first layout and with the v1 copy of the tool in this branch, are kept in `dryruns_layout1_2026-10-02\` and
+`dryruns_tool_v1_layout2\`; they are superseded.) The lists' SHA-256 (first 16 hex): scalebars `8b969cc648f798c2`, resaves
+`e3397b026f80fc45`, exports `4f558950ec680edd`, roi_crops `0f8d6521f719e733`.
 
 **The side effects to know before the go:**
 
-1. **90 `raw_linked` links go.** The 90 derivatives that have their own project (the same as the original's) are linked in
-   that project's `raw_linked\` today; after the move they are under `working\historical_drives\…` instead. That follows
-   the principle (they are not acquisitions), but it is a visible change in six projects.
-2. **The destination subtree is shared with stream A's non-raw placement**, which writes
-   `<project>\working\historical_drives\<drive label>\<folder>\` as well. The two write different files (a `.czi` raw
-   member here, non-raw files there) and the retire tool refuses to overwrite, so no collision is expected; the
-   coordinator may want to check when both are done.
+1. **90 `raw_linked` links go** (Ryan: they may). The 90 derivatives that have their own project (the same as the
+   original's) are linked in that project's `raw_linked\` today; after the move they are under `working\historical_drives\…`.
+2. **The destination trees are shared with stream A's non-raw placement.** A's frozen `_PATHMAP.csv` and `_INDEX.csv` were
+   read, and no destination exists or is in an index. A's folder names are frozen only once A has published them: **run
+   `verify-lists` right before each `--execute`** (it re-plans), and regenerate the lists if A has placed more material in
+   between (a different name for the same folder would split it in two).
 3. **Each affected project's `index.html` is regenerated** by the tool (the dry run lists it per project); the global
    Finder page is left to the 03:00 job, as in Step 3.
+4. **The tool refuses `--execute` while `registry_raw.csv` is being written** (each dry run now prints a `WARN`: it changed
+   minutes ago, an ingest may be mid-batch). That is the write-window rule; `--allow-recent-registry-writes` overrides it
+   once the coordinator has confirmed no ingest is running.
 
 **List a2 is the one that touches content most:** 9 identical re-saves (14.3 GB) whose bytes are **kept** (`derivative`
 mode), not dropped. Retire v2's `equivalent` mode (stream E) is for a re-save whose pixels **and metadata XML** are
@@ -327,6 +384,52 @@ lines (the `CreationDate`, display colours and ranges, an empty `<Layers />`; `R
 "Create Image Subset" operation), which are the researcher's own edits, so they are not `equivalent` and `derivative` is
 the right mode. **One, `103-40x-2.czi` (project `1123`, 7.9 MB), has identical metadata XML to `102-40x-1.czi`:** the only
 candidate for `equivalent` (Q2). The 3 scale-bar copies differ from their originals by the added scale-bar layer, as expected.
+
+### The index step, after the retire run
+
+Ryan's layout comes with an index so that nothing is lost: each project tree has an `_INDEX.csv` (new path, full original
+path, size, SHA-256), a `_PATHMAP.csv` (every folder's original and rendered name) and an `_ORIGIN.txt` in each study folder.
+A wrote them for what it copied; **the retired derivatives must be in them too.** `r4_groups.py index` merges them. It is a
+dry run unless `--execute` (previews go to `D:\projects\gjesus3\staging\_analysis\drives-r4-cleanup\index_preview\`):
+
+- **`_INDEX.csv`:** one row per retired derivative: the new path, the drive, the archive, the full original drive path, the
+  size and SHA-256, `shortened`, and the note `retired derivative of <original ACQ-ID>, formerly <retired ACQ-ID>`. The 153
+  rows are in [`drives_r4_index_rows.csv`](drives_r4_index_rows.csv). They are inserted in path order; **every existing row
+  stays as it is, in its place** (checked on the previews: 0 changed, 0 moved).
+- **`_PATHMAP.csv`:** the 32 new folders of the whole plan (`1321` 24, `0721` 5, `1123` 2, `1019` 1), so that their
+  (shortened) names are frozen for A's later runs and for a re-plan. They are frozen at the first run, whichever list it
+  merges, so that a later list cannot drift.
+- **`_ORIGIN.txt`:** only for a new study folder that has something dropped above it (2: `1019`, and `0721`'s
+  `Histologias`). A folder whose path here is its drive path says nothing, so it gets none.
+
+| tree | `_INDEX.csv` rows now | new rows | `_PATHMAP.csv` rows now | new folders |
+|---|---:|---:|---:|---:|
+| `0219` | 61 | 12 | 14 | 0 |
+| `0420` | 3,920 | 2 | 149 | 0 |
+| `0721` | 2,872 | 13 | 257 | 5 |
+| `1019` | 7,288 | 1 | 560 | 1 |
+| `1123` | 278 | 35 | 37 | 2 |
+| `1321` | 300 | 90 | 79 | 24 |
+
+**Safety.** A's existing documents must re-serialise byte for byte before anything is merged (`0219` and `0420` were written
+under A's earlier 9-column header, without `why`, so they are merged under their own header). A row whose path is already in
+the index with other bytes is a conflict: nothing is written. `--execute` refuses unless every selected file is at its
+destination with the expected size. It writes with A's `write_if_changed` (temp file, then replace) in A's format (UTF-8
+with a BOM, CRLF) and re-reads every new row from the NAS. `--lists scalebars,resaves,exports,roi_crops` selects which rows
+(default all), so it can follow each retire run. **If A re-publishes one of these trees it rewrites `_INDEX.csv` from its own
+previews and would drop these rows, unless it passes them as `extra_index_rows`.**
+
+**Rehearsal** (`tools/drive_staging/r4_index_rehearsal.py`, re-runnable in about a minute). `--execute` was run on a
+**scratch copy** of the six trees (under `…\drives-r4-cleanup\rehearsal_nas\`, never production), with the destination files
+created at their exact sizes, through `r4_groups.py --nas <scratch> index`: the dry run
+(0 files present) and `--execute` both refuse while the files are missing; `--execute` on `scalebars` adds exactly their 3 rows
+and leaves every row of A untouched, in order; a second run changes nothing (byte-identical); `exports` on top adds 60 more
+(63 in all); a tampered row is a conflict and nothing is written; a missing file is refused; no temp file is left. The
+rehearsal also found, and the fixed-point plan now prevents, a drift between the planned and the re-planned destinations of
+2 files (§6).
+
+**The order in the write window:** (1) `verify-lists`, (2) for each list `retire_acquisition.py --list … --execute` (after the
+coordinator's checks), (3) `r4_groups.py index --execute`, (4) the verification listed in the plan's Step 5 item 3 (§13d).
 
 ---
 
@@ -420,38 +523,30 @@ the name.
 
 ---
 
-## 11. Questions for Ryan
+## 11. Questions for Ryan: asked 2026-10-02, answered 2026-10-04
 
-Each has a recommendation. None blocks the others, and none is a stakeholder sign-off: these are Data Office calls
-informed by what the data shows.
+None was a stakeholder sign-off: these are Data Office calls informed by what the data shows. Ryan's answers came through the
+coordinator on 2026-10-04.
 
-1. **Where the file lands: its own folder or the original's?** The lists use the **derivative's own folder on the drive**
-   (`working\historical_drives\<label>\<its folder>`), assumed from "the original folder path" of the placement decision.
-   They differ from the original's folder in 58 of 60 (list b), 52 of 81 (b2), 2 of 3 (a) and 1 of 9 (a2). **Recommendation:
-   its own folder** (it shows where the file lived, and matches stream A's non-raw placement). A change to the original's
-   folder is a one-line edit to `list_rows`.
-2. **List a2 (9 identical re-saves, 14.3 GB): move as derivatives now, or wait for retire v2's `equivalent` mode?**
-   **Recommendation: now,** as derivatives: nothing is dropped. Only 1 of the 9 (`103-40x-2.czi`, 7.9 MB) has metadata
-   identical to its original's and so qualifies for `equivalent`; the other 8 carry the researcher's own display edits.
-   Dropping the re-save's bytes would be a separate decision about content, not about placement.
-3. **List b2 (81 ROI crops and subsets, 184.3 GB, 0.46 to 3.7 GB each, median 75% of the original's size) with the others,
-   or on its own?** It is a separate file so it can be approved separately. **Recommendation: approve it with the rest.**
-   They are derivatives under the principle, the hard link copies nothing, and they stay reachable under the project's
-   `working\` folder. Know that 63 of them have a `raw_linked` link today that goes, and that these are substantial files
-   a researcher may have worked from, not thumbnails.
-4. **`ID65` stays in `/raw/`** (§9). A deviation from the BACKLOG; please confirm.
-5. **Proposal (c): scene splits 182, stitched copies 72, rendering 1 (39.4 GB).** **Recommendation: retire as derivatives.**
-   Only the 22 stitched copies with a project (16.5 GB) could be listed now; the rest follow the mapping round.
-6. **The 90 `raw_linked` links** that the move removes (§6): acceptable?
-7. **Which no-project groups to map first:** the six "Herida" / "ROS" plate groups of 2024 (211 of the 294 waiting
-   derivatives, §8).
-8. **Path length: 5 destination paths pass 259 characters** (262 to 266 on `J:\gjesus3-data\…`, 280 as UNC), all in list b2
-   and in one folder (`…\Lung-surfactant\InVivos-Biodistribuciones_y_TT\Histologias-TT-Octubre23\alphaSMA\`, project `1321`):
-   `ROI-ID76`, `Lobulo1-ID79`, `Lobulo2-ID79`, `ROI1-ID79`, `ROI2-ID79`. The retire tool uses long-path forms, so it can
-   write them; Explorer and Office on the lab's machines may not open them. This is the same decision as stream A's
-   path-length blocker. **Recommendation: follow whatever is decided for stream A.**
-9. **`prueba`/`prueba2` and `MedioCompleto-Stitching-01`** stay `distinct` (§5). For information only.
-10. **The ambiguous pair `id15_normal`** stays flagged (§5). A person who opens both in ZEN could settle it; nothing else can.
+| # | Question (2026-10-02) | Recommendation | Decision (2026-10-04) |
+|---|---|---|---|
+| 1 | Where the file lands: its own drive folder or the original's? | its own folder | **Settled by stream A's rule:** the derivative lands under its own drive path, as a study-folder layout, in the folder A used for its neighbours (§6) |
+| 2 | List a2, 9 identical re-saves (14.3 GB): move as derivatives now, or wait for retire v2's `equivalent`? | now (8 of 9 carry the researcher's own edits; only `103-40x-2.czi` qualifies for `equivalent`) | **Approved** (all four lists) |
+| 3 | List b2, 81 ROI crops (184.3 GB): with the others? | approve with the rest | **Approved** |
+| 4 | `ID65` stays in `/raw/` | confirm | **Stays** |
+| 5 | Proposal (c), 255 files (39.4 GB) | retire as derivatives, 22 now, the rest after the mapping | **Waits, with no list** |
+| 6 | The 90 `raw_linked` links removed | acceptable? | **They may go** |
+| 7 | Which no-project groups to map first | the six "Herida" / "ROS" plate groups (211 of 294) | the 61 no-project derivatives **wait, with no list** |
+| 8 | 5 destination paths past 259 characters | follow stream A's decision | **Solved:** 236 to 240 under the short-path rule |
+| 9 | `prueba` / `prueba2`, `MedioCompleto-Stitching-01` stay `distinct` | information | none needed |
+| 10 | The ambiguous `id15_normal` pair stays flagged | information | none needed |
+
+**11. The one question left: the 50 `1321` files with no study folder near them.** A's rule gives them their drive path,
+shortened where it must be (§6). That keeps everything and matches the holding folder, and the index records each one's
+original path. (The 11 other files with no claim of their own, in `0721`, join their neighbours' study folder, so there
+is nothing to ask.) The alternative for the 50 would be to file them under the study folder of their *original*
+acquisition (a different drive folder from the derivative's own). **Recommendation: leave it as the rule gives it;** the 2b
+mapping round can regroup later, because the index and `_PATHMAP.csv` say where everything was.
 
 ---
 
@@ -459,12 +554,15 @@ informed by what the data shows.
 
 | what | where |
 |---|---|
-| the tool | `tools/drive_staging/r4_groups.py` (read-only on D: and production; writes only under `--out` and the lists it is told to) |
-| its tests | `tools/test_drives_r4_groups.py` (`python tools/test_drives_r4_groups.py`) |
+| the tool | `tools/drive_staging/r4_groups.py` (read-only on D: and production, except `index --execute`; writes only under `--out` and the lists it is told to) |
+| the destinations | `tools/drive_staging/r4_destinations.py`: calls stream A's `historical_paths.py` and `nonraw_placement.py` read-only (found in A's worktree until A merges; `R4_STREAM_A_DIR` overrides) |
+| its tests | `tools/test_drives_r4_groups.py` (`python tools/test_drives_r4_groups.py`; the destination tests are skipped, with a message, if A's modules are not found) |
+| the index rehearsal | `tools/drive_staging/r4_index_rehearsal.py`: `index --execute` on a scratch copy of the six trees, with the refusals; run it again just before the window |
 | classification of every file | `tasks/drives_r4_classification.csv` (819 rows + ID65; method and result per member) |
 | groups waiting for a project | `tasks/drives_r4_waiting_groups.csv` (81 groups) |
 | the four lists | `tasks/retire_lists/2026-10_r4_{scalebars,resaves,exports,roi_crops}.csv` |
-| working data (regenerable) | `D:\projects\gjesus3\staging\_analysis\drives-r4-cleanup\` (`members.csv`, `features.csv`, `pieces\`, `relations\`, `classified.csv`, `dryruns\`) |
+| the index rows (153) | `tasks/drives_r4_index_rows.csv`: what the `index` step merges into each project's `_INDEX.csv` |
+| working data (regenerable) | `D:\projects\gjesus3\staging\_analysis\drives-r4-cleanup\` (`members.csv`, `features.csv`, `pieces\`, `relations\`, `classified.csv`, `dryruns\`, `index_preview\`) |
 
 ```
 python tools\drive_staging\r4_groups.py table         # members.csv: ACQ-ID, project, size, ... (819 rows)
@@ -475,12 +573,13 @@ python tools\drive_staging\r4_groups.py relations     # pairwise tests per group
                                                        # commands add each later test to relation files made before it existed
 python tools\drive_staging\r4_groups.py validate      # the gate sample (exhaustive tests on gated-out groups)
 python tools\drive_staging\r4_groups.py classify      # classified.csv
-python tools\drive_staging\r4_groups.py lists         # tasks\retire_lists\2026-10_r4_*.csv
-python tools\drive_staging\r4_groups.py verify-lists  # against production (read-only)
+python tools\drive_staging\r4_groups.py lists         # the four lists + tasks\drives_r4_index_rows.csv; run BEFORE the retire run
+python tools\drive_staging\r4_groups.py verify-lists  # against production, destinations re-planned (read-only)
+python tools\drive_staging\r4_groups.py index         # AFTER the retire run: merge the index rows; a dry run unless --execute
 python tools\drive_staging\r4_groups.py report        # the tables in this review, and waiting_groups.csv
 ```
 
-A dry run of one list (never `--execute` without Ryan's go, the coordinator's window, and one writer on `J:`):
+A dry run of one list (never `--execute` without the coordinator's window and one writer on `J:`):
 
 ```
 python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_r4_exports.csv --quick
@@ -497,15 +596,16 @@ python tools\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retir
 ### 13a. `tasks/STATUS.md`
 
 **Where:** §2 "Active / Up next", the bullet "Historical microscopy on external drives". Add this sub-bullet after
-"**Six streams run over the weekend of 2026-10-03/04**", and add "the same-timestamp retirements (Ryan's go on the four
-lists)" to the "**Still open:**" bullet's list.
+"**Six streams run over the weekend of 2026-10-03/04**", and add "the same-timestamp retirements (the four approved
+lists) and their index step" to the "**Still open:**" bullet's list. Replace it with a done line once the lists have run.
 
 ```markdown
-  - **🔶 Same-timestamp clean-up (gate rule R4), stream D, 2026-10-02: analysed by pixel check, four retire lists written and dry-run, nothing executed. Waiting for Ryan's go.** Review: [`drives_r4_cleanup_review.md`](drives_r4_cleanup_review.md); the evidence per file is in `drives_r4_classification.csv`.
+  - **🔶 Same-timestamp clean-up (gate rule R4), stream D: analysed 2026-10-02; all four lists approved by Ryan 2026-10-04 and dry-run clean; NOT yet executed (waiting for the write window).** Review: [`drives_r4_cleanup_review.md`](drives_r4_cleanup_review.md); the evidence per file is in `drives_r4_classification.csv`.
     - **Of the 819 files in 247 groups, 469 are derivatives (251.8 GB) and 350 stay in `/raw/`:** 195 originals, 153 sibling scenes whose master is not on the drive, 2 ambiguous. The 469: 17 scale-bar copies, 51 identical re-saves, 136 crops, 10 subsets, 182 scene splits, 72 stitched copies, 1 rendering.
-    - **Four lists, 153 acquisitions, 200.1 GB, into six active projects** (`1321` 90, `1123` 35, `0721` 13, `0219` 12, `0420` 2, `1019` 1): `2026-10_r4_scalebars.csv` (3), `2026-10_r4_resaves.csv` (9), `2026-10_r4_exports.csv` (60, under 5% of the original), `2026-10_r4_roi_crops.csv` (81, 184 GB of ROI re-saves, a separate decision). Each passed `verify-lists` and a full dry run. 90 `raw_linked` links would go.
-    - **Waiting:** 61 more derivatives (12.3 GB) whose original has no project; proposal (c), 255 files (182 scene splits, 72 stitched copies, 1 rendering, 39.4 GB), is Ryan's call. 81 groups hold 294 derivatives that need the project mapping (item 2b); six plate groups hold 211 of them.
-    - **`ID65_PB_lung_20x_scale.czi` stays:** it is the only record of its acquisition, not a copy (a deviation from the BACKLOG).
+    - **Four approved lists, 153 acquisitions, 200.1 GB, into six active projects** (`1321` 90, `1123` 35, `0721` 13, `0219` 12, `0420` 2, `1019` 1): `2026-10_r4_scalebars.csv` (3), `2026-10_r4_resaves.csv` (9), `2026-10_r4_exports.csv` (60), `2026-10_r4_roi_crops.csv` (81, 184 GB of ROI re-saves). Each passed `verify-lists` and a `--quick` and a full dry run against production. 90 `raw_linked` links go (Ryan: they may).
+    - **Destinations follow stream A's short-path rule** (Ryan rejected long paths): `<project>\working\historical_drives\<FRIO-X6 | MFB-Disco-2>\<study folder>\<path below>`, at most 240 characters (the longest is 240), each file in the folder A already used for the others of its drive folder. After the retire run, `r4_groups.py index` merges one row per derivative into each project's `_INDEX.csv` and freezes the new folders in `_PATHMAP.csv`; it is prepared and dry-run.
+    - **Waiting, with no list (Ryan):** 61 derivatives whose original has no project, and proposal (c): 182 scene splits, 72 stitched copies and 1 rendering (255 files, 39.4 GB). 81 groups hold 294 derivatives that need the project mapping (item 2b); six plate groups hold 211 of them.
+    - **`ID65_PB_lung_20x_scale.czi` stays** (Ryan): it is the only record of its acquisition, not a copy.
 ```
 
 ### 13b. `CHANGELOG.md`
@@ -513,7 +613,7 @@ lists)" to the "**Still open:**" bullet's list.
 **Where:** a new row at the top of the table (newest first).
 
 ```markdown
-| 2026-10-02 | R. Tasseff | **Historical drives: the 247 same-timestamp groups (819 files, gate rule R4) are classified by pixel check; four retire lists are written and dry-run, none executed.** Every file is uncompressed, so the stored tile bytes are the pixels: each file's tiles were cached once (`tools/drive_staging/r4_groups.py`) and every pair inside a group was related by exact tests (identical tiles, cut tiles, region, re-placed or trimmed tiles, sampled stitched interiors), after a stage-position gate that was validated three ways with 0 false negatives. **Result:** 469 derivatives (251.8 GB) and 350 files that stay (195 originals, 153 sibling scenes whose master is not on the drive, 2 ambiguous), plus `ID65`. **Four lists, 153 acquisitions, 200.1 GB:** 3 scale-bar copies, 9 identical re-saves, 60 small exports and 81 ROI crops of 0.46 to 3.7 GB, each to its original's project under `working\historical_drives\<drive>\<folder>`, with 90 `raw_linked` links to be removed. Every list passed `verify-lists` against production and a full dry run. **Not listed:** 61 derivatives whose original has no project, and 255 scene splits, stitched copies and one rendering (Ryan's call, 39.4 GB). **Corrections to the BACKLOG's estimates:** `ID65_PB_lung_20x_scale.czi` is the only record of its acquisition, not a copy, and stays; of 31 "scale" names only 13 are scale-bar copies; the "18 small exports" are 60, and the "550 splits and stitched copies (320 GB)" are 254 (39.4 GB). A composite-image comparison was rejected: it depends on the paste order in the tile overlaps. Review: `tasks/drives_r4_cleanup_review.md`. |
+| 2026-10-04 | R. Tasseff | **Historical drives: the four same-timestamp retire lists are approved and use the short-path layout; nothing is executed yet.** On 2026-10-02 the 247 same-timestamp groups (819 files, gate rule R4) were classified by tile-level pixel check (`tools/drive_staging/r4_groups.py`; every file is uncompressed, so the stored bytes are the pixels): 469 derivatives (251.8 GB) and 350 files that stay (195 originals, 153 sibling scenes whose master is not on the drive, 2 ambiguous), plus `ID65`. **On 2026-10-04 Ryan approved all four lists** (153 acquisitions, 200.1 GB: 3 scale-bar copies, 9 identical re-saves, 60 small exports, 81 ROI crops of 0.46 to 3.7 GB), confirmed that `ID65_PB_lung_20x_scale.czi` stays in `/raw/` (the only record of its acquisition, not a copy) and that the 90 `raw_linked` links may go, and put proposal (c) (255 scene splits, stitched copies and one rendering, 39.4 GB) and the 61 derivatives of originals with no project on hold, with no list. **He rejected long paths and zips,** so the lists were regenerated with stream A's shared rule (`tools/drive_staging/historical_paths.py`): `<project>\working\historical_drives\<FRIO-X6 \| MFB-Disco-2>\<study folder>\<path below>`, at most 240 characters on `\\GJESUS3\gjesus3\` (the five ROI paths that were over 259 are now 236 to 240), each derivative in the folder A already used for the other files of its drive folder (78 of 78 checked agree), and the plan is a fixed point (re-planning after the folders are frozen gives the same destinations). Every list passed `verify-lists` and a `--quick` and a full dry run against production, with the retire tool as it is on `main` (v2). **Prepared:** `r4_groups.py index` merges a row per retired derivative (original drive path, new path, SHA-256, "retired derivative of <original>, formerly <retired id>") into each project's `_INDEX.csv` and freezes the new folders in `_PATHMAP.csv`; it refuses to write until the files are at their destinations, is dry-run on all six trees (153 rows, 32 new folders), and was rehearsed with `--execute` on a scratch copy. **Corrections to the BACKLOG's estimates:** of 31 "scale" names only 13 are scale-bar copies; the "18 small exports" are 60; the "550 splits and stitched copies (320 GB)" are 254 (39.4 GB). Review: `tasks/drives_r4_cleanup_review.md`. |
 ```
 
 ### 13c. `tasks/BACKLOG.md`
@@ -525,45 +625,39 @@ block below, **keep the last sub-bullet** ("Out of `/raw/` already: the gate's R
 lead-in to the first line.
 
 ```markdown
-- [ ] **Clean up the drives ingest's same-timestamp groups after the run (2026-10-01). 🔶 Analysed and listed 2026-10-02 (stream D); the retirements wait for Ryan's go.**
+- [ ] **Clean up the drives ingest's same-timestamp groups after the run (2026-10-01). 🔶 Analysed 2026-10-02 (stream D); the four lists are approved (Ryan, 2026-10-04) and dry-run; not yet executed.**
   - **Measured by pixel check 2026-10-02** (replaces "Measured from the frozen plan"; review `tasks/drives_r4_cleanup_review.md`, evidence per file in `tasks/drives_r4_classification.csv`): of 819 files in 247 groups, 195 originals, 153 sibling scenes (master not on the drive) and 2 ambiguous stay; **469 are derivatives (251.8 GB):** 17 scale-bar copies, 51 identical re-saves, 136 crops, 10 subsets, 182 scene splits, 72 stitched copies, 1 rendering.
   - **The estimates corrected:** of the 31 "scale" names (3.4 GB), 13 are scale-bar copies, 14 are crops, 2 scene splits, 1 a stitched copy, 1 an original (ID65). **60** crops are under 5% of their original (not ~18). **254** scene splits and stitched copies are **39.4 GB** (not ~550 / ~320 GB). 81 crops and subsets are ROI re-saves of 0.46 to 3.7 GB (184 GB).
-  - **`ID65_PB_lung_20x_scale.czi` is not a copy:** it is the only record of its acquisition, so it stays in `/raw/`.
-  - **Retire lists written** (`tasks/retire_lists/2026-10_r4_*.csv`, 153 acquisitions, 200.1 GB, each to the original's project under `working\historical_drives\<drive>\<the file's own folder>`): `scalebars` 3, `resaves` 9, `exports` 60, `roi_crops` 81. Each passed `verify-lists` and a full dry run; **none executed.** 90 `raw_linked` links would be removed.
+  - **`ID65_PB_lung_20x_scale.czi` is not a copy:** it is the only record of its acquisition, so it stays in `/raw/` (Ryan confirmed).
+  - **Retire lists, approved** (`tasks/retire_lists/2026-10_r4_*.csv`, 153 acquisitions, 200.1 GB): `scalebars` 3, `resaves` 9, `exports` 60, `roi_crops` 81. Each goes to the original's project under stream A's short-path layout (`<project>\working\historical_drives\<FRIO-X6 | MFB-Disco-2>\<study folder>\…`, at most 240 characters, in the folders A already uses). 90 `raw_linked` links go (Ryan: they may).
   - **Left to do:**
-    - Ryan's go on each list (the ROI list on its own, if he prefers), then the run: one writer, the coordinator's window, a verification after each.
+    - **The run:** in the coordinator's write window (one writer): `verify-lists` right before each `--execute` (it re-plans, and catches A having placed more material), then each list through `retire_acquisition.py`, then `r4_groups.py index --execute` (it merges a row per derivative into each project's `_INDEX.csv`, freezes the new folders in `_PATHMAP.csv`, and refuses until the files are at their destinations), then the checks listed in the close-out plan's Step 5 item 3.
     - **61 derivatives (12.3 GB) wait** for their original to get a project (item 2b); list them then. Six plate groups hold 211 of the 294 derivatives (including proposal (c)) that wait.
-    - **Proposal (c)** (182 scene splits, 72 stitched copies, 1 rendering; 39.4 GB) is Ryan's decision; the recommendation is to retire them as derivatives. Only 22 stitched copies (16.5 GB) have an original with a project today.
-    - **5 destination paths pass 259 characters** (all in one `alphaSMA` folder of `1321`): decide with stream A's path-length blocker.
+    - **Proposal (c)** (182 scene splits, 72 stitched copies, 1 rendering; 39.4 GB) is on hold (Ryan, 2026-10-04); the recommendation stands to retire them as derivatives. Only 22 stitched copies (16.5 GB) have an original with a project today.
+    - **50 of the 153 files (all in `1321`) have no study folder near them,** so they keep their drive path, shortened where needed; the 2b mapping round can regroup them.
     - 🔸 LOW, after the retirements: the survivors' registry `notes` and sidecars still say "shares its acquisition timestamp with N other file(s)". Decide whether to leave them as provenance or correct them.
 ```
 
 ### 13d. `tasks/historical_drives_closeout_plan.md`
 
-**Where:** (1) Step 5 item 3; (2) a new item at the end of "Open questions for Ryan"; (3) in the weekend table, row D, nothing changes.
+**Where:** (1) Step 5 item 3; (2) the "Open questions for Ryan" block of stream D, if the coordinator added one from the first
+report: replace it with the "answered" line below; (3) in "Who may approve a production write", nothing changes: the
+same-timestamp retirements are now approved by Ryan, so the coordinator may run them.
 
 **(1) Replace Step 5 item 3** ("Clean up the same-timestamp groups") with:
 
 ```markdown
-3. **Clean up the same-timestamp groups:** BACKLOG "Clean up the drives ingest's same-timestamp groups". **🔶 Analysed 2026-10-02 (stream D); four lists dry-run, none executed.** Review: `tasks/drives_r4_cleanup_review.md` (branch `feat/drives-r4-cleanup`).
+3. **Clean up the same-timestamp groups:** BACKLOG "Clean up the drives ingest's same-timestamp groups". **🔶 Analysed 2026-10-02 (stream D); the four lists approved by Ryan 2026-10-04 and dry-run clean; not yet executed.** Review: `tasks/drives_r4_cleanup_review.md` (branch `feat/drives-r4-cleanup`).
    - Of the 819 files in 247 groups, **469 are derivatives (251.8 GB)** and 350 stay in `/raw/`.
-   - **The lists** (`tasks/retire_lists/2026-10_r4_*.csv`): `scalebars` 3, `resaves` 9, `exports` 60, `roi_crops` 81 (184 GB); 153 acquisitions, 200.1 GB. `subfolder` is `working\historical_drives\<drive>\<the file's own folder>`. **For each:** `--quick`, then a full dry run, then Ryan's go, then `--execute`, then verify. The ROI list can be approved on its own.
-   - **Verify after each write:** the rows and `/raw/` folders are gone and the tombstones are appended (one per row); each destination file exists and its SHA-256 equals the staged drive copy's (`tasks/drives_ingest_provenance.csv`); the originals are untouched; the project `raw_linked` links are gone (90 across the four lists); `registry_raw` is down by the list's row count; the validator is at 10,314 errors with no new class.
-   - **Not done:** 61 derivatives wait for a project (item 2b); proposal (c), 255 files (39.4 GB), is Ryan's call.
+   - **The lists** (`tasks/retire_lists/2026-10_r4_*.csv`): `scalebars` 3, `resaves` 9, `exports` 60, `roi_crops` 81 (184 GB); 153 acquisitions, 200.1 GB. `subfolder` and `dest_name` come from stream A's short-path rule (`<project>\working\historical_drives\<FRIO-X6 | MFB-Disco-2>\<study folder>\…`, at most 240 characters, in the folders A already uses).
+   - **The run, in the write window, one writer:** (a) `python tools/drive_staging/r4_groups.py verify-lists` right before each `--execute` (it re-plans the destinations against the NAS as it is now; if A has placed more material, regenerate the lists with `lists`); (b) each list through `retire_acquisition.py --list … --execute` after its `--quick` and full dry run; the tool refuses while `registry_raw.csv` was written in the last 15 minutes; (c) **then** `python tools/drive_staging/r4_groups.py index --execute` (`--lists` selects which): it merges one row per derivative into each project's `_INDEX.csv`, freezes the new folders of the whole plan in `_PATHMAP.csv`, writes the 2 new `_ORIGIN.txt`, and refuses unless every selected file is at its destination.
+   - **Verify after each write:** the rows and `/raw/` folders are gone and the tombstones are appended (one per row); each destination file exists and its SHA-256 equals the staged drive copy's (`tasks/drives_ingest_provenance.csv`); the originals are untouched; the project `raw_linked` links are gone (90 across the four lists); `registry_raw` is down by the list's row count; the validator is at 10,314 errors with no new class; after the index step, every derivative has its row in the project's `_INDEX.csv` and no existing row changed.
+   - **On hold (Ryan, 2026-10-04):** 61 derivatives wait for a project (item 2b); proposal (c), 255 files (39.4 GB), waits too. No list for either.
    - **`ID65_PB_lung_20x_scale.czi` has no group flag and is not a copy:** it is the only record of its acquisition, and stays.
 ```
 
-**(2) Add to "Open questions for Ryan"** (the newest go last):
+**(2) Replace stream D's open questions** (if present) with:
 
 ```markdown
-7. **Stream D's questions** (the same-timestamp clean-up; review `tasks/drives_r4_cleanup_review.md` §11 on `feat/drives-r4-cleanup`). Each has a recommendation.
-   - **Q1:** the lists put each derivative under its **own** drive folder, `working\historical_drives\<drive>\<its folder>`; it differs from the original's folder in most rows. **Its own folder.**
-   - **Q2:** the 9 identical re-saves (14.3 GB): move as derivatives now, or wait for retire v2's `equivalent` mode? **Now:** nothing is dropped.
-   - **Q3:** the 81 ROI crops (184 GB, median 75% of the original's size) are a separate list. **Approve with the rest.** 63 of them lose a `raw_linked` link.
-   - **Q4:** `ID65` stays in `/raw/`. **Confirm** (a deviation from the BACKLOG).
-   - **Q5:** proposal (c), 255 files (39.4 GB). **Retire as derivatives;** 22 can go now, the rest after the mapping.
-   - **Q6:** the 90 `raw_linked` links removed. **Acceptable?**
-   - **Q7:** map first the six "Herida" / "ROS" plate groups of 2024 (211 of the 294 waiting derivatives).
-   - **Q8:** 5 destination paths pass 259 characters (one `alphaSMA` folder, `1321`). **Follow stream A's path-length decision.**
-   - **Q9, Q10:** `prueba`/`prueba2`, `MedioCompleto-Stitching-01` (distinct) and the `id15_normal` pair (ambiguous) stay. For information.
+   - **Stream D's questions: answered 2026-10-04 (Ryan).** All four lists approved (153); `ID65` stays; the 90 `raw_linked` links may go; proposal (c) and the 61 no-project derivatives wait, with no list; destinations use stream A's short-path layout (the five over-259 paths are now at most 240). One small question is left, in the review's §11 (Q11): 50 `1321` files with no study folder near them keep their drive path; recommendation: leave it.
 ```
