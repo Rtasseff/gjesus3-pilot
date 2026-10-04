@@ -85,6 +85,38 @@ a DPA reference.** That gives a validator rule: human ⇒ DPA present.
   and README in `/raw/` (the recovery pattern), plus the agreement details for each cohort from
   Ryan.
 
+## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
+
+Found by stream F while previewing the first m12 study of 2026-07-10.
+
+**The cause.** `linker.create_hardlink` (folder primary) does `os.makedirs(dest, exist_ok=True)` and links only the files that do not exist yet.
+- So two acquisitions with the same link name (same animal, same day, same exam number and recons) end up sharing one link folder. The second gets none of its own files, or a mix.
+- The standard MRI link name, `MRI_<sample>_<date>_<exam>_<recons>`, has no per-study part.
+
+**It has already happened.** On 44 multi-study animal-days (483 acquisitions), **209 have no link folder of their own: 43.3%, against 2.65% on single-study days.**
+
+| Project | Acquisitions without their own link folder |
+|---|---:|
+| `AE-biomaGUNE-0721` | 153 of 294 |
+| `AE-biomaGUNE-1022` | 53 of 179 |
+| `AE-biomaGUNE-0219` | 3 of 10 |
+
+- `/raw/` and the registry are intact.
+- Provenance cannot show it: it is idempotent on `output_path`.
+
+**Evidence:** `tasks/mri_july_1125_review.md` §2.1; the scripts and their output are in `D:\projects\gjesus3\staging\_analysis\mri-july-1125\`:
+- `audit_link_folders.txt`: the 209 of 483, and the single-study baseline;
+- `collision_A_result.txt` and `collision_B_result.txt`: the reproduction, standard path against scoped config;
+- `audit_link_collisions.txt`: the provenance view, which cannot see it;
+- `scripts\audit_link_folders.py` and `scripts\collision_check.py`.
+
+The streams that ingested on 2026-10-04 checked every planned link name first, and verified each acquisition's link folder strictly afterwards.
+
+- [ ] **Code:** `create_hardlink` must refuse (raise) when an existing file in the destination is not the same file (`os.path.samefile`), instead of skipping it. Test it with two acquisitions of one name.
+- [ ] **Template:** give the MRI `link_filename` a per-study part (the study start time, or the ACQ-ID), so a same-day repeat cannot collide.
+- [ ] **Audit and repair (Ryan's decision):** list the affected acquisitions (an inode check of each link folder), then add the missing links under distinct names. Additive only: project folders are researcher-owned (05_PROJECTS §3a).
+- [x] The first m12 study of 2026-07-10 avoided it with a scoped config (a `_study1147` suffix).
+
 ## 🔺 HIGH — port gjesus3 RDM production onto Box A (2026-09-04)
 
 **The plan is written and awaiting review:
@@ -1945,9 +1977,9 @@ place the system promises to be authoritative.
 - **The operators are not established.** ParaVision's `ACQ_operator` is `nmr`, and the facility DB records no operator. For m6, the best-supported answer is `Irene`.
 - These ingests are outside the 2026-10-01 pre-approval, so each needs **Ryan's go**.
 
-- [ ] Decide who ingests them, and how: the Data Office from the scanner, or the operators through the GUI.
-- [ ] Ingest the 9 protocol-1125 sessions, and later the 1025 ones, once each operator is known. Each is a normal `mri-ingest`, run from Windows.
-- [ ] Decide whether the 5 phantom/QC studies belong in gjesus3: `jrc260611_SPION`, `jrc_260612_phantom_SPION_RGD`, `jrc260708_phantom`, `jrc260709_phantom` and `jrc260818_Phantom_MnACC`. Their names carry no `m<animal>_<protocol>`, so the ingest regex does not parse them (the silent skip, STATUS §0 D3).
+- [x] *(Done 2026-10-04: Ryan chose the Data Office, from the scanner; operator `Irene`.)* Decide who ingests them, and how: the Data Office from the scanner, or the operators through the GUI.
+- [x] *(Done 2026-10-04: the 9 protocol-1125 sessions, 141 acquisitions. The 5 protocol-1025 sessions of 10-01/02 stay with the operators.)* Ingest the 9 protocol-1125 sessions, and later the 1025 ones, once each operator is known. Each is a normal `mri-ingest`, run from Windows.
+- [x] *(Done 2026-10-04: Ryan said yes; ingested with a blank project, 69 acquisitions.)* Decide whether the 5 phantom/QC studies belong in gjesus3: `jrc260611_SPION`, `jrc_260612_phantom_SPION_RGD`, `jrc260708_phantom`, `jrc260709_phantom` and `jrc260818_Phantom_MnACC`. Their names carry no `m<animal>_<protocol>`, so the ingest regex does not parse them (the silent skip, STATUS §0 D3).
 - [ ] Run the reconciliation again on a schedule. It is read-only: an SFTP listing plus a registry read.
 - [ ] Confirm that other groups' studies on the shared scanner stay out of scope. Since 2026-06-01 there are 362 of them (1,755 exam folders), from `jl`, `pr`, `sp`, `dan`, `fer` and `aka`; none is MFB, and none is in the registry.
 
@@ -1992,6 +2024,30 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
   - retire them with the retire tool (which disposition? a new `not-an-image`, or `derivative`?), keeping any recoverable files as other data in the project folder;
   - or leave them, with the line applying only from 2026-10-04 on.
 - [ ] Live ingest: should the MRI path stop registering spectroscopy and calibration exams at ingest? Today it registers them as `not-applicable` placeholders.
+
+## 🔹 LOW — an exam that produced no data is registered with today's date (2026-10-04)
+
+- **The cause:** an aborted exam has no `visu_pars`, so `mri_acquisition_datetime` is empty and the preview shows today's date (`ACQ-20261004-MRI-…`).
+- **Where it was hit:** stream B, on its B06 setup scans; and again on exam 66 of the 2026-07-08 phantom.
+- **The fix:** `expand_batch` should skip (or stop on) an MRI exam with no reconstructed image, as Ryan's line of 2026-10-04 says (09_MODALITIES).
+- **Today:** both cases are handled by an allow-list case table.
+
+## 🔹 LOW — phantom and QC studies need a scoped config until the regex has a phantom branch (2026-10-04)
+
+- Names without `m<animal>_<protocol>` match neither shared regex (D3).
+- The five `jrc` phantom studies were ingested through `tools/configs/mri_july_1125/mri_phantom_*.yaml`, which take the sample label from ParaVision's `SUBJECT_id`.
+- **A durable fix:** an explicit phantom path in the MRI template.
+- **Decided 2026-10-04:** `phantom` for an imaging test object, `material` for a bare sample of a material under study.
+
+## 🔹 LOW — another group's study lives inside m3's folder on the scanner (2026-10-04)
+
+`20260707_094320_jl260707_1225_m26_…` (13 exams, 358 MB) exists only nested inside `…_m3_1125_…`. It is not MFB data and was not ingested. Someone may want to tell the `jl` group.
+
+## 🔹 LOW — a live WSL write to the share is about 20 times slower than local (2026-10-04)
+
+- The five phantom configs (69 acquisitions, 509 files) took 31 minutes from WSL to `/mnt/gjesus3`, against 84 s on D: scratch: roughly 2 s per small file over the 9p/SMB path.
+- 11_OPERATIONS §5.5 already notes that WSL cannot hard-link there.
+- Plan a window by file count. A native-DICOM study with no project could be written from Windows instead.
 
 ## Metadata database — retire the CSV registries (2026-08-12)
 

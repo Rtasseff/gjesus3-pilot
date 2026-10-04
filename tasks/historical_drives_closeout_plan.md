@@ -211,7 +211,10 @@ coordinator:**
   - **Session- and animal-level claim folders** are grouped under their parent.
   - **Standing approval** for the coordinator to delete finished stream scratch on D:.
 
-**⚠️ A production finding for Ryan (stream F, 2026-10-04): project link folders silently merge.**
+- **The July protocol-1125 series (9 sessions, 141 acquisitions) and the 5 `jrc` phantom/QC studies (69) are in production** (stream F, merged). Both were verified independently. The registry is at **26,660** rows.
+- **Stream B's `1519` batches B03 and B02 are in** (660 rows). Stream A's step 2b (regrouped) and the v2 top-up are placed (13,182 files). Both were verified independently.
+
+**⚠️ A production finding for Ryan (stream F, 2026-10-04): project link folders silently merge.** *(Now a BACKLOG 🔺 HIGH item, "a second acquisition with an existing link name"; the audit and repair are Ryan's decision.)*
 
 - **The cause:** `linker.create_hardlink` creates the link folder with `makedirs(exist_ok)`, and
   links only the files that don't exist yet. When two acquisitions get the same link name (several
