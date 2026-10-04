@@ -2062,6 +2062,19 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
 - [ ] Low: **ask Claudia about B08's `20240424_120501_I01Tdnrn01_1_2`.** Its folder says mouse 01, but its subject file says 02 (Q8).
 - [ ] Low: **the 3 X1 rows use the generic-DICOM shape** (`series/` plus a `dicom` block). Their project link mirrors the whole acquisition folder, sidecar included (§7b).
 
+## 🔺 HIGH — historical drives: the 2b mapping round (Ryan's worksheet) (2026-10-04)
+
+- [ ] **Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv`.** Only the 62 `A` rows matter; a blank row stays in holding.
+- [ ] **A session applies it,** following `tasks/drives_nonraw_2b_2c_followup.md`: `remap`, then `apply-raw` (projects on the blank-project raw rows; write-once-if-blank), then `copy --from-holding`. The holding folder is already filled, so D: is not needed.
+- [ ] **Before the D: staging is erased,** keep the record manifest off D: (runbook §2.6). The current one is `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.
+
+## 🔸 MODERATE — historical drives: holding-folder access, and the held material (2026-10-04)
+
+- [ ] **Holding-folder ACL:** `staging\historical_drives_unassigned\` inherits `staging\`, so the `GJesus` group can modify, not only read. Ryan decides whether it should be read-only for the group.
+- [ ] **Aperio `.svs` (15 files, from the Drive zuri TUNEL zips) and TopSpin NMR (671 experiments)** are held: the instruments are not onboarded, and NMR is not imaging. Revisit if either is ever registered.
+- [ ] Low: **`catalog.py` does not open nested archives.** `nonraw_placement.py nested` is the stopgap; fold it in if the catalog is reused for another drive.
+- [ ] Low: **`historical_paths.py` is now the destination rule for all drive material placed on gjesus3** (streams A, C and D). Consider promoting it into `05_PROJECTS`; that is a spec change, so the Data Office decides.
+
 ## Metadata database — retire the CSV registries (2026-08-12)
 
 Context: all of this is **metadata** — CSV rows pointing at acquisition data and at more

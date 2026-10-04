@@ -169,6 +169,13 @@ The genuinely in-flight items (kept tight — everything else is in
   - **2026-10-04, Ryan's decisions and the day's writes:** see the close-out plan's "Decisions of 2026-10-04".
     - **Written and verified:** +578 drives MRI/PET-CT rows; 4 paperwork projects (`PROJ-0062`…`0065`); `1519` and `0320` reopened; retire v2 merged.
     - **Approved and queued:** the non-raw copies (short-path layout with an index), the holding folder, `LEONE`'s new content into `DTS24`'s folder, D's 153 retirements, and the dot-file plus 14 nested `.czi`.
+  - **✅ The drives' non-raw material is done (stream A, 2026-10-03/04).** Record: `tasks/drives_nonraw_placement_review.md`; the runbook for the mapping round is `tasks/drives_nonraw_2b_2c_followup.md`.
+    - **Placed:** 27,547 files (237.73 GB) in 17 projects, under `<project>\working\historical_drives\<FRIO-X6|MFB-Disco-2>\<study folder>\…`. Every path is at most 240 characters (the rule in `tools/drive_staging/historical_paths.py`), and each tree has `_INDEX.csv`, `README.txt`, `_ORIGIN.txt` and `_PATHMAP.csv`.
+    - **Created:** `AE-biomaGUNE-1116`, `-1420`, `-1520` and `Project-0521` (`PROJ-0062`…`0065`).
+    - **Holding:** 54,721 unassigned files (218.89 GB) in `staging\historical_drives_unassigned\`, with `README.txt` and `manifest.csv`.
+    - **Raw one-offs:** the dot-file `.czi` is `ACQ-20240125-CELL-050`, and the 14 nested `.czi` are `ACQ-20230503-CELL-001`…`014` (blank project).
+    - **Verified:** every file was re-hashed at copy time, and the coordinator re-verified every step independently.
+    - **Waiting on Ryan:** the 2b mapping worksheet (`tasks/drives_nonraw_mapping_worksheet.csv`; the 62 `A` rows cover nearly everything), and whether the holding folder should be read-only for the group.
   - **✅ The drives' DICOM stream is done in true production (stream B, 2026-10-02/04): +1,764 acquisitions.** Record: `tasks/drives_dicom_review.md`.
     - **By project:** `0619` 2020 +234 (`PROJ-0004`); `0420` 2021 +338 (`PROJ-0012`); `1519` 2020 and 2022 +661 (`PROJ-0008`, reopened); `1319` PET/CT +8 (`PROJ-0061`, created).
     - **With no project:** phantoms and collaborations 2022–23 (+123); the Madrid ICON exams of 2024 (+363, as `XMRI`, `collaborator:Uni-Madrid`); and the 2021 `1019` MRS-session image exams (+37, D6).

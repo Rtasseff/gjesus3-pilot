@@ -439,7 +439,13 @@ In rough order:
    protocol 1125) from the scanner, through the normal MRI path. Its no-DICOM exams go on the
    regen worklist. **Then** retire the 17 empty `ACQ-20260710-MRI-*` orphans (`--orphan`, list in
    `tasks/retire_lists/`).
-2. **Non-raw placement into project folders** (Ryan, 2026-10-02):
+2. **✅ DONE 2026-10-04 (stream A, merged):**
+   - 27,547 files placed in 17 projects;
+   - 4 projects created;
+   - the dot-file and the 14 nested `.czi` ingested;
+   - the holding folder filled (item 2c, done early by Ryan's choice).
+
+   **2b (mapping) waits for Ryan's worksheet.** *The plan as written:* **Non-raw placement into project folders** (Ryan, 2026-10-02):
    - **What goes in:**
      - the 22 R3 derivatives in `_analysis\ingest\nonraw_derived.csv`, each tied to its parent
        ACQ-ID (the 18 ROI crops go to `1123`);
