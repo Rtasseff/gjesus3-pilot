@@ -176,6 +176,26 @@ Added to all MRI configs before the first real run: `link_filename` (the product
 - **Model:** `Bruker BioSpec 11.7T` on B04a; `7T` on B04b, B05a and B05b; `Molecubes (PET/SPECT/CT)` on N03.
 - **Not repaired, for the record:** `PROJ-0061`'s `start_date` is 2026-10-02 (creation day) rather than the 2021 acquisition date. The other auto-created projects behave the same way (STATUS: the project-date recompute backlog item).
 
+**B04b DICOM regen + relink, 2026-10-04 (write window from the coordinator; completes the approved B04 batch).** The two no-DICOM exams were regenerated from `stage_B04` per `tools/drive_staging/regen_window_B04b.md`:
+- `ACQ-20200304-MRI-001`: m27/1 localizer, 9 DICOM;
+- `ACQ-20200304-MRI-055`: m32/12 cine, 15 DICOM.
+
+**How:**
+1. A fresh backup, `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261004_dicom_B04b_regen\`.
+2. `backfill_dicom_regen.py --apply` in WSL (Dicomifier 2.5.3 + workarounds; PixelSpacing check `matches_unswapped` on both).
+3. Project links from Windows through **`tools/drive_staging/relink_dicom_regen_drives.py`**, a thin wrapper that only swaps the stock `relink_mri_regen.py`'s hard-coded config markers for `dicom_B04b_0619_bret_7T`; the shared tool is unchanged. Result: 165 matched, 2 created, 163 complete, 0 errors.
+
+**Verified:**
+- checksums PASS (n_files 9 / 15);
+- link `.dcm` count == `.data/` count, all `samefile`;
+- worklist → `regenerated`;
+- registry `file_count` 9 / 15 and `checksum_present Y`;
+- the real `acquisition_datetime` kept;
+- row count unchanged (25,790);
+- validator 10,314 / 1 class.
+
+**`stage_B04` is no longer needed** (deletion waits on Ryan's approval).
+
 ### 7c. One-off X1: three real exams the ParaVision path cannot take (dry run only)
 
 **What they are:** `0619` `m27/4` and `m31/4` (B04b), and `1519` `m14/8` (B03). Their only copy has no `acqp`, and `_is_paravision_exam` requires `acqp` + `method`. **Decided (coordinator, 2026-10-02):** bring them in through a scoped one-off, with no detector change.
