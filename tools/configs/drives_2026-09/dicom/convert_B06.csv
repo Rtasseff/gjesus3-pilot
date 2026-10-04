@@ -1,0 +1,59 @@
+original_name,status,n_dicom,reason
+20210128_090809_jrc210128_m50MBmrs_1_1/10,converted,64,
+20210128_090809_jrc210128_m50MBmrs_1_1/11,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210128_090809_jrc210128_m50MBmrs_1_1/3,converted,3,
+20210128_090809_jrc210128_m50MBmrs_1_1/4,converted,12,
+20210128_090809_jrc210128_m50MBmrs_1_1/5,converted,8,
+20210128_090809_jrc210128_m50MBmrs_1_1/6,converted,12,
+20210128_090809_jrc210128_m50MBmrs_1_1/7,converted,12,
+20210128_090809_jrc210128_m50MBmrs_1_1/9,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210128_102542_jrc210128_m53MBmrs_1_1/10,converted,64,
+20210128_102542_jrc210128_m53MBmrs_1_1/11,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210128_102542_jrc210128_m53MBmrs_1_1/4,converted,3,
+20210128_102542_jrc210128_m53MBmrs_1_1/5,converted,12,
+20210128_102542_jrc210128_m53MBmrs_1_1/6,converted,8,
+20210128_102542_jrc210128_m53MBmrs_1_1/7,converted,12,
+20210128_102542_jrc210128_m53MBmrs_1_1/9,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210129_113034_jrc210129_m57MBmrs_1_1/10,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210129_113034_jrc210129_m57MBmrs_1_1/4,converted,3,
+20210129_113034_jrc210129_m57MBmrs_1_1/5,converted,12,
+20210129_113034_jrc210129_m57MBmrs_1_1/6,converted,12,
+20210129_113034_jrc210129_m57MBmrs_1_1/8,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210129_113034_jrc210129_m57MBmrs_1_1/9,converted,64,
+20210129_125823_jrc210129_m56MBmrs_1_1/1,converted,3,
+20210129_125823_jrc210129_m56MBmrs_1_1/2,converted,12,
+20210129_125823_jrc210129_m56MBmrs_1_1/3,converted,12,
+20210129_125823_jrc210129_m56MBmrs_1_1/5,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210129_125823_jrc210129_m56MBmrs_1_1/6,converted,64,
+20210129_125823_jrc210129_m56MBmrs_1_1/7,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210222_085824_jrc210222_m55MBmrs_1_1/10,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210222_085824_jrc210222_m55MBmrs_1_1/12,converted,64,
+20210222_085824_jrc210222_m55MBmrs_1_1/13,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210222_085824_jrc210222_m55MBmrs_1_1/5,converted,3,
+20210222_085824_jrc210222_m55MBmrs_1_1/6,converted,12,
+20210222_085824_jrc210222_m55MBmrs_1_1/7,converted,12,
+20210222_085824_jrc210222_m55MBmrs_1_1/8,converted,8,
+20210222_104227_jrc210222_m58MBmrs_1_1/2,converted,3,
+20210222_104227_jrc210222_m58MBmrs_1_1/3,converted,12,
+20210222_104227_jrc210222_m58MBmrs_1_1/4,converted,12,
+20210222_104227_jrc210222_m58MBmrs_1_1/5,converted,8,
+20210222_104227_jrc210222_m58MBmrs_1_1/7,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210222_104227_jrc210222_m58MBmrs_1_1/8,converted,64,
+20210222_104227_jrc210222_m58MBmrs_1_1/9,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210301_125535_jrc210301_m57LVmrs_1_1/11,converted,64,
+20210301_125535_jrc210301_m57LVmrs_1_1/12,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210301_125535_jrc210301_m57LVmrs_1_1/13,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210301_125535_jrc210301_m57LVmrs_1_1/14,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210301_125535_jrc210301_m57LVmrs_1_1/15,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210301_125535_jrc210301_m57LVmrs_1_1/7,converted,9,
+20210301_125535_jrc210301_m57LVmrs_1_1/8,converted,14,
+20210301_125535_jrc210301_m57LVmrs_1_1/9,converted,24,
+20210302_093848_jrc210302_m56LVmrs_1_1/10,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210302_093848_jrc210302_m56LVmrs_1_1/11,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210302_093848_jrc210302_m56LVmrs_1_1/12,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210302_093848_jrc210302_m56LVmrs_1_1/3,converted,9,
+20210302_093848_jrc210302_m56LVmrs_1_1/4,converted,14,
+20210302_093848_jrc210302_m56LVmrs_1_1/5,converted,24,
+20210302_093848_jrc210302_m56LVmrs_1_1/7,converted,64,
+20210302_093848_jrc210302_m56LVmrs_1_1/8,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image
+20210302_093848_jrc210302_m56LVmrs_1_1/9,notregistered:non-image,0,spectroscopy/calibration method (PRESS); no reconstructed image

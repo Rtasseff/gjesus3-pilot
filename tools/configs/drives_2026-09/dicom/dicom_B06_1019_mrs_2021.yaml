@@ -64,7 +64,7 @@ registry:
   session_id:           "${discovered.jrc_id}"
   acquisition_datetime: discovered.drv_acq_datetime
   project_name:         ""
-  notes:                "Internal MRS/MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol 1019 from folder claim); recons kept: ${discovered.mri_recon_indices}; historical drives (drive 1 Drive Maria Jesus and Irati 20211209.zip), predates the kenia retention horizon"
+  notes:                "Internal MRS/MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol 1019 from folder claim); recons kept: ${discovered.mri_recon_indices}; historical drives (drive 1 Drive Maria Jesus and Irati 20211209.zip), predates the kenia retention horizon; ${discovered.drv_dicom_origin}"
 
 operator: "NA"
 

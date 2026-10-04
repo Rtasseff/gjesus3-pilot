@@ -35,7 +35,7 @@ auto_discover:
   case_table:
     file:       cases_dicom_B08_icon_madrid_2024.csv
     key:        original_name
-    on_missing: error
+    on_missing: skip
   subject_from_db: false
 
 registry:
@@ -50,7 +50,7 @@ registry:
   session_id:           discovered.drv_session
   acquisition_datetime: discovered.drv_acq_datetime
   project_name:         ""
-  notes:                "External MRI (Bruker ICON 1T, Uni Madrid) ${discovered.mri_sequence_name} exam ${discovered.drv_exam}, mouse ${discovered.drv_label} (scanner id ${discovered.drv_subject}); study 'nanoparticulas'; historical drives (drive 1 Claudia/Madrid 29-04-2024)"
+  notes:                "External MRI (Bruker ICON 1T, Uni Madrid) ${discovered.mri_sequence_name} exam ${discovered.drv_exam}, mouse ${discovered.drv_label} (scanner id ${discovered.drv_subject}); study 'nanoparticulas'; historical drives (drive 1 Claudia/Madrid 29-04-2024); ${discovered.drv_dicom_origin}"
 
 subject:
   facility_animal_id:  ""
