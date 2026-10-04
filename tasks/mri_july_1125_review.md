@@ -192,25 +192,48 @@ append-only (+69 each); the worklist, subjects, projects and tombstones byte-ide
 
 ## 6. The production write: order and checks (not run)
 
-1. **Preflight** (`prod_preflight_july.py`, read-only; passed today 09:42): no lock, registry quiet; counters at 16 / 30 / 34 and
+**Dress rehearsal of the write itself (2026-10-04, 10:14 to 10:22, scratch only).** The scratch root held production's registry
+snapshot of that minute (25,925 rows, stream B's rows included), PROJ-0021's `provenance.csv` and `_project.yaml`, and the 17 `_bis` raw
+and link folders. The two write drivers then ran exactly as they will in production: `write_sessions.py` (Windows: the eight sessions
+through `mri_ingest.py`, then the first m12 study through its scoped config, stopping at the first step that is not clean) and
+`write_phantoms_wsl.sh` (WSL + Dicomifier: the five configs, stopping at the first one whose exit code, `DONE` count, regenerated
+count or `Failed:` line differs). Both refuse a live root unless given `--go-production`. **Result: 210 / 210, 0 failed checks.**
+`verify_sessions.py` and `verify_phantoms.py` both clean on the cumulative root; `registry_raw` and `ingest_manifest` +210 lines each,
+all CRLF, none bare-LF, though Windows wrote 141 and WSL wrote 69; `provenance.csv` an exact prefix plus 141 lines, `_project.yaml`
+identical; **all eight counter changes exactly as predicted and no other key** (`check_counters.py`); **34 m12 link folders, 17 `_bis`
+(no suffix) and 17 first-study (`_study1147`), each owned by exactly one acquisition and holding all its files**
+(`check_link_owners.py`, by device and inode; on the earlier standard-CLI reproduction the same check finds 16 of 17 `_bis` folders
+intact, one polluted, as the audit did); the validator names none of the 141 session ids; `generate_index.py --project PROJ-0021`
+writes only that project's `index.html` (1 s) and lists all 141. Mixed Windows and WSL writers on one registry therefore leave no
+line-ending or counter anomaly. Output: `dress_*.txt`, `verify_dress_*.txt`, `check_*_dress.txt`.
+
+**Production baseline, read-only, 10:19:** the validator (`--no-enrichment`) reports **10,314 errors, all the `operator` placeholder**
+(25,925 rows, stream B's and A's writes included): the baseline did not move.
+
+1. **Preflight** (`prod_preflight_july.py`, read-only; passed 09:42, and at 10:14 in `--quick` mode with one expected red, "registry
+   written 0.6 minutes ago", because stream B was writing; counters, link names and unregistered folders unchanged): no lock, registry
+   quiet; counters at 16 / 30 / 34 and
    0 for the five phantom prefixes; none of the 14 studies registered; `PROJ-0021` active; **none of the 141 link names exists
    in `raw_linked`**; no unregistered MRI folder on disk; all 8,423 pulled files at their manifest size and all 3,527 DICOM and
    `2dseq` files re-hashed. **Rerun immediately before the write: stream B is writing now** (counters, link names, unregistered
    folders and "registry quiet" are all re-read).
 2. **Backup** to a fresh dated folder under `C:\Users\rtasseff\temp\` (registries, `.acq_id_seq.json`, `PROJ-0021`'s
    `_project.yaml` and `provenance.csv`), SHA-256-verified.
-3. **Sessions, Windows,** in this order, from the repo root:
+3. **Sessions, Windows,** in this order, via `write_sessions.py --nas-root J:\gjesus3-data --go-production`, which runs from the repo root
    `python tools\operator\mri_ingest.py "D:\projects\gjesus3\scratch_mri-july-1125\<study>" --nas-root J:\gjesus3-data --operator Irene --model 7T --no-prompt --go`
    for m2, m3, m4, m5, m6, m7, m8, m19; **then**
    `python tools\ingest_raw.py --config tools\configs\mri_july_1125\mri_m12_first_irene.yaml --nas-root J:\gjesus3-data`.
-4. **Phantoms, WSL,** in this order: `mri_phantom_0611_spion`, `_0612_spion_rgd`, `_0708_phantom`, `_0709_phantom`, `_0818_mnacc`:
+4. **Phantoms, WSL,** in this order, via `write_phantoms_wsl.sh /mnt/gjesus3/gjesus3-data <log dir> prod --go-production`: `mri_phantom_0611_spion`,
+   `_0612_spion_rgd`, `_0708_phantom`, `_0709_phantom`, `_0818_mnacc`. For each it does
    `source ~/miniforge3/etc/profile.d/conda.sh && conda activate dicomifier-pilot`, then from the repo root
    `python tools/ingest_raw.py --config tools/configs/mri_july_1125/<file> --nas-root /mnt/gjesus3/gjesus3-data`.
    (Writing to the live share from WSL has precedent: the 2026-07-16 regeneration backfill and today's B04b regeneration.)
 5. **Verify:** `verify_sessions.py` (rows == the predicted exam → ID map, fields, DICOM counts, `checksums.json` == disk,
    SHA-256 == manifests, link identity, DB subjects, counters, append-only registries) and `verify_phantoms.py` (same, plus
-   sample_type, no project, no placeholder, regenerated counts). Then `generate_index.py --project PROJ-0021`, and the validator
-   (expect the known 10,314 errors, one class, and no new class).
+   sample_type, no project, no placeholder, regenerated counts), `check_counters.py` (the eight counter changes and nothing else),
+   `check_link_owners.py` (the 34 m12 link folders, 17 + 17, one owner each), `append_only_check.py` (`registry_raw` +210; its only
+   "problem" is `.acq_id_seq.json`, which is a counter file and is meant to change), all against the backup. Then
+   `generate_index.py --project PROJ-0021`, and the validator (expect the same 10,314 errors, one class, none on our ids).
 
 ## 7. Surprises recorded
 
