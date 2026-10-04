@@ -107,6 +107,38 @@ def record_fields(record):
     return next(csv.reader([text.rstrip("\r\n")]), [])
 
 
+def record_terminator(path):
+    """The line terminator of a CSV file's header record (b"\\r\\n" or b"\\n"; CRLF if unknown)."""
+    if not os.path.exists(path):
+        return b"\r\n"
+    with open(path, "rb") as f:
+        head = f.read(65536)
+    recs = split_records(head)
+    if recs and recs[0].endswith(b"\r\n"):
+        return b"\r\n"
+    if recs and recs[0].endswith(b"\n"):
+        return b"\n"
+    return b"\r\n"
+
+
+def append_record(path, record):
+    """Append one raw record (bytes) to an existing CSV, byte-exactly (retire tool v2, 2026-10-02).
+
+    The record is written as given; one without a terminator gets the file's own (record_terminator).
+    The trailing-newline guard runs first. The CALLER must hold ``locking.registry_lock`` when the
+    file is a registry.
+    """
+    if not os.path.exists(path):
+        raise RuntimeError(f"{path}: append_record needs an existing file (with its header)")
+    if not record.endswith(b"\n"):
+        record += record_terminator(path)
+    ensure_trailing_newline(path)
+    with open(path, "ab") as f:
+        f.write(record)
+        f.flush()
+        os.fsync(f.fileno())
+
+
 def remove_records(path, key_field, keys, dry_run=False):
     """Remove every record whose ``key_field`` value is in ``keys``, byte-exactly.
 

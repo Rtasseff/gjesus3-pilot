@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ In use (true production)  
-**Last Updated:** 2026-10-01 (new §5.7 — retiring an ACQ-ID)
+**Last Updated:** 2026-10-02 (§5.7 — 🔶 v2: content-equivalent re-saves and re-identifying a mis-coded acquisition; classify before re-identifying) · Prior: 2026-10-01 (new §5.7 — retiring an ACQ-ID)
 
 ---
 
@@ -393,11 +393,20 @@ refuses while `registries\.registry.lock` exists or `registry_raw.csv` changed i
 cannot see an ingest that is *between* batches — **confirm with whoever is running ingests**. Override the
 15-minute check (`--allow-recent-registry-writes`) only after that confirmation.
 
+**🔶 v2 (branch `feat/retire-v2`; not used in production yet):** a `.czi` re-save whose content is
+identical to a live survivor is retired as `equivalent`; a mis-coded acquisition is **re-identified** in place
+under its correct instrument code (`--reidentify-as`; disposition `reidentified`). **Classify first:** a
+re-identified id can never be retired or re-identified again (no chains, 06 §2.9.2), so decide whether a
+file is a duplicate or a derivative *before* re-identifying it, and re-identify only what stays in `/raw/`.
+A re-identify is therefore not undone by the tool; the file's own device fingerprint must name the new code,
+and the dry run shows it.
+
 **Steps.**
 
 1. **Decide the pairs, with evidence.** For duplicates, which id survives (see the proposal in
-   `tasks/retire_acquisition_review.md`); for derivatives, the original and the project. Write them into a
-   list CSV (`acq_id, disposition, target_acq_id, to_project, reason`).
+   `tasks/retire_acquisition_review.md`); for derivatives, the original and the project; for a re-identify,
+   the new instrument code (`tasks/retire_v2_review.md`). Write them into a list CSV (`acq_id, disposition,
+   target_acq_id, to_project, reason`; a re-identify adds `new_instrument`).
 2. **Dry run** (no `--execute`). Read every line: the hashes it compared, the rows it will remove, each link
    and what will happen to it (`replace` / `remove` / `absent` / `foreign`). Subject rows are never removed. Any
    `REFUSED` stops the whole list: fix the cause, don't work around it.
@@ -416,7 +425,8 @@ mid-run (re-run to finish) · 5 self-check failed (read the report).
 
 **Restoring a retirement** (not automated): the tombstone row holds the original `registry_raw` record
 verbatim and every other removed row in `other_rows_removed`; the run's backup holds the pre-run registries
-and the sidecars. A deleted duplicate's bytes are the survivor's; a derivative's are at `moved_to`.
+and the sidecars. A deleted duplicate's bytes are the survivor's; a derivative's are at `moved_to`; a
+re-identified acquisition's file is its new id's primary (`moved_to`), never removed.
 
 ---
 
