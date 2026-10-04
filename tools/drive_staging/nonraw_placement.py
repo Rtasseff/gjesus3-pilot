@@ -88,8 +88,29 @@ NESTED_SEP = "!"  # member "<nested archive>!<inner path>" for archives inside a
 MANIFEST_FIELDS = [
     "row", "drive", "drive_label", "relpath", "archive", "member", "size", "sha256", "class", "ext",
     "flag", "claim_id", "verdict", "researcher", "project_name", "project_id", "project_status",
-    "dest_rel", "decision", "reason", "note", "root_key", "shortened",
+    "dest_rel", "decision", "reason", "note", "root_key", "shortened", "why",
 ]
+
+# Ryan, 2026-10-04: MRI that has no reconstructed image, or whose reconstruction cannot be converted
+# to DICOM, is NOT registered; it is kept as other data, beside a plain README saying why
+# (stream B hands it over in nonraw_for_A v3 as kind notregistered:<reason>)
+NOTREG_WHY = {
+    "no-recon": "no reconstructed image (e.g. spectroscopy); gjesus3 registers MRI only as "
+                "reconstructed DICOM images",
+    "conversion-failed": "could not be converted to DICOM; if someone converts it, it can be registered",
+}
+NOTREG_README = "README_not_registered.txt"
+
+
+def notreg_text(whys):
+    lines = ["Why these files are not registered in gjesus3", "=============================================", "",
+             "The MRI data in this folder (and its sub-folders) is kept here as OTHER DATA,",
+             "not as a registered acquisition in gjesus3's archive. The reason:", ""]
+    lines += [f"  - {w}" for w in sorted(whys)]
+    lines += ["", "The files are byte-for-byte copies from the historical operator drives.",
+              "Their original location is in _INDEX.csv (column original_path; column why).",
+              "Questions: the Data Office.", ""]
+    return "\r\n".join(lines)
 
 
 # ---------------------------------------------------------------------------------------- helpers
@@ -224,6 +245,12 @@ def decide(rec, ctx):
         return "holding", "NMR (TopSpin) experiment: holding folder (Ryan, 2026-10-02)", None
     if rec.get("from_b") is not None:  # stream B's own non-raw list (nonraw_for_A.csv), its project
         proj = rec["from_b"] or None
+        kind = rec.get("from_b_kind") or ""
+        if kind.startswith("notregistered:"):
+            sub = kind.split(":", 1)[1]
+            if not proj:
+                return "holding", "B->A not registered, no project", None
+            return _project_decision(proj, ctx, f"B->A not registered ({sub})")
         if cls == "archive":  # B lists a nested archive whole; its inner content comes in B's v2 list
             return "unclear", "B->A nested archive: waiting for B's v2 (its contents), not placed whole", proj
         if not proj:
@@ -381,10 +408,12 @@ def cmd_plan(args):
     mapping_used = collections.Counter()
     if args.mapping:
         say(f"2b mapping: {len(mapping)} groups mapped in {args.mapping}")
+    fromb_kind = {}
     fromb = {}  # stream B's non-raw list: (drive, archive or '-', path) -> project ('' = none)
     if os.path.exists(args.from_b):
         for r in it(args.from_b):
             fromb[(r["drive"], r["archive"] or "-", r["path"])] = r["project"]
+            fromb_kind[(r["drive"], r["archive"] or "-", r["path"])] = r.get("kind", "")
     say(f"B->A non-raw rows: {len(fromb)} from {args.from_b}")
     nested_rows = rd(args.nested) if os.path.exists(args.nested) else []
     nested_archives = {(r["drive"], r["archive"], r["nested"]) for r in nested_rows}
@@ -407,6 +436,9 @@ def cmd_plan(args):
                                                       f"2b mapping ({who} | {series})")
         r = dict(base)
         r.update(decision=dec, reason=reason)
+        kind = rec.get("from_b_kind") or ""
+        if kind.startswith("notregistered:"):
+            r["why"] = NOTREG_WHY.get(kind.split(":", 1)[1], kind)
         if proj:
             prow = projects.get(proj)
             r["project_name"] = proj
@@ -436,7 +468,8 @@ def cmd_plan(args):
                    excluded_reason=excluded.get(f["relpath"]),
                    ingested=f["relpath"] in ingested_loose,
                    derived=derived.get((drive, f["relpath"])),
-                   from_b=fromb.get((drive, "-", f["relpath"])))
+                   from_b=fromb.get((drive, "-", f["relpath"])),
+                   from_b_kind=fromb_kind.get((drive, "-", f["relpath"])))
         add(base, rec)
         if f["class"] == "archive":
             archives[(drive, f["relpath"])] = rows[-1]
@@ -487,7 +520,8 @@ def cmd_plan(args):
                    ingested=(m["archive_relpath"], m["member"]) in ingested_member,
                    derived=None,
                    from_b=fromb.get((drive, m["archive_relpath"], m["member"]),
-                                    archive_fromb.get((drive, m["archive_relpath"]))))
+                                    archive_fromb.get((drive, m["archive_relpath"]))),
+                   from_b_kind=fromb_kind.get((drive, m["archive_relpath"], m["member"])))
         if (drive, m["archive_relpath"], m["member"]) in nested_archives:
             rec["special"] = ("expanded", "nested archive: its members are decided one by one", None)
         if installer:
@@ -585,8 +619,39 @@ def load_claim_roots():
         if not proj and c["verdict"] == "SHADOWED":
             proj = c["proposed_project"] or None
         if proj:
-            out[H.claim_root_segments(c["claim_root"])] = proj
+            key = H.claim_root_segments(c["claim_root"])
+            out[key] = proj
+            if c["source"] in ("filename", "archive-member-filename"):
+                FILENAME_ROOTS.add(key)   # the root is just the folder of a file whose NAME held the code
     return out
+
+
+FILENAME_ROOTS = set()
+
+# Ryan, 2026-10-04 ("group under the parent"): in these projects a study folder that is only a
+# session / animal level folder is replaced by its parent, so the sessions sit together as on the drive
+PARENT_GROUP_PROJECTS = {"AE-biomaGUNE-0721", "AE-biomaGUNE-1019", "AE-biomaGUNE-1123", "AE-biomaGUNE-1321"}
+SESSION_OR_ANIMAL_RE = re.compile(
+    r"^\d{8}_\d{6}_"                 # a ParaVision session  20221006_120152_jrc221006_m42_0721_1_1
+    r"|^id\s?\d+[a-z]?$"             # an animal             ID205, ID 22
+    r"|(^|_)m\d+[a-z]?(_|$)"         # an animal             m36, Splits_m5_1019_End-Expiration
+    r"|^grupo\s+[a-z]$",             # an animal group       Grupo B
+    re.I)
+
+
+def promote_root(names, kinds, i, from_filename, code=""):
+    """Ryan's "group under the parent": climb from root index i while the folder is session / animal
+    level (or, on the first step, only the folder of a file-name claim -- unless that folder's own
+    name carries the project code: then it IS the study folder, e.g. `Proyecto 1019 ...`). Never onto
+    the drive's top folder, never past an archive."""
+    first = True
+    while i > 1 and kinds[i - 1] == "dir" and kinds[i] == "dir":
+        named_for_project = bool(code) and code in names[i]
+        if not (SESSION_OR_ANIMAL_RE.search(names[i]) or (first and from_filename and not named_for_project)):
+            break
+        i -= 1
+        first = False
+    return i
 
 
 def row_root(r, claim_roots):
@@ -596,10 +661,11 @@ def row_root(r, claim_roots):
       - holding: None."""
     if r["decision"] == "holding" or not r.get("project_name"):
         return None
-    if r.get("root_key") and not r["reason"].startswith("2b mapping"):
+    if r.get("root_key") and not r["reason"].startswith("2b mapping") and r["project_name"] not in RECOMPUTE_ROOTS:
         return None if r["root_key"] == "-" else tuple(r["root_key"].split("|"))  # computed earlier
     segs = H.logical_segments(r["relpath"], r["archive"], r["member"])
     names = [H.norm(n) for n, _k in segs]
+    kinds = [k for _n, k in segs]
     if r["reason"].startswith("2b mapping"):
         _d, _who, series, _kind = manifest_group(r)
         if series.startswith("("):
@@ -614,8 +680,14 @@ def row_root(r, claim_roots):
         return tuple(names[: pos + 1])
     for i in range(len(names) - 1):            # outermost first
         if claim_roots.get(tuple(names[: i + 1])) == r["project_name"]:
+            if r["project_name"] in PARENT_GROUP_PROJECTS:
+                i = promote_root(names, kinds, i, tuple(names[: i + 1]) in FILENAME_ROOTS,
+                                 code=r["project_name"][-4:])
             return tuple(names[: i + 1])
     return None
+
+
+RECOMPUTE_ROOTS = set()  # projects whose stored root_key is ignored (paths --recompute-roots)
 
 
 def plan_tree(base, rows, claim_roots, nas, budget):
@@ -628,7 +700,8 @@ def plan_tree(base, rows, claim_roots, nas, budget):
         r["root_key"] = "|".join(root) if root else "-"
         items.append(H.Item(id=str(r["row"]), drive=r["drive"], relpath=r["relpath"], archive=r["archive"],
                             member=r["member"], root=root,
-                            extra={"size": r["size"], "sha256": r["sha256"], "claim_id": r["claim_id"]}))
+                            extra={"size": r["size"], "sha256": r["sha256"], "claim_id": r["claim_id"],
+                                   "why": r.get("why", "")}))
     return p, items, p.plan(items)
 
 
@@ -668,6 +741,9 @@ def assign_destinations(rows, projects, nas, out, say, claim_roots, global_index
         idx = H.index_rows(d, items, base)
         H.write_index(os.path.join(tdir, H.INDEX_NAME), idx)
         H.write_pathmap(os.path.join(tdir, H.PATHMAP_NAME), p.pathmap_rows())
+        notreg = notreg_folders(base, [(d[i.id], byid[i.id].get("why", "")) for i in items if byid[i.id].get("why")])
+        wcsv(os.path.join(tdir, "_NOTREG.csv"), ["folder", "why"],
+             [{"folder": f, "why": w} for f, ws in sorted(notreg.items()) for w in sorted(ws)])
         origins = p.origins(items)
         wcsv(os.path.join(tdir, "_ORIGINS.csv"), ["folder", "original"],
              [{"folder": k, "original": o} for k, v in sorted(origins.items()) for o in v])
@@ -958,10 +1034,18 @@ def load_manifest(path):
 
 
 def cmd_copy(args):
-    rows = [r for r in load_manifest(args.manifest) if r["decision"] == "place"]
+    projects = load_projects(args.nas)
+    # a `closed-project` row is placeable once the LIVE registry says its project is active again
+    # (Ryan reopens case by case: 1519 / 0320 on 2026-10-04)
+    reopened = {n for n, p in projects.items() if (p.get("status") or "").strip().lower() == "active"}
+    rows = [r for r in load_manifest(args.manifest)
+            if r["decision"] == "place" or (r["decision"] == "closed-project" and r["project_name"] in reopened)]
     if args.project:
         rows = [r for r in rows if r["project_name"] in args.project]
-    projects = load_projects(args.nas)
+    held = sorted({r["project_name"] for r in load_manifest(args.manifest)
+                   if r["decision"] == "closed-project" and r["project_name"] not in reopened})
+    if held:
+        print(f"still closed, not copied: {held}")
     if args.from_holding:
         # 2b after the D: staging is gone: a mapped group's files are read from their copy in the NAS
         # holding folder (filled by `holding --execute`). Rows placed earlier from D: are already at
@@ -1064,8 +1148,9 @@ def _sevenzip_members(rows):
 
 
 def cmd_verify(args):
-    """Count/bytes per project from the NAS + a random re-hash sample."""
-    rows = [r for r in load_manifest(args.manifest) if r["decision"] == "place"]
+    """Count/bytes per project from the NAS + a random re-hash sample (place rows, and closed-project
+    rows of projects since reopened)."""
+    rows = [r for r in load_manifest(args.manifest) if r["decision"] in ("place", "closed-project")]
     if args.project:
         rows = [r for r in rows if r["project_name"] in args.project]
     per = collections.defaultdict(lambda: [0, 0, 0, 0])
@@ -1176,7 +1261,36 @@ def tree_documents(manifest, base, holding=False, extra_index_rows=()):
             origins[r["folder"]].append(r["original"])
     for folder, origs in origins.items():
         docs[f"{base}\\{folder}\\{H.ORIGIN_NAME}"] = H.origin_text(origs).encode("utf-8")
+    nrp = os.path.join(tdir, "_NOTREG.csv")
+    if os.path.exists(nrp):
+        nr = collections.defaultdict(set)
+        for r in rd(nrp):
+            nr[r["folder"]].add(r["why"])
+        for folder, whys in nr.items():
+            docs[f"{base}\\{folder}\\{NOTREG_README}"] = notreg_text(whys).encode("utf-8")
     return docs
+
+
+def notreg_folders(base, dest_whys):
+    """{folder below base: {why}} -- one README per GROUP: the topmost folder holding not-registered
+    files (an exam folder), moved up while its README path would break the budget."""
+    folders = collections.defaultdict(set)
+    for dest, why in dest_whys:
+        folders[os.path.dirname(dest)[len(base) + 1:]].add(why)
+    keep = {}
+    for f in sorted(folders, key=lambda x: (x.count("\\"), x.lower())):
+        if any(f.lower().startswith(k.lower() + "\\") for k in keep):
+            for k in keep:
+                if f.lower().startswith(k.lower() + "\\"):
+                    keep[k] |= folders[f]
+            continue
+        keep[f] = set(folders[f])
+    out = collections.defaultdict(set)
+    for f, whys in keep.items():
+        while H.unc_len(f"{base}\\{f}\\{NOTREG_README}") > H.BUDGET and f.count("\\") > 0:
+            f = os.path.dirname(f)
+        out[f] |= whys
+    return out
 
 
 def publish_tree(nas, manifest, base, execute, holding=False, extra_index_rows=()):
@@ -1363,7 +1477,7 @@ WORKSHEET_FIELDS = ["group", "priority", "project", "note_for_ryan", "drive", "r
                     "example_1", "example_2", "example_3", "acq_ids", "group_key"]
 
 
-MAPPABLE_REASONS = ("no claim", "(C) claim", "B->A non-raw, no project")
+MAPPABLE_REASONS = ("no claim", "(C) claim", "B->A non-raw, no project", "B->A not registered, no project")
 
 
 def mappable(reason):
@@ -1552,6 +1666,7 @@ def cmd_paths(args):
     <out>\\trees\\. On the record manifest it also rewrites the committed global index."""
     rows = load_manifest(args.manifest)
     projects = load_projects(args.nas)
+    RECOMPUTE_ROOTS.update(args.recompute_roots or [])
     log = []
 
     def say(m):
@@ -1767,6 +1882,8 @@ def main(argv=None):
     ws.add_argument("--force", action="store_true", help="overwrite a worksheet that has mapped groups")
     pa = sub.add_parser("paths")
     pa.add_argument("--manifest", default=None)
+    pa.add_argument("--recompute-roots", nargs="*", default=[],
+                    help="projects whose study folders are re-derived (e.g. after a rule change)")
     rm = sub.add_parser("remap")
     rm.add_argument("--manifest", default=os.path.join(OUT_DEFAULT, "placement_manifest.csv"),
                     help="the stored manifest (default: stream A's record; its copy off D: once D: is erased)")

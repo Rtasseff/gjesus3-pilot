@@ -46,7 +46,8 @@ CTX = {"projects": PROJECTS}
 def rec(**kw):
     r = {"drive": "D1", "relpath": "a\\b.png", "archive": "", "member": "", "class": "figure",
          "flag": "", "size": "10", "verdict": "CONFIRMED", "proposed_project": "AE-biomaGUNE-1123",
-         "imaging_root": None, "excluded_reason": None, "derived": None, "ingested": False}
+         "imaging_root": None, "excluded_reason": None, "derived": None, "ingested": False,
+         "from_b_kind": ""}
     r.update(kw)
     return r
 
@@ -235,6 +236,54 @@ def test_remap():
     check(rows[0]["decision"] == "holding", "input rows are not modified")
 
 
+def test_parent_grouping():
+    print("group under the parent (Ryan, 2026-10-04): session / animal level study folders climb")
+    def climb(path, i, fn=False):
+        segs = [p for p in path.split("\\")]
+        names = [s.lower() for s in segs]
+        kinds = ["dir"] * (len(segs) - 1) + ["file"]
+        return segs[N.promote_root(names, kinds, i, fn)]
+    p = r"T\Biodistribucion Noviembre22\20221006_120152_jrc221006_m42_0721_1_1\pdata\x.nii"
+    check(climb(p, 2) == "Biodistribucion Noviembre22", "a ParaVision session climbs to its study folder")
+    p = r"C\AXIOSCAN\Prueba jpeg\ID205\a.czi"
+    check(climb(p, 3, fn=True) == "Prueba jpeg", "an animal folder from a file-name claim climbs")
+    p = r"C\PR REPETICION\Grupo B\a.tif"
+    check(climb(p, 2) == "PR REPETICION", "Grupo B climbs")
+    p = r"C\Proyecto 0619\MRI\a.xlsx"
+    check(climb(p, 1) == "Proyecto 0619", "a real study folder stays")
+    segs = r"A\Pili y Mili\Proyecto 1019 Envejecimiento y dieta\MRI\a.xlsx".split("\\")
+    i = N.promote_root([x.lower() for x in segs], ["dir"] * 4 + ["file"], 2, True, code="1019")
+    check(segs[i] == "Proyecto 1019 Envejecimiento y dieta", "a folder named for the project never climbs")
+    p = r"Top\20221006_120152_x_m42\a.nii"
+    check(climb(p, 1) == "20221006_120152_x_m42", "never climbs onto the drive's top folder")
+
+
+def test_not_registered():
+    print("not-registered MRI (Ryan, 2026-10-04): placed / held as other data, README per group")
+    D = lambda **kw: N.decide(rec(**kw), CTX)  # noqa: E731
+    r = D(**{"class": "bruker"}, imaging_root="mri: x", from_b="AE-biomaGUNE-1123", from_b_kind="notregistered:no-recon")
+    check(r[0] == "place" and "not registered" in r[1], f"with a project -> placed {r[:2]}")
+    r = D(**{"class": "bruker"}, imaging_root="mri: x", from_b="", from_b_kind="notregistered:conversion-failed")
+    check(r[:2] == ("holding", "B->A not registered, no project"), f"no project -> holding {r[:2]}")
+    check(N.mappable("B->A not registered, no project"), "a not-registered group without a project is mappable in 2b")
+    base = r"projects\P\working\historical_drives"
+    why = N.NOTREG_WHY["no-recon"]
+    f = N.notreg_folders(base, [(base + r"\FRIO-X6\S\sess\5\acqp", why), (base + r"\FRIO-X6\S\sess\5\pdata\1\2dseq", why),
+                                (base + r"\FRIO-X6\S\sess\6\acqp", why)])
+    check(sorted(f) == [r"FRIO-X6\S\sess\5", r"FRIO-X6\S\sess\6"], f"one README per exam folder {sorted(f)}")
+    deep = "FRIO-X6\\" + "\\".join(["x" * 40] * 4)
+    f = N.notreg_folders(base, [(base + "\\" + deep + "\\a", why)])
+    (k,) = f
+    check(H_ok(base, k), f"a README that would break the budget moves up ({k.count(chr(92))} levels)")
+    txt = N.notreg_text({why})
+    check("spectroscopy" in txt and "_INDEX.csv" in txt, "README text says why and where to look")
+
+
+def H_ok(base, folder):
+    import historical_paths as H
+    return H.unc_len(f"{base}\\{folder}\\{N.NOTREG_README}") <= H.BUDGET
+
+
 def test_publish():
     print("publishing a tree's index documents (what was previewed is what lands)")
     import historical_paths as H
@@ -357,6 +406,8 @@ if __name__ == "__main__":
     test_worksheet_roundtrip()
     test_link_names()
     test_remap()
+    test_parent_grouping()
+    test_not_registered()
     test_publish()
     test_copy()
     print(f"\n{'FAILED: ' + str(len(FAILS)) if FAILS else 'all passed'}")

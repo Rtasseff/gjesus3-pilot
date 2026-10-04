@@ -440,7 +440,7 @@ class Planner:
 # --------------------------------------------------------------------------- index / readme / origin
 
 INDEX_FIELDS = ["new_path", "drive", "archive", "original_path", "size", "sha256", "claim_id", "shortened",
-                "note"]
+                "why", "note"]
 
 
 def index_rows(dests, items, base):
@@ -454,7 +454,8 @@ def index_rows(dests, items, base):
         rows.append({"new_path": rel, "drive": DRIVE_LABELS[it.drive], "archive": it.archive,
                      "original_path": orig, "size": it.extra.get("size", ""),
                      "sha256": it.extra.get("sha256", ""), "claim_id": it.extra.get("claim_id", ""),
-                     "shortened": "Y" if it.extra.get("shortened") else "N", "note": ""})
+                     "shortened": "Y" if it.extra.get("shortened") else "N",
+                     "why": it.extra.get("why", ""), "note": ""})
     return sorted(rows, key=lambda r: r["new_path"].lower())
 
 
