@@ -1,6 +1,6 @@
 # Historical drives: the non-raw material — placement review (Phase 1, read-only)
 
-**Status:** 🔶 DRAFT — Phase 1 done, **no production write yet** · **Date:** 2026-10-02 ·
+**Status:** 🔶 IN PROGRESS — projects created and 27,534 files placed and verified (§9b); holding fill and raw one-offs pending · **Date:** 2026-10-02 ·
 **Branch:** `feat/drives-nonraw-placement` (stream A of the weekend close-out, plan Step 5 items 2 / 2b / 2c)
 **Tool:** [`tools/drive_staging/nonraw_placement.py`](../tools/drive_staging/nonraw_placement.py) · tests
 [`tools/test_nonraw_placement.py`](../tools/test_nonraw_placement.py) · per-project summary
@@ -340,6 +340,38 @@ Each one's `_ORIGIN.txt` says where it was. **An option, not applied** because i
 6. Report to the coordinator.
 
 The copy reads about 229 GB from D:: loose files directly, and archive members via `zipfile` or one `7z` call per `.7z`, extracting only the listed members to D: scratch (3,919 Haizpea members, 14.0 GB, deleted after the copy). At roughly 60 MB/s to the NAS that is **about 1–1.5 h of transfer**.
+
+## 9b. Production log (what was written, and how it was verified)
+
+All the steps below ran inside a write window the coordinator (`gj3-handoff`) granted. Each was verified independently, and the coordinator re-verified it.
+
+| Step | When | What | Result |
+|---|---|---|---|
+| 1 | 2026-10-04 08:31 | `create_project.py`: `AE-biomaGUNE-1116` **PROJ-0062**, `-1420` **PROJ-0063**, `-1520` **PROJ-0064**, `Project-0521` **PROJ-0065** (owner `Data-Office`, a placeholder) | registry append-only (+4 rows, BOM-free, CRLF); skeletons present; validator unchanged at 10,314, all the MRI placeholder. Backup: `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261004_0831_nonraw_step1\` |
+| 2a | 2026-10-04, run `NONRAW-20261004-084951` | 5,671 files / 104.42 GB into 11 projects | 5,671 copied, 0 collisions |
+| 2c | 2026-10-04, run `NONRAW-20261004-094913` | 8,681 files / 8.29 GB into `1519` and `0320`, after the coordinator reopened them | 8,681 copied, 0 collisions |
+| 2b + v2 top-up | 2026-10-04, run `NONRAW-20261004-100718` | the regrouped `0721` / `1019` / `1123` / `1321` (Ryan, "group under the parent") + stream B's v2 NIfTI for `0619` / `0320` | 13,182 copied + 1,255 skipped as identical, 0 collisions |
+
+**Placed in total: 27,534 files, 237.73 GB, in 17 projects.** The per-project counts, bytes and list hashes are in `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement\step2_expected_per_project.csv` and `…-v2b\step2b_expected_per_project.csv`.
+
+**Verification, every step:**
+- **The copy itself:** every file was re-hashed from the NAS before its rename.
+- **An independent walk** of each project's `working\historical_drives\` against the expected list: 0 missing, 0 extra, 0 size mismatches, no temp files, plus a fresh 2% re-hash. Evidence: `verify_step2a.txt`, `verify_step2c.txt`, `-v2b\verify_step2b.txt`.
+- **Provenance:** one row per file plus one per index document; no duplicate FILE ids.
+- **ACL:** a placed file inherits `working\` (`GJesus` Modify plus the admins).
+- **`/raw/` and `registry_raw.csv`:**
+  - unchanged in 2a/2c (byte-identical registry; a sample of 40 `/raw/` month folders unchanged);
+  - in 2b, stream B was ingesting in parallel, so the `/raw/` sample excluded B's month folders (unchanged), and the tool is audited to open no registry file for writing.
+
+**The working manifests:**
+- the record (v1): `D:\…\drives-nonraw-placement\placement_manifest.csv`;
+- **the current one** (B's v2, regrouped, re-planned against the frozen NAS path maps): `D:\…\drives-nonraw-placement-v2b\placement_manifest.csv`.
+
+**Use the current one for every later step** (holding, 2b mapping). Copy it off D: before the staging is erased (runbook §2.6).
+
+**Still to do:**
+- step 3, the holding fill: after stream B's `nonraw_for_A` v3 (not-registered MRI), re-planned against the frozen path maps;
+- step 4, the two raw one-offs (§4).
 
 ## 10. Proposed wording for STATUS / CHANGELOG / BACKLOG (the coordinator applies it at merge)
 
