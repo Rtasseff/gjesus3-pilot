@@ -1,0 +1,82 @@
+group,original_acq_id,original_name,instrument,original_folder,derivatives,classes,derivative_gb
+CELL|2022-05-06T09:41:35.280851Z,ACQ-20220506-CELL-001,Lucia320'69.czi,CELL,drive1_FRIO-X6/Cell observer/Lucia-Lorena Garayoa,1,export: crop 1,0.96
+CELL|2022-05-06T11:42:56.4073076Z,ACQ-20220506-CELL-008,Lucia320'72P10x.czi,CELL,drive1_FRIO-X6/Cell observer/Lucia-Lorena Garayoa,1,export: crop 1,0.21
+CELL|2022-05-13T10:24:09.6171808Z,ACQ-20220513-CELL-004,Lucia320'55.10x.czi,CELL,drive1_FRIO-X6/Cell observer/Lucia-Lorena Garayoa,1,stitched copy 1,0.91
+CELL|2022-05-20T06:53:24.755108Z,ACQ-20220520-CELL-013,Lucia320'69.10xp.czi,CELL,drive1_FRIO-X6/Cell observer/Lucia-Lorena Garayoa,1,stitched copy 1,1.09
+CELL|2022-06-06T08:49:38.8704664Z,ACQ-20220606-CELL-028,ID162_Corazon1_PR_POL.czi,CELL,drive1_FRIO-X6/Cell observer/LYDIA/Lydia_Kepa/Picrosirius Red,1,scale-bar copy 1,0.32
+CELL|2022-09-16T09:01:03.4864746Z,ACQ-20220916-CELL-001,56_cayado_10x.czi,CELL,drive1_FRIO-X6/Cell observer/AINHIZE/Aortas/Alizarin,1,scale-bar copy 1,0.07
+CELL|2022-09-16T09:15:57.4526065Z,ACQ-20220916-CELL-004,56_cayado_40x_1.czi,CELL,drive1_FRIO-X6/Cell observer/AINHIZE/Aortas/Alizarin,1,identical re-save 1,0.03
+CELL|2023-06-29T10:45:21.6214687Z,ACQ-20230629-CELL-009,IPF_4_P_S.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Experimentos-fibroblastos/COL-1,1,identical re-save 1,0.0
+CELL|2023-07-04T11:50:02.4623703Z,ACQ-20230704-CELL-004,Free-FBS.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Experimentos-fibroblastos/ki67-Laura,1,stitched copy 1,0.16
+CELL|2023-07-04T12:06:44.779592Z,ACQ-20230704-CELL-002,5ng-TFG-B.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Experimentos-fibroblastos/ki67-Laura,1,stitched copy 1,0.32
+CELL|2023-07-04T12:38:52.9149316Z,ACQ-20230704-CELL-006,LS-LS-Nint.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Experimentos-fibroblastos/ki67-Laura,1,stitched copy 1,0.46
+CELL|2023-07-11T08:03:39.0112584Z,ACQ-20230711-CELL-033,PBS(-)-PBS(+)-FreeNint.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Experimentos-fibroblastos/ki67-48h-trata/Pocillo.completo,1,stitched copy 1,0.5
+CELL|2023-07-11T09:07:10.5444575Z,ACQ-20230711-CELL-031,LS-LS-Nint.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Experimentos-fibroblastos/ki67-48h-trata/Pocillo.completo,1,stitched copy 1,0.32
+CELL|2023-07-11T09:26:06.155442Z,ACQ-20230711-CELL-025,LS-Nin-4.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Experimentos-fibroblastos/ki67-48h-trata,1,scale-bar copy 1,0.0
+CELL|2023-07-11T09:34:21.0125021Z,ACQ-20230711-CELL-027,LP-LP-Nint-Stitching-01.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Experimentos-fibroblastos/ki67-48h-trata/Pocillo.completo,2,identical re-save 1; stitched copy 1,0.66
+CELL|2023-07-11T09:46:42.555649Z,ACQ-20230711-CELL-012,LP-Nint-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Experimentos-fibroblastos/ki67-48h-trata,1,scale-bar copy 1,0.0
+CELL|2023-09-20T09:33:22.8938276Z,ACQ-20230920-CELL-011,56.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Invivo-Agosto23/HE/20x/56,1,scale-bar copy 1,0.03
+CELL|2023-09-20T12:46:40.1309311Z,ACQ-20230920-CELL-100,63-2.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/Invivo-Agosto23/TM/20x,1,scale-bar copy 1,0.03
+CELL|2023-09-28T14:24:00.8346814Z,ACQ-20230928-CELL-002,56-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/InVivos-Biodistribuciones_y_TT/Ex vivo/CellObv-TT-Agosto23/PR/20x,1,scale-bar copy 1,0.03
+CELL|2023-10-26T09:35:06.5572688Z,ACQ-20231026-CELL-028,56-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Lung-surfactant/InVivos-Biodistribuciones_y_TT/Ex vivo/CellObv-TT-Agosto23/sma,1,scale-bar copy 1,0.0
+CELL|2024-01-19T11:16:14.3856692Z,ACQ-20240119-CELL-020,48h-5.czi,CELL,drive1_FRIO-X6/Cell observer/Laura/Cell observer/uptake-DPPCDOPE/48h,1,scale-bar copy 1,0.0
+CELL|2024-01-25T11:55:21.0886843Z,ACQ-20240125-CELL-032,LS-SPN-20x-11.czi,CELL,drive1_FRIO-X6/Cell observer/Laura/Cell observer/Interaccion-LS-SPN,2,scale-bar copy 2,0.12
+CELL|2024-02-22T15:37:45.9215258Z,ACQ-20240222-CELL-054,24-2.czi,CELL,drive1_FRIO-X6/Cell observer/Laura/Cell observer/Uptake-LP-IONP-DOXO,1,scale-bar copy 1,0.0
+CELL|2024-03-04T09:48:39.7248095Z,ACQ-20240304-CELL-001,ID26_0219_alphasma_10x tiles.czi,CELL,drive1_FRIO-X6/Cell observer/AINHIZE/LAURA/1321/Immunos tiles Marina,2,export: crop 1; identical re-save 1,4.67
+CELL|2024-03-04T11:08:20.4508343Z,ACQ-20240304-CELL-003,ID26_0219_col I_10x tiles.czi,CELL,drive1_FRIO-X6/Cell observer/AINHIZE/LAURA/1321/Immunos tiles Marina,2,export: crop 1; identical re-save 1,4.56
+CELL|2024-04-04T16:49:34.6896483Z,ACQ-20240404-CELL-043,New-06.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Calceina-,1,identical re-save 1,0.0
+CELL|2024-04-04T16:49:44.2664528Z,ACQ-20240404-CELL-044,New.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Calceina-,1,identical re-save 1,0.0
+CELL|2024-05-07T13:37:53.9365424Z,ACQ-20240507-CELL-058,24h-20x-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/uptake-HLF/LS-NP,1,identical re-save 1,0.0
+CELL|2024-05-07T14:33:50.5863465Z,ACQ-20240507-CELL-102,24h-20x-3.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/uptake-HLF/LS,2,identical re-save 1; scale-bar copy 1,0.0
+CELL|2024-06-20T08:58:33.1782276Z,ACQ-20240620-CELL-001,ROS.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER,52,scene split 52,3.18
+CELL|2024-06-26T14:35:58.4909385Z,ACQ-20240626-CELL-001,LauraFM.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Herida,28,scene split 14; stitched copy 14,8.47
+CELL|2024-06-27T09:37:53.5174316Z,ACQ-20240627-CELL-096,LauraFM-02.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/ROS-27.06.24,53,scene split 53,0.05
+CELL|2024-06-27T14:28:25.6751744Z,ACQ-20240627-CELL-041,LauraFM-14.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Herida/Herida-27.06.24/2024-06-27,28,scene split 14; stitched copy 14,6.61
+CELL|2024-06-28T14:14:01.2290816Z,ACQ-20240628-CELL-004,Medio completo.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:18:14.7399977Z,ACQ-20240628-CELL-002,Medio completo-2.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:20:03.5712445Z,ACQ-20240628-CELL-012,Medsio-sin-FBS.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:22:01.5880133Z,ACQ-20240628-CELL-010,Medsio-sin-FBS-2.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:23:59.9129629Z,ACQ-20240628-CELL-013,x1.4-0.01-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:27:20.8165745Z,ACQ-20240628-CELL-017,x1.8-0.01-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:47:37.1768579Z,ACQ-20240628-CELL-018,x1.8-0.01-2.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:49:25.6998982Z,ACQ-20240628-CELL-006,Medio-5nTGFB-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:51:03.7524921Z,ACQ-20240628-CELL-008,Medio-5nTGFB-2.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:53:00.8045687Z,ACQ-20240628-CELL-015,x1.4-0.05-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:54:34.2048596Z,ACQ-20240628-CELL-016,x1.4-0.05-2.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:55:57.9042644Z,ACQ-20240628-CELL-019,x1.8-0.05-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:57:30.7651722Z,ACQ-20240628-CELL-020,x1.8-0.05-2.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-06-28T14:59:36.0240749Z,ACQ-20240628-CELL-014,x1.4-0.01-2.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Ki67-Herida,1,stitched copy 1,0.02
+CELL|2024-07-03T14:11:04.5249825Z,ACQ-20240703-CELL-104,x1.8-0.05-3.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/FeMn/Ki67,1,scale-bar copy 1,0.0
+CELL|2024-07-05T12:58:59.3135594Z,ACQ-20240705-CELL-024,LauraFM-03.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Herida-05.07.24/2024-07-05,26,identical re-save 1; scene split 25,0.31
+CELL|2024-07-09T15:18:31.3949888Z,ACQ-20240709-CELL-005,LauraFM.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Herida-Elena-09.07.24/2024-07-09,1,identical re-save 1,0.01
+CELL|2024-07-09T16:13:01.9761076Z,ACQ-20240709-CELL-004,LauraFM-04.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Herida-Elena-09.07.24/2024-07-09,1,export: subset 1,0.01
+CELL|2024-07-12T07:24:14.7515946Z,ACQ-20240712-CELL-090,MedioSinFBS-20x-1.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/FeMn-COL-5ngTGFB,1,identical re-save 1,0.0
+CELL|2024-07-12T07:24:47.3628201Z,ACQ-20240712-CELL-091,MedioSinFBS-20x-2.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/FeMn-COL-5ngTGFB,1,identical re-save 1,0.0
+CELL|2024-07-12T09:04:51.2822592Z,ACQ-20240712-CELL-138,alfaSMA.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/FeMn-alfaSMA-10ngTGFB/2024-07-12,2,identical re-save 2,0.29
+CELL|2024-07-12T10:19:39.8581425Z,ACQ-20240712-CELL-141,5ng.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/FeMn-alfaSMA-5ngTGFB,1,identical re-save 1,0.13
+CELL|2024-07-18T15:41:27.7837038Z,ACQ-20240718-CELL-001,LauraFM.czi,CELL,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/CELL OBSERVER/Herida-18.07.24,24,scene split 24,0.13
+LSM9|2023-03-30T08:39:17.0774308Z,ACQ-20230330-LSM9-007,8170 40x-.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/CD45 594 Y ALFASMA 488 300323/Fotos a 40X anitguas,1,identical re-save 1,0.0
+LSM9|2023-04-17T15:27:42.1038181Z,ACQ-20230417-LSM9-014,81680x-1 tiles.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/SM22alfa 594 170423/C PBS,1,identical re-save 1,0.0
+LSM9|2023-04-17T15:28:25.6624232Z,ACQ-20230417-LSM9-013,81680x- tiles.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/SM22alfa 594 170423/C PBS,1,identical re-save 1,0.0
+LSM9|2023-04-18T08:27:57.1125088Z,ACQ-20230418-LSM9-050,10x-1 confocal.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/Fotos confocales cdh5 jagged2.zip/AFASMA de las fotos con collagen pero no he sacado collagen/8170 y 8171,1,identical re-save 1,0.01
+LSM9|2023-04-18T13:17:42.4014634Z,ACQ-20230418-LSM9-054,8170 10x-1 tiles.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/SM22alfa 594 170423/C BLEO,1,export: rendering 1,0.0
+LSM9|2023-04-18T15:36:16.1875861Z,ACQ-20230418-LSM9-030,20x-1 tiles.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/COL1 + SMA 120423/C PBS,1,identical re-save 1,0.0
+LSM9|2023-04-18T15:57:02.7117847Z,ACQ-20230418-LSM9-047,40x confo.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/COL1 + SMA 120423/EXP PBS,1,identical re-save 1,0.01
+LSM9|2023-04-19T13:31:40.3523831Z,ACQ-20230419-LSM9-002,10x-.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/CD45 594 Y ALFASMA 488 300323/C BLEO,1,identical re-save 1,0.03
+LSM9|2023-04-19T14:31:44.2582381Z,ACQ-20230419-LSM9-016,20x-1 confocal.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/CD45 594 Y ALFASMA 488 300323/EXP BLEO,1,identical re-save 1,0.01
+LSM9|2023-04-21T08:58:19.4089835Z,ACQ-20230421-LSM9-008,10x-2 ntile.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/Calponin 594 200423/C PBS,2,identical re-save 2,0.04
+LSM9|2023-04-21T10:04:14.0729126Z,ACQ-20230421-LSM9-016,20x-1-1-1 confo.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED2/Calponin 594 200423/EXP BLEO,1,identical re-save 1,0.01
+LSM9|2023-06-12T09:41:11.2858159Z,ACQ-20230612-LSM9-029,40x-1 confo.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED1/ki67 488 SMA 594/C PBS,1,identical re-save 1,0.01
+LSM9|2023-06-13T16:20:26.3225274Z,ACQ-20230613-LSM9-025,40x-1 confo dapi.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED1/cd45 594 SMA 488/C PBS,1,identical re-save 1,0.03
+LSM9|2023-06-23T10:12:50.8416441Z,ACQ-20230623-LSM9-003,10x-3 tiles.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED1/DESMIN 488 SMA 647 DAPI/EXP BLEO,1,identical re-save 1,0.0
+LSM9|2023-06-28T14:35:13.7613789Z,ACQ-20230628-LSM9-004,110-2.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED1/calponin 488 SMA 594/C BLEO,2,identical re-save 2,0.01
+LSM9|2023-06-28T14:50:20.8261913Z,ACQ-20230628-LSM9-019,10x-3 tiles.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED1/calponin 488 SMA 594/EXP PBS,1,identical re-save 1,0.0
+LSM9|2023-06-28T14:51:08.6881217Z,ACQ-20230628-LSM9-024,20x-3 tiles.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED1/calponin 488 SMA 594/EXP PBS,1,identical re-save 1,0.0
+LSM9|2023-06-28T14:52:21.4294799Z,ACQ-20230628-LSM9-023,20x-3 tiles real.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED1/calponin 488 SMA 594/EXP PBS,1,identical re-save 1,0.02
+LSM9|2023-06-28T14:55:30.2358937Z,ACQ-20230628-LSM9-026,40x-3 confo.czi,LSM9,drive1_FRIO-X6/Former students/Zuriñe/0 IMAGEN CONFOCAL/CDH5 JAGGED1/calponin 488 SMA 594/EXP PBS,1,identical re-save 1,0.01
+XMIC|2024-09-30T10:15:57.972561Z,ACQ-20240930-XMIC-011,HpaEPIcS-24h-tgfb (2).czi,XMIC,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Ferritas/Charité/Fluorescence/Test-1/hPAEpC/Laura2,1,identical re-save 1,0.01
+XMIC|2024-09-30T10:16:38.5448816Z,ACQ-20240930-XMIC-013,HpaEPIcS-24h-tgfb (3).czi,XMIC,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Ferritas/Charité/Fluorescence/Test-1/hPAEpC/Laura2,1,identical re-save 1,0.01
+XMIC|2024-09-30T10:17:05.2084067Z,ACQ-20240930-XMIC-015,HpaEPIcS-24h-tgfb (4).czi,XMIC,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Ferritas/Charité/Fluorescence/Test-1/hPAEpC/Laura2,1,identical re-save 1,0.01
+XMIC|2024-09-30T10:18:54.7856741Z,ACQ-20240930-XMIC-049,hPAepiCs-48h-TGFB.czi,XMIC,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Ferritas/Charité/Fluorescence/Test-1/hPAEpC/Laura2,1,identical re-save 1,0.01
+XMIC|2024-09-30T10:19:36.3040489Z,ACQ-20240930-XMIC-043,hPAepiCs-48h-TGFB (2).czi,XMIC,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Ferritas/Charité/Fluorescence/Test-1/hPAEpC/Laura2,1,identical re-save 1,0.01
+XMIC|2024-09-30T10:20:09.6569565Z,ACQ-20240930-XMIC-045,hPAepiCs-48h-TGFB (3).czi,XMIC,drive2_MFB-Disco-2/2025-10-02 - Toshiba EXT (Backup)/Proyectos_Laboratorio_Laura/Ferritas/Charité/Fluorescence/Test-1/hPAEpC/Laura2,1,identical re-save 1,0.01
