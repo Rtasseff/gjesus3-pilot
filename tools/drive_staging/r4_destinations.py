@@ -137,10 +137,34 @@ def split_dest(dest, project_folder):
     return sub, name
 
 
+def _plan_tree(H, NP, base, rows, members, by_key, proj, frozen):
+    """One Planner pass over a project's rows with `frozen` ({folder node key: rendered path}: the tree's _PATHMAP
+    plus the decisions taken so far). -> (planner, items, dests)."""
+    planner = H.Planner(base, strategy="gain")          # A's default, pinned: $HP_STRATEGY must not change a plan
+    planner.fixed = dict(frozen)
+    items = []
+    for r in sorted(rows, key=lambda x: x["acq_id"]):
+        m = members[r["acq_id"]]
+        row = {"decision": "place", "project_name": proj, "relpath": m["relpath"], "archive": m["archive"],
+               "member": m["member"], "reason": "", "row": r["acq_id"]}
+        items.append(H.Item(id=r["acq_id"], drive=m["drive"], relpath=m["relpath"], archive=m["archive"],
+                            member=m["member"], root=NP.row_root(row, RootsFor(by_key, proj)),
+                            extra={"size": m["size"], "sha256": m["sha256"], "claim_id": "", "why": ""}))
+    return planner, items, planner.plan(items)
+
+
 def plan_destinations(rows, members, nas, by_key=None, projects=None):
     """rows: [{acq_id, to_project}]; members: {acq_id: members.csv row}. One Planner per project tree, with the
     tree's frozen _PATHMAP.csv read from the NAS, planned over ALL the rows of that project at once (the
-    shortening is a global greedy per tree). Raises historical_paths.BudgetError if a path cannot fit."""
+    shortening is a global greedy per tree). Raises historical_paths.BudgetError if a path cannot fit.
+
+    A's planner renders a folder once per file that walks through it, and the last one wins in _PATHMAP.csv. That
+    is harmless for A (every file it places has a study folder), but a derivative with no study folder of its own
+    can sit in the very folder that is another file's (promoted) study folder: the same folder would be rendered two
+    ways, and a later re-plan would move files. So: (1) a folder that is the study folder of ANY file is rendered
+    as a study folder for everything in it; (2) the plan is run again with every decision frozen until it does not
+    change (a FIXED POINT), so that re-planning after the index step has frozen these folders gives the same
+    destinations."""
     H, NP = load_stream_a()
     projects = projects if projects is not None else NP.load_projects(nas)
     by_key = by_key if by_key is not None else claim_roots_by_key()
@@ -151,17 +175,29 @@ def plan_destinations(rows, members, nas, by_key=None, projects=None):
     for proj, rs in sorted(by_proj.items()):
         folder = NP.project_folder(proj, projects)
         base = "\\".join(["projects", folder, *NP.SUBDIR])
-        planner = H.Planner(base)
-        planner.load_pathmap(os.path.join(nas, base, H.PATHMAP_NAME))
-        items = []
-        for r in sorted(rs, key=lambda x: x["acq_id"]):
-            m = members[r["acq_id"]]
-            row = {"decision": "place", "project_name": proj, "relpath": m["relpath"], "archive": m["archive"],
-                   "member": m["member"], "reason": "", "row": r["acq_id"]}
-            items.append(H.Item(id=r["acq_id"], drive=m["drive"], relpath=m["relpath"], archive=m["archive"],
-                                member=m["member"], root=NP.row_root(row, RootsFor(by_key, proj)),
-                                extra={"size": m["size"], "sha256": m["sha256"], "claim_id": "", "why": ""}))
-        dests = planner.plan(items)
+        p0 = H.Planner(base)
+        p0.load_pathmap(os.path.join(nas, base, H.PATHMAP_NAME))
+        nas_frozen = dict(p0.fixed)
+        planner, items, dests = _plan_tree(H, NP, base, rs, members, by_key, proj, nas_frozen)
+        frozen = dict(nas_frozen)
+        for it in items:                                  # (1) a study folder of any file is one for all of them
+            ri = it.extra["ri"]
+            if ri is None:
+                continue
+            nk = planner.node_key(it.drive, it.extra["segs"], ri)
+            if nk not in frozen:
+                tag = H.TAGS[it.drive]
+                label = planner.roots[(tag, nk)]
+                frozen[nk] = f"{tag}\\{H.short_name(label, planner.short[nk]) if nk in planner.short else label}"
+        if frozen != nas_frozen:
+            planner, items, dests = _plan_tree(H, NP, base, rs, members, by_key, proj, frozen)
+        for _ in range(4):                                # (2) freeze all decisions: the plan must not move
+            p2, i2, d2 = _plan_tree(H, NP, base, rs, members, by_key, proj, {**nas_frozen, **planner.nodes})
+            if d2 == dests:
+                break
+            planner, items, dests = p2, i2, d2
+        else:
+            raise H.BudgetError(f"{proj}: the destination plan does not settle")
         plan.trees[proj] = (planner, items, base)
         for it in items:
             sub, name = split_dest(dests[it.id], folder)
@@ -365,7 +401,7 @@ def new_origin_docs(plan, nas, only=None):
     none yet (an existing one is never touched), and only where something was dropped above the folder: a folder
     whose path here IS its path on the drive (no study folder on the way, or the drive's own top folder) has
     nothing to say. Only the files in `only`, if given."""
-    H, _NP = load_stream_a()
+    H, NP = load_stream_a()
     docs = {}
     for _proj, (planner, items, base) in plan.trees.items():
         items = [i for i in items if only is None or i.id in only]
@@ -374,6 +410,6 @@ def new_origin_docs(plan, nas, only=None):
             if all(o.partition("\\")[2].lower() == rest for o in origs):
                 continue
             rel = f"{base}\\{folder}\\{H.ORIGIN_NAME}"
-            if not os.path.exists(os.path.join(nas, rel)):
+            if not os.path.exists(NP.lp(os.path.join(nas, rel))):
                 docs[rel] = H.origin_text(origs).encode("utf-8")
     return docs

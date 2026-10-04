@@ -2096,7 +2096,9 @@ def cmd_index(args):
     problems = [f"{a}: the list has {listed[a]!r}, stream A's rule now gives {(d['subfolder'], d['dest_name'])!r}"
                 for a, d in sorted(plan.dests.items()) if listed[a] != (d["subfolder"], d["dest_name"])]
     irows = D.index_rows_for(plan, members, targets, only=selected)
-    nodes = D.planned_nodes(plan, only=selected)
+    # the index rows and the _ORIGIN.txt are for the lists being merged; the FOLDERS are frozen for the whole plan,
+    # so that re-planning after a partial merge cannot move the files of a list that is still to come
+    nodes = D.planned_nodes(plan)
     origins = D.new_origin_docs(plan, NAS, only=selected)
     docs, lines, pdir = {}, [], os.path.join(args.out, "index_preview")
     present = 0
@@ -2273,8 +2275,10 @@ def cmd_report(args):
 # ---------------------------------------------------------------------------------------------
 
 def main(argv=None):
+    global NAS
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default=OUT)
+    ap.add_argument("--nas", default=NAS, help="the NAS data root (default J:\\gjesus3-data; a scratch copy for a rehearsal)")
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--lists-dir", default=RETIRE_LISTS)
     ap.add_argument("--redo", action="store_true", help="relations: recompute groups already done")
@@ -2287,15 +2291,17 @@ def main(argv=None):
                     help="pieces: do not read groups whose members are distinct stage positions")
     ap.add_argument("--sample", type=int, default=20, help="validate: how many gated-out groups to test")
     ap.add_argument("--max-gb", type=float, default=6.0, help="validate: largest group (GB) to test")
-    ap.add_argument("--lists", default="",
-                    help="index: which lists to merge, comma-separated (scalebars,resaves,exports,roi_crops; default all)")
-    ap.add_argument("--execute", action="store_true",
-                    help="index: write the merged documents to the NAS (default: a dry run that writes only previews)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("table", "features", "pieces", "check", "relations", "retile", "restitch", "retrim", "region", "validate", "classify", "lists",
                  "verify-lists", "index", "report"):
-        sub.add_parser(name)
+        sp = sub.add_parser(name)
+        if name == "index":
+            sp.add_argument("--lists", default="",
+                            help="which lists to merge, comma-separated (scalebars,resaves,exports,roi_crops; default all)")
+            sp.add_argument("--execute", action="store_true",
+                            help="write the merged documents to the NAS (default: a dry run that writes only previews)")
     args = ap.parse_args(argv)
+    NAS = args.nas
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
     return {"table": cmd_table, "features": cmd_features, "pieces": cmd_pieces, "check": cmd_check,

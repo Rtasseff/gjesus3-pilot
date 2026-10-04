@@ -608,6 +608,40 @@ def test_destinations():
         check(stat["folder_differ"] == 1 and any("A put the other files" in p for p in problems),
               "A's other files of the same drive folder in another folder is a problem")
 
+    with tempfile.TemporaryDirectory() as nas:        # a promoted study folder and a claim-less sibling in the same folder
+        proj7 = "AE-biomaGUNE-0721"                    # one of the projects where stream A groups under the parent
+        base7 = "projects\\AE-biomaGUNE-0721\\working\\historical_drives"
+        os.makedirs(os.path.join(nas, base7))
+        projects7 = {proj7: {"name": proj7, "folder_location": "/projects/AE-biomaGUNE-0721"}}
+        key7 = cr("Top\\Lab\\Histologias\\Raw-images")   # a claim made by a file NAME in Raw-images: promoted to its parent
+        NP.FILENAME_ROOTS.add(key7)
+        try:
+            by7 = {key7: {proj7}}
+            m7 = {"R1": mem_row("R1", "Top\\Lab\\Histologias\\Raw-images\\a.czi"),
+                  "R2": mem_row("R2", "Top\\Lab\\Histologias\\b.czi"),                 # no claim on its path
+                  "R3": mem_row("R3", "Top\\Lab\\Histologias\\Raw-images\\sub\\c.czi")}
+            rows7 = [{"acq_id": a, "to_project": proj7} for a in m7]
+            plan7 = D.plan_destinations(rows7, m7, nas, by_key=by7, projects=projects7)
+            ds = {a: d["dest"][len(base7) + 1:] for a, d in plan7.dests.items()}
+            check(plan7.dests["R1"]["root"] is not None and plan7.dests["R2"]["root"] is None,
+                  "the premise: one file has a (promoted) study folder, its sibling in the parent folder has none")
+            check(ds == {"R1": "FRIO-X6\\Histologias\\Raw-images\\a.czi", "R2": "FRIO-X6\\Histologias\\b.czi",
+                         "R3": "FRIO-X6\\Histologias\\Raw-images\\sub\\c.czi"},
+                  "a folder that is the study folder of any file is one for everything in it: all three share FRIO-X6\\Histologias")
+            nodes = D.planned_nodes(plan7)[proj7]
+            H.write_pathmap(os.path.join(nas, base7, "_PATHMAP.csv"),
+                            [{"node_key": k, "rendered": v} for k, v in sorted(nodes.items())])
+            again = D.plan_destinations(rows7, m7, nas, by_key=by7, projects=projects7)
+            check({a: d["dest"] for a, d in again.dests.items()} == {a: d["dest"] for a, d in plan7.dests.items()},
+                  "re-planning after the index step has frozen every folder gives the same destinations (a fixed point)")
+            root_nk = "D1:Top\\Lab\\Histologias"
+            H.write_pathmap(os.path.join(nas, base7, "_PATHMAP.csv"), [{"node_key": root_nk, "rendered": nodes[root_nk]}])
+            part = D.plan_destinations(rows7, m7, nas, by_key=by7, projects=projects7)
+            check({a: d["dest"] for a, d in part.dests.items()} == {a: d["dest"] for a, d in plan7.dests.items()},
+                  "and with only the study folder frozen (a partial merge) nothing moves either")
+        finally:
+            NP.FILENAME_ROOTS.discard(key7)
+
     with tempfile.TemporaryDirectory() as nas:        # the 240-character budget: the fewest folders are cut
         tree(nas)
         names = ["alpha " + "x" * 70, "beta " + "y" * 70, "gamma " + "z" * 70]
