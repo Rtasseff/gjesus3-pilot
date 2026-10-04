@@ -1,6 +1,6 @@
 # Historical drives: the non-raw material — placement review (Phase 1, read-only)
 
-**Status:** 🔶 IN PROGRESS — placement, holding fill and the 1519 not-registered placement done and verified (§9b); step 4 (raw one-offs) pending · **Date:** 2026-10-02 ·
+**Status:** ✅ DONE (stream A, 2026-10-04) — placement, holding fill, the 1519 not-registered placement and the two raw one-offs done and verified (§9b); next is the 2b mapping round (runbook) · **Date:** 2026-10-02 ·
 **Branch:** `feat/drives-nonraw-placement` (stream A of the weekend close-out, plan Step 5 items 2 / 2b / 2c)
 **Tool:** [`tools/drive_staging/nonraw_placement.py`](../tools/drive_staging/nonraw_placement.py) · tests
 [`tools/test_nonraw_placement.py`](../tools/test_nonraw_placement.py) · per-project summary
@@ -353,6 +353,7 @@ All the steps below ran inside a write window the coordinator (`gj3-handoff`) gr
 | 2b + v2 top-up | 2026-10-04, run `NONRAW-20261004-100718` | the regrouped `0721` / `1019` / `1123` / `1321` (Ryan, "group under the parent") + stream B's v2 NIfTI for `0619` / `0320` | 13,182 copied + 1,255 skipped as identical, 0 collisions |
 | 3 holding | 2026-10-04, detached process (log `…-v3b\holding_step3.out`) | 54,721 files / 218.89 GB into `staging\historical_drives_unassigned\` (B's v3; Ryan chose option B, fill now) + 26 documents | 54,721 copied, 0 collisions; list_sha256 `b64958a0…` reproduced from the NAS walk; 1,094/1,094 re-hash |
 | 1519 not registered | 2026-10-04, run `NONRAW-20261004-142020` | 13 not-registered MRI files (`m35_week3/35`) + `README_not_registered.txt`; `_INDEX`/`_PATHMAP` republished as a merge | 13 copied (13/13 full re-hash), 8,667 skipped-identical |
+| 4 raw one-offs | 2026-10-04 16:08, `ingest_raw.py` with `drives_dotfile.yaml` and `drives_nested.yaml` (the only registry writer) | the hidden dot-file `.czi` → **`ACQ-20240125-CELL-050`** (CELL, Laura, no claim → blank project, so no project link); the 14 `.czi` from `Drive zuri 170823.zip` > `8583.zip` → **`ACQ-20230503-CELL-001` … `-014`** (CELL, zuri, blank project) | 15/15 success; before: dedup by SHA-256 and by (instrument, time, name) against the live registry, 0 already present. After: `checksums.json` == the drive manifest SHA-256 on all 15; `registry_raw.csv` and `ingest_manifest.csv` append-only (+15 lines each, CRLF, no BOM), the other registries byte-identical; the re-run adds 0; validator still 10,314, all the MRI placeholder; provenance in `tasks/drives_ingest_provenance.csv` (batches `DOTFILE` / `NESTED`). Backup: `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261004_1608_nonraw_step4\` |
 
 **Placed in total: 27,547 files, 237.73 GB, in 17 projects; holding: 54,721 files, 218.89 GB.** The per-project counts, bytes and list hashes are in `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement\step2_expected_per_project.csv` and `…-v2b\step2b_expected_per_project.csv`.
 
@@ -373,11 +374,11 @@ All the steps below ran inside a write window the coordinator (`gj3-handoff`) gr
 
 **A `/raw/` check that fired (step 3), and why it was fine.** My before/after sample of 40 `/raw/` month folders (excluding stream B's) showed 3 MICROSCOPY month folders that lost acquisitions during the window: `2021-11` 22→21, `2025-04` 155→153, `2025-09` 215→214. Stream A writes nothing under `/raw/` (the tool has no `/raw/` path). **Verified against the tombstones** by the coordinator: all were approved retirements, namely `ACQ-20250915-LSM9-016` (the coordinator's content-equivalent retirement `RET-20261004-135015-801`), `ACQ-20250415-CELL-003` and `-010`, and `ACQ-20211105-CELL-021` (stream D's derivative retirements).
 
-**Still to do:** step 4, the two raw one-offs (§4), in a registry window. Both dry runs were clean against production on 2026-10-04 14:35, and none of the 15 is in the registry; re-run them before the write.
+**Still to do (stream A):** nothing. What follows is the 2b round (Ryan's mapping), run from `tasks/drives_nonraw_2b_2c_followup.md`.
 
 ## 10. Proposed wording for STATUS / CHANGELOG / BACKLOG (the coordinator applies it at merge)
 
-*Final for the stream as of 2026-10-04. Fill in step 4's two ACQ-ID ranges once it has run.*
+*Final for the stream, 2026-10-04 (step 4 included).*
 
 **STATUS §2, drives bullet — add:**
 > **Non-raw material (stream A, 2026-10-03/04): done.**
@@ -385,7 +386,7 @@ All the steps below ran inside a write window the coordinator (`gj3-handoff`) gr
 > - **Created:** `AE-biomaGUNE-1116/-1420/-1520`, `Project-0521` (PROJ-0062..0065).
 > - **Holding:** 54,721 unassigned files (218.89 GB) are in `staging\historical_drives_unassigned\`, with `README.txt` and `manifest.csv`. That includes the `.lsm`, `.svs`, NMR, unreadable `.czi` and not-registered MRI (each exam folder with a `README_not_registered.txt`).
 > - **Verified:** every file was re-hashed at copy time, and an independent NAS walk found 0 missing and 0 extra; the coordinator re-verified it.
-> - **Raw one-offs:** the dot-file `.czi` and 14 nested `.czi` were ingested as `<ACQ-IDs>` *(step 4)*.
+> - **Raw one-offs:** the dot-file `.czi` was ingested as `ACQ-20240125-CELL-050` and the 14 nested `.czi` as `ACQ-20230503-CELL-001`…`-014` (blank project, no claim; 2026-10-04).
 > - **Waiting on Ryan:**
 >   - the 2b mapping worksheet (`tasks/drives_nonraw_mapping_worksheet.csv`; the 62 `A` rows cover nearly everything);
 >   - whether the holding folder should be group read-only (it inherits `staging\`'s Modify).
@@ -416,7 +417,7 @@ All the steps below ran inside a write window the coordinator (`gj3-handoff`) gr
 >   - Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv` (the 62 `A` rows; blank = stays in holding).
 >   - A session applies it with `tasks/drives_nonraw_2b_2c_followup.md`: `remap` → `apply-raw` (blank-project raw rows) → `copy --from-holding`. The holding folder is already filled (option B), so D: is not needed.
 >   - Before the D: staging is erased, keep the record manifest off D: (runbook §2.6). The current manifest is `…\drives-nonraw-placement-v3b\placement_manifest.csv`.
-> - 🔸 **Holding folder ACL:** it inherits `staging\` (`GJesus` Modify). Decide whether it should be group read-only.
+> - 🔸 **Holding folder ACL** (passed to Ryan by the coordinator): it inherits `staging\` (`GJesus` Modify). Decide whether it should be group read-only.
 > - 🔸 **Aperio `.svs` (15, Drive zuri TUNEL) and TopSpin NMR (671 experiments):** held, because the instruments are not onboarded / the data is not imaging. Revisit if either is ever registered.
 > - 🔹 **`catalog.py` does not open nested archives**; `nonraw_placement.py nested` is the stopgap. Fold it in if the catalog is reused for another drive.
 > - 🔹 **`historical_paths.py` is now the destination rule for any drive material placed on gjesus3** (streams A, C, D). Consider promoting it into `05_PROJECTS` (a spec change, so the Data Office decides).
