@@ -1,0 +1,61 @@
+# Historical drives, DICOM stream (stream B), ONE-OFF X1: three real MRI exams the
+# ParaVision path cannot take, because their only copy on the drives has no `acqp`.
+# Review: tasks/drives_dicom_review.md §7c. Decided: bring them in (coordinator 2026-10-02:
+# part of batches Ryan approved, only copy). Scoped one-off: no shared-regex or detector change.
+#
+#   20200304_101934_jrc200304_m27_BE_1_1/4   0619  (B04b)  3 DICOM, method + visu_pars + 2dseq, no acqp
+#   20200304_134107_jrc200304_m31_BE_1_1/4   0619  (B04b)  3 DICOM, "long axis LV", no acqp
+#   20200923_162311_jrc200923_m14_postcirugw2_1519_1_1/8   1519 (B03)  30 DICOM (recons 1 + 3), nothing else
+#
+# WHY A DIFFERENT PATH: ingest/config.py::_is_paravision_exam requires acqp + method, so
+# these fall to "not a scan folder". The only no-code-change route is the engine's generic
+# DICOM copy (data_ecosystem DICOM, acquisition_layout `file`, the default), which copies
+# the staged DICOMs into <ACQ-ID>/series/ (primary_kind `archive`), not the internal-MRI
+# <ACQ-ID>.data/ shape. ⚠️ So these 3 rows differ in SHAPE from the other MRI rows; their
+# sidecar carries the curated `dicom` header block (auto_discover.dicom_headers), not the
+# `mri` ParaVision block. That is the trade-off the coordinator is asked to accept.
+#
+# STAGING: DICOMs only, one folder per exam, named recon<idx>_<original basename> (m14/8's
+# two reconstructions reuse basenames):
+#     D:/projects/gjesus3/scratch_drives-dicom/stage_oneoff2/<study>__<exam>/
+# Per-exam values come from cases_dicom_X1_oneoff_acqpless.csv.
+#
+# PROJECTS: 0619 = PROJ-0004 (active). 1519 = PROJ-0008 is CLOSED until the coordinator
+# reopens it; the m14 row must not run before that.
+#
+#   python tools/ingest_raw.py --config tools/configs/drives_2026-09/dicom/dicom_X1_oneoff_acqpless.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/scratch_drives-dicom/stage_oneoff2"
+  pattern: "*__[0-9]*/"
+  dicom_headers: true
+  case_table:
+    file:       cases_dicom_X1_oneoff_acqpless.csv
+    key:        original_name
+    on_missing: error
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.drv_protocol}"
+    animal_code:   "${discovered.drv_animal}"
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     "Bruker BioSpec 7T"
+  modalities_in_study:  MR
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "m${discovered.drv_animal}_${discovered.drv_protocol}"
+  sample_type:          organism
+  session_id:           "${discovered.drv_session}"
+  acquisition_datetime: discovered.drv_acq_datetime
+  project_name:         "${discovered.drv_project}"
+  notes:                "Internal MRI exam ${discovered.drv_exam} (animal m${discovered.drv_animal}, protocol ${discovered.drv_protocol}); DICOM only (the drive copy has no acqp); datetime from ${discovered.drv_acq_time_source}; source ${discovered.drv_origin}"
+
+operator: "NA"
+
+link_filename: "MRI_m${discovered.drv_animal}_${discovered.drv_protocol}_${acq_date}_${discovered.drv_exam}_dicom"
