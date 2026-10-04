@@ -7,8 +7,12 @@ A RETIRED acquisition is one the Data Office has taken out of the live registry
 (Ryan, 2026-10-01): a byte-identical DUPLICATE registration of another
 acquisition, a DERIVATIVE (scale-bar copy, thumbnail, export) that is not an
 acquisition and moved to its original's project folder, or an ORPHAN `/raw/`
-folder whose registry row was never written. Its row LEAVES registry_raw.csv
-and is appended here, verbatim, with the reason and what happened to the bytes.
+folder whose registry row was never written. v2 (2026-10-02) adds an
+EQUIVALENT duplicate (a .czi re-save: same information, different container)
+and a REIDENTIFIED acquisition (a wrong instrument code, so a wrong ACQ-ID: the
+same file re-registered in place under a new id, which is its superseded_by).
+Its row LEAVES registry_raw.csv and is appended here, verbatim, with the reason
+and what happened to the bytes.
 
 Rules this file carries:
   - ACQ-IDs are NEVER reused. A tombstoned id still counts toward the ACQ-ID
@@ -42,9 +46,10 @@ RETIRED_FILENAME = "retired_acquisitions.csv"
 RETIRED_FIELDS = [
     "acq_id",            # the retired id (unique key)
     "retired_at",        # ISO-8601 UTC of the commit
-    "disposition",       # duplicate | derivative | orphan
-    "superseded_by",     # the live acquisition it duplicates / derives from ("" for orphan)
-    "reason",            # free text, required
+    "disposition",       # duplicate | derivative | orphan | equivalent | reidentified
+    "superseded_by",     # the live acquisition it duplicates / derives from / was re-identified
+                         #   as ("" for orphan)
+    "reason",            # free text, required; v2 appends " || evidence: {json}" (EVIDENCE_SEP)
     "bytes_fate",        # deleted | moved  (what happened to the /raw/ bytes)
     "moved_to",          # NAS-relative path of the bytes' new home (derivative), else ""
     "sha256",            # SHA-256 of the primary, hashed fresh from disk at retirement
@@ -60,8 +65,37 @@ RETIRED_FIELDS = [
                            #   subjects are never deleted (06 §2.8.3).
 ]
 
-DISPOSITIONS = ("duplicate", "derivative", "orphan")
+DISPOSITIONS = ("duplicate", "derivative", "orphan",
+                # v2 (2026-10-02): a .czi re-save that is information-identical to the survivor but
+                # not byte-identical; and a mis-coded acquisition re-registered in place under the
+                # right instrument code (superseded_by = its new id). 06_REGISTRIES §2.9.
+                "equivalent", "reidentified")
 BYTES_FATES = ("deleted", "moved")
+
+# v2: the tool's own evidence is appended to the operator's `reason`, after this separator, as one
+# compact JSON object (no schema change: the tombstone file's header stays as v1 created it).
+EVIDENCE_SEP = " || evidence: "
+
+
+def with_evidence(reason, evidence):
+    """The `reason` cell: the operator's reason, then the tool's evidence as compact JSON."""
+    if not evidence:
+        return reason
+    return reason + EVIDENCE_SEP + json.dumps(evidence, sort_keys=True, separators=(",", ":"),
+                                              ensure_ascii=False)
+
+
+def split_evidence(reason):
+    """(the operator's reason, evidence dict or None) from a tombstone's `reason` cell."""
+    reason = reason or ""
+    if EVIDENCE_SEP not in reason:
+        return reason, None
+    head, _sep, tail = reason.rpartition(EVIDENCE_SEP)
+    try:
+        ev = json.loads(tail)
+    except ValueError:
+        return reason, None
+    return (head, ev) if isinstance(ev, dict) else (reason, None)
 
 ACQ_ID_RE = re.compile(r"ACQ-\d{8}-[A-Z0-9]+-\d{3}(?!\d)")
 

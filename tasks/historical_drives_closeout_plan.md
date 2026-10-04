@@ -55,6 +55,200 @@ BACKLOG current.
     with that path instead of the tool's default `outputs\derived`.
 - **The 63 `.lsm` files go to the holding folder** (item 2c), not to `/raw/`.
 
+**Open questions for Ryan.** The coordinator keeps this list current; the newest are last.
+
+1. **Unregistered MFB MRI sessions: who ingests them, and the go.** Stream F's read-only
+   reconciliation of 2026-10-02 found 14 animal sessions (232 exams) and 5 phantom/QC studies
+   (70 exams) on the scanner, in no registry (BACKLOG "14 MFB animal sessions on the scanner").
+   - The 14 animal sessions: protocol 1125 in July, 9 sessions including m6; protocol 1025 this
+     week, 5 sessions.
+   - Since the 2026-06 bulk load, only two sessions were ingested.
+   - **Recommendation:** the Data Office ingests the July 1125 series from the scanner, as `m12`
+     was, once the operator is confirmed (likely Irene). The fresh 1025 sessions belong to the
+     operators' normal workflow, but someone should ask them to ingest.
+   - **The phantoms:** are they in scope?
+
+   *The first finding, kept for the record:* **A second missing July MRI session: ingest it?** The session is
+   `20260706_111010_jrc20260703_m6_1125`: 15 exams of animal 6 of protocol 1125
+   (`PROJ-0021`), from 2026-07-06.
+   - It is in no registry and has no `/raw/` folder. The counter `ACQ-20260706-MRI-` stands at 30,
+     from two failed GUI attempts on 2026-07-16.
+   - It is outside the pre-approval, which covers only `m12`.
+   - **Its operator is not in the data.** ParaVision records only the shared login `nmr`. The
+     evidence points to Irene: the same scan protocol, the same day's pulls, and the failed GUI
+     attempt recorded as `ifernandez`.
+   - **Recommendation:** ingest it from the scanner, as `m12` was, with operator Irene.
+2. **15 Aperio `.svs` whole-slide scans** (~4.1 GB), in two nested zips under
+   `PAPERS\TUNEL 230123 CDH5 JAGGED2\` in `Drive zuri 170823.zip`. The instrument is not onboarded.
+   **Default,** by analogy with the `.lsm` decision: the holding folder, or project material if they
+   sit under a project claim.
+3. **671 TopSpin NMR experiments** (1.15 GB of chem-lab spectrometer data, not imaging), listed by
+   stream B. **Default:** the same as question 2.
+4. **Stream B's questions** (Phase 1 done 2026-10-02; review `tasks/drives_dicom_review.md` on
+   `feat/drives-dicom`). Each has the coordinator's recommendation.
+   - **Q1:** reopen `1519` (`PROJ-0008`, closed) for B02 (526 exams, March 2022) and B03 (136 exams,
+     September 2020)? **Yes.**
+   - **Q2:** B06, the 1019 MRS 2021 exams on the 11.7T (66): leave the project blank, like the 854
+     other 2021 1019 exams (STATUS §0 D6)? **Yes, blank.**
+   - **Q3:** 133 phantom and collaboration exams from 2022–23 (initials `prc`/`pr`): ingest with a
+     blank project? **Yes.**
+   - **Q4:** 363 exams from an external Bruker ICON in Madrid (Claudia, 4 mice, 2024): ingest as
+     `XMRI` collaborator data, as was done for Charité's `XMIC`? **Yes.**
+   - **Q5:** 3 PET/CT files from 2019 with no AE code: **hold them** with the `S:\gnuclear` set that
+     is waiting for AE codes.
+   - **Q6:** 18 Molecubes FDK reconstructions (Marina, `1321`) are in the `S:\gnuclear` snapshot but
+     not in production. That is a gnuclear question, **not a drives ingest.**
+   - **Q7:** go for B04 (`0619`, 236 exams), B05 (`0420`, 343) and N03 (`1319` PET/CT, 8, with the
+     project created), once their dry runs are clean? **Yes.**
+5. **Stream E's questions** (retire tool v2, built and unmerged on `feat/retire-v2`; review
+   `tasks/retire_v2_review.md` §2.5). The coordinator reviewed it, and 30/30 test suites pass.
+   - **Its finding:** of the 15 rows left to re-code, **only 2 are mis-coded acquisitions**
+     (`ACQ-20240625-LSM9-001/-002` are Cell Observer files). **The other 13 `CELL` rows are ZEN
+     exports of AxioScan scans already coded correctly:** 3 crops of `ZWSI-001…003` (2026-04-22) and
+     10 single-scene splits of the two-scene scans `ZWSI-001…010` (2026-05-07). Each shares its
+     scan's acquisition timestamp.
+   - **E-Q1 (decide first):** retire the 13 as **derivatives** into their own project, `claudia`, at
+     `working\<original folder>`, rather than re-coding them. **Yes.** This is your principle:
+     exports are not acquisitions. It is a same-timestamp retirement, so it needs your go.
+     - The rule the coordinator proposes: a derivative goes to its own registered project if it has
+       one; otherwise, to the original's project.
+   - **E-Q2 to E-Q8 (the design):** accept E's defaults as a package. **Yes.**
+     - Re-identify in place: a hard link to the same file, so nothing is copied and every project
+       link stays valid.
+     - New dispositions `reidentified` and `equivalent`, so that `duplicate` still means
+       byte-identical.
+     - The evidence goes in `reason`, so the schema doesn't change.
+     - Link names are unchanged; only the identity fields change; `bytes_fate` = `moved`; the
+       no-chain rule stays.
+   - **E-Q9:** retire `ACQ-20250915-LSM9-016` as `equivalent` of `-001`. You had said to leave the
+     pair until this mode exists; it now exists. **Yes.**
+   - **The go,** once the questions are answered:
+     - re-identify the 2 `LSM9` rows as `CELL` (their dry run gives `ACQ-20240625-CELL-008/-009`);
+     - the `equivalent` retirement;
+     - the 13 derivative retirements.
+6. **Stream A's interim report** (2026-10-02). Its session hit its usage limit, so Phase 1 is
+   unfinished. Its branch is at `ebe9f8d`, and it has later edits that are not committed. It left a
+   list for a fresh session; see the review on its branch once it is written.
+   - **A blocker, for Ryan: path length.** 5,083 of the 6,206 files to place would get a UNC path
+     longer than 259 characters (the longest is 402). All of them come from
+     `Drive Maria Jesus and Irati 20211209.zip`. The options are:
+     - shorter labels in the destination;
+     - keeping that zip whole, as one file;
+     - accepting long paths.
+   - **250 `.czi` sit in nested archives,** most of them `LSM9` and most inside
+     `Fotos confocales cdh5 jagged2.zip` within `Drive zuri`. That contradicts stream B's note. They
+     include `8583.zip`'s 14. **They need deduplicating** against production, by SHA-256 and by
+     (instrument, timestamp, name), before any raw one-off.
+   - **Closed projects** would receive material: `0320` 14 documents, and `1519` 6, plus about
+     10,110 of stream B's rows. That links to B-Q1.
+   - **Unclear:** `Simu_2_V_XYZ.zip` (97 GB, which cannot be opened as a zip) and 2 unreadable
+     `.czi` that have bytes.
+   - **The dot-file `.czi`:** its dry run is clean (it would become `ACQ-20240125-CELL-050`). It needs
+     Ryan's go.
+
+**A gap found on 2026-10-02: the catalog never opened nested archives** (archives inside
+archives).
+- Stream B listed the 8 inside `Drive zuri 170823.zip`. One of them, `8583.zip`, holds **14 `.czi`
+  that the ingest never saw**. Stream A takes them as raw stragglers, together with the dot-file.
+- Stream A covers the remaining nested archives; `LEONE.zip` and `Cardiac MRI.zip` stay with their
+  own streams.
+- **This must be closed before the D: erase.** The test for the erase is that everything from the
+  drives is accounted for.
+
+**Decisions of 2026-10-04 (Ryan).** These answer questions 1–6 above.
+
+- **Every recommendation in questions 1–5 is accepted as written**, and so is "go on the dot-file".
+- **Long paths: neither long paths that throw errors, nor zips.** Researchers have to be able to
+  browse. His words: "combine dropping high level dirs, putting info in an index or registry to
+  help them find what info was dropped".
+  - **Built by stream A:** `tools/drive_staging/historical_paths.py`.
+  - **The layout:** `<project>\working\historical_drives\<FRIO-X6|MFB-Disco-2>\<study folder>\<path
+    below>`.
+  - **The budget** is 240 characters on `\\GJESUS3\gjesus3\`. The fewest folders needed are
+    shortened deterministically (24 or 12 characters, then `~` and a 4-hex hash).
+  - **Each project gets** `_INDEX.csv` (the full original path of every file), `README.txt`,
+    `_PATHMAP.csv` and `_ORIGIN.txt`. A global index goes in `tasks/`.
+  - **The result:** 0 of 75,683 destinations over the budget.
+- **Fill the holding folder now** (A's Part 0, option B). It changes the earlier rule of filling it
+  only when the mapping round closes. D: can then be erased once the streams finish.
+- **LEONE is part of `DTS24`.** "Do not ingest any of the DICOM images that we already have. No
+  duplicates." The new content goes into `DTS24`'s project folder as files:
+  - 36 echo exams, MR supplements and 72 derived objects: 7,161 files, 59 GB;
+  - at `working\historical_drives\FRIO-X6\LEONE\`;
+  - with no new project, code or registry row.
+
+  C's review doc and its scripts go into git.
+- **Stream D's four lists are approved:** 153 retirements (3 scale-bar copies, 9 re-saves, 60
+  exports, 81 ROI crops). `ID65_PB_lung_20x_scale.czi` stays in `/raw/`.
+- **The 14 new nested `.czi`** (`8583.zip`) are ingested with a blank project.
+- **Deletions on D:** stream B's and stream A's refused scratch deletions were approved and done by
+  the coordinator.
+
+**Production writes of 2026-10-04, each verified by its stream and checked independently by the
+coordinator:**
+
+- **Stream B ingested five batches,** 578 rows: B04a/b `0619` (232), B05a/b `0420` (338), and N03
+  `1319` PET/CT (8). `AE-biomaGUNE-1319` (`PROJ-0061`) was created.
+  - The registry went 25,212 → **25,790**, with 0 duplicates and 0 rows dated 2026.
+  - 25 of 25 sampled files re-hash to their checksums, and 25 of 25 links are the same file.
+- **Stream A created 4 projects:** `PROJ-0062` `AE-biomaGUNE-1116`, `PROJ-0063` `-1420`,
+  `PROJ-0064` `-1520`, `PROJ-0065` `Project-0521`.
+- **The coordinator reopened** `1519` (187 links) and `0320` (653), using `tools/reopen_project.py`.
+- **Retire v2 is merged** (`8b0514c`), its statuses are updated (`867612c`), and 30 of 30 test suites
+  pass.
+- **Stream B's B04b regen and relink:** 2 exams, 9 and 15 DICOMs, verified.
+- **`LEONE` is done** (stream C, merged `5a015a3`). 7,161 files (59.15 GB) are in `DTS24`'s project
+  folder, and the coordinator verified them independently: 0 missing or extra, 20/20 fresh hashes.
+  The 77 GB working copy on C: is deleted, and the review and scripts were committed on Ryan's
+  instruction.
+- **Stream A's copies 2a and 2c:** 14,352 files, 112.71 GB, into 13 projects. The coordinator
+  verified them: exact files and bytes per project, 119/119 fresh hashes, and A's per-project
+  fingerprints reproduce.
+- **Ryan's later answers:**
+  - **Unconvertible MRI is not registered.** The rule is documented in `09_MODALITIES`; see the
+    CHANGELOG.
+  - **The 3 acqp-less exams** use the generic DICOM shape.
+  - **Session- and animal-level claim folders** are grouped under their parent.
+  - **Standing approval** for the coordinator to delete finished stream scratch on D:.
+
+- **The July protocol-1125 series (9 sessions, 141 acquisitions) and the 5 `jrc` phantom/QC studies (69) are in production** (stream F, merged). Both were verified independently. The registry is at **26,660** rows.
+- **Retire v2's first production operations (the coordinator):**
+  - 2 `LSM9` rows were re-identified as `CELL-008/-009`;
+  - `LSM9-016` was retired as `equivalent`;
+  - the 13 `claudia` exports were retired as derivatives.
+
+  All were verified independently. **All 25 mis-coded rows and all 32 duplicates are resolved.** The registry is at **26,646** rows.
+- **Stream D's same-timestamp retirements: 3 of 4 lists are done** (scale bars 3, re-saves 9,
+  exports 60 = 72; 114/114 checks passed). The coordinator verified them independently: none still
+  live, all tombstoned `derivative`, 6/6 fresh hashes match. The registry is at 26,574 rows, with 137
+  tombstones.
+  - **⚠️ The fourth list, 81 ROI crops (184 GB), is ON HOLD.** The permission system refused its
+    `--execute` in stream D's context. Ryan's go for the list stands, but the permission system needs
+    his own action:
+    - tell the coordinator to run D's six documented steps (`tasks/drives_r4_cleanup_review.md`
+      §14, on D's branch);
+    - or run them himself.
+- **Stream A's holding fill is done:** `J:\gjesus3-data\staging\historical_drives_unassigned\`, 54,721
+  files, 218.89 GB, with README, manifest and path map. The coordinator verified it independently:
+  0 missing, 0 wrong size, 25/25 fresh hashes. The 13 unregistered `1519` files are placed in
+  `1519`.
+- **Stream B's `1519` batches B03 and B02 are in** (660 rows). Stream A's step 2b (regrouped) and the v2 top-up are placed (13,182 files). Both were verified independently.
+
+**⚠️ A production finding for Ryan (stream F, 2026-10-04): project link folders silently merge.** *(Now a BACKLOG 🔺 HIGH item, "a second acquisition with an existing link name"; the audit and repair are Ryan's decision.)*
+
+- **The cause:** `linker.create_hardlink` creates the link folder with `makedirs(exist_ok)`, and
+  links only the files that don't exist yet. When two acquisitions get the same link name (several
+  studies of one animal on one day), the second merges into the first's folder.
+- **Already in production:** on 44 multi-study animal-days (483 acquisitions), **209 acquisitions
+  have no link folder of their own** (`AE-biomaGUNE-0721` 153/294, `-1022` 53/179, `-0219` 3/10).
+- **Not affected:** `/raw/` and the registry are intact; only the project links researchers browse
+  are affected. Provenance can't show it.
+- **The guard now:** each new ingest checks every planned link name for collisions first. The July
+  m12 first study gets a `_study1147` suffix.
+- **Needed:** a code fix (`create_hardlink` must refuse), a per-study part in the link-name template,
+  and an audit and repair of the 209, which is Ryan's call. It will be a BACKLOG HIGH item at stream
+  F's merge.
+
 ---
 
 ## Where things are (2026-10-02)
@@ -159,7 +353,28 @@ The order is either, but the conflicts are known.
     wording.
   - Push.
 
-## Step 3: the first retirements in production
+## Step 3: the first retirements in production (✅ DONE 2026-10-02)
+
+**Result: both operations ran, and both were verified independently.** Under Ryan's pre-approval,
+each full dry run had to show every pair byte-identical and match the approved list exactly; both
+did.
+
+- **The 22 `ZWSI` twins:** run `RET-20261002-115731-642`. Backup:
+  `C:\Users\rtasseff\temp\gjesus3_retire_backup_20261002-115731-642\`.
+  - The registry went 25,227 → 25,205 and stayed BOM-free with CRLF line endings.
+  - 22 tombstones were written, the rows and folders are gone, and the survivors are intact.
+  - The validator shows 10,314 errors, all the known placeholder, with no new class.
+- **The 10 `CELL` copies:** run `RET-20261002-121520-505`. Backup:
+  `…\gjesus3_retire_backup_20261002-121520-505\`.
+  - The registry went 25,205 → 25,195, with 32 tombstones in all.
+  - **All 10 of Claudia's links are the same file as their `ZWSI` survivor** (`os.path.samefile`),
+    under the same names.
+  - This also fixes 10 of the 25 mis-coded rows; the other 15 wait for retire v2 (stream E).
+  - The validator checked 25,195 rows: 10,314 errors, all the known placeholder, and warnings
+    unchanged at 23,859. There is no new class.
+- The global Finder page is left to the 03:00 job.
+
+*The procedure, as it was planned:*
 
 Do this after Step 2, with nothing ingesting. **Each operation is its own dry run, then Ryan's go,
 then `--execute`, then verify.**
@@ -216,7 +431,11 @@ OneDrive marks the directories read-only.
 
 In rough order:
 
-1. **Re-ingest the missing MRI session** `jrc20260710_m12_1125_bis` (17 exams, animal 12 of
+1. **✅ DONE 2026-10-02 (stream F, merged `fba7e76`).** The session was re-ingested as
+   `ACQ-20260710-MRI-018…034`, from the scanner's current copy. The 17 orphans were then retired
+   (run `RET-20261002-133115-491`, 17 tombstones, backed up whole). The coordinator verified both
+   writes. Record: `tasks/mri_0710_reingest_review.md`. *The plan as written:* **Re-ingest the
+   missing MRI session** `jrc20260710_m12_1125_bis` (17 exams, animal 12 of
    protocol 1125) from the scanner, through the normal MRI path. Its no-DICOM exams go on the
    regen worklist. **Then** retire the 17 empty `ACQ-20260710-MRI-*` orphans (`--orphan`, list in
    `tasks/retire_lists/`).

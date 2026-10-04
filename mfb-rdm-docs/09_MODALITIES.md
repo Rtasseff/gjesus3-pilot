@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-09-30 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `XMIC` code for an external microscope's `.czi` (§1.6, first use the Charité Axio Imager.Z2); `discovered.czi_*` / `discovered.mri_*` field tables re-verified against `tools/ingest/czi_metadata.py` and `tools/ingest/paravision_metadata.py` `EXPOSED_FIELDS` (in sync — 21 CZI + 22 MRI fields); `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
+**Last Updated:** 2026-10-04 — ✅ the line on what is registered for platform data: a reconstructed image stored as DICOM, or not at all (§1 "Two Categories of ‘Raw’ Data"). Prior: 2026-09-30 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `XMIC` code for an external microscope's `.czi` (§1.6, first use the Charité Axio Imager.Z2); `discovered.czi_*` / `discovered.mri_*` field tables re-verified against `tools/ingest/czi_metadata.py` and `tools/ingest/paravision_metadata.py` `EXPOSED_FIELDS` (in sync — 21 CZI + 22 MRI fields); `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
 
 ---
 
@@ -26,6 +26,23 @@ The instruments in scope fall into two categories, and the meaning of "raw" data
 | **Platform instruments** (MRI, Nuclear Imaging) | Reconstructed images provided to researchers by the platform | DICOM and/or NIfTI; on-disk shape varies by ecosystem (see [03_RAW_STORAGE §4](03_RAW_STORAGE.md)). Internal MRI uses folder-as-primary (no zip) since round 6 (2026-05-20). Collaborator DICOM continues with the legacy zipped-archive shape. |
 
 The platforms manage and archive their own true raw acquisition data (e.g., PET listmode files, raw k-space MRI data). gjesus3 is the **research-facing working layer** — see [13_GJESUS3_ROLE](13_GJESUS3_ROLE.md) for the two-tier framing. Our "raw" for platform data is the reconstructed images.
+
+> **✅ DECIDED 2026-10-04 (Ryan): the line on what is registered.** A platform acquisition, internal or
+> external, is registered in `/raw/` **only with a reconstructed image stored as DICOM**. External
+> equipment is accommodated in other ways (`XMIC`, `XMRI`), but this convention is not relaxed for it.
+>
+> - **No reconstructed image of any kind** (e.g. MR spectroscopy such as STEAM/PRESS, or calibration
+>   scans): **not registered.** The centre does not register its own spectroscopy either.
+> - **A reconstruction that cannot be converted to DICOM** (e.g. a sequence Dicomifier fails on): **not
+>   registered now.** If someone converts it later, it can be registered then.
+> - **Such files are kept as other data, never as an empty registry row.** They go in the project's
+>   folder when the project is known; otherwise in the unassigned holding area
+>   (`staging\historical_drives_unassigned\` for the historical drives). Each sits beside a plain
+>   `README` that says why it is not registered.
+> - **Live-scanner exams without exported DICOMs are not affected** while their DICOMs can still be
+>   regenerated from the platform ([11_OPERATIONS §5.5](11_OPERATIONS.md)).
+> - **🔶 Open (BACKLOG):** what to do with the existing empty placeholders that the 2026-07-16 drain
+>   marked `not-applicable` (spectroscopy/calibration) or `no-source`.
 
 ### Cross-modality requirement: subject + condition metadata for preclinical acquisitions
 

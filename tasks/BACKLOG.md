@@ -17,6 +17,10 @@ When a backlog item becomes a blocker for delivery, promote it to `STATUS.md`.
 
 ## 🔺 HIGH (top) — a registry flag for human, privacy-restricted data (2026-10-02)
 
+> **Scope addition (2026-10-04, `LEONE`):** the backfill must also reach `projects\DTS24\working\historical_drives\FRIO-X6\LEONE\`, 7,161 files whose DICOM headers carry full identifiers (`PatientBirthDate` on ~91%).
+> - These are **project-folder files, not acquisitions**, so a registry-level flag will not reach them on its own.
+> - Echo pixels **may carry burned-in identifiers**, even though their headers declare `BurnedInAnnotation = NO`; nobody has checked the pixels.
+
 **Raised by Ryan, 2026-10-02, at the highest priority; to discuss before building.** Human data is
 in the system (DTS24, 75 acquisitions), and more is coming (`LEONE`, from the historical drives).
 There is a species column (`sample_organism` = `Homo sapiens`), but, in Ryan's words, *"since
@@ -42,6 +46,8 @@ boolean. Not sure, but it seems worthwhile; open to suggestions."*
   `DTS24` (both cohorts, 75) and `LEONE`, which is copied first (Ryan, 2026-10-02).
 
 ## 🔺 HIGH (top) — record the data processing agreement (DPA) for every external dataset (2026-10-02)
+
+> **Scope addition (2026-10-04):** add `DTS24`'s `working\historical_drives\FRIO-X6\LEONE\` (7,161 project-folder files, not acquisitions) to the backfill, beside the `DTS24` acquisitions and the Charité `XMIC` files.
 
 **Raised by Ryan, 2026-10-02, at the highest priority; to discuss before building.** External data
 should say which **data processing agreement** covers it. Acceptable forms:
@@ -78,6 +84,38 @@ a DPA reference.** That gives a validator rule: human ⇒ DPA present.
   first, Ryan 2026-10-02) and `XMIC` (338, Charité). Each needs a controlled rewrite of its sidecar
   and README in `/raw/` (the recovery pattern), plus the agreement details for each cohort from
   Ryan.
+
+## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
+
+Found by stream F while previewing the first m12 study of 2026-07-10.
+
+**The cause.** `linker.create_hardlink` (folder primary) does `os.makedirs(dest, exist_ok=True)` and links only the files that do not exist yet.
+- So two acquisitions with the same link name (same animal, same day, same exam number and recons) end up sharing one link folder. The second gets none of its own files, or a mix.
+- The standard MRI link name, `MRI_<sample>_<date>_<exam>_<recons>`, has no per-study part.
+
+**It has already happened.** On 44 multi-study animal-days (483 acquisitions), **209 have no link folder of their own: 43.3%, against 2.65% on single-study days.**
+
+| Project | Acquisitions without their own link folder |
+|---|---:|
+| `AE-biomaGUNE-0721` | 153 of 294 |
+| `AE-biomaGUNE-1022` | 53 of 179 |
+| `AE-biomaGUNE-0219` | 3 of 10 |
+
+- `/raw/` and the registry are intact.
+- Provenance cannot show it: it is idempotent on `output_path`.
+
+**Evidence:** `tasks/mri_july_1125_review.md` §2.1; the scripts and their output are in `D:\projects\gjesus3\staging\_analysis\mri-july-1125\`:
+- `audit_link_folders.txt`: the 209 of 483, and the single-study baseline;
+- `collision_A_result.txt` and `collision_B_result.txt`: the reproduction, standard path against scoped config;
+- `audit_link_collisions.txt`: the provenance view, which cannot see it;
+- `scripts\audit_link_folders.py` and `scripts\collision_check.py`.
+
+The streams that ingested on 2026-10-04 checked every planned link name first, and verified each acquisition's link folder strictly afterwards.
+
+- [ ] **Code:** `create_hardlink` must refuse (raise) when an existing file in the destination is not the same file (`os.path.samefile`), instead of skipping it. Test it with two acquisitions of one name.
+- [ ] **Template:** give the MRI `link_filename` a per-study part (the study start time, or the ACQ-ID), so a same-day repeat cannot collide.
+- [ ] **Audit and repair (Ryan's decision):** list the affected acquisitions (an inode check of each link folder), then add the missing links under distinct names. Additive only: project folders are researcher-owned (05_PROJECTS §3a).
+- [x] The first m12 study of 2026-07-10 avoided it with a scoped config (a `_study1147` suffix).
 
 ## 🔺 HIGH — port gjesus3 RDM production onto Box A (2026-09-04)
 
@@ -359,13 +397,14 @@ are the same acquisition, but not always the same pixels.
   each dry first, **after the drives ingest is merged**: the 22 `ZWSI` twins
   (`tasks/retire_lists/2026-10_sha256_twins_zwsi.csv`), then the 10 `CELL` rows (`…_cell.csv`). Per-pair
   table and commands: `tasks/retire_acquisition_review.md` §6a.
-- [ ] **v2 of the retire tool: a "content-equivalent duplicate" mode for `.czi` (2026-10-01).** A
+  **✅ 2026-10-02 — the 32 duplicates are retired in production** (close-out plan Step 3; runs `RET-20261002-115731-642` and `RET-20261002-121520-505`, each after a full dry run that showed every pair byte-identical, and each verified independently). This fixes 10 of the 25 mis-coded rows. **What remains is re-coding the other 15** (13 `CELL` → `ZWSI`, 2 `LSM9` → `CELL`): that is the v2 re-identify item below, being built on `feat/retire-v2` (2026-10-03/04).
+- [x] *(✅ Built, merged and first used 2026-10-04: `ACQ-20250915-LSM9-016` retired as `equivalent` of `-001`, run `RET-20261004-135015-801`.)* **v2 of the retire tool: a "content-equivalent duplicate" mode for `.czi` (2026-10-01).** A
   duplicate may be retired when the decoded subblocks, the metadata XML and the attachment payloads are
   all identical, even though the bytes differ (ZEN rewrote the container). Record the evidence in the
   tombstone. First user: **`ACQ-20250915-LSM9-016`**, a re-save of `-001` that is information-identical
   but 1 MB smaller (`-001` carries a 472 KB `DELETED` segment from an in-place metadata rewrite).
   **Ryan: leave the pair until this exists.** Evidence: `tasks/retire_acquisition_review.md` §6b.
-- [ ] **v2 of the retire tool: re-identify a mis-coded acquisition** (retire + re-register under the
+- [x] *(✅ Built, merged and first used 2026-10-04. **✅ 2026-10-04 — the rest is done too (retire v2's first production use):** the 2 `LSM9` rows that are Cell Observer files are re-identified as `ACQ-20240625-CELL-008/-009` (run `RET-20261004-134924-221`; the same files, project links unchanged). The 13 `CELL` rows turned out to be ZEN exports (3 crops and 10 split scenes) of correctly coded AxioScan scans, so they are retired as **derivatives** into `claudia\working\…` (`RET-20261004-135040-313`). **All 25 mis-coded rows and all 32 duplicates are resolved.**)* **v2 of the retire tool: re-identify a mis-coded acquisition** (retire + re-register under the
   right instrument code, e.g. the remaining 15 mis-coded rows). **It must not be blocked by its own
   tombstone:** the ingest dedup index deliberately includes retired rows (Ryan, 2026-10-01), so a
   re-identify has to bypass that for the id it is replacing.
@@ -914,6 +953,8 @@ touching it again:
   verification instruction that would have missed the 2026-07-17 crash.
 
 ## 🔺 HIGH — external collaborator archives are one row per EXAM, not per series (2026-08-14)
+
+> **For the re-shape (2026-10-04):** consider promoting `LEONE`'s `mr_supplements` (case 3.02's 3D QFlow series, plus the raw-data objects) into the matching `DTS24` exams. Also consider the 36 echo exams for `/raw/`, once an external-echo instrument code exists. Ryan's 2026-10-04 ruling placed them in `DTS24`'s project folder as files for now.
 
 The 75 external cardiac-MRI acquisitions in `DTS24` (`XMRI`; LIONS ×42, HPIC ×33) are each
 stored as **one archive standing for a whole exam**. Every internal dataset is separated by
@@ -1899,20 +1940,20 @@ absent from the registry are invisible to the Finder — no researcher can be mi
 them. But they are **unaccounted-for data in an immutable area**, and `/raw/` is the one
 place the system promises to be authoritative.
 
-- [ ] **Work out what happened**, then either register them or delete them. The mtime
+- [x] **Work out what happened** *(2026-10-02: the frozen exe's README crash on 2026-07-16, plus a rollback blocked by the operator's write-not-modify ACL; CHANGELOG 2026-07-17. Established from the pattern; no log survives)*, then either register them or delete them. The mtime
   (2026-07-16) coincides with the no-DICOM DICOM-regen backfill drain, so start with that
   session's records and `pending_dicom_regen.csv`. The empty `.data/` says these are the
   no-DICOM placeholder path.
-- [ ] **Decide the rule, not just this case**: should `/raw/` folders without a registry
+- [ ] **Decide the rule, not just this case** *(still open, and now with a second instance: the m6 session's two failed attempts, 2026-10-02)*: should `/raw/` folders without a registry
   row be (a) reported by `validate_registries` as an ERROR, (b) auto-cleaned by a drain
   tool, or (c) tolerated? Today nothing looks for them, which is why these sat unnoticed
   for a month. A **`/raw/`-vs-registry orphan check is the natural companion** to the
   multi-value hygiene item above, and unlike the checks that were dropped on 2026-08-12 it
   is a genuine integrity question — `/raw/` is system-owned, so nothing here depends on
   researcher behaviour (contrast [05_PROJECTS §3a](../mfb-rdm-docs/05_PROJECTS.md)).
-- [ ] If they are deleted, **do not release the reserved ids** — retire them, as
+- [x] *(Done 2026-10-02: 17 tombstones, disposition `orphan`; the counter is untouched at 34.)* If they are deleted, **do not release the reserved ids** — retire them, as
   `PROJ-0054`/`99_test` was on 2026-08-12.
-- [ ] **2026-10-01 — decided (Ryan): retire them, after the session is re-ingested.** They are the
+- [x] *(✅ Done 2026-10-02: the session was re-ingested as `ACQ-20260710-MRI-018…034`, from the scanner's current copy, and the 17 orphan folders were then retired, backed up whole off-NAS; run `RET-20261002-133115-491`; record `tasks/mri_0710_reingest_review.md`.)* **2026-10-01 — decided (Ryan): retire them, after the session is re-ingested.** They are the
   no-DICOM placeholder shape (empty `.data`, a `checksums.json` with no files, no `README.txt`), created
   2026-07-16 09:16 UTC by `ingest_raw.py`, which stopped before the registry append (cause not
   established). Their session **`jrc20260710_m12_1125_bis`** (animal 12, protocol 1125, 17 exams) is
@@ -1920,6 +1961,93 @@ place the system promises to be authoritative.
   no-DICOM exams go to the DICOM-regen worklist (11_OPERATIONS §5.5), with fresh ids from `-018`;
   (2) then `retire_acquisition.py --orphan` with `tasks/retire_lists/2026-10_orphans_20260710_MRI.csv`
   (`tasks/retire_acquisition_review.md` §6c).
+
+## 🔸 MODERATE — 14 MFB animal sessions on the scanner are registered nowhere, including `m6` of 2026-07-06 (2026-10-02)
+
+**What was found.** A read-only reconciliation of `kenia` (`/opt/PV-7.0.0/data/nmr`) against `registry_raw` found **19 unregistered `jrc` studies dated 2026-06-01 or later: 14 animal sessions (232 exam folders) and 5 phantom/QC studies (70)**. Evidence: `tasks/mri_0710_reingest_review.md` §5.1 (the script and the per-study CSV are on D:).
+
+- **The animal sessions:**
+  - protocol **1125**, 9 sessions: m2 and m3 on 2026-07-03; m4, m5, **m6**, m7 and m8 on 07-06; the first m12 study (11:47) and m19 on 07-10;
+  - protocol **1025**, 5 sessions: m25–m28 on 2026-10-01, and m29 on 10-02.
+- **m6 was found first.** Its counter `ACQ-20260706-MRI- = 30` fits two failed attempts of 15 exams, with the same README crash.
+  - It has two NAS pulls, `staging\sftp_20260716_112028` and `_122729`, byte-identical to each other and to the scanner's exam data.
+  - Its dry run gives 15 acquisitions in `PROJ-0021`, with real IDs from `-031`.
+  - The other sessions were never pulled to the NAS.
+- **Since the 2026-06-13/14 bulk load, only m1 (07-03) and the m12 `_bis` session were ingested.** The data is safe on the scanner, which keeps years.
+- **The operators are not established.** ParaVision's `ACQ_operator` is `nmr`, and the facility DB records no operator. For m6, the best-supported answer is `Irene`.
+- These ingests are outside the 2026-10-01 pre-approval, so each needs **Ryan's go**.
+
+- [x] *(Done 2026-10-04: Ryan chose the Data Office, from the scanner; operator `Irene`.)* Decide who ingests them, and how: the Data Office from the scanner, or the operators through the GUI.
+- [x] *(Done 2026-10-04: the 9 protocol-1125 sessions, 141 acquisitions. The 5 protocol-1025 sessions of 10-01/02 stay with the operators.)* Ingest the 9 protocol-1125 sessions, and later the 1025 ones, once each operator is known. Each is a normal `mri-ingest`, run from Windows.
+- [x] *(Done 2026-10-04: Ryan said yes; ingested with a blank project, 69 acquisitions.)* Decide whether the 5 phantom/QC studies belong in gjesus3: `jrc260611_SPION`, `jrc_260612_phantom_SPION_RGD`, `jrc260708_phantom`, `jrc260709_phantom` and `jrc260818_Phantom_MnACC`. Their names carry no `m<animal>_<protocol>`, so the ingest regex does not parse them (the silent skip, STATUS §0 D3).
+- [ ] Run the reconciliation again on a schedule. It is read-only: an SFTP listing plus a registry read.
+- [ ] Confirm that other groups' studies on the shared scanner stay out of scope. Since 2026-06-01 there are 362 of them (1,755 exam folders), from `jl`, `pr`, `sp`, `dan`, `fer` and `aka`; none is MFB, and none is in the registry.
+
+## 🔹 LOW — keep `staging\sftp_20260716_110906` until someone decides on the deleted recon `/2` (2026-10-02)
+
+This folder holds the **only copy of `/2`** (`pdata\2` of 12 exams, 72 files) of session `m12_1125_bis`. The researcher deleted it on the scanner on 2026-07-23, and it is not in `/raw/`: the ingest took `/1,3`.
+
+- The workflow notes say auto-generated reconstructions (`/1`, `/2`) are typically discarded, so this is a retention call, not a loss.
+- **Do not delete any `staging\sftp_20260716_*` folder before the m6 session is ingested;** then decide on this one.
+
+## 🔹 LOW — the dry-run preview ignores `.acq_id_seq.json` (2026-10-02)
+
+`tools/operator/preview.py::_preview_acq_id` calls `generate_acq_id`, which reads only the registry and the tombstones.
+
+- So a preview shows `ACQ-20260710-MRI-001…017` where the real run allocates `-018…-034`.
+- That is harmless once known, but misleading when a plan says "IDs from -018".
+- **Fix:** make the preview take `max(registry, reservation) + 1`, as `allocate_acq_id` does, without writing.
+
+## 🔹 LOW — the anatomy rule gets no signal from Dicomifier-regenerated DICOMs (2026-10-02)
+
+This was seen in the rehearsal of the same 17 exams.
+
+- **With the native Bruker DICOMs,** the rule read "4 chamber", "long axis LV" and "Cine_ 4 chamber", and set `anatomy` = `heart` on three exams.
+- **With Dicomifier-regenerated DICOMs,** the per-DICOM headers in the sidecar carried no `SeriesDescription` or `ProtocolName`, so the rule set nothing.
+- **A likely fix:** `acqp` holds `ACQ_scan_name` (e.g. "4 chamber (E3)") for every exam. Adding it to `anatomy_derive.collect_mri_signals` may give the regenerated exams the same hint. This is unverified beyond the rehearsal, so check it on a regenerated production exam first.
+
+## 🔹 LOW — NIfTI folders next to ParaVision studies (2026-10-02)
+
+The researcher's own conversions sit in the study folder: `NIFTI\`, 30 files (32 MB) for `m12_1125_bis` and 26 files (25 MB) for `m6`.
+
+- The MRI path skips them as a non-exam sibling, and they were left on the scanner by decision.
+- If they should live in a project folder, that is a placement call (`working\`).
+
+## 🔸 MODERATE — existing MRI rows that fall outside the 2026-10-04 line (2026-10-04)
+
+Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is registered only with a reconstructed image stored as DICOM. Spectroscopy and calibration exams are not registered, and neither are reconstructions that cannot be converted to DICOM.
+
+**The conflict:** production already holds MRI rows registered as empty placeholders before the line existed. The 2026-07-16 drain of the DICOM-regen worklist (10_TOOLS §3.8) left **365 rows `not-applicable`** (spectroscopy/calibration: STEAM/PRESS/WOBBLE) and **94 `no-source`**.
+
+- [ ] Count them afresh, from `registries/pending_dicom_regen.csv` and from `/raw/` folders with an empty `.data\`.
+- [ ] **Decide (Ryan):**
+  - retire them with the retire tool (which disposition? a new `not-an-image`, or `derivative`?), keeping any recoverable files as other data in the project folder;
+  - or leave them, with the line applying only from 2026-10-04 on.
+- [ ] Live ingest: should the MRI path stop registering spectroscopy and calibration exams at ingest? Today it registers them as `not-applicable` placeholders.
+
+## 🔹 LOW — an exam that produced no data is registered with today's date (2026-10-04)
+
+- **The cause:** an aborted exam has no `visu_pars`, so `mri_acquisition_datetime` is empty and the preview shows today's date (`ACQ-20261004-MRI-…`).
+- **Where it was hit:** stream B, on its B06 setup scans; and again on exam 66 of the 2026-07-08 phantom.
+- **The fix:** `expand_batch` should skip (or stop on) an MRI exam with no reconstructed image, as Ryan's line of 2026-10-04 says (09_MODALITIES).
+- **Today:** both cases are handled by an allow-list case table.
+
+## 🔹 LOW — phantom and QC studies need a scoped config until the regex has a phantom branch (2026-10-04)
+
+- Names without `m<animal>_<protocol>` match neither shared regex (D3).
+- The five `jrc` phantom studies were ingested through `tools/configs/mri_july_1125/mri_phantom_*.yaml`, which take the sample label from ParaVision's `SUBJECT_id`.
+- **A durable fix:** an explicit phantom path in the MRI template.
+- **Decided 2026-10-04:** `phantom` for an imaging test object, `material` for a bare sample of a material under study.
+
+## 🔹 LOW — another group's study lives inside m3's folder on the scanner (2026-10-04)
+
+`20260707_094320_jl260707_1225_m26_…` (13 exams, 358 MB) exists only nested inside `…_m3_1125_…`. It is not MFB data and was not ingested. Someone may want to tell the `jl` group.
+
+## 🔹 LOW — a live WSL write to the share is about 20 times slower than local (2026-10-04)
+
+- The five phantom configs (69 acquisitions, 509 files) took 31 minutes from WSL to `/mnt/gjesus3`, against 84 s on D: scratch: roughly 2 s per small file over the 9p/SMB path.
+- 11_OPERATIONS §5.5 already notes that WSL cannot hard-link there.
+- Plan a window by file count. A native-DICOM study with no project could be written from Windows instead.
 
 ## Metadata database — retire the CSV registries (2026-08-12)
 

@@ -23,6 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ingest import registry  # noqa: E402  (BOM-tolerant read_registry)
+from ingest import retired  # noqa: E402  (the tombstone's reason + evidence)
 from ingest import project_ids as pids  # noqa: E402  (the ;-separated project cell)
 
 # Free-text search is matched against the lower-cased concatenation of these.
@@ -163,8 +164,13 @@ def main(argv=None):
         res = registry.resolve_acq_id(q, os.path.join(args.nas_root, "registries"))
         if res["status"] == "retired":
             t = res["tombstone"]
-            print(f"  {q} is RETIRED ({t.get('retired_at', '')[:10]}, {t.get('disposition')}"
-                  f"{' of ' + res['superseded_by'] if res['superseded_by'] else ''}): {t.get('reason')}")
+            disp = t.get("disposition") or ""
+            what = {"reidentified": "re-identified as",
+                    "equivalent": "content-equivalent duplicate of"}.get(disp, f"{disp} of")
+            # v2 appends the tool's evidence to the reason (06 §2.9); show the human part only.
+            reason, _evidence = retired.split_evidence(t.get("reason"))
+            print(f"  {q} is RETIRED ({t.get('retired_at', '')[:10]}, "
+                  f"{what + ' ' + res['superseded_by'] if res['superseded_by'] else disp}): {reason}")
             if res["resolved"]:
                 print(f"  -> use {res['resolved']}")
             if t.get("moved_to"):

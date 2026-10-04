@@ -1,0 +1,58 @@
+# Scoped config: MFB phantom/QC study 'jrc-260612_phantom_SPION_RGD' on the internal 7T MRI, registered from the scanner (kenia).
+# Decided by Ryan 2026-10-04 (relayed by the coordinator): the five unregistered `jrc` phantom/QC studies are
+# ingested by the Data Office with a BLANK project. 7 exams, no DICOM: regenerated at ingest.
+#
+# sample_type = phantom, by stream B's B07 rule (coordinator, 2026-10-04): `phantom` for an imaging test object
+# (named or built as a phantom), `material` for a bare sample of a material under study (06_REGISTRIES 2.4).
+#
+# WHY A SCOPED CONFIG: a phantom's study name carries no `m<animal>_<protocol>`, so the shared MRI regex
+# (`..._m(?P<animal_num>\d+)_(?P<project_code>\d{4})`) parses nothing and the study would be dropped with no error
+# and no worklist row (STATUS 0 D3). The shared regex is deliberately NOT relaxed. This config is scoped to ONE study
+# by its pattern, and takes the identity from ParaVision's own SUBJECT_id (as stream B did for its B07 phantoms), so no
+# filename regex is needed at all.
+#
+# Source: the scanner's current copy, pulled to D: with a SHA-256 manifest (tasks/mri_july_1125_review.md).
+# staging_dir is in WSL form on purpose: this config is RUN FROM WSL, so that Dicomifier regenerates the exams that
+# have no DICOM AT INGEST (nothing is left as an empty placeholder). A blank project means no hard links, so the WSL
+# hard-link limitation does not apply. From the repo root, in WSL:
+#   source ~/miniforge3/etc/profile.d/conda.sh && conda activate dicomifier-pilot     # mandatory
+#   python tools/ingest_raw.py --config tools/configs/mri_july_1125/<this file> --nas-root /mnt/gjesus3/gjesus3-data [--dry-run]
+# (Run the repo file itself: the registry's ingest_config column records its path. For a Windows-side preview, swap the
+# staging_dir to D:/projects/gjesus3/scratch_mri-july-1125 in memory, never in the file.)
+#
+# NOTHING NAMES AN OPERATOR: ParaVision records only the shared login `nmr` (ACQ_operator / OWNER / SUBJECT_referral),
+# the remarks are empty. researcher and operator are therefore NA (as G1 and B07). No animal: subject_from_db is off.
+# The sample label is the SUBJECT_id exactly as the scanner records it (coordinator, 2026-10-04: never normalise it).
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false
+  acquisition_layout: folder
+  copy_strategy: mri_paravision_v2
+  reconstructions: all
+  # Imaging exams with no exported DICOM are regenerated at ingest (Dicomifier 2.5.3 in WSL); where Dicomifier is
+  # absent the ingest falls back to a placeholder and a regen-worklist row, which is why WSL is mandatory here.
+  auto_regenerate_dicom: true
+
+auto_discover:
+  staging_dir: "/mnt/d/projects/gjesus3/scratch_mri-july-1125"
+  pattern: "20260612_141006_jrc_260612_phantom_SPION_RGD_jrc_260612_pha_1_1/[0-9]*"
+  subject_from_db: false
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  # Derived from acqp ACQ_station ("Biospec 70/30" -> Bruker BioSpec 7T); every exam of this study says so.
+  instrument_model:     "${discovered.mri_scanner_model}"
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  # The ParaVision SUBJECT_id is the sample label (B07: sample_id and session_id both). Verbatim, as typed.
+  sample_id:            "${discovered.mri_animal_id}"
+  sample_type:          phantom
+  session_id:           "${discovered.mri_animal_id}"
+  acquisition_datetime: discovered.mri_acquisition_datetime
+  project_name:         ""
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, phantom sample ${discovered.mri_animal_id}; recons kept: ${discovered.mri_recon_indices}"
+operator: "NA"
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
