@@ -578,6 +578,7 @@ round can regroup them later, because the index and `_PATHMAP.csv` say where eve
 | the destinations | `tools/drive_staging/r4_destinations.py`: calls stream A's `historical_paths.py` and `nonraw_placement.py` read-only (found in A's worktree until A merges; `R4_STREAM_A_DIR` overrides) |
 | its tests | `tools/test_drives_r4_groups.py` (`python tools/test_drives_r4_groups.py`; the destination tests are skipped, with a message, if A's modules are not found) |
 | the index rehearsal | `tools/drive_staging/r4_index_rehearsal.py`: `index --execute` on a scratch copy of the six trees, with the refusals; run it again just before the window |
+| the window checklist | `tools/drive_staging/r4_window_checks.py`: `snapshot --lists <list>` before a retire run, `verify --lists <list>` after the index step (read-only on the NAS; §14) |
 | classification of every file | `tasks/drives_r4_classification.csv` (819 rows + ID65; method and result per member) |
 | groups waiting for a project | `tasks/drives_r4_waiting_groups.csv` (81 groups) |
 | the four lists | `tasks/retire_lists/2026-10_r4_{scalebars,resaves,exports,roi_crops}.csv` |
@@ -681,3 +682,80 @@ same-timestamp retirements are now approved by Ryan, so the coordinator may run 
 ```markdown
    - **Stream D's questions: answered 2026-10-04 (Ryan).** All four lists approved (153); `ID65` stays; the 90 `raw_linked` links may go; proposal (c) and the 61 no-project derivatives wait, with no list; destinations use stream A's short-path layout (the five over-259 paths are now at most 240). The one small question that followed (review §11, Q11) is answered too: the 50 `1321` files with no study folder near them keep their shortened drive path, as A's rule gives it. No question is open.
 ```
+
+---
+
+## 14. The write window, 2026-10-04: what ran
+
+*Added after the window. Three of the four lists ran and passed every check; the fourth (`roi_crops`) was stopped at its
+last step by the permission system and has **not** run. §13 was written before the window and says "not yet executed": use
+the numbers here. Logs, backups and the checks' output are in `D:\projects\gjesus3\staging\_analysis\drives-r4-cleanup\window\`.*
+
+### 14a. Preflight (14:06 to 14:23)
+
+- **One writer.** The coordinator's last registry write was 14:00:44 (retire v2, run `RET-20261004-135040-313`); no other
+  registry file changed after it, `.registry.lock` was absent, and `registry_raw.csv` had 26,646 rows and `retired_acquisitions.csv`
+  65 tombstones, as the coordinator stated. Before each later list the only write since the previous check was my own previous
+  list (by file times and tombstone run ids).
+- **Tools.** The retire tool was run from a `git archive` export of `origin/main` at `f19cd48`; `retire_acquisition.py` is
+  byte-identical to the v2 used in the dry runs (`main` changed only MRI configuration files since).
+- **Baseline.** `validate_registries.py --no-enrichment`: 26,646 rows, 10,314 errors, 0 warnings, one class (the MRI `operator`
+  template placeholder). The full validator was cut off at 10 minutes over SMB, so the enrichment checks were skipped; the error
+  count does not depend on them.
+- **`verify-lists`, all four lists:** 0 problems; 153 destinations, longest 240, none over budget, none already on the NAS.
+
+### 14b. The lists
+
+| list | rows (originals) | retire run | tool | backup (files) | index step | checks |
+|---|---|---|---|---|---|---|
+| `scalebars` | 3 (3) | `RET-20261004-142340-610`, 14:23:40 to 14:24:05 | exit 0, self-check OK for 3 | `C:\Users\rtasseff\temp\gjesus3_retire_backup_20261004-142340-610` (20) | 14:24:25: `0721` +2, `1123` +1; 4 documents written | 38 of 38 |
+| `resaves` | 9 (9) | `RET-20261004-142705-105`, 14:27:04 to 14:32:00 | exit 0, self-check OK for 9 | `..._20261004-142705-105` (41) | 14:32:33: `0219` +4, `0420` +1, `1019` +1, `1123` +1, `1321` +2; 8 of 11 documents written; the first new `_ORIGIN.txt` | 38 of 38 |
+| `exports` | 60 (20) | `RET-20261004-143716-029`, 14:37:15 to 14:40:47 | exit 0, self-check OK for 60 | `..._20261004-143716-029` (192) | 14:40:57: `0721` +11, `1123` +18, `1321` +31; 4 of 7 documents written; the second new `_ORIGIN.txt` | 38 of 38 |
+| `roi_crops` | 81 (64) | **not run** | | | | |
+
+- **Guard.** `scalebars` ran 22 minutes after the coordinator's write, so it needed no override. `resaves` and `exports` were run with
+  `--allow-recent-registry-writes`, each only because the recent write was my own previous list.
+- **After each list, the validator** (`--no-enrichment`) reported 26,643, 26,634 and 26,574 rows and **10,314 errors of the same single
+  class** each time; the retire logs hold no warning or refusal. Tombstones: 65, 68, 77, 137. `raw_linked` links gone: 1, 8, 18
+  (27 of the 90 so far). `provenance.csv` events appended: +4, +17, +78, as the dry runs announced.
+- **What `verify` checked per list** (`r4_window_checks.py`; 38 checks each, 0 failed): `registry_raw.csv` and `ingest_manifest.csv`
+  are the pre-run copy minus exactly the list's rows, byte for byte (every other row, line ending and quote untouched);
+  `registry_subjects.csv` and `registry_projects.csv` are byte-identical; the old tombstones are untouched and one new one per row is
+  appended (derivative, `superseded_by` the original, `moved_to` the planned destination); every `/raw/` folder is gone; every
+  destination file exists at the staged size and its SHA-256 equals the staged drive copy's (72 of 72 so far); every original keeps
+  its registry row and its `/raw/` folder names, sizes and modification times; exactly the dry run's `raw_linked` links are gone and
+  nothing else in the six `raw_linked` folders changed; `provenance.csv` grew by the announced events; each `_INDEX.csv` has the
+  list's rows and every other row unchanged and in order; `_PATHMAP.csv` keeps all its rows.
+
+### 14c. What is left: `roi_crops` (81 rows, 64 originals, 184 GB, 63 links)
+
+- **Why it stopped.** The command `retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_r4_roi_crops.csv
+  --execute --allow-recent-registry-writes` was refused by the permission system ("Modify Shared Resources"). It was not run, not
+  retried in any other form, and nothing was written; the registry files are as the exports run left them (14:40:46).
+- **Ready.** `verify-lists --lists roi_crops` (14:43): 0 problems; the snapshot was taken 14:43:36 (it is the current
+  `window\snapshot.json`, with its backup in `window\before_roi_crops_144336\`); the index dry run (14:45) shows 81 rows
+  (`0219` +8, `0420` +1, `1123` +15, `1321` +57), no new folder and no new `_ORIGIN.txt`, so the plan is still a fixed point after
+  the three merges. The tool's 15-minute guard clears at 14:55:46 if nothing else writes before then.
+- **To finish** (one writer on `J:`; the same export of main's tools as the first three):
+
+```
+python tools\drive_staging\r4_groups.py verify-lists --lists roi_crops
+python tools\drive_staging\r4_window_checks.py snapshot --lists roi_crops      # again, if anything wrote the registry since 14:40:46
+python <main's tools>\retire_acquisition.py --nas-root J:\gjesus3-data --list tasks\retire_lists\2026-10_r4_roi_crops.csv --execute
+python tools\drive_staging\r4_groups.py index --lists roi_crops --execute
+python tools\drive_staging\r4_window_checks.py verify --lists roi_crops
+python <main's tools>\validate_registries.py --nas-root J:\gjesus3-data --no-enrichment    # expect 26,493 rows, 10,314 errors, one class
+```
+
+  Expected after it: `registry_raw` 26,493 rows, 218 tombstones, 90 `raw_linked` links gone in all. The retire run hashes 184 GB over
+  SMB (about 110 MB/s) and `verify` hashes it again: estimate 30 to 60 minutes and about 30 minutes. Add
+  `--allow-recent-registry-writes` to the retire command only while the 14:40:46 write is under 15 minutes old.
+
+### 14d. Changes to §13's wording once these facts are used
+
+- **Status lines** ("NOT yet executed (waiting for the write window)", "not yet executed"): "three of the four lists executed
+  2026-10-04 (`scalebars` 3, `resaves` 9, `exports` 60: 72 acquisitions, every check passed; validator unchanged at 10,314 errors);
+  `roi_crops` (81, 184 GB) is next". Replace with a done line when it has run.
+- **13d, "Verify after each write"** is the checklist `r4_window_checks.py verify` runs; the guard sentence ("do not use
+  `--allow-recent-registry-writes` unless the coordinator says") stands: the coordinator allowed it for the writer's own previous list.
+- **Link count:** 90 links go across the four lists; 27 have gone.

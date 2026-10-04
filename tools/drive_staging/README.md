@@ -140,7 +140,7 @@ python tools/drive_staging/ingest_verify.py --nas-root <root> --batch B01   # af
   through `auto_discover.case_table` (10_TOOLS §2.1.3). Tests: `python tools/test_drives_ingest_plan.py`
   and `PYTHONPATH=tools python tools/ingest/test_case_table.py`.
 
-## The same-timestamp clean-up (`r4_groups.py`, `r4_destinations.py`, `r4_index_rehearsal.py`)
+## The same-timestamp clean-up (`r4_groups.py`, `r4_destinations.py`, `r4_index_rehearsal.py`, `r4_window_checks.py`)
 
 *Added 2026-10-02, extended 2026-10-04 (stream D of the weekend close-out).* One-time tools for the 247 groups
 (819 `.czi`) that gate rule R4 left in `/raw/` because they share an acquisition timestamp: which members are copies of
@@ -159,6 +159,8 @@ python tools/drive_staging/r4_groups.py verify-lists [--lists a,b]   # the lists
 python tools/drive_staging/r4_groups.py index [--lists a,b] [--execute]   # AFTER a retire run: merge the index rows (a dry run unless --execute)
 python tools/drive_staging/r4_groups.py report        # the tables of the review
 python tools/drive_staging/r4_index_rehearsal.py      # `index --execute` on a scratch copy of the six trees, with the refusals
+python tools/drive_staging/r4_window_checks.py snapshot --lists scalebars   # BEFORE a retire run: back up the registry files and the six trees' index documents, record the originals
+python tools/drive_staging/r4_window_checks.py verify   --lists scalebars   # AFTER the retire run and the index step: the close-out plan's checklist (read-only)
 ```
 
 - **The evidence is exact.** Every file is uncompressed, so the stored tile bytes are the pixels; a relation (identical
@@ -174,3 +176,12 @@ python tools/drive_staging/r4_index_rehearsal.py      # `index --execute` on a s
 - **`index` merges, it never overwrites.** One row per retired derivative goes into each project's `_INDEX.csv` (a superset
   of A's rows, each kept as it is), the new folders into `_PATHMAP.csv`, and an `_ORIGIN.txt` into a new study folder that has
   something dropped above it. It refuses unless every selected file is at its destination.
+- **`r4_window_checks.py` is the checklist of a write window,** one list at a time, read-only on the NAS (it only copies the
+  registry files and the six trees' `_INDEX.csv` / `_PATHMAP.csv` to `<staging>\_analysis\drives-r4-cleanup\window\`).
+  `verify` exits 1 on any failed check: `registry_raw.csv` and `ingest_manifest.csv` are the snapshot minus exactly the list's
+  rows (byte for byte), `registry_subjects.csv` and `registry_projects.csv` are byte-identical, one tombstone per row (derivative of
+  the right original, `moved_to` = the planned destination), the `/raw/` folders are gone, each destination file has the staged size
+  and a SHA-256 equal to the staged drive copy's, the originals are untouched (registry row and `/raw/` folder names, sizes,
+  mtimes), exactly the dry run's `raw_linked` links are gone, `provenance.csv` grew by the events the dry run announced, and each
+  `_INDEX.csv` has the list's rows with every other row unchanged. The validator is run by hand, with
+  `validate_registries.py --no-enrichment` (the full run takes over ten minutes over SMB; the error count does not depend on it).
