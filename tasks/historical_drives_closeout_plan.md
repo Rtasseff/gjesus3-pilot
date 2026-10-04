@@ -212,6 +212,12 @@ coordinator:**
   - **Standing approval** for the coordinator to delete finished stream scratch on D:.
 
 - **The July protocol-1125 series (9 sessions, 141 acquisitions) and the 5 `jrc` phantom/QC studies (69) are in production** (stream F, merged). Both were verified independently. The registry is at **26,660** rows.
+- **Retire v2's first production operations (the coordinator):**
+  - 2 `LSM9` rows were re-identified as `CELL-008/-009`;
+  - `LSM9-016` was retired as `equivalent`;
+  - the 13 `claudia` exports were retired as derivatives.
+
+  All were verified independently. **All 25 mis-coded rows and all 32 duplicates are resolved.** The registry is at **26,646** rows.
 - **Stream B's `1519` batches B03 and B02 are in** (660 rows). Stream A's step 2b (regrouped) and the v2 top-up are placed (13,182 files). Both were verified independently.
 
 **⚠️ A production finding for Ryan (stream F, 2026-10-04): project link folders silently merge.** *(Now a BACKLOG 🔺 HIGH item, "a second acquisition with an existing link name"; the audit and repair are Ryan's decision.)*

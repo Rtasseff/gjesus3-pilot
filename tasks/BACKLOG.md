@@ -398,13 +398,13 @@ are the same acquisition, but not always the same pixels.
   (`tasks/retire_lists/2026-10_sha256_twins_zwsi.csv`), then the 10 `CELL` rows (`…_cell.csv`). Per-pair
   table and commands: `tasks/retire_acquisition_review.md` §6a.
   **✅ 2026-10-02 — the 32 duplicates are retired in production** (close-out plan Step 3; runs `RET-20261002-115731-642` and `RET-20261002-121520-505`, each after a full dry run that showed every pair byte-identical, and each verified independently). This fixes 10 of the 25 mis-coded rows. **What remains is re-coding the other 15** (13 `CELL` → `ZWSI`, 2 `LSM9` → `CELL`): that is the v2 re-identify item below, being built on `feat/retire-v2` (2026-10-03/04).
-- [ ] **v2 of the retire tool: a "content-equivalent duplicate" mode for `.czi` (2026-10-01).** A
+- [x] *(✅ Built, merged and first used 2026-10-04: `ACQ-20250915-LSM9-016` retired as `equivalent` of `-001`, run `RET-20261004-135015-801`.)* **v2 of the retire tool: a "content-equivalent duplicate" mode for `.czi` (2026-10-01).** A
   duplicate may be retired when the decoded subblocks, the metadata XML and the attachment payloads are
   all identical, even though the bytes differ (ZEN rewrote the container). Record the evidence in the
   tombstone. First user: **`ACQ-20250915-LSM9-016`**, a re-save of `-001` that is information-identical
   but 1 MB smaller (`-001` carries a 472 KB `DELETED` segment from an in-place metadata rewrite).
   **Ryan: leave the pair until this exists.** Evidence: `tasks/retire_acquisition_review.md` §6b.
-- [ ] **v2 of the retire tool: re-identify a mis-coded acquisition** (retire + re-register under the
+- [x] *(✅ Built, merged and first used 2026-10-04. **✅ 2026-10-04 — the rest is done too (retire v2's first production use):** the 2 `LSM9` rows that are Cell Observer files are re-identified as `ACQ-20240625-CELL-008/-009` (run `RET-20261004-134924-221`; the same files, project links unchanged). The 13 `CELL` rows turned out to be ZEN exports (3 crops and 10 split scenes) of correctly coded AxioScan scans, so they are retired as **derivatives** into `claudia\working\…` (`RET-20261004-135040-313`). **All 25 mis-coded rows and all 32 duplicates are resolved.**)* **v2 of the retire tool: re-identify a mis-coded acquisition** (retire + re-register under the
   right instrument code, e.g. the remaining 15 mis-coded rows). **It must not be blocked by its own
   tombstone:** the ingest dedup index deliberately includes retired rows (Ryan, 2026-10-01), so a
   re-identify has to bypass that for the id it is replacing.
