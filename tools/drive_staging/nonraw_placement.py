@@ -706,7 +706,8 @@ RECOMPUTE_ROOTS = set()  # projects whose stored root_key is ignored (paths --re
 def plan_tree(base, rows, claim_roots, nas, budget):
     """Plan one tree with historical_paths. -> (planner, items, {row id: dest})."""
     p = H.Planner(base, budget=budget)
-    p.load_pathmap(os.path.join(nas, base, H.PATHMAP_NAME))
+    p.load_pathmap(os.path.join(nas, base, H.PATHMAP_NAME))              # folders already placed
+    p.load_index(os.path.join(nas, base, "manifest.csv" if base == HOLDING_BASE else H.INDEX_NAME))  # files
     items = []
     for r in rows:
         root = row_root(r, claim_roots)
@@ -1350,10 +1351,17 @@ def cmd_holding(args):
     print(f"  existing holding folder: {os.path.isdir(lp(root))}")
     extra = not_copied_rows(allrows)
     docs = tree_documents(args.manifest, HOLDING_BASE, holding=True, extra_index_rows=extra)
+    notreg_preview = []
     for rel, data in docs.items():  # previews of exactly what will be published
-        name = rel[len(HOLDING_BASE) + 1:].replace("\\", "__")
-        with open(os.path.join(args.out, "holding_preview__" + name), "wb") as f:
+        name = rel[len(HOLDING_BASE) + 1:]
+        if os.path.basename(name) == NOTREG_README:  # deep paths: one combined preview file instead
+            notreg_preview.append(f"== {name}\r\n".encode("utf-8") + data + b"\r\n")
+            continue
+        with open(os.path.join(args.out, "holding_preview__" + name.replace("\\", "__")), "wb") as f:
             f.write(data)
+    if notreg_preview:
+        with open(os.path.join(args.out, "holding_preview__README_not_registered_ALL.txt"), "wb") as f:
+            f.write(b"".join(notreg_preview))
     print(f"  documents: {len(docs)} (README.txt, manifest.csv incl. {len(extra)} not-copied row, _PATHMAP.csv); "
           f"previews: {args.out}\\holding_preview__*")
     if not args.execute:

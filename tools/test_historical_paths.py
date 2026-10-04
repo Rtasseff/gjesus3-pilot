@@ -142,6 +142,26 @@ def test_frozen_pathmap():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_pinned_files():
+    print("a file already placed keeps its recorded path, even a shortened file name")
+    tmp = tempfile.mkdtemp(prefix="hp_pin_")
+    try:
+        first = _deep("a", "UNIVERSAL_12112020_085550_(1_No-Stain Labeled Membrane).tif")
+        p = H.Planner(BASE, budget=200)          # tight budget: the first run cuts the file name too
+        d1 = p.plan([first])["a"]
+        H.write_pathmap(os.path.join(tmp, H.PATHMAP_NAME), p.pathmap_rows())
+        H.write_index(os.path.join(tmp, H.INDEX_NAME), H.index_rows({"a": d1}, [first], BASE))
+        q = H.Planner(BASE, budget=200)
+        q.load_pathmap(os.path.join(tmp, H.PATHMAP_NAME))
+        n = q.load_index(os.path.join(tmp, H.INDEX_NAME))
+        again = _deep("a", "UNIVERSAL_12112020_085550_(1_No-Stain Labeled Membrane).tif")
+        d2 = q.plan([again])["a"]
+        check(n == 1 and d2 == d1, f"same path on a re-plan:\n      {d1}\n      {d2}")
+        check(again.extra["shortened"] == ("~" in os.path.basename(d1) or "~" in d1), "shortened flag kept")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_uniqueness():
     print("two originals never share a destination")
     p = H.Planner(BASE)
@@ -168,6 +188,7 @@ if __name__ == "__main__":
     test_budget_fewest_and_consistent()
     test_cut_order()
     test_frozen_pathmap()
+    test_pinned_files()
     test_uniqueness()
     test_cli()
     print(f"\n{'FAILED: ' + str(len(FAILS)) if FAILS else 'all passed'}")

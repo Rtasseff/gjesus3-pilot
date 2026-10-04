@@ -170,8 +170,22 @@ class Planner:
         self.short = {}          # node key -> keep (chars kept) for folders this run renders short
         self.file_short = {}     # item id -> keep, for file names this run renders short
         self.nodes = {}          # node key -> rendered path below base (fixed + this run)
+        self.pinned = {}         # full original path (lower) -> path below base, of FILES already placed
 
     # -- persistence --------------------------------------------------------------------------
+    def load_index(self, path):
+        """Pin every FILE already placed (the tree's _INDEX.csv / holding manifest.csv on the NAS): a
+        re-plan returns its recorded path exactly. _PATHMAP.csv freezes folder names, but a file name
+        shortened in an earlier run is only recorded here -- without this a later run could place a
+        second, unshortened copy (found in the step-3 dry run, 2026-10-04: 14 files in 1019)."""
+        if not path or not os.path.exists(path):
+            return 0
+        with io.open(path, encoding="utf-8-sig", newline="") as f:
+            for r in csv.DictReader(f):
+                if r.get("new_path") and r.get("original_path"):
+                    self.pinned[r["original_path"].lower()] = r["new_path"]
+        return len(self.pinned)
+
     def load_pathmap(self, path):
         """Freeze every folder already placed: its name on the NAS never changes."""
         if not path or not os.path.exists(path):
@@ -333,6 +347,10 @@ class Planner:
         full = lambda rel: f"{self.base}\\{rel}"  # noqa: E731
         length, node_files, plain_of, top_nodes, by_id = {}, {}, {}, set(), {}
         for it in items:
+            pin = self.pinned.get(original_display(it.drive, it.relpath, it.archive, it.member).lower())
+            it.extra["pinned"] = pin
+            if pin:
+                continue                                  # already on the NAS: its path is final
             rel, nodes = self._walk(it)
             by_id[it.id] = it
             length[it.id] = unc_len(full(rel))
@@ -403,10 +421,14 @@ class Planner:
         out, seen = {}, {}
         for it in items:
             rel, nodes = self._walk(it, record=True)
+            if it.extra.get("pinned"):
+                rel = it.extra["pinned"]
+                it.extra["shortened"] = bool(re.search(r"~[0-9a-f]{4}(\\|\.|$)", rel))
+            else:
+                it.extra["shortened"] = bool(it.id in self.file_short) or any(
+                    nk in self.short or (plain is None and re.search(r"~[0-9a-f]{4}$", self.fixed[nk]))
+                    for nk, plain in nodes)
             dest = full(rel)
-            it.extra["shortened"] = bool(it.id in self.file_short) or any(
-                nk in self.short or (plain is None and re.search(r"~[0-9a-f]{4}$", self.fixed[nk]))
-                for nk, plain in nodes)
             if unc_len(dest) > self.budget:
                 raise BudgetError(f"over budget after shortening: {dest}")
             if any(len(c) > COMPONENT_MAX for c in dest.split("\\")):
