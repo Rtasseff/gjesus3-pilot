@@ -55,8 +55,8 @@ the original's project folder; a file stays flagged only when it is genuinely am
   4. A composite-image comparison would have been wrong: it depends on the paste order in the tile overlaps (§4 example A).
   5. Six plate groups (the "Herida" and "ROS" series of June and July 2024, on drive 2) hold **211 of the 294 derivatives**
      that wait for a project (§8). Mapping those six groups unblocks most of the rest.
-- **§11 has the ten questions of 2026-10-02 with Ryan's answers, and the one that is left:** 50 `1321` files have no study
-  folder near them, so they keep their drive path (shortened where needed) instead of a study folder.
+- **§11 has the ten questions of 2026-10-02 with Ryan's answers, and the one asked on 2026-10-04, also answered:** the
+  50 `1321` files that have no study folder near them keep their (shortened) drive path, as A's rule gives it. No question is open.
 - **After the retire run, one more step:** `r4_groups.py index` merges a row per retired derivative into each project's
   `_INDEX.csv` (§6). It is prepared and dry-run; it refuses to write until the files are at their destinations.
 
@@ -419,7 +419,10 @@ the index with other bytes is a conflict: nothing is written. `--execute` refuse
 destination with the expected size. It writes with A's `write_if_changed` (temp file, then replace) in A's format (UTF-8
 with a BOM, CRLF) and re-reads every new row from the NAS. `--lists scalebars,resaves,exports,roi_crops` selects which rows
 (default all), so it can follow each retire run. **If A re-publishes one of these trees it rewrites `_INDEX.csv` from its own
-previews and would drop these rows, unless it passes them as `extra_index_rows`.**
+previews and would drop these rows, unless it passes them as `extra_index_rows`.** The coordinator has told stream A to keep
+any existing `_INDEX` row it did not produce (a true merge) and, meanwhile, to pass `tasks/drives_r4_index_rows.csv` as
+`extra_index_rows`. The coordinator also approved (2026-10-04) that the index step freezes the new folders in
+`_PATHMAP.csv` and writes the 2 `_ORIGIN.txt`, in A's format: that is needed for consistency.
 
 **Rehearsal** (`tools/drive_staging/r4_index_rehearsal.py`, re-runnable in about a minute). `--execute` was run on a
 **scratch copy** of the six trees (under `…\drives-r4-cleanup\rehearsal_nas\`, never production), with the destination files
@@ -430,8 +433,22 @@ and leaves every row of A untouched, in order; a second run changes nothing (byt
 rehearsal also found, and the fixed-point plan now prevents, a drift between the planned and the re-planned destinations of
 2 files (§6).
 
-**The order in the write window:** (1) `verify-lists`, (2) for each list `retire_acquisition.py --list … --execute` (after the
-coordinator's checks), (3) `r4_groups.py index --execute`, (4) the verification listed in the plan's Step 5 item 3 (§13d).
+**The order in the write window** (the coordinator's, 2026-10-04; queued after stream B's `1519` ingest, stream F's July
+series and the coordinator's own retire v2 operations; the coordinator will message when it opens). One writer on `J:`.
+
+1. `r4_groups.py verify-lists`: all four lists against production, the destinations re-planned against the NAS as it is
+   then. Any problem stops the run; if A has placed more material and a destination moved, regenerate the lists with
+   `lists` and redo that list's dry runs.
+2. **For each list in turn, `scalebars`, then `resaves`, then `exports`, then `roi_crops`:**
+   - `retire_acquisition.py --list <list> --execute`. **Respect the tool's 15-minute guard** (it refuses while
+     `registry_raw.csv` was written in the last 15 minutes): **do not use `--allow-recent-registry-writes` unless the
+     coordinator says so.**
+   - **then** `r4_groups.py index --lists <that list> --execute` (the first one also freezes the folders of the whole plan);
+   - then the checks of §13d for that list.
+
+   Between two lists, `verify-lists --lists <the lists still to run>` re-checks only those (a retired list's rows are gone
+   from the registry and its files are at their destinations, so it would, rightly, not pass again).
+3. Report to the coordinator.
 
 ---
 
@@ -543,12 +560,13 @@ coordinator on 2026-10-04.
 | 9 | `prueba` / `prueba2`, `MedioCompleto-Stitching-01` stay `distinct` | information | none needed |
 | 10 | The ambiguous `id15_normal` pair stays flagged | information | none needed |
 
-**11. The one question left: the 50 `1321` files with no study folder near them.** A's rule gives them their drive path,
-shortened where it must be (§6). That keeps everything and matches the holding folder, and the index records each one's
-original path. (The 11 other files with no claim of their own, in `0721`, join their neighbours' study folder, so there
-is nothing to ask.) The alternative for the 50 would be to file them under the study folder of their *original*
-acquisition (a different drive folder from the derivative's own). **Recommendation: leave it as the rule gives it;** the 2b
-mapping round can regroup later, because the index and `_PATHMAP.csv` say where everything was.
+**11. Asked 2026-10-04, answered the same day: the 50 `1321` files with no study folder near them.** A's rule gives them
+their drive path, shortened where it must be (§6). That keeps everything and matches the holding folder, and the index
+records each one's original path. (The 11 other files with no claim of their own, in `0721`, join their neighbours' study
+folder, so there was nothing to ask.) The alternative for the 50 would have been to file them under the study folder of
+their *original* acquisition (a different drive folder from the derivative's own). **Decision (coordinator, 2026-10-04):
+yes, leave them on their shortened drive path,** consistent with A's rule for files with no study folder. The 2b mapping
+round can regroup them later, because the index and `_PATHMAP.csv` say where everything was.
 
 ---
 
@@ -633,7 +651,7 @@ lead-in to the first line.
   - **`ID65_PB_lung_20x_scale.czi` is not a copy:** it is the only record of its acquisition, so it stays in `/raw/` (Ryan confirmed).
   - **Retire lists, approved** (`tasks/retire_lists/2026-10_r4_*.csv`, 153 acquisitions, 200.1 GB): `scalebars` 3, `resaves` 9, `exports` 60, `roi_crops` 81. Each goes to the original's project under stream A's short-path layout (`<project>\working\historical_drives\<FRIO-X6 | MFB-Disco-2>\<study folder>\…`, at most 240 characters, in the folders A already uses). 90 `raw_linked` links go (Ryan: they may).
   - **Left to do:**
-    - **The run:** in the coordinator's write window (one writer): `verify-lists` right before each `--execute` (it re-plans, and catches A having placed more material), then each list through `retire_acquisition.py`, then `r4_groups.py index --execute` (it merges a row per derivative into each project's `_INDEX.csv`, freezes the new folders in `_PATHMAP.csv`, and refuses until the files are at their destinations), then the checks listed in the close-out plan's Step 5 item 3.
+    - **The run:** in the coordinator's write window (one writer, after the queue ahead of it): `verify-lists` first (it re-plans, and catches A having placed more material); then, for each list in turn (`scalebars`, `resaves`, `exports`, `roi_crops`), `retire_acquisition.py --list <list> --execute` (respecting the tool's 15-minute registry guard, with no `--allow-recent-registry-writes` unless the coordinator says), then `r4_groups.py index --lists <that list> --execute` (it merges a row per derivative into each project's `_INDEX.csv`, freezes the new folders in `_PATHMAP.csv`, and refuses until the files are at their destinations), then the checks listed in the close-out plan's Step 5 item 3.
     - **61 derivatives (12.3 GB) wait** for their original to get a project (item 2b); list them then. Six plate groups hold 211 of the 294 derivatives (including proposal (c)) that wait.
     - **Proposal (c)** (182 scene splits, 72 stitched copies, 1 rendering; 39.4 GB) is on hold (Ryan, 2026-10-04); the recommendation stands to retire them as derivatives. Only 22 stitched copies (16.5 GB) have an original with a project today.
     - **50 of the 153 files (all in `1321`) have no study folder near them,** so they keep their drive path, shortened where needed; the 2b mapping round can regroup them.
@@ -652,7 +670,7 @@ same-timestamp retirements are now approved by Ryan, so the coordinator may run 
 3. **Clean up the same-timestamp groups:** BACKLOG "Clean up the drives ingest's same-timestamp groups". **🔶 Analysed 2026-10-02 (stream D); the four lists approved by Ryan 2026-10-04 and dry-run clean; not yet executed.** Review: `tasks/drives_r4_cleanup_review.md` (branch `feat/drives-r4-cleanup`).
    - Of the 819 files in 247 groups, **469 are derivatives (251.8 GB)** and 350 stay in `/raw/`.
    - **The lists** (`tasks/retire_lists/2026-10_r4_*.csv`): `scalebars` 3, `resaves` 9, `exports` 60, `roi_crops` 81 (184 GB); 153 acquisitions, 200.1 GB. `subfolder` and `dest_name` come from stream A's short-path rule (`<project>\working\historical_drives\<FRIO-X6 | MFB-Disco-2>\<study folder>\…`, at most 240 characters, in the folders A already uses).
-   - **The run, in the write window, one writer:** (a) `python tools/drive_staging/r4_groups.py verify-lists` right before each `--execute` (it re-plans the destinations against the NAS as it is now; if A has placed more material, regenerate the lists with `lists`); (b) each list through `retire_acquisition.py --list … --execute` after its `--quick` and full dry run; the tool refuses while `registry_raw.csv` was written in the last 15 minutes; (c) **then** `python tools/drive_staging/r4_groups.py index --execute` (`--lists` selects which): it merges one row per derivative into each project's `_INDEX.csv`, freezes the new folders of the whole plan in `_PATHMAP.csv`, writes the 2 new `_ORIGIN.txt`, and refuses unless every selected file is at its destination.
+   - **The run, in the write window, one writer** (the coordinator's order): (a) `python tools/drive_staging/r4_groups.py verify-lists` first (it re-plans the destinations against the NAS as it is now; if A has placed more material, regenerate the lists with `lists`); between lists, `verify-lists --lists <the lists still to run>`; (b) **for each list in turn, `scalebars`, `resaves`, `exports`, `roi_crops`:** `retire_acquisition.py --list … --execute` after its `--quick` and full dry run (the tool refuses while `registry_raw.csv` was written in the last 15 minutes: respect it, and do not use `--allow-recent-registry-writes` unless the coordinator says), **then** `python tools/drive_staging/r4_groups.py index --lists <that list> --execute`: it merges one row per derivative into each project's `_INDEX.csv`, freezes the new folders of the whole plan in `_PATHMAP.csv` (the first time), writes the 2 new `_ORIGIN.txt`, and refuses unless every selected file is at its destination; (c) the checks below, then report.
    - **Verify after each write:** the rows and `/raw/` folders are gone and the tombstones are appended (one per row); each destination file exists and its SHA-256 equals the staged drive copy's (`tasks/drives_ingest_provenance.csv`); the originals are untouched; the project `raw_linked` links are gone (90 across the four lists); `registry_raw` is down by the list's row count; the validator is at 10,314 errors with no new class; after the index step, every derivative has its row in the project's `_INDEX.csv` and no existing row changed.
    - **On hold (Ryan, 2026-10-04):** 61 derivatives wait for a project (item 2b); proposal (c), 255 files (39.4 GB), waits too. No list for either.
    - **`ID65_PB_lung_20x_scale.czi` has no group flag and is not a copy:** it is the only record of its acquisition, and stays.
@@ -661,5 +679,5 @@ same-timestamp retirements are now approved by Ryan, so the coordinator may run 
 **(2) Replace stream D's open questions** (if present) with:
 
 ```markdown
-   - **Stream D's questions: answered 2026-10-04 (Ryan).** All four lists approved (153); `ID65` stays; the 90 `raw_linked` links may go; proposal (c) and the 61 no-project derivatives wait, with no list; destinations use stream A's short-path layout (the five over-259 paths are now at most 240). One small question is left, in the review's §11 (Q11): 50 `1321` files with no study folder near them keep their drive path; recommendation: leave it.
+   - **Stream D's questions: answered 2026-10-04 (Ryan).** All four lists approved (153); `ID65` stays; the 90 `raw_linked` links may go; proposal (c) and the 61 no-project derivatives wait, with no list; destinations use stream A's short-path layout (the five over-259 paths are now at most 240). The one small question that followed (review §11, Q11) is answered too: the 50 `1321` files with no study folder near them keep their shortened drive path, as A's rule gives it. No question is open.
 ```

@@ -215,11 +215,14 @@ def tree_index_paths(nas, base, H):
     return {r["new_path"].lower(): r for r in rcsv(p)} if os.path.exists(p) else {}
 
 
-def check_plan(plan, nas, members):
-    """Read-only checks of a plan against the NAS. -> (report dict, problems list)."""
+def check_plan(plan, nas, members, only=None):
+    """Read-only checks of a plan against the NAS, of the files in `only` if given (the plan itself is always made over
+    all the rows of a tree, but between two retire runs only the lists still to run are expected to be free).
+    -> (report dict, problems list)."""
     H, NP = load_stream_a()
     problems, seen = [], {}
-    stat = {"items": len(plan.dests), "max_unc": 0, "max_j": 0, "over_budget": 0, "shortened": 0, "no_root": 0,
+    dests = {a: d for a, d in plan.dests.items() if only is None or a in only}
+    stat = {"items": len(dests), "max_unc": 0, "max_j": 0, "over_budget": 0, "shortened": 0, "no_root": 0,
             "exists": 0, "in_a_index": 0, "folder_agree": 0, "folder_differ": 0, "folder_no_a_file": 0}
     a_index, a_bydir = {}, {}
     for proj, (_planner, _items, base) in plan.trees.items():
@@ -229,7 +232,7 @@ def check_plan(plan, nas, members):
             od = ir["original_path"].rsplit("\\", 1)[0].lower()
             bydir[od].add(ir["new_path"].rsplit("\\", 1)[0].lower() if "\\" in ir["new_path"] else "")
         a_bydir[proj] = bydir
-    for acq, d in sorted(plan.dests.items()):
+    for acq, d in sorted(dests.items()):
         stat["max_unc"] = max(stat["max_unc"], d["unc_len"])
         stat["max_j"] = max(stat["max_j"], len(nas) + 1 + len(d["dest"]))
         stat["shortened"] += d["shortened"]

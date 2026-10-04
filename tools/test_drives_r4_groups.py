@@ -600,6 +600,10 @@ def test_destinations():
         with open(dest, "wb") as f:
             f.write(b"x")
         check(any("already exists" in p for p in D.check_plan(plan, nas, members)[1]), "a destination that exists is a problem")
+        pa1, pa3 = D.check_plan(plan, nas, members, only={"A1"}), D.check_plan(plan, nas, members, only={"A3"})
+        check(pa1[0]["items"] == 1 and any("already exists" in p for p in pa1[1]) and not any("_INDEX.csv" in p for p in pa1[1])
+              and any("_INDEX.csv" in p for p in pa3[1]) and not any("already exists" in p for p in pa3[1]),
+              "check_plan(only=...) judges only those files: between two retire runs only the lists still to run")
         H.write_index(os.path.join(t, "_INDEX.csv"), [
             {"new_path": "FRIO-X6\\Elsewhere\\other.tif", "drive": "drive1_FRIO-X6", "archive": "",
              "original_path": "drive1_FRIO-X6\\Cell observer\\Person\\Study 0999\\ID5\\other.tif", "size": "1", "sha256": "f" * 64,

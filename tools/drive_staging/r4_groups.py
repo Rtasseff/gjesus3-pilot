@@ -2008,12 +2008,22 @@ def cmd_verify_lists(args):
     original is live in registry_raw; the original's registry project is the row's `to_project`, active;
     the retiree's own project is blank or the same; no id is both retiree and original; and the SHA-256 in
     each acquisition's own checksums.json equals the staged file's (so the pixel check was made on the
-    bytes that are in production)."""
+    bytes that are in production). Then the destinations are re-planned against the NAS as it is now.
+
+    `--lists scalebars,resaves,...` checks only those lists (default all four): once a list has been retired its rows
+    are gone from the registry and its files are at their destinations, so between two retire runs only the lists
+    still to run are expected to pass. The destination plan is still made over all four, so it does not move."""
     reg = {r["acq_id"]: r for r in rcsv(os.path.join(NAS, "registries", "registry_raw.csv"))}
     projs = {r["project_id"]: r for r in rcsv(os.path.join(NAS, "registries", "registry_projects.csv"))}
     mem = {m["acq_id"]: m for m in rcsv(os.path.join(args.out, "members.csv"))}
+    chosen = [x for x in (args.lists or "").split(",") if x] or list(LIST_SHORT)
+    unknown = [x for x in chosen if x not in LIST_SHORT]
+    if unknown:
+        print(f"unknown list(s) {unknown}; choose from {sorted(LIST_SHORT)}", file=sys.stderr)
+        return 2
+    files = [LIST_FILES[LIST_SHORT[x]] for x in chosen]
     bad = 0
-    for fn in LIST_FILES.values():
+    for fn in files:
         path = os.path.join(args.lists_dir, fn)
         rows = rcsv(path)
         retirees = {r["acq_id"] for r in rows}
@@ -2049,18 +2059,20 @@ def cmd_verify_lists(args):
     # fit the budget, be unique, be free, and sit in the folder A used for the same drive folder
     import r4_destinations as D
     H, _NP = D.load_stream_a()
-    all_rows, listed = [], {}
+    all_rows, listed, only = [], {}, set()
     for fn in LIST_FILES.values():
         for r in rcsv(os.path.join(args.lists_dir, fn)):
             all_rows.append({"acq_id": r["acq_id"], "to_project": r["to_project"]})
             listed[r["acq_id"]] = (r["subfolder"], r["dest_name"])
+            if fn in files:
+                only.add(r["acq_id"])
     plan = D.plan_destinations(all_rows, mem, NAS)
-    stat, problems = D.check_plan(plan, NAS, mem)
+    stat, problems = D.check_plan(plan, NAS, mem, only=only)
     for a, d in sorted(plan.dests.items()):
-        if listed[a] != (d["subfolder"], d["dest_name"]):
+        if a in only and listed[a] != (d["subfolder"], d["dest_name"]):
             problems.append(f"{a}: the list has {listed[a]!r}, stream A's rule now gives {(d['subfolder'], d['dest_name'])!r}")
     print_plan_stat(stat, H)
-    print(f"destinations: {len(all_rows)} list rows checked, {len(problems)} problems")
+    print(f"destinations: {len(only)} list rows checked ({', '.join(chosen)}), {len(problems)} problems")
     for p in problems:
         print("   PROBLEM:", p)
     bad += len(problems)
@@ -2295,9 +2307,10 @@ def main(argv=None):
     for name in ("table", "features", "pieces", "check", "relations", "retile", "restitch", "retrim", "region", "validate", "classify", "lists",
                  "verify-lists", "index", "report"):
         sp = sub.add_parser(name)
-        if name == "index":
+        if name in ("index", "verify-lists"):
             sp.add_argument("--lists", default="",
-                            help="which lists to merge, comma-separated (scalebars,resaves,exports,roi_crops; default all)")
+                            help="which lists, comma-separated (scalebars,resaves,exports,roi_crops; default all four)")
+        if name == "index":
             sp.add_argument("--execute", action="store_true",
                             help="write the merged documents to the NAS (default: a dry run that writes only previews)")
     args = ap.parse_args(argv)
