@@ -275,8 +275,10 @@ def test_not_registered():
     f = N.notreg_folders(base, [(base + "\\" + deep + "\\a", why)])
     (k,) = f
     check(H_ok(base, k), f"a README that would break the budget moves up ({k.count(chr(92))} levels)")
-    txt = N.notreg_text({why})
-    check("spectroscopy" in txt and "_INDEX.csv" in txt, "README text says why and where to look")
+    txt = N.notreg_text({why, N.NOTREG_WHY["non-image"]})
+    check("spectroscopy" in txt and "_INDEX.csv" in txt and "CAN be" in txt,
+          "README text says why, that it can be registered later, and where to look")
+    check(set(N.NOTREG_WHY) == {"no-recon", "non-image", "conversion-failed"}, "all three of B's kinds have a plain reason")
 
 
 def H_ok(base, folder):

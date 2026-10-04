@@ -88,28 +88,37 @@ NESTED_SEP = "!"  # member "<nested archive>!<inner path>" for archives inside a
 MANIFEST_FIELDS = [
     "row", "drive", "drive_label", "relpath", "archive", "member", "size", "sha256", "class", "ext",
     "flag", "claim_id", "verdict", "researcher", "project_name", "project_id", "project_status",
-    "dest_rel", "decision", "reason", "note", "root_key", "shortened", "why",
+    "dest_rel", "decision", "reason", "note", "root_key", "shortened", "why", "why_detail",
 ]
 
 # Ryan, 2026-10-04: MRI that has no reconstructed image, or whose reconstruction cannot be converted
 # to DICOM, is NOT registered; it is kept as other data, beside a plain README saying why
 # (stream B hands it over in nonraw_for_A v3 as kind notregistered:<reason>)
-NOTREG_WHY = {
-    "no-recon": "no reconstructed image (e.g. spectroscopy); gjesus3 registers MRI only as "
-                "reconstructed DICOM images",
-    "conversion-failed": "could not be converted to DICOM; if someone converts it, it can be registered",
+NOTREG_WHY = {   # plain language, one per stream-B kind (agreed with B, 2026-10-04)
+    "no-recon": "no reconstructed image: the exam holds raw scanner data only, so there is no image "
+                "to convert to DICOM",
+    "non-image": "spectroscopy or calibration (for example PRESS or STEAM MRS), not an image",
+    "conversion-failed": "a reconstructed image exists, but it could not be converted to DICOM",
 }
 NOTREG_README = "README_not_registered.txt"
 
 
 def notreg_text(whys):
-    lines = ["Why these files are not registered in gjesus3", "=============================================", "",
-             "The MRI data in this folder (and its sub-folders) is kept here as OTHER DATA,",
-             "not as a registered acquisition in gjesus3's archive. The reason:", ""]
+    """README beside each not-registered exam group (stream B's proposal, in plain language)."""
+    lines = ["NOT REGISTERED IN gjesus3 -- KEPT HERE AS OTHER DATA",
+             "===================================================", "",
+             "The MRI exam folders here come from the lab's historical external drives",
+             "(FRIO-X6 and MFB-Disco-2, staged in September 2026). They are kept, but they are",
+             "not official acquisitions in gjesus3: gjesus3 registers an MRI scan only when it",
+             "has a reconstructed image stored as DICOM.", "",
+             "Why these are not registered:"]
     lines += [f"  - {w}" for w in sorted(whys)]
-    lines += ["", "The files are byte-for-byte copies from the historical operator drives.",
-              "Their original location is in _INDEX.csv (column original_path; column why).",
-              "Questions: the Data Office.", ""]
+    lines += ["", "If someone later produces DICOM images from one of these exams, it CAN be",
+              "registered then: ask the Data Office.", "",
+              "Every file is a byte-for-byte copy. Each file's original location and the exact",
+              "reason for its exam are in the index of this folder tree (_INDEX.csv, or",
+              "manifest.csv in the holding folder: columns original_path and why).",
+              "The originals also remain on the owners' external drives.", ""]
     return "\r\n".join(lines)
 
 
@@ -408,12 +417,14 @@ def cmd_plan(args):
     mapping_used = collections.Counter()
     if args.mapping:
         say(f"2b mapping: {len(mapping)} groups mapped in {args.mapping}")
-    fromb_kind = {}
+    fromb_kind, fromb_reason = {}, {}
     fromb = {}  # stream B's non-raw list: (drive, archive or '-', path) -> project ('' = none)
     if os.path.exists(args.from_b):
         for r in it(args.from_b):
             fromb[(r["drive"], r["archive"] or "-", r["path"])] = r["project"]
             fromb_kind[(r["drive"], r["archive"] or "-", r["path"])] = r.get("kind", "")
+            if r.get("reason"):
+                fromb_reason[(r["drive"], r["archive"] or "-", r["path"])] = r["reason"]
     say(f"B->A non-raw rows: {len(fromb)} from {args.from_b}")
     nested_rows = rd(args.nested) if os.path.exists(args.nested) else []
     nested_archives = {(r["drive"], r["archive"], r["nested"]) for r in nested_rows}
@@ -439,6 +450,8 @@ def cmd_plan(args):
         kind = rec.get("from_b_kind") or ""
         if kind.startswith("notregistered:"):
             r["why"] = NOTREG_WHY.get(kind.split(":", 1)[1], kind)
+            r["why_detail"] = fromb_reason.get((base["drive"], base["archive"] or "-",
+                                                base["member"] if base["archive"] else base["relpath"]), "")
         if proj:
             prow = projects.get(proj)
             r["project_name"] = proj
@@ -701,7 +714,7 @@ def plan_tree(base, rows, claim_roots, nas, budget):
         items.append(H.Item(id=str(r["row"]), drive=r["drive"], relpath=r["relpath"], archive=r["archive"],
                             member=r["member"], root=root,
                             extra={"size": r["size"], "sha256": r["sha256"], "claim_id": r["claim_id"],
-                                   "why": r.get("why", "")}))
+                                   "why": r.get("why", "") + (f" -- {r['why_detail']}" if r.get("why_detail") else "")}))
     return p, items, p.plan(items)
 
 
