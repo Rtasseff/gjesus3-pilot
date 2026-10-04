@@ -324,6 +324,55 @@ def test_publish():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_publish_merges():
+    print("re-publishing MERGES with the NAS (stream D's rows, older header, frozen folders are kept)")
+    import historical_paths as H
+    tmp = tempfile.mkdtemp(prefix="nonraw_merge_")
+    try:
+        out, nas = os.path.join(tmp, "out"), os.path.join(tmp, "nas")
+        manifest = os.path.join(out, "placement_manifest.csv")
+        base = r"projects\P\working\historical_drives"
+        tdir = N.tree_preview_dir(manifest, base)
+        os.makedirs(tdir)
+        H.write_index(os.path.join(tdir, H.INDEX_NAME), [{"new_path": r"FRIO-X6\S\mine.tif", "drive": "drive1_FRIO-X6",
+                      "archive": "", "original_path": r"drive1_FRIO-X6\X\S\mine.tif", "size": "1", "sha256": "a",
+                      "claim_id": "", "shortened": "N", "why": "", "note": ""}])
+        H.write_pathmap(os.path.join(tdir, H.PATHMAP_NAME), [{"node_key": r"D1:X\S", "rendered": r"FRIO-X6\S"}])
+        N.wcsv(os.path.join(tdir, "_ORIGINS.csv"), ["folder", "original"], [{"folder": r"FRIO-X6\S", "original": r"drive1_FRIO-X6\X\S"}])
+        # what is already on the NAS: stream D's row under the OLDER 9-column header (no `why`), a
+        # stale copy of our own row, D's frozen folder, and an _ORIGIN with another original path
+        tree = os.path.join(nas, base)
+        os.makedirs(os.path.join(tree, "FRIO-X6", "S"))
+        old9 = ["new_path", "drive", "archive", "original_path", "size", "sha256", "claim_id", "shortened", "note"]
+        with open(os.path.join(tree, H.INDEX_NAME), "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=old9 + ["retired_from"])
+            w.writeheader()
+            w.writerow({"new_path": r"FRIO-X6\S\derivative_from_D.czi", "drive": "drive1_FRIO-X6", "archive": "",
+                        "original_path": r"drive1_FRIO-X6\X\S\derivative_from_D.czi", "size": "9", "sha256": "d",
+                        "claim_id": "", "shortened": "N", "note": "stream D", "retired_from": "ACQ-1"})
+            w.writerow({"new_path": r"FRIO-X6\S\mine.tif", "drive": "drive1_FRIO-X6", "archive": "",
+                        "original_path": r"drive1_FRIO-X6\X\S\mine.tif", "size": "0", "sha256": "OLD",
+                        "claim_id": "", "shortened": "N", "note": "", "retired_from": ""})
+        H.write_pathmap(os.path.join(tree, H.PATHMAP_NAME), [{"node_key": r"D1:X\S", "rendered": r"FRIO-X6\S"},
+                                                            {"node_key": r"D1:Y\T", "rendered": r"FRIO-X6\T"}])
+        with open(os.path.join(tree, "FRIO-X6", "S", H.ORIGIN_NAME), "w", encoding="utf-8") as f:
+            f.write(H.origin_text([r"drive2_MFB-Disco-2\Other\S"]))
+        N.publish_tree(nas, manifest, base, execute=True)
+        rows = list(csv.DictReader(open(os.path.join(tree, H.INDEX_NAME), encoding="utf-8-sig", newline="")))
+        paths = {r["new_path"]: r for r in rows}
+        check(r"FRIO-X6\S\derivative_from_D.czi" in paths, "stream D's row is KEPT")
+        check(paths[r"FRIO-X6\S\derivative_from_D.czi"]["retired_from"] == "ACQ-1", "its extra column is kept too")
+        check(len(rows) == 2 and paths[r"FRIO-X6\S\mine.tif"]["sha256"] == "a", "our own row is replaced, not duplicated")
+        check("why" in rows[0] and "retired_from" in rows[0], "header = ours + any existing column (older header merged)")
+        pm = list(csv.DictReader(open(os.path.join(tree, H.PATHMAP_NAME), encoding="utf-8-sig", newline="")))
+        check({r["node_key"] for r in pm} == {r"D1:X\S", r"D1:Y\T"}, "D's frozen folder stays in _PATHMAP.csv")
+        org = open(os.path.join(tree, "FRIO-X6", "S", H.ORIGIN_NAME), encoding="utf-8").read()
+        check(r"drive2_MFB-Disco-2\Other\S" in org and r"drive1_FRIO-X6\X\S" in org, "_ORIGIN.txt keeps both origins")
+        check(not any(w for _r, w in N.publish_tree(nas, manifest, base, execute=True)), "a re-run writes nothing")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _sha(b):
     return hashlib.sha256(b).hexdigest()
 
@@ -411,6 +460,7 @@ if __name__ == "__main__":
     test_parent_grouping()
     test_not_registered()
     test_publish()
+    test_publish_merges()
     test_copy()
     print(f"\n{'FAILED: ' + str(len(FAILS)) if FAILS else 'all passed'}")
     sys.exit(1 if FAILS else 0)

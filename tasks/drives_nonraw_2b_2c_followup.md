@@ -178,6 +178,14 @@ python tools\drive_staging\nonraw_placement.py --out <same new folder> apply-raw
 - **`remap` and `plan` load the tree's `_PATHMAP.csv` from the NAS, so folders placed earlier keep their names.** A mapped group's study folder is the group's own folder (its `series`).
 - `copy` publishes the updated index documents after the files.
 - If a tree cannot fit the budget without renaming a placed folder, the run **stops** ("cannot bring under 240"): nothing is written, and a human decides.
+- **Files already placed are pinned.** A re-plan reads the tree's NAS `_INDEX.csv` (`manifest.csv` in holding) and gives every file listed there exactly its recorded path, including a file name shortened in an earlier run.
+- **Publishing is a true MERGE, never a rebuild** (coordinator, 2026-10-04). Other writers add to these trees: stream D merged 153 retired derivatives into `0219`, `0420`, `0721`, `1019`, `1123` and `1321`, with 32 frozen folders and 2 `_ORIGIN.txt`. When `copy` or `holding` republishes a tree:
+  - every existing `_INDEX.csv` row it did not produce is **kept** (a row for the same `new_path` is replaced);
+  - the header becomes ours plus any column only the existing file has, so the older 9-column header without `why` in `0219`/`0420` is fine;
+  - existing `_PATHMAP.csv` entries **win**;
+  - `_ORIGIN.txt` keeps the original paths from both.
+
+  This is pinned by `test_publish_merges`. Do not "simplify" it back to writing the manifest's own rows.
 
 ```
 python tools\drive_staging\nonraw_placement.py copy --manifest <new out>\placement_manifest.csv                 (dry run)

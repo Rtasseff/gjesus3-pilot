@@ -1256,19 +1256,71 @@ def tree_preview_dir(manifest, base):
     return os.path.join(os.path.dirname(manifest), "trees", base.replace("\\", "__"))
 
 
-def tree_documents(manifest, base, holding=False, extra_index_rows=()):
+def _read_nas_csv(path):
+    """(rows, header) of an existing tree document on the NAS, or ([], [])."""
+    if not path or not os.path.exists(lp(path)):
+        return [], []
+    with io.open(lp(path), encoding="utf-8-sig", newline="") as f:
+        rd_ = csv.DictReader(f)
+        return list(rd_), list(rd_.fieldnames or [])
+
+
+def merge_index_rows(existing, ours):
+    """A TRUE MERGE of a tree's index (coordinator, 2026-10-04): every existing row this run did not
+    produce is KEPT (stream D's derivative rows, an earlier 2b round, ...); a row for the same
+    new_path is replaced by ours (it describes the same file). Never a rebuild from one manifest."""
+    mine = {r["new_path"].lower() for r in ours if r.get("new_path")}
+    kept = [r for r in existing if not (r.get("new_path") and r["new_path"].lower() in mine)]
+    out = kept + list(ours)
+    seen, uniq = set(), []
+    for r in out:                       # a not-copied row (no new_path) once per original path
+        k = ((r.get("new_path") or "").lower(), (r.get("original_path") or "").lower())
+        if k in seen:
+            continue
+        seen.add(k)
+        uniq.append(r)
+    return sorted(uniq, key=lambda r: ((r.get("new_path") or "~").lower(), (r.get("original_path") or "").lower()))
+
+
+def merge_header(existing_header):
+    """Our columns first, then any column only an existing file has (D merges under an older 9-column
+    header without `why`; nothing is ever dropped)."""
+    return list(H.INDEX_FIELDS) + [c for c in existing_header if c and c not in H.INDEX_FIELDS]
+
+
+def merge_pathmap(existing, ours):
+    """Existing entries WIN (those folders are on the NAS); ours only add new folders."""
+    out = {r["node_key"]: r["rendered"] for r in ours}
+    out.update({r["node_key"]: r["rendered"] for r in existing})
+    return [{"node_key": k, "rendered": v} for k, v in sorted(out.items())]
+
+
+def _origins_in(text):
+    return [l.strip() for l in text.splitlines() if l.startswith("  ") and "\\" in l]
+
+
+def tree_documents(manifest, base, holding=False, extra_index_rows=(), nas=None):
     """{path relative to the NAS root: bytes} for one tree, from `plan`'s previews (so what was
-    reviewed is exactly what is published)."""
+    reviewed is exactly what is published), MERGED with what the tree already holds on the NAS when
+    `nas` is given: other writers' _INDEX rows, _PATHMAP folders and _ORIGIN paths are kept."""
     tdir = tree_preview_dir(manifest, base)
     docs = {}
-    rows = rd(os.path.join(tdir, H.INDEX_NAME)) + list(extra_index_rows)
+    index_name = "manifest.csv" if holding else H.INDEX_NAME
+    ours = rd(os.path.join(tdir, H.INDEX_NAME)) + list(extra_index_rows)
+    existing, header = _read_nas_csv(os.path.join(nas, base, index_name)) if nas else ([], [])
+    rows = merge_index_rows(existing, ours)
     buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=H.INDEX_FIELDS, extrasaction="ignore", lineterminator="\r\n")
+    w = csv.DictWriter(buf, fieldnames=merge_header(header), extrasaction="ignore", lineterminator="\r\n")
     w.writeheader()
     w.writerows(rows)
-    docs[f"{base}\\{'manifest.csv' if holding else H.INDEX_NAME}"] = buf.getvalue().encode("utf-8-sig")
-    with open(os.path.join(tdir, H.PATHMAP_NAME), "rb") as f:
-        docs[f"{base}\\{H.PATHMAP_NAME}"] = f.read()
+    docs[f"{base}\\{index_name}"] = buf.getvalue().encode("utf-8-sig")
+    our_pm = rd(os.path.join(tdir, H.PATHMAP_NAME))
+    ex_pm, _h = _read_nas_csv(os.path.join(nas, base, H.PATHMAP_NAME)) if nas else ([], [])
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=["node_key", "rendered"], lineterminator="\r\n")
+    w.writeheader()
+    w.writerows(merge_pathmap(ex_pm, our_pm))
+    docs[f"{base}\\{H.PATHMAP_NAME}"] = buf.getvalue().encode("utf-8-sig")
     readme = README_TXT if holding else H.PROJECT_README
     docs[f"{base}\\{H.README_NAME}"] = readme.replace("\n", "\r\n").encode("utf-8")
     origins = collections.defaultdict(list)
@@ -1277,7 +1329,11 @@ def tree_documents(manifest, base, holding=False, extra_index_rows=()):
         for r in rd(op):
             origins[r["folder"]].append(r["original"])
     for folder, origs in origins.items():
-        docs[f"{base}\\{folder}\\{H.ORIGIN_NAME}"] = H.origin_text(origs).encode("utf-8")
+        rel = f"{base}\\{folder}\\{H.ORIGIN_NAME}"
+        if nas and os.path.exists(lp(os.path.join(nas, rel))):
+            with io.open(lp(os.path.join(nas, rel)), encoding="utf-8", errors="replace") as f:
+                origs = sorted(set(origs) | set(_origins_in(f.read())))
+        docs[rel] = H.origin_text(origs).encode("utf-8")
     nrp = os.path.join(tdir, "_NOTREG.csv")
     if os.path.exists(nrp):
         nr = collections.defaultdict(set)
@@ -1313,7 +1369,7 @@ def notreg_folders(base, dest_whys):
 def publish_tree(nas, manifest, base, execute, holding=False, extra_index_rows=()):
     """Write a tree's documents to the NAS (or, dry run, list them). -> [(rel path, written?)]"""
     out = []
-    for rel, data in sorted(tree_documents(manifest, base, holding, extra_index_rows).items()):
+    for rel, data in sorted(tree_documents(manifest, base, holding, extra_index_rows, nas=nas).items()):
         full = os.path.join(nas, rel)
         if len("\\\\GJESUS3\\gjesus3\\" + rel) > H.BUDGET:
             raise SystemExit(f"document path over budget: {rel}")
@@ -1356,7 +1412,7 @@ def cmd_holding(args):
           f"{sum(1 for x in lens if x > H.BUDGET)}")
     print(f"  existing holding folder: {os.path.isdir(lp(root))}")
     extra = not_copied_rows(allrows)
-    docs = tree_documents(args.manifest, HOLDING_BASE, holding=True, extra_index_rows=extra)
+    docs = tree_documents(args.manifest, HOLDING_BASE, holding=True, extra_index_rows=extra, nas=args.nas)
     notreg_preview = []
     for rel, data in docs.items():  # previews of exactly what will be published
         name = rel[len(HOLDING_BASE) + 1:]
