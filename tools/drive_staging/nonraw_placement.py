@@ -42,6 +42,7 @@ import collections
 import csv
 import datetime as dt
 import getpass
+import glob
 import hashlib
 import io
 import os
@@ -1765,6 +1766,41 @@ def cmd_paths(args):
     return 0
 
 
+def cmd_index_from_nas(args):
+    """The Data Office's GLOBAL index, read from the NAS: every project's live (merged) _INDEX.csv --
+    stream A's rows and any other stream's (D's retired derivatives, C's LEONE in DTS24) -- tagged by
+    writer, plus a per-project summary. Read-only on J:. Re-run it whenever another stream adds rows;
+    the committed copy is a dated snapshot."""
+    mine = set()
+    if args.manifest and os.path.exists(args.manifest):
+        for r in it(args.manifest):
+            if r["decision"] in ("place", "closed-project") and r["dest_rel"]:
+                mine.add(r["dest_rel"].lower())
+    rows, per = [], collections.defaultdict(lambda: collections.Counter())
+    for idx in sorted(glob.glob(os.path.join(args.nas, "projects", "*", *SUBDIR, H.INDEX_NAME))):
+        proj = idx.split(os.sep)[-4]
+        base = "\\".join(["projects", proj, *SUBDIR])
+        for r in it(idx):
+            writer = "stream A" if f"{base}\\{r.get('new_path', '')}".lower() in mine else "other stream"
+            rows.append({"project": proj, "new_path": r.get("new_path", ""), "original_path": r.get("original_path", ""),
+                         "size": r.get("size", ""), "claim_id": r.get("claim_id", ""),
+                         "shortened": r.get("shortened", ""), "why": r.get("why", ""), "writer": writer})
+            c = per[proj]
+            c["files"] += 1
+            c["bytes"] += int(r.get("size") or 0)
+            c[writer] += 1
+    out = args.index or os.path.join(args.repo, "tasks", "drives_nonraw_index.csv")
+    wcsv(out, ["project", "new_path", "original_path", "size", "claim_id", "shortened", "why", "writer"], rows)
+    summ = [{"project": p, "files": c["files"], "bytes": c["bytes"], "gb": gb(c["bytes"]),
+             "stream_A": c["stream A"], "other_stream": c["other stream"]} for p, c in sorted(per.items())]
+    wcsv(os.path.join(os.path.dirname(out), "drives_nonraw_placement_per_project.csv"),
+         ["project", "files", "bytes", "gb", "stream_A", "other_stream"], summ)
+    for s in summ:
+        print(f"  {s['project']:20s} {s['files']:6d} {s['gb']:>8s} GB  A {s['stream_A']:6d}  other {s['other_stream']:5d}")
+    print(f"{len(rows)} rows from {len(summ)} projects -> {out} (snapshot {dt.date.today()})")
+    return 0
+
+
 def cmd_remap(args):
     """2b WITHOUT the catalog: apply Ryan's worksheet to a stored manifest (stream A's record
     `placement_manifest.csv`, or its copy kept off D: before the staging is erased). Writes
@@ -1963,6 +1999,10 @@ def main(argv=None):
     ws = sub.add_parser("worksheet")
     ws.add_argument("--manifest", default=None)
     ws.add_argument("--force", action="store_true", help="overwrite a worksheet that has mapped groups")
+    ix = sub.add_parser("index-from-nas")
+    ix.add_argument("--manifest", default=os.path.join(OUT_DEFAULT + "-v3b", "placement_manifest.csv"),
+                    help="stream A's current manifest (tags rows as stream A's)")
+    ix.add_argument("--index", default=None)
     pa = sub.add_parser("paths")
     pa.add_argument("--manifest", default=None)
     pa.add_argument("--recompute-roots", nargs="*", default=[],
@@ -1990,7 +2030,7 @@ def main(argv=None):
     if getattr(args, "manifest", None) is None:
         args.manifest = os.path.join(args.out, "placement_manifest.csv")
     os.makedirs(args.out, exist_ok=True)
-    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "nested-farm": cmd_nested_farm, "worksheet": cmd_worksheet, "apply-raw": cmd_apply_raw, "remap": cmd_remap, "paths": cmd_paths, "copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
+    return {"plan": cmd_plan, "dotfile-farm": cmd_dotfile_farm, "nested": cmd_nested, "nested-farm": cmd_nested_farm, "worksheet": cmd_worksheet, "apply-raw": cmd_apply_raw, "remap": cmd_remap, "paths": cmd_paths, "index-from-nas": cmd_index_from_nas, "copy": cmd_copy, "verify": cmd_verify, "holding": cmd_holding}[args.cmd](args) or 0
 
 
 if __name__ == "__main__":

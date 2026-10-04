@@ -222,7 +222,7 @@ Stream B's DICOM ingest also needs `1519` reopened (close-out plan Step 5 item 4
   | `_ORIGIN.txt` | in every study folder: the full original path that was dropped above it |
   | `_PATHMAP.csv` | every folder's original → rendered name |
 
-  A later run reads `_PATHMAP.csv` from the NAS, so **a folder already placed is never renamed** (it is frozen). The Data Office's global index is [`drives_nonraw_index.csv`](drives_nonraw_index.csv): 21,921 rows for the project trees.
+  A later run reads `_PATHMAP.csv` from the NAS, so **a folder already placed is never renamed** (it is frozen). The Data Office's global index is [`drives_nonraw_index.csv`](drives_nonraw_index.csv): a dated snapshot read from the NAS (`nonraw_placement.py index-from-nas`). On 2026-10-04 it had 34,720 rows in 18 projects: stream A's 27,547, plus stream C's LEONE in `DTS24` and stream D's first derivatives, tagged by `writer`. Re-run the command whenever another stream adds rows.
 
 **Effect, on all 75,683 destinations** (placed + closed-project + holding):
 
