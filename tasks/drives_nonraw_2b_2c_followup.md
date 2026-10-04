@@ -31,6 +31,8 @@ Every non-raw file is today read from the **staged copy of the drives on Ryan's 
 | **A. As planned** | Ryan maps; the mapped groups are copied from D:; then the rest goes to the holding folder; then D: is erased. | only after the mapping round closes | about 212 GB, at the end |
 | **B. Holding first** | Fill the holding folder **now** with all 32,558 unassigned files. Ryan maps whenever he can; each mapped group is copied **from the holding folder** into its project (`copy --from-holding`). | as soon as the other streams finish | about 212 GB in `staging\` now, plus a copy of each mapped group in its project (holding is never trimmed automatically) |
 
+> ✅ **DECIDED (Ryan, 2026-10-03/04, relayed by the coordinator): option B.** The holding folder is filled **now** (stream A, step 3 of the weekend), and mapped groups are later copied **from the NAS holding folder** with `copy --from-holding`. Everything below that says "option A" is kept only for the record. Before the D: staging is erased, do §2.6 (keep the record manifest off D:).
+
 **Stream A's recommendation: B**, if the mapping will take more than a few weeks. It removes the only reason to keep D:, and the holding folder is what 2c produces anyway; the only change is *when*. **This is Ryan's call,** because his decision of 2026-10-02 says the holding folder is filled "only when Ryan closes the mapping round".
 
 The **raw** half of 2b never needs D:. It works on `/raw/` on the NAS.
