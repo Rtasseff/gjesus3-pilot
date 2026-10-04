@@ -261,6 +261,9 @@ def decide(rec, ctx):
                 return "holding", "B->A not registered, no project", None
             return _project_decision(proj, ctx, f"B->A not registered ({sub})")
         if cls == "archive":  # B lists a nested archive whole; its inner content comes in B's v2 list
+            if re.search(r"OneDrive_1_29-1-2021\.zip$", rec["member"] or rec["relpath"]):
+                return "exclude", ("not copied: a byte-identical copy of BrEt\\ (4,269/4,269 members "
+                                   "CRC-equal; stream B, 2026-10-04)"), None
             return "unclear", "B->A nested archive: waiting for B's v2 (its contents), not placed whole", proj
         if not proj:
             return "holding", "B->A non-raw, no project", None
@@ -1319,15 +1322,18 @@ def publish_tree(nas, manifest, base, execute, holding=False, extra_index_rows=(
 
 
 def not_copied_rows(manifest_rows):
-    """Index rows for material deliberately NOT copied but listed (Ryan, 2026-10-02): Simu_2_V_XYZ.zip."""
+    """Index rows for material deliberately NOT copied but listed: Simu_2_V_XYZ.zip (Ryan, 2026-10-02),
+    the nested OneDrive_1_29-1-2021.zip duplicate of BrEt\\ (coordinator, 2026-10-04). Note = reason."""
     out = []
     for r in manifest_rows:
         if r["decision"] == "exclude" and r["reason"].startswith("not copied:"):
-            out.append({"new_path": "", "drive": r["drive_label"], "archive": "",
-                        "original_path": H.original_display(r["drive"], r["relpath"]),
+            note = r["reason"]
+            if "truncated archive" in note:   # the wording Ryan asked for
+                note = "not copied: truncated archive, 97 GB, remains on the owner's drive"
+            out.append({"new_path": "", "drive": r["drive_label"], "archive": r["archive"],
+                        "original_path": H.original_display(r["drive"], r["relpath"], r["archive"], r["member"]),
                         "size": r["size"], "sha256": r["sha256"], "claim_id": r["claim_id"],
-                        "shortened": "N",
-                        "note": "not copied: truncated archive, 97 GB, remains on the owner's drive"})
+                        "shortened": "N", "note": note})
     return out
 
 

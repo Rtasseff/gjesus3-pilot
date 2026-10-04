@@ -315,7 +315,7 @@ def test_publish():
         shutil.copy(os.path.join(tdir, H.INDEX_NAME), hdir)
         shutil.copy(os.path.join(tdir, H.PATHMAP_NAME), hdir)
         extra = N.not_copied_rows([{"decision": "exclude", "reason": "not copied: truncated", "drive_label": "drive1_FRIO-X6",
-                                    "drive": "D1", "relpath": "Simu_2_V_XYZ.zip", "size": "97", "sha256": "", "claim_id": ""}])
+                                    "drive": "D1", "relpath": "Simu_2_V_XYZ.zip", "archive": "", "member": "", "size": "97", "sha256": "", "claim_id": ""}])
         docs = N.tree_documents(manifest, N.HOLDING_BASE, holding=True, extra_index_rows=extra)
         man = docs[N.HOLDING_BASE + "\\manifest.csv"].decode("utf-8-sig")
         check("Simu_2_V_XYZ.zip" in man and "not copied" in man, "holding manifest lists the not-copied archive")
