@@ -1,0 +1,65 @@
+# Scoped config: the FIRST m12 study of 2026-07-10 (study folder 20260710_114705_..., 17 exams, acquired 11:58-12:55).
+# It is the config `mri_ingest.py <study> --operator Irene --model 7T --no-prompt` builds in memory (the operator
+# template tools/templates/instruments/mri_bruker.yaml + those overrides), written out, with ONE deliberate change:
+#
+#   link_filename gets the suffix `_study1147` (the study's start time).
+# and one precaution: ingest.auto_create_projects is false (PROJ-0021 exists; a failed lookup must stop the run, not
+# silently create a duplicate project).
+#
+# WHY: the second m12 study of the same day (`..._m12_1125_bis`, ACQ-20260710-MRI-018..034) is already in PROJ-0021 under
+# link names MRI_m12_1125_20260710_<exam>_<recons>. Nine of this study's names are IDENTICAL (exams 2,3,4,5,7,8,9,10,11).
+# linker.create_hardlink does `os.makedirs(dest, exist_ok=True)` and links only the files that do not exist yet, so a
+# second acquisition with the same name silently ends up with the FIRST one's files in its project folder while the
+# registry and provenance say otherwise. Distinct names avoid that; the shared template is not changed.
+# (A code fix belongs in BACKLOG: create_hardlink should refuse when an existing file is not the same file.)
+#
+# Everything else is the standard internal-MRI path: PROJ-0021 (AE-biomaGUNE-1125), subject from the animal DB, native
+# Bruker DICOMs (no regeneration needed), researcher = operator = Irene (best-supported by the evidence in
+# tasks/mri_july_1125_review.md, Ryan's go 2026-10-04), instrument_model 7T (every exam says Biospec 70/30).
+#
+# Run from Windows (links need Windows; the DB lookup works there), from the repo root:
+#   python tools/ingest_raw.py --config tools/configs/mri_july_1125/mri_m12_first_irene.yaml --nas-root J:\gjesus3-data [--dry-run]
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false
+  acquisition_layout: folder
+  copy_strategy: mri_paravision_v2
+  reconstructions: all
+  auto_regenerate_dicom: true
+auto_discover:
+  staging_dir: D:/projects/gjesus3/scratch_mri-july-1125
+  pattern: 20260710_114705_jrc20260710_m12_1125_jrc20260710_m12_1125_1_1/*
+  filename_parse:
+    source: parent_name
+    regex: (?P<jrc_id>(?P<pi_initials>[a-z]+)_?\d{6,8}_m(?P<animal_num>\d+)_(?P<project_code>\d{4}))
+  subject_from_db: true
+  subject_lookup:
+    project_alias: ${discovered.project_code}
+    animal_code: ${discovered.animal_num}
+registry:
+  instrument: MRI
+  data_ecosystem: DICOM
+  instrument_model: Bruker BioSpec 7T
+  modalities_in_study: NA
+  researcher: Irene
+  data_source: internal
+  sample_id: m${discovered.animal_num}_${discovered.project_code}
+  sample_type: organism
+  session_id: ${discovered.jrc_id}
+  acquisition_datetime: discovered.mri_acquisition_datetime
+  project_name: AE-biomaGUNE-${discovered.project_code}
+  notes: 'Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number} (animal m${discovered.animal_num}, protocol ${discovered.project_code}); recons kept: ${discovered.mri_recon_indices}'
+operator: Irene
+auto_create_project:
+  owner: NMR-platform
+  description: Auto-created from internal MRI ingest; animal-protocol code ${discovered.project_code}. PROVISIONAL project_name — see 05_PROJECTS §9.
+  notes: Auto-created on first ingest. Edit owner via _project.yaml to record the researcher behind the animal protocol.
+link_filename: MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}_study1147
+condition:
+  is_control: null
+  disease_model: ''
+  disease_state: ''
+  source: operator-entered
+anatomy:
+  is_whole_body: null
+  source: operator-entered
