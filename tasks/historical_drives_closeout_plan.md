@@ -218,6 +218,20 @@ coordinator:**
   - the 13 `claudia` exports were retired as derivatives.
 
   All were verified independently. **All 25 mis-coded rows and all 32 duplicates are resolved.** The registry is at **26,646** rows.
+- **Stream D's same-timestamp retirements: 3 of 4 lists are done** (scale bars 3, re-saves 9,
+  exports 60 = 72; 114/114 checks passed). The coordinator verified them independently: none still
+  live, all tombstoned `derivative`, 6/6 fresh hashes match. The registry is at 26,574 rows, with 137
+  tombstones.
+  - **⚠️ The fourth list, 81 ROI crops (184 GB), is ON HOLD.** The permission system refused its
+    `--execute` in stream D's context. Ryan's go for the list stands, but the permission system needs
+    his own action:
+    - tell the coordinator to run D's six documented steps (`tasks/drives_r4_cleanup_review.md`
+      §14, on D's branch);
+    - or run them himself.
+- **Stream A's holding fill is done:** `J:\gjesus3-data\staging\historical_drives_unassigned\`, 54,721
+  files, 218.89 GB, with README, manifest and path map. The coordinator verified it independently:
+  0 missing, 0 wrong size, 25/25 fresh hashes. The 13 unregistered `1519` files are placed in
+  `1519`.
 - **Stream B's `1519` batches B03 and B02 are in** (660 rows). Stream A's step 2b (regrouped) and the v2 top-up are placed (13,182 files). Both were verified independently.
 
 **⚠️ A production finding for Ryan (stream F, 2026-10-04): project link folders silently merge.** *(Now a BACKLOG 🔺 HIGH item, "a second acquisition with an existing link name"; the audit and repair are Ryan's decision.)*
