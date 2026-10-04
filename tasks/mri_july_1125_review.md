@@ -1,10 +1,12 @@
 # Review: the July protocol-1125 MRI sessions and the five `jrc` phantom studies, ingested from the scanner (branch `feat/mri-july-1125`)
 
 **Date:** 2026-10-04 · **Stream F, second task** (the first was [`mri_0710_reingest_review.md`](mri_0710_reingest_review.md)) ·
-**Status:** 🔶 the read-only phase is done: every study pulled and hashed, every dry run read, every ingest rehearsed on
-scratch copies. **No production write has happened.** The coordinator answered all six questions on 2026-10-04 (§8), and the
-write is **queued after stream B's B03 → B02 ingest into `1519`** (stream A is copying in parallel); the coordinator will give
-the window. The order holds: m19 before m12's first study, the 07-08 phantom before the 07-09 one.
+**Status:** ✅ **done and verified in production, 2026-10-04.** **210 acquisitions are in** (the nine sessions = 141, the five
+phantom studies = 69), written in the coordinator's window 12:52 to 13:33; every check in §6 is clean (0 failed, 0 exceptions) and the
+validator's baseline did not move. The read-only phase (§§1 to 5), the coordinator's six answers (§8) and the dress rehearsal came
+first. **Open housekeeping:** my seven rehearsal roots under `D:\projects\gjesus3\scratch_mri-july-1125_rehearsal\` (about 800 MB) are
+not deleted, because the permission system denied the delete command; I did not retry or work around it. The pulls stay until the
+coordinator releases them.
 
 **Scope (Ryan's go, 2026-10-04, relayed by the coordinator).** The Data Office ingests, from the scanner, **9 unregistered
 protocol-1125 sessions** (operator `Irene`) and **5 `jrc` phantom/QC studies** (blank project). **Not** the 5
@@ -190,7 +192,30 @@ native, 18 regenerated); IDs equal to the oracle per exam; `sample_type` `materi
 blank, no today-dated row; counters `…0611` 0 → 5, `…0612` 0 → 7, `…0708` 0 → 33, `…0709` 0 → 18, `…0818` 0 → 6; `registry_raw` and `ingest_manifest`
 append-only (+69 each); the worklist, subjects, projects and tombstones byte-identical; no link, no `pending_links.csv`.**
 
-## 6. The production write: order and checks (not run)
+## 6. The production write: result, and the order and checks it followed
+
+**Production result (2026-10-04, window 12:52 to 13:33): 210 / 210 written and verified, 0 failed checks anywhere.**
+
+| Step | Result |
+|---|---|
+| Full preflight, 12:52:54 | **PASS.** No lock; registry quiet (last write 11:16:13, 95 minutes before; 26,450 rows, stream B's included); counters 16 / 30 / 34 and 0 for the five phantom prefixes; none of the 141 link names in `raw_linked`; no unregistered MRI folder; 8,423 pulled files at manifest size, 3,527 DICOM and `2dseq` files re-hashed, 0 differ |
+| Backup, 12:53:03 | `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261004_1253_mri_july_1125`: 11 files (the registries, `.acq_id_seq.json`, PROJ-0021's `_project.yaml` and `provenance.csv`), SHA-256 verified, 0 mismatches |
+| Sessions, Windows, 12:53 to 12:58 | m2 15, m3 16, m4 14, m5 14, m6 15, m7 16, m8 16, m19 18, m12 first study 17 (scoped config): **141 / 141, `Failed: 0` in every step**, 27 to 46 s each |
+| Phantoms, WSL + Dicomifier, 12:58 to 13:29 | 0611 5 / 5 (5 regenerated), 0612 7 / 7 (7), 0708 41 / 41, 0709 10 / 10, 0818 6 / 6 (6): **69 / 69, 18 regenerated at ingest, none fell back**, no warning, no worklist row. **31 minutes** (§7) |
+| `verify_sessions` | 141 / 141: rows and fields, DICOM counts, `checksums.json` == disk, every DICOM's SHA-256 in the pull manifest, **141 / 141 link folders by file identity**, subjects from the animal DB; 3,150 files hashed; 0 failed, 0 exceptions |
+| `verify_phantoms` | 69 / 69 (51 native, 18 regenerated), 509 files hashed; `sample_type` `material` ×5 and `phantom` ×64, blank project, `researcher` and `operator` blank, `ingest_config` the repo config path, no placeholder, no today-dated id, regenerated DICOMs are new bytes; 0 failed, 0 exceptions |
+| `check_counters` | exactly the eight predicted changes (`…0703` 16 → 47, `…0706` 30 → 105, `…0710` 34 → 69, `…0611` 0 → 5, `…0612` 0 → 7, `…0708` 0 → 33, `…0709` 0 → 18, `…0818` 0 → 6); 896 → 901 keys; nothing else moved |
+| `check_link_owners` (by inode) | 34 m12 link folders = 17 `_bis` (unpolluted, no suffix) + 17 first-study (`_study1147`), each owned by exactly one acquisition and holding all its files |
+| Append-only | `registry_raw` +100,453 bytes and `ingest_manifest` +27,069 bytes, **210 lines each, all CRLF, none bare-LF** (the same byte counts as the dress rehearsal); the other six registry CSVs byte-identical; `provenance.csv` an exact prefix, 318 → 459 rows (+141); `_project.yaml` identical |
+| `check_raw_vs_registry` | registry 26,450 → 26,660 rows; the 210 new ids are exactly the predicted set; 603 MRI folders on disk in 2026-06 to 08, none without a row, none missing; no `pending_links.csv`; `pending_dicom_regen.csv` byte-identical (nothing queued) |
+| `generate_index --project PROJ-0021` | only the project's `index.html` rewritten (456,375 → 643,959 bytes); the global `registries\index.html` untouched (last rebuilt 03:00 today, outside this repo; it will list the 210 at its next rebuild) |
+| Validator `--no-enrichment` | 26,660 rows, **10,314 errors, all the `operator` placeholder** (the unchanged baseline), 0 warnings, none on our 210 ids; no new class |
+
+Evidence: `preflight_window.txt`, `backup_prod_manifest_stdout.txt`, `prod_sessions_run.txt`, `prod_phantoms_run.txt` and the per-step
+`prod_*.log`, `verify_prod_*.txt`, `check_*_prod.txt`, `append_only_check_prod.txt`, `generate_index_prod.txt`,
+`validator_production_after_write.txt`, all in `D:\projects\gjesus3\staging\_analysis\mri-july-1125\`.
+
+The plan it followed, with the dress rehearsal that preceded it:
 
 **Dress rehearsal of the write itself (2026-10-04, 10:14 to 10:22, scratch only).** The scratch root held production's registry
 snapshot of that minute (25,925 rows, stream B's rows included), PROJ-0021's `provenance.csv` and `_project.yaml`, and the 17 `_bis` raw
@@ -211,12 +236,12 @@ line-ending or counter anomaly. Output: `dress_*.txt`, `verify_dress_*.txt`, `ch
 (25,925 rows, stream B's and A's writes included): the baseline did not move.
 
 1. **Preflight** (`prod_preflight_july.py`, read-only; passed 09:42, and at 10:14 in `--quick` mode with one expected red, "registry
-   written 0.6 minutes ago", because stream B was writing; counters, link names and unregistered folders unchanged): no lock, registry
-   quiet; counters at 16 / 30 / 34 and
+   written 0.6 minutes ago", because stream B was writing; counters, link names and unregistered folders unchanged; **rerun in full at
+   12:52 inside the window: PASS**): no lock, registry quiet; counters at 16 / 30 / 34 and
    0 for the five phantom prefixes; none of the 14 studies registered; `PROJ-0021` active; **none of the 141 link names exists
    in `raw_linked`**; no unregistered MRI folder on disk; all 8,423 pulled files at their manifest size and all 3,527 DICOM and
-   `2dseq` files re-hashed. **Rerun immediately before the write: stream B is writing now** (counters, link names, unregistered
-   folders and "registry quiet" are all re-read).
+   `2dseq` files re-hashed. **Rerun immediately before the write** (counters, link names, unregistered folders and "registry quiet"
+   are all re-read).
 2. **Backup** to a fresh dated folder under `C:\Users\rtasseff\temp\` (registries, `.acq_id_seq.json`, `PROJ-0021`'s
    `_project.yaml` and `provenance.csv`), SHA-256-verified.
 3. **Sessions, Windows,** in this order, via `write_sessions.py --nas-root J:\gjesus3-data --go-production`, which runs from the repo root
@@ -246,6 +271,11 @@ line-ending or counter anomaly. Output: `dress_*.txt`, `verify_dress_*.txt`, `ch
   1225, started 2026-07-07 09:43), **nested inside it, and not present anywhere else on the scanner.** The `<study>/*` scope lists
   it as a skipped non-scan folder and does not descend, so nothing of it is ingested. **Decided (coordinator, 2026-10-04): not
   ours, not ingested; the coordinator passes it to Ryan as an FYI for the `jl` group.**
+- **A live write from WSL is about 20 times slower than a scratch one.** The five phantom configs took 84 s on D: scratch and
+  **31 minutes** on the live share: the WSL-to-SMB path costs roughly 2 s per small file (the 128-file multi-echo exam alone took
+  over 3 min), so the writes took 36 minutes (5 for the sessions, 31 for the phantoms) where the whole scratch rehearsal had taken 3.
+  The Windows sessions took 5 minutes for 141. Nothing failed; plan the window by the file count, and note that the 51 native-DICOM phantom exams
+  (0708, 0709) could have been written from Windows as well, which was not rehearsed and so not used.
 - **The 07-08 phantom crosses midnight** (18:51 → 08:29), so its IDs span two date prefixes.
 - **`researcher: "NA"` is stored blank**, in the registry and the sidecar (as for G1); `modalities_in_study` comes out `MR`.
 - **`NIFTI\` folders** sit in 13 of the 14 studies (all but the 08-18 phantom; the researchers' own conversions) and are skipped as
@@ -258,15 +288,20 @@ line-ending or counter anomaly. Output: `dress_*.txt`, `verify_dress_*.txt`, `ch
 3. **Exam 66 (never acquired): excluded** (§2.3).
 4. **Phantom sample ids keep the typed `SUBJECT_id`; never normalised** (§5).
 5. **The nested `jl` study in m3 is not ours:** passed to Ryan as an FYI; not ingested (§7).
-6. **The window:** queued after stream B's B03 → B02 ingest into `1519`. The coordinator will message. About 25 minutes for the
-   210 acquisitions plus verification; sequence and commands in §6.
+6. **The window:** granted by the coordinator after stream B's B03 → B02 ingest into `1519`, used 12:52 to 13:33 (41 minutes
+   including the preflight, the backup, the verification and the index), exactly per §6.
 
 **Open, for Ryan (the coordinator carries it):** the production link-collision hazard, and whether and how to repair the 209
 acquisitions that have no link folder of their own (§2.1, §9). It is not part of this write.
 
+**Open, housekeeping:** (1) the seven rehearsal roots under `D:\projects\gjesus3\scratch_mri-july-1125_rehearsal\` (`dress_S`,
+`dress_S_before`, `nas_C_cli`, `nas_C_yaml`, `nas_P`, `nas_P_before`, `nas_S`; about 800 MB) were to be deleted after verification, but
+the permission system denied the command, so they stay until someone with the authority removes them or grants it; (2) the pulls in
+`D:\projects\gjesus3\scratch_mri-july-1125\` (6.2 GB) stay until the coordinator confirms; (3) the backup folder above stays.
+
 ## 9. Proposed wording for STATUS, CHANGELOG, BACKLOG and the plan
 
-*Drafted now; the bracketed facts are filled in after the writes. I have not touched these four files.*
+*Filled in after the writes (2026-10-04). I have not touched these four files; the coordinator applies them.*
 
 ### `tasks/BACKLOG.md`
 
@@ -305,22 +340,30 @@ acquisitions that have no link folder of their own (§2.1, §9). It is not part 
 > `20260707_094320_jl260707_1225_m26_…` (13 exams, 358 MB) exists only nested in `…_m3_1125_…`. Not MFB; not ingested. Someone
 > may want to tell the `jl` group.
 
-**Update the item "14 MFB animal sessions on the scanner are registered nowhere":** [after the writes: tick the 9 protocol-1125
-sessions and the 5 phantom studies; the 5 protocol-1025 sessions stay with the operators].
+> ## 🔹 LOW — a live WSL write to the share is about 20 times slower than local (2026-10-04)
+> The five phantom configs (69 acquisitions, 509 files) took 31 minutes from WSL to `/mnt/gjesus3` against 84 s on D: scratch: roughly
+> 2 s per small file over the 9p/SMB path (11_OPERATIONS §5.5 already notes that WSL cannot hard-link there). Plan a window by file
+> count; a native-DICOM study with no project could be written from Windows instead.
+
+**Update the item "14 MFB animal sessions on the scanner are registered nowhere":** tick the 9 protocol-1125 sessions (141
+acquisitions) and the 5 phantom studies (69); done 2026-10-04. The 5 protocol-1025 sessions of 10-01/02 stay with the operators.
 
 ### `tasks/STATUS.md` (§2 drives bullet and §1 counts)
 
-> - **[✅ after the writes] The July protocol-1125 series is in production, ingested from the scanner (2026-10-04).** 9 sessions
+> - **✅ The July protocol-1125 series is in production, ingested from the scanner (2026-10-04).** 9 sessions
 >   (m2, m3, m4–m8 including m6, the first m12 study, m19), 141 acquisitions, `ACQ-20260703-MRI-017…047`,
 >   `ACQ-20260706-MRI-031…105`, `ACQ-20260710-MRI-035…069`, all native DICOMs, `PROJ-0021`, `Irene`. The five `jrc` phantom/QC
->   studies, 69 acquisitions with a blank project, `sample_type` `phantom` ×64 and `material` ×5 (stream B's rule; 18 regenerated at ingest). The protocol-1025 sessions
->   of 10-01/02 stay with the operators. The m12 first study needed its own link names (BACKLOG HIGH: link collisions).
+>   studies, 69 acquisitions with a blank project (`ACQ-20260611-MRI-001…005`, `ACQ-20260612-MRI-001…007`, `ACQ-20260708-MRI-001…033`,
+>   `ACQ-20260709-MRI-001…018`, `ACQ-20260818-MRI-001…006`), `sample_type` `phantom` ×64 and `material` ×5 (stream B's rule; 18
+>   regenerated at ingest; exam 66 of the 07-08 phantom excluded as never acquired). Registry 26,450 → 26,660 rows; verified end to end
+>   (0 failed checks; validator unchanged at 10,314, all the `operator` placeholder). The protocol-1025 sessions of 10-01/02 stay with
+>   the operators. The m12 first study needed its own link names (BACKLOG HIGH: link collisions).
 
 ### `CHANGELOG.md` (one dated row, newest first)
 
-> | 2026-10-04 | R. Tasseff | **The July protocol-1125 MRI sessions and the five `jrc` phantom studies are [ingested] from the scanner.** [Counts, IDs and verification after the writes.] **Found on the way:** the shared MRI link name has no per-study part and `create_hardlink` silently merges two acquisitions that share it: 9 of the first m12 study's 17 links would have been wrong, and **209 of 483 acquisitions on multi-study animal-days already have no link folder of their own** (`AE-biomaGUNE-0721`, `-1022`, `-0219`); `/raw/` is intact. The first m12 study uses a scoped config with a `_study1147` suffix. |
+> | 2026-10-04 | R. Tasseff | **The July protocol-1125 MRI sessions and the five `jrc` phantom studies are ingested from the scanner: 210 acquisitions.** The nine sessions (m2, m3, m4–m8 including m6, m19, the first m12 study; `Irene`, `PROJ-0021`; 141 acquisitions, all native DICOM; `ACQ-20260703-MRI-017…047`, `ACQ-20260706-MRI-031…105`, `ACQ-20260710-MRI-035…069`) and the five phantom/QC studies (blank project; 69 acquisitions; `sample_type` `phantom` ×64 and `material` ×5 by stream B's rule; 18 regenerated at ingest with Dicomifier from WSL; exam 66 of the 07-08 phantom excluded as never acquired). Registry 26,450 → 26,660 rows. Verified end to end: rows and fields, DICOM counts, `checksums.json` == disk, SHA-256 against the scanner pulls, 141 / 141 link folders by inode, the eight counter changes exactly as predicted, registries append-only (+210 CRLF lines), validator unchanged at 10,314 errors (all the `operator` placeholder). **Found on the way:** the shared MRI link name has no per-study part and `create_hardlink` silently merges two acquisitions that share it: 9 of the first m12 study's 17 links would have been wrong, and **209 of 483 acquisitions on multi-study animal-days already have no link folder of their own** (`AE-biomaGUNE-0721`, `-1022`, `-0219`); `/raw/` is intact. The first m12 study uses a scoped config with a `_study1147` suffix. |
 
 ### `tasks/historical_drives_closeout_plan.md`
 
-Step 5: mark the unregistered MFB sessions **[done]** for the nine 1125 sessions and the five phantoms; the 1025 sessions are the
-operators'. Add the link-collision audit and repair as a Step 5 item (Ryan's decision).
+Step 5: mark the unregistered MFB sessions **[done 2026-10-04]** for the nine 1125 sessions and the five phantoms; the 1025 sessions
+are the operators'. Add the link-collision audit and repair as a Step 5 item (Ryan's decision).
