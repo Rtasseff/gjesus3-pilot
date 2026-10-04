@@ -196,6 +196,35 @@ coordinator:**
 - **The coordinator reopened** `1519` (187 links) and `0320` (653), using `tools/reopen_project.py`.
 - **Retire v2 is merged** (`8b0514c`), its statuses are updated (`867612c`), and 30 of 30 test suites
   pass.
+- **Stream B's B04b regen and relink:** 2 exams, 9 and 15 DICOMs, verified.
+- **`LEONE` is done** (stream C, merged `5a015a3`). 7,161 files (59.15 GB) are in `DTS24`'s project
+  folder, and the coordinator verified them independently: 0 missing or extra, 20/20 fresh hashes.
+  The 77 GB working copy on C: is deleted, and the review and scripts were committed on Ryan's
+  instruction.
+- **Stream A's copies 2a and 2c:** 14,352 files, 112.71 GB, into 13 projects. The coordinator
+  verified them: exact files and bytes per project, 119/119 fresh hashes, and A's per-project
+  fingerprints reproduce.
+- **Ryan's later answers:**
+  - **Unconvertible MRI is not registered.** The rule is documented in `09_MODALITIES`; see the
+    CHANGELOG.
+  - **The 3 acqp-less exams** use the generic DICOM shape.
+  - **Session- and animal-level claim folders** are grouped under their parent.
+  - **Standing approval** for the coordinator to delete finished stream scratch on D:.
+
+**⚠️ A production finding for Ryan (stream F, 2026-10-04): project link folders silently merge.**
+
+- **The cause:** `linker.create_hardlink` creates the link folder with `makedirs(exist_ok)`, and
+  links only the files that don't exist yet. When two acquisitions get the same link name (several
+  studies of one animal on one day), the second merges into the first's folder.
+- **Already in production:** on 44 multi-study animal-days (483 acquisitions), **209 acquisitions
+  have no link folder of their own** (`AE-biomaGUNE-0721` 153/294, `-1022` 53/179, `-0219` 3/10).
+- **Not affected:** `/raw/` and the registry are intact; only the project links researchers browse
+  are affected. Provenance can't show it.
+- **The guard now:** each new ingest checks every planned link name for collisions first. The July
+  m12 first study gets a `_study1147` suffix.
+- **Needed:** a code fix (`create_hardlink` must refuse), a per-study part in the link-name template,
+  and an audit and repair of the 209, which is Ryan's call. It will be a BACKLOG HIGH item at stream
+  F's merge.
 
 ---
 
