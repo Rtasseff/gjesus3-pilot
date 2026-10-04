@@ -196,6 +196,19 @@ Added to all MRI configs before the first real run: `link_filename` (the product
 
 **`stage_B04` is no longer needed** (deletion waits on Ryan's approval).
 
+**B03 + B02 into `AE-biomaGUNE-1519`, 2026-10-04 (Ryan's go relayed; `1519` reopened by the coordinator; write window granted).** Ryan's convert-first rule applied: only exams with DICOM, or with DICOM produced before ingest, are registered.
+
+**New per-batch pre-check (stream F's hazard: `linker.create_hardlink` silently merges into an existing folder):** `tools/drive_staging/check_link_collisions.py` rebuilds every planned link name the way the template does, with `mri_recon_indices` = every `pdata/<idx>/` subdirectory, then checks it case-insensitively against the project's `raw_linked\` and within the batch. **B03 0 / B02 0 collisions.**
+
+**New post-check:** `tools/drive_staging/verify_links_strict.py` requires each acquisition's link folder, under its exact name, to hold exactly its own `.dcm` set (same count, all `samefile`, nothing extra). It was re-run on B04a/B04b/B05a/B05b too: **all exact (67/165/165/173), so no merge in earlier batches.**
+
+| Batch | Rows | Checksums | Links (strict) | Validator | Result |
+|---|---:|---|---|---|---|
+| B03 `1519` Sep 2020 | +135 (25,790 → 25,925) | 135/135 | 135/135 exact | 10,314 / 1 class | ✅ PASS |
+| B02 `1519` Mar 2022 | +525 (→ 26,450) | 525/525 | 525/525 exact | 10,314 / 1 class | ✅ PASS |
+
+B02's `m35_week3` exams 29/30/38/39/40 carry the scanner's own DICOMs, taken from the same-session `_bad` copy (5 rows say so in `notes`). `m35_week3/35` (no reconstruction) goes to stream A as not-registered, into `1519`.
+
 ### 7c. One-off X1: three real exams the ParaVision path cannot take (dry run only)
 
 **What they are:** `0619` `m27/4` and `m31/4` (B04b), and `1519` `m14/8` (B03). Their only copy has no `acqp`, and `_is_paravision_exam` requires `acqp` + `method`. **Decided (coordinator, 2026-10-02):** bring them in through a scoped one-off, with no detector change.
