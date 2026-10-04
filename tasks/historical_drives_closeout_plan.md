@@ -155,6 +155,48 @@ archives).
 - **This must be closed before the D: erase.** The test for the erase is that everything from the
   drives is accounted for.
 
+**Decisions of 2026-10-04 (Ryan).** These answer questions 1–6 above.
+
+- **Every recommendation in questions 1–5 is accepted as written**, and so is "go on the dot-file".
+- **Long paths: neither long paths that throw errors, nor zips.** Researchers have to be able to
+  browse. His words: "combine dropping high level dirs, putting info in an index or registry to
+  help them find what info was dropped".
+  - **Built by stream A:** `tools/drive_staging/historical_paths.py`.
+  - **The layout:** `<project>\working\historical_drives\<FRIO-X6|MFB-Disco-2>\<study folder>\<path
+    below>`.
+  - **The budget** is 240 characters on `\\GJESUS3\gjesus3\`. The fewest folders needed are
+    shortened deterministically (24 or 12 characters, then `~` and a 4-hex hash).
+  - **Each project gets** `_INDEX.csv` (the full original path of every file), `README.txt`,
+    `_PATHMAP.csv` and `_ORIGIN.txt`. A global index goes in `tasks/`.
+  - **The result:** 0 of 75,683 destinations over the budget.
+- **Fill the holding folder now** (A's Part 0, option B). It changes the earlier rule of filling it
+  only when the mapping round closes. D: can then be erased once the streams finish.
+- **LEONE is part of `DTS24`.** "Do not ingest any of the DICOM images that we already have. No
+  duplicates." The new content goes into `DTS24`'s project folder as files:
+  - 36 echo exams, MR supplements and 72 derived objects: 7,161 files, 59 GB;
+  - at `working\historical_drives\FRIO-X6\LEONE\`;
+  - with no new project, code or registry row.
+
+  C's review doc and its scripts go into git.
+- **Stream D's four lists are approved:** 153 retirements (3 scale-bar copies, 9 re-saves, 60
+  exports, 81 ROI crops). `ID65_PB_lung_20x_scale.czi` stays in `/raw/`.
+- **The 14 new nested `.czi`** (`8583.zip`) are ingested with a blank project.
+- **Deletions on D:** stream B's and stream A's refused scratch deletions were approved and done by
+  the coordinator.
+
+**Production writes of 2026-10-04, each verified by its stream and checked independently by the
+coordinator:**
+
+- **Stream B ingested five batches,** 578 rows: B04a/b `0619` (232), B05a/b `0420` (338), and N03
+  `1319` PET/CT (8). `AE-biomaGUNE-1319` (`PROJ-0061`) was created.
+  - The registry went 25,212 → **25,790**, with 0 duplicates and 0 rows dated 2026.
+  - 25 of 25 sampled files re-hash to their checksums, and 25 of 25 links are the same file.
+- **Stream A created 4 projects:** `PROJ-0062` `AE-biomaGUNE-1116`, `PROJ-0063` `-1420`,
+  `PROJ-0064` `-1520`, `PROJ-0065` `Project-0521`.
+- **The coordinator reopened** `1519` (187 links) and `0320` (653), using `tools/reopen_project.py`.
+- **Retire v2 is merged** (`8b0514c`), its statuses are updated (`867612c`), and 30 of 30 test suites
+  pass.
+
 ---
 
 ## Where things are (2026-10-02)
