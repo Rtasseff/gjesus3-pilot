@@ -209,6 +209,19 @@ Added to all MRI configs before the first real run: `link_filename` (the product
 
 B02's `m35_week3` exams 29/30/38/39/40 carry the scanner's own DICOMs, taken from the same-session `_bad` copy (5 rows say so in `notes`). `m35_week3/35` (no reconstruction) goes to stream A as not-registered, into `1519`.
 
+**X1 → B07 → B08 → B06, 2026-10-04 (Ryan's go relayed; write window granted; convert-first).** Before writing, `origin/main` was merged into this branch (`ff89761`), so the ingest ran with retire v2's `retired.py` (the tombstone file now holds v2 dispositions, and the ingest reads it into its dedup index). Validator baseline: 10,314 / 1 class; registry 26,574 rows.
+
+| Batch | Rows | Checksums | Fields | Result |
+|---|---:|---|---|---|
+| X1 one-off (generic DICOM shape) | +3 (26,574 → 26,577) | 3/3 | `0619` ×2, `1519` ×1, 7T, `series/` | ✅ PASS (see below) |
+| B07 phantoms / collab | +123 (→ 26,700) | 123/123 | blank project; `phantom` 98 / `material` 25; 7T 112 / 11.7T 11; every row ≥ 3 DICOMs | ✅ PASS |
+| B08 Madrid ICON | +363 (→ 27,063) | 363/363 | `XMRI`, `Bruker ICON 1T`, `collaborator:Uni-Madrid`, blank project, 4 scanner subject ids | ✅ PASS |
+| B06 `1019` 2021 (image exams of MRS sessions) | +37 (→ 27,100) | 37/37 | 11.7T, blank project (D6), facility subject ids | ✅ PASS |
+
+**Validator after each batch:** 10,314 / 1 class. **0 rows dated 2026.** DICOMs that I produced before ingest (B07, B08, B06) are noted per row in `notes` (`drv_dicom_origin`).
+
+**X1's links: a verifier mismatch, explained and accepted (coordinator, 2026-10-04).** For the generic-DICOM shape (primary `series/`, `primary_kind` `archive`), the engine hard-links the **whole acquisition folder** into the project: `README.txt`, `checksums.json`, `metadata.json` and `series/`. The `.data/` links of internal MRI hold the DICOMs only, and my first X1 check expected that. I stopped before B07 and reported. The full-tree check (`verify_x1_links.py`, now fixed) shows each X1 link is an **exact per-file mirror of its own `/raw/` folder** (6/6, 6/6, 33/33, all `samefile`, nothing extra), so it is not a merge. **Note for researchers:** these 3 links also expose the sidecar, README and checksums, which stay read-only because hard links share the `/raw/` file's ACL.
+
 ### 7c. One-off X1: three real exams the ParaVision path cannot take (dry run only)
 
 **What they are:** `0619` `m27/4` and `m31/4` (B04b), and `1519` `m14/8` (B03). Their only copy has no `acqp`, and `_is_paravision_exam` requires `acqp` + `method`. **Decided (coordinator, 2026-10-02):** bring them in through a scoped one-off, with no detector change.
