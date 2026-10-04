@@ -85,7 +85,6 @@ RETIRE_LISTS = os.path.join(REPO, "tasks", "retire_lists")
 DRIVES = {"D1": "drive1_FRIO-X6", "D2": "drive2_MFB-Disco-2"}
 STAGED = {"D1": "drive1_FRIO-X6_2322E4A111E7", "D2": "drive2_MFB-Disco-2_2322E4A112BD"}
 EXTRACT = os.path.join(STAGING, "_extract")
-WORKING_ROOT = "working\\historical_drives"      # Ryan, 2026-10-02: <project>\working\historical_drives\...
 
 # the one scale-bar-by-name pattern in the BACKLOG measurement; the overlay in the XML is the evidence
 SCALE_WORDS = ("scale", "escala")
@@ -122,24 +121,6 @@ def basename(original_name):
 def dirname(original_name):
     parts = original_name.replace("\\", "/").rsplit("/", 1)
     return parts[0] if len(parts) == 2 else ""
-
-
-def subfolder_from_folder(folder):
-    """working\\historical_drives\\<folder>, where `folder` is a registry original_name's folder
-    (`<drive label>/<path on the drive>`, forward slashes)."""
-    return WORKING_ROOT + "\\" + folder.replace("/", "\\")
-
-
-def subfolder_for(original_name):
-    """The retire list's `subfolder` for a file whose registry original_name is
-    `<drive label>/<path on the drive>/<name>`: working\\historical_drives\\<drive label>\\<folder
-    path on the drive> (Ryan, 2026-10-02). The name stays the file's own (retire_acquisition's
-    default dest_name). An archive member's folder includes the archive's own name, as it does in
-    original_name."""
-    folder = dirname(original_name)
-    if not folder:
-        raise ValueError(f"original_name has no folder: {original_name!r}")
-    return subfolder_from_folder(folder)
 
 
 def staged_path(row):
@@ -1915,16 +1896,29 @@ def reason_text(r):
             f"{r['parent_name']} ({r['parent_acq_id']}) -- {r['evidence']}")
 
 
-def list_rows(classified, action):
+LIST_FILES = {"a": "2026-10_r4_scalebars.csv", "b": "2026-10_r4_exports.csv", "r": "2026-10_r4_resaves.csv",
+              "k": "2026-10_r4_roi_crops.csv"}
+LIST_SHORT = {"scalebars": "a", "exports": "b", "resaves": "r", "roi_crops": "k"}     # `index --lists` names
+
+
+def list_plan_rows(classified):
+    """[{acq_id, to_project}] for every classified member that goes on one of the four lists: the input of
+    the destination plan (which must cover ALL the rows of a project tree at once)."""
+    return [{"acq_id": r["acq_id"], "to_project": r["parent_project"]} for r in classified if r["action"] in LIST_FILES]
+
+
+def list_rows(classified, action, dests):
     """Retire-list rows (acq_id, disposition, target_acq_id, to_project, reason, subfolder, dest_name) for
-    the classified members whose action is `action`."""
+    the classified members whose action is `action`. `dests` = {acq_id: (subfolder, dest_name)}: where each
+    lands, from r4_destinations (stream A's short-path rule)."""
     out = []
     for r in classified:
         if r["action"] != action:
             continue
+        sub, name = dests[r["acq_id"]]
         out.append({"acq_id": r["acq_id"], "disposition": "derivative", "target_acq_id": r["parent_acq_id"],
                     "to_project": r["parent_project"], "reason": reason_text(r),
-                    "subfolder": subfolder_from_folder(r["folder"]), "dest_name": r["name"]})
+                    "subfolder": sub, "dest_name": name})
     return out
 
 
@@ -1960,30 +1954,52 @@ def write_list(path, rows):
         w.writerows(rows)
 
 
+INDEX_ROWS_FILE = os.path.join(REPO, "tasks", "drives_r4_index_rows.csv")
+
+
+def print_plan_stat(stat, H):
+    print(f"destinations (stream A's short-path rule, budget {H.BUDGET} on \\\\GJESUS3\\gjesus3\\): {stat['items']} files, "
+          f"longest {stat['max_unc']} (J: form {stat['max_j']}), over budget {stat['over_budget']}, "
+          f"folders or names shortened {stat['shortened']}, no study folder on the path {stat['no_root']}")
+    print(f"  already on the NAS: {stat['exists']}; already in a tree's _INDEX.csv: {stat['in_a_index']}; "
+          f"other files of the same drive folder placed by stream A: same folder {stat['folder_agree']}, "
+          f"a different folder {stat['folder_differ']}, none placed {stat['folder_no_a_file']}")
+
+
 def cmd_lists(args):
+    """Write the four retire lists, and the index rows that go with them. Where each file lands comes from stream
+    A's short-path rule (r4_destinations), planned over all four lists at once; NOTHING is written unless every
+    destination is within the 240-character budget, unique, free on the NAS, and in the same folder A used for the
+    other files of that drive folder. Run it BEFORE the retire run: afterwards every destination exists."""
+    import r4_destinations as D
+    H, _NP = D.load_stream_a()
     classified = rcsv(os.path.join(args.out, "classified.csv"))
-    names = {"a": "2026-10_r4_scalebars.csv", "b": "2026-10_r4_exports.csv", "r": "2026-10_r4_resaves.csv",
-             "k": "2026-10_r4_roi_crops.csv"}
-    os.makedirs(args.lists_dir, exist_ok=True)
-    held = []
-    for action, fn in names.items():
-        rows = list_rows(classified, action)
-        keep = []
+    members = {m["acq_id"]: m for m in rcsv(os.path.join(args.out, "members.csv"))}
+    plan = D.plan_destinations(list_plan_rows(classified), members, NAS)
+    stat, problems = D.check_plan(plan, NAS, members)
+    print_plan_stat(stat, H)
+    dests = {a: (d["subfolder"], d["dest_name"]) for a, d in plan.dests.items()}
+    lists = {action: list_rows(classified, action, dests) for action in LIST_FILES}
+    for rows in lists.values():
         for r in rows:
-            iss = path_issues(r["to_project"], r["subfolder"], r["dest_name"])
-            (held if iss else keep).append((r, iss) if iss else r)
-        write_list(os.path.join(args.lists_dir, fn), keep)
-        ids = {r["acq_id"] for r in keep}
+            problems += [f"{r['acq_id']}: {i}" for i in path_issues(r["to_project"], r["subfolder"], r["dest_name"])]
+    if problems:
+        for p in problems:
+            print("  PROBLEM:", p)
+        print("NOT WRITTEN: fix the problems above first", file=sys.stderr)
+        return 1
+    os.makedirs(args.lists_dir, exist_ok=True)
+    for action, fn in LIST_FILES.items():
+        rows = lists[action]
+        write_list(os.path.join(args.lists_dir, fn), rows)
+        ids = {r["acq_id"] for r in rows}
         gb = sum(int(r["size"]) for r in classified if r["acq_id"] in ids) / 1e9
-        # past the classic Windows limit of 259 characters (J:\gjesus3-data\projects\... form): the retire tool
-        # uses long-path forms, but Explorer, Office and older tools on the lab's machines may not
-        long_ = [r for r in keep if len(NAS) + len("\\projects\\") + len(r["to_project"]) + 1 + len(r["subfolder"]) + 1
-                 + len(r["dest_name"]) > 259]
-        print(f"{fn}: {len(keep)} rows, {gb:.1f} GB" + (f"; {len(long_)} destination path(s) over 259 characters" if long_ else ""))
-        for r in long_:
-            print(f"    over 259: {r['acq_id']} {r['dest_name']}")
-    for r, iss in held:
-        print(f"  HELD (path issue, not listed): {r['acq_id']} {r['dest_name']}: {'; '.join(iss)}")
+        print(f"{fn}: {len(rows)} rows, {gb:.1f} GB")
+    targets = {r["acq_id"]: r["parent_acq_id"] for r in classified if r["action"] in LIST_FILES}
+    irows = D.index_rows_for(plan, members, targets)
+    flat = [dict(r, project=p) for p, rs in sorted(irows.items()) for r in rs]
+    wcsv(INDEX_ROWS_FILE, ["project", *H.INDEX_FIELDS], flat)
+    print(f"index rows (merged into each project's _INDEX.csv after the retire run): {len(flat)} -> {INDEX_ROWS_FILE}")
     return 0
 
 
@@ -1997,8 +2013,7 @@ def cmd_verify_lists(args):
     projs = {r["project_id"]: r for r in rcsv(os.path.join(NAS, "registries", "registry_projects.csv"))}
     mem = {m["acq_id"]: m for m in rcsv(os.path.join(args.out, "members.csv"))}
     bad = 0
-    for fn in ("2026-10_r4_scalebars.csv", "2026-10_r4_exports.csv", "2026-10_r4_resaves.csv",
-               "2026-10_r4_roi_crops.csv"):
+    for fn in LIST_FILES.values():
         path = os.path.join(args.lists_dir, fn)
         rows = rcsv(path)
         retirees = {r["acq_id"] for r in rows}
@@ -2030,7 +2045,143 @@ def cmd_verify_lists(args):
         for p in problems:
             print("   PROBLEM:", p)
         bad += len(problems)
+    # the destinations, recomputed from stream A's rule against the NAS as it is NOW: they must equal the lists,
+    # fit the budget, be unique, be free, and sit in the folder A used for the same drive folder
+    import r4_destinations as D
+    H, _NP = D.load_stream_a()
+    all_rows, listed = [], {}
+    for fn in LIST_FILES.values():
+        for r in rcsv(os.path.join(args.lists_dir, fn)):
+            all_rows.append({"acq_id": r["acq_id"], "to_project": r["to_project"]})
+            listed[r["acq_id"]] = (r["subfolder"], r["dest_name"])
+    plan = D.plan_destinations(all_rows, mem, NAS)
+    stat, problems = D.check_plan(plan, NAS, mem)
+    for a, d in sorted(plan.dests.items()):
+        if listed[a] != (d["subfolder"], d["dest_name"]):
+            problems.append(f"{a}: the list has {listed[a]!r}, stream A's rule now gives {(d['subfolder'], d['dest_name'])!r}")
+    print_plan_stat(stat, H)
+    print(f"destinations: {len(all_rows)} list rows checked, {len(problems)} problems")
+    for p in problems:
+        print("   PROBLEM:", p)
+    bad += len(problems)
     return 1 if bad else 0
+
+
+def cmd_index(args):
+    """The step that FOLLOWS the retire run: give each project tree's documents on the NAS the retired derivatives.
+    One row per derivative is added to the tree's `_INDEX.csv` (original drive path, new path, SHA-256, and the note
+    "retired derivative of <original ACQ-ID>, formerly <retired ACQ-ID>"); the new folders are frozen in
+    `_PATHMAP.csv`; a new study folder gets its `_ORIGIN.txt`. It MERGES (a superset of what stream A wrote; an
+    existing row is never changed or dropped) and writes the documents the way stream A does (UTF-8 BOM, CRLF,
+    temp file + replace). Dry run unless --execute, which refuses unless every selected file is on the NAS at its
+    destination with the right size, no row conflicts, and A's existing documents re-serialise byte for byte.
+    Previews of the merged documents go to <out>\\index_preview\\."""
+    import r4_destinations as D
+    H, NP = D.load_stream_a()
+    members = {m["acq_id"]: m for m in rcsv(os.path.join(args.out, "members.csv"))}
+    chosen = [x for x in (args.lists or "").split(",") if x] or list(LIST_SHORT)
+    unknown = [x for x in chosen if x not in LIST_SHORT]
+    if unknown:
+        print(f"unknown list(s) {unknown}; choose from {sorted(LIST_SHORT)}", file=sys.stderr)
+        return 2
+    all_rows, listed, targets, selected = [], {}, {}, set()
+    for short, action in LIST_SHORT.items():
+        for r in rcsv(os.path.join(args.lists_dir, LIST_FILES[action])):
+            all_rows.append({"acq_id": r["acq_id"], "to_project": r["to_project"]})
+            listed[r["acq_id"]] = (r["subfolder"], r["dest_name"])
+            targets[r["acq_id"]] = r["target_acq_id"]
+            if short in chosen:
+                selected.add(r["acq_id"])
+    plan = D.plan_destinations(all_rows, members, NAS)
+    problems = [f"{a}: the list has {listed[a]!r}, stream A's rule now gives {(d['subfolder'], d['dest_name'])!r}"
+                for a, d in sorted(plan.dests.items()) if listed[a] != (d["subfolder"], d["dest_name"])]
+    irows = D.index_rows_for(plan, members, targets, only=selected)
+    nodes = D.planned_nodes(plan, only=selected)
+    origins = D.new_origin_docs(plan, NAS, only=selected)
+    docs, lines, pdir = {}, [], os.path.join(args.out, "index_preview")
+    present = 0
+    for proj, rows in sorted(irows.items()):
+        if not rows:
+            continue
+        _planner, items, base = plan.trees[proj]
+        ipath, ppath = os.path.join(NAS, base, H.INDEX_NAME), os.path.join(NAS, base, H.PATHMAP_NAME)
+        if not (os.path.exists(NP.lp(ipath)) and os.path.exists(NP.lp(ppath))):
+            problems.append(f"{proj}: no {H.INDEX_NAME} / {H.PATHMAP_NAME} under {base} (stream A's tree is missing)")
+            continue
+        with open(NP.lp(ipath), "rb") as f:
+            raw_i = f.read()
+        with open(NP.lp(ppath), "rb") as f:
+            raw_p = f.read()
+        ex_i, ex_p = rcsv(NP.lp(ipath)), rcsv(NP.lp(ppath))
+        fields = D.read_header(NP.lp(ipath))       # an older index has no `why` column: merged under ITS header
+        why_not = D.index_fields_problem(fields, H)
+        if why_not:
+            problems.append(f"{proj}: {why_not}")
+            continue
+        rt_i, rt_p = D.serialize_index(ex_i, H, fields) == raw_i, D.serialize_pathmap(ex_p) == raw_p
+        merged_i, n_add, n_already, conf_i = D.merge_index_rows(ex_i, rows)
+        merged_p, n_nodes, conf_p = D.merge_pathmap_rows(ex_p, nodes[proj])
+        here = [i for i in items if i.id in selected]
+        have = sum(1 for i in here if os.path.exists(NP.lp(os.path.join(NAS, plan.dests[i.id]["dest"]))))
+        present += have
+        for i in here:
+            p = os.path.join(NAS, plan.dests[i.id]["dest"])
+            if os.path.exists(NP.lp(p)) and os.path.getsize(NP.lp(p)) != int(members[i.id]["size"]):
+                problems.append(f"{i.id}: the file at the destination has {os.path.getsize(NP.lp(p))} bytes, "
+                                f"expected {members[i.id]['size']}")
+        problems += conf_i + conf_p
+        if not (rt_i and rt_p):
+            problems.append(f"{proj}: stream A's existing document does not re-serialise byte for byte "
+                            f"(_INDEX.csv {rt_i}, _PATHMAP.csv {rt_p}); merging would change its format")
+        docs[f"{base}\\{H.INDEX_NAME}"] = D.serialize_index(merged_i, H, fields)
+        docs[f"{base}\\{H.PATHMAP_NAME}"] = D.serialize_pathmap(merged_p)
+        os.makedirs(os.path.join(pdir, proj), exist_ok=True)
+        for name, data in ((H.INDEX_NAME, docs[f"{base}\\{H.INDEX_NAME}"]), (H.PATHMAP_NAME, docs[f"{base}\\{H.PATHMAP_NAME}"])):
+            with open(os.path.join(pdir, proj, name), "wb") as f:
+                f.write(data)
+        lines.append(f"  {proj:18s} _INDEX.csv {len(ex_i):5d} rows + {n_add:3d} new ({n_already} already merged) | "
+                     f"_PATHMAP.csv {len(ex_p):4d} + {n_nodes:3d} new folders | destination files present {have}/{len(here)} "
+                     f"| A's documents re-serialise identically: {rt_i and rt_p}"
+                     + ("" if len(fields) == len(H.INDEX_FIELDS) else f" (index kept under its {len(fields)}-column header)"))
+    docs.update({k: v for k, v in origins.items()})
+    with open(os.path.join(pdir, "new_ORIGIN_docs.txt"), "w", encoding="utf-8") as f:
+        for rel, data in sorted(origins.items()):
+            f.write(f"== {rel}\n{data.decode('utf-8')}\n")
+    n_sel = len(selected)
+    print(f"{'EXECUTE' if args.execute else 'DRY RUN'}: index merge for {n_sel} retired derivatives "
+          f"({', '.join(chosen)}) in {len([1 for r in irows.values() if r])} project trees")
+    for ln in lines:
+        print(ln)
+    print(f"  new _ORIGIN.txt documents (study folders this creates): {len(origins)}; previews: {pdir}")
+    print(f"  destination files present: {present}/{n_sel}"
+          + ("" if args.execute else " (0 is expected until the retire run has been done)"))
+    for p in problems:
+        print("  PROBLEM:", p)
+    if not args.execute:
+        print("  nothing written to the NAS. Re-run with --execute after the retire run.")
+        return 1 if problems else 0
+    if problems or present != n_sel:
+        print(f"REFUSED: {len(problems)} problem(s); {present}/{n_sel} destination files present; nothing written",
+              file=sys.stderr)
+        return 1
+    written = 0
+    for rel, data in sorted(docs.items()):
+        if len("\\\\GJESUS3\\gjesus3\\" + rel) > H.BUDGET:
+            print(f"REFUSED: document path over budget: {rel}", file=sys.stderr)
+            return 1
+        written += bool(NP.write_if_changed(os.path.join(NAS, rel), data))
+    for proj, rows in irows.items():     # verify: every existing row kept, every new row there
+        if not rows:
+            continue
+        base = plan.trees[proj][2]
+        after = rcsv(NP.lp(os.path.join(NAS, base, H.INDEX_NAME)))
+        keys = {r["new_path"].lower(): r for r in after}
+        miss = [r["new_path"] for r in rows if keys.get(r["new_path"].lower(), {}).get("sha256") != r["sha256"]]
+        if miss:
+            print(f"VERIFY FAILED for {proj}: {len(miss)} new rows are not in the index after the write", file=sys.stderr)
+            return 1
+    print(f"  documents written: {written} of {len(docs)} (the rest were already as wanted); verified")
+    return 0
 
 
 def md_table(header, rows):
@@ -2136,9 +2287,13 @@ def main(argv=None):
                     help="pieces: do not read groups whose members are distinct stage positions")
     ap.add_argument("--sample", type=int, default=20, help="validate: how many gated-out groups to test")
     ap.add_argument("--max-gb", type=float, default=6.0, help="validate: largest group (GB) to test")
+    ap.add_argument("--lists", default="",
+                    help="index: which lists to merge, comma-separated (scalebars,resaves,exports,roi_crops; default all)")
+    ap.add_argument("--execute", action="store_true",
+                    help="index: write the merged documents to the NAS (default: a dry run that writes only previews)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("table", "features", "pieces", "check", "relations", "retile", "restitch", "retrim", "region", "validate", "classify", "lists",
-                 "verify-lists", "report"):
+                 "verify-lists", "index", "report"):
         sub.add_parser(name)
     args = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):
@@ -2146,7 +2301,7 @@ def main(argv=None):
     return {"table": cmd_table, "features": cmd_features, "pieces": cmd_pieces, "check": cmd_check,
             "relations": cmd_relations, "retile": cmd_retile, "restitch": cmd_restitch, "retrim": cmd_retrim, "region": cmd_region,
             "validate": cmd_validate,
-            "classify": cmd_classify, "lists": cmd_lists, "verify-lists": cmd_verify_lists,
+            "classify": cmd_classify, "lists": cmd_lists, "verify-lists": cmd_verify_lists, "index": cmd_index,
             "report": cmd_report}[args.cmd](args)
 
 
