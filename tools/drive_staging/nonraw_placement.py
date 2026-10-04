@@ -95,8 +95,8 @@ MANIFEST_FIELDS = [
 # to DICOM, is NOT registered; it is kept as other data, beside a plain README saying why
 # (stream B hands it over in nonraw_for_A v3 as kind notregistered:<reason>)
 NOTREG_WHY = {   # plain language, one per stream-B kind (agreed with B, 2026-10-04)
-    "no-recon": "no reconstructed image: the exam holds raw scanner data only, so there is no image "
-                "to convert to DICOM",
+    "no-recon": "no reconstructed image: the exam holds scanner parameter files (and, where present, raw "
+                "scanner data) but no image, so there is nothing to convert to DICOM",
     "non-image": "spectroscopy or calibration (for example PRESS or STEAM MRS), not an image",
     "conversion-failed": "a reconstructed image exists, but it could not be converted to DICOM",
 }
