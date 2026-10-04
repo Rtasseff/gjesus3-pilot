@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ In use (true production)  
-**Last Updated:** 2026-10-02 (§5.7 — 🔶 v2: content-equivalent re-saves and re-identifying a mis-coded acquisition; classify before re-identifying) · Prior: 2026-10-01 (new §5.7 — retiring an ACQ-ID)
+**Last Updated:** 2026-10-04 (§5.7 — ✅ v2 design accepted by Ryan; retirements in production use since 2026-10-02) · Prior: 2026-10-02 (§5.7 — 🔶 v2: content-equivalent re-saves and re-identifying a mis-coded acquisition; classify before re-identifying) · Prior: 2026-10-01 (new §5.7 — retiring an ACQ-ID)
 
 ---
 
@@ -380,8 +380,8 @@ reporting 0 to add means it holds.
 
 ### 5.7 Retiring an ACQ-ID — duplicates, derivatives, orphans (Data Office)
 
-> **Status:** 🕗 Procedure written 2026-10-01; tool built and rehearsed on a scratch copy only. **No
-> production retirement has run.** Each one is a separate, approved operation. Tool: [10_TOOLS §3.9](10_TOOLS.md).
+> **Status:** Procedure written 2026-10-01. **In production use since 2026-10-02** (the 32 duplicate twins,
+> then the 17 orphan folders). Each retirement is a separate, approved operation. Tool: [10_TOOLS §3.9](10_TOOLS.md).
 > Schema: [06_REGISTRIES §2.9](06_REGISTRIES.md).
 
 **Who.** The Data Office only. Never an operator, never a researcher, never by hand-editing a registry.
@@ -393,7 +393,7 @@ refuses while `registries\.registry.lock` exists or `registry_raw.csv` changed i
 cannot see an ingest that is *between* batches — **confirm with whoever is running ingests**. Override the
 15-minute check (`--allow-recent-registry-writes`) only after that confirmation.
 
-**🔶 v2 (branch `feat/retire-v2`; not used in production yet):** a `.czi` re-save whose content is
+**v2 (✅ design accepted by Ryan 2026-10-04; not used in production yet):** a `.czi` re-save whose content is
 identical to a live survivor is retired as `equivalent`; a mis-coded acquisition is **re-identified** in place
 under its correct instrument code (`--reidentify-as`; disposition `reidentified`). **Classify first:** a
 re-identified id can never be retired or re-identified again (no chains, 06 §2.9.2), so decide whether a
