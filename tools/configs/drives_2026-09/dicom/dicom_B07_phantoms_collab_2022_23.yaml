@@ -52,7 +52,7 @@ registry:
   session_id:           discovered.drv_subject
   acquisition_datetime: discovered.drv_acq_datetime
   project_name:         ""
-  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, ${discovered.drv_sample_type} sample ${discovered.drv_subject}; recons kept: ${discovered.mri_recon_indices}; historical drives (drive 2 Laura backup); the kenia pull skipped it (no animal/protocol token)"
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}, ${discovered.drv_sample_type} sample ${discovered.drv_subject}; recons kept: ${discovered.mri_recon_indices}; historical drives (drive 2 Laura backup); the kenia pull skipped it (no animal/protocol token); ${discovered.drv_dicom_origin}"
 
 operator: "NA"
 
