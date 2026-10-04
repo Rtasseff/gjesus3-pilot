@@ -1,6 +1,21 @@
 # Historical drives: the MRI, PET/CT and other DICOM data (stream B review)
 
-**Status:** 🔶 **Phase 1 (read-only) complete, proposal below; nothing written to production.**
+**Status:** ✅ **DONE in true production, 2026-10-02 / 04.** Every approved batch is written and verified (§7b).
+- **Registry:** +1,764 rows, 1 project created (`PROJ-0061` = `AE-biomaGUNE-1319`), 2 regen-filled exams.
+- **Checks:** checksums all PASS, project links exact (strict per-acquisition check), validator unchanged at 10,314 / 1 class.
+- **What remains** is §8's non-ingest questions. The Phase 1 text below is kept as the record; the outcome is in §7b and §10.
+
+| Write (date) | Batches | Rows | Projects |
+|---|---|---:|---|
+| 2026-10-02 | B04a, B04b (`0619` 2020), B05a, B05b (`0420` 2021), N03 (`1319` PET/CT) | +578 | `PROJ-0004`, `-0012`, `-0061` (created) |
+| 2026-10-04 | B04b regen + relink (2 exams filled in place) | 0 | `PROJ-0004` |
+| 2026-10-04 | B03, B02 (`1519` 2020, 2022) | +660 | `PROJ-0008` (reopened by the coordinator) |
+| 2026-10-04 | X1 (3 acqp-less), B07 (phantoms/collab), B08 (Madrid ICON, `XMRI`), B06 (`1019` 2021 image exams) | +526 | `PROJ-0004`, `-0008`, blank |
+| **Total** | | **+1,764** (578 + 660 + 526; registry 25,212 → 27,100 including other streams' writes) | |
+
+**Rule applied from 2026-10-04 (Ryan): convert first.** Only exams with DICOM, or with DICOM produced before ingest, are registered; no empty rows.
+- **Not registered:** 24 exams (21 spectroscopy, 3 with no reconstruction). They went to stream A as other data, with a README (`nonraw_for_A` v3).
+- **Never-acquired setup scans (23):** nothing to store.
 **Branch:** `feat/drives-dicom` · **Date:** 2026-10-02 · **Plan:** [`historical_drives_closeout_plan.md`](historical_drives_closeout_plan.md) Step 5 item 4
 **Evidence (regenerable, not backed up):** `D:\projects\gjesus3\staging\_analysis\drives-dicom\`
 
@@ -278,24 +293,44 @@ B02's `m35_week3` exams 29/30/38/39/40 carry the scanner's own DICOMs, taken fro
 
 ## 10. Proposed wording for the shared files (the coordinator applies at merge)
 
+**`tasks/STATUS.md` §1 (numbers):** registry rows and MRI/NI counts as of the merge. Stream B added +1,764 acquisitions; the per-batch numbers are in §7b.
+
 **`tasks/STATUS.md` §2, drives bullet:**
-> - **Drives' DICOM stream (stream B):** Phase 1 done 2026-10-02 (`tasks/drives_dicom_review.md`).
->   - Already in production: 605 distinct MRI exams and 177 NI reconstructions.
->   - New: 1,306 lab MRI exams (`1519`, `0619`, `0420`, `1019`) and 8 `1319` PET/CT, awaiting Ryan's go.
->   - Questions: reopen `1519`, plus the phantom, ICON, 2019 PET and FDK groups.
->   - Found 526 post-horizon `1519` exams the scanner pull silently dropped (evidence for D3).
+> - **Drives' DICOM stream (stream B): ✅ DONE in true production 2026-10-02/04** (`tasks/drives_dicom_review.md`). **+1,764 acquisitions:**
+>   - `0619` 2020 (+232, plus 2 X1 exams and 2 regen-filled, `PROJ-0004` +234);
+>   - `0420` 2021 (+338, `PROJ-0012`);
+>   - `1519` 2020 + 2022 (+661 incl. 1 X1 exam, `PROJ-0008`, reopened);
+>   - `1319` PET/CT 2021 (+8, `PROJ-0061`, created);
+>   - phantoms/collaborations 2022–23 (+123, no project);
+>   - Madrid ICON 2024 (+363, `XMRI`, `collaborator:Uni-Madrid`, no project);
+>   - `1019` 2021 MRS-session image exams (+37, no project, D6).
+>
+>   Already in production before this, untouched: 605 MRI exams and 177 NI reconstructions on the drives.
+>
+>   **Rule (Ryan, 2026-10-04): an MRI exam is registered only with DICOM, or with DICOM produced before ingest.** The 24 exams that have none are kept as other data with a README (holding, or `1519`).
 
 **`tasks/STATUS.md` §0 D3, append to Detail:**
-> Measured on the drives 2026-10-02: 1,568 exams in studies matching neither regex, **0 in production**, including 526 post-horizon `1519` (`_weekN`) and nine May 2023 `0721` `_biod` sessions (`tasks/drives_dicom_review.md` §5).
+> Measured on the drives 2026-10-02: 1,568 exams in studies matching neither ingest regex, **0 of them in production**. That included 526 post-horizon `1519` `_weekN` exams (now ingested from the drives) and nine May 2023 `0721` `_biod` sessions, present on the drives only as NIfTI (raw probably still on kenia). `tasks/drives_dicom_review.md` §5.
 
 **`tasks/BACKLOG.md`:**
-> - 🔸 **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). Should be 11.7T. No production row is affected yet (no 11.7T ingested); fix before any 11.7T ingest relies on auto-derivation.
-> - 🔺 **Re-pull from kenia the sessions the regex skipped**, before the retention horizon passes them: `1519` `_weekN` (Mar 2022, if not taken from the drives), `0721` `_biod` (May 2023), and the phantoms. It depends on D3(a).
-> - 🔸 **Ask the `S:\gnuclear` owner about 18 `FDK` reconstructions** in the snapshot but not in production (`drives_dicom_review.md` Q6).
+> - 🔸 **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T. Production is unaffected: the 11.7T rows ingested by stream B set `instrument_model` explicitly. Fix before any 11.7T ingest relies on auto-derivation.
+> - 🔺 **Re-pull from kenia the sessions the regex skipped, before the retention horizon passes them:** the `0721` `_biod` sessions (May 2023) and any other unparsed study. It depends on D3(a).
+> - 🔸 **Ask the `S:\gnuclear` owner about 18 Molecubes `FDK` reconstructions** of Marina's `1321` CTs (Aug 2023). They are in the snapshot but not in production (`drives_dicom_review.md` Q6).
+> - 🔸 **`linker.create_hardlink` silently merges into an existing link folder** (stream F's finding). Stream B's batches were guarded by `tools/drive_staging/check_link_collisions.py` (before) and `verify_links_strict.py` (after), and all its links are exact. The engine fix (refuse a taken name) is still open.
+> - 🔸 **The regen worklist assumes a re-pull from the platform host.** That is false for data from external drives, so convert before ingest, from the staging (`tools/drive_staging/convert_staged_exams.py`).
 > - Low: **~83 `1519` 2020 sessions survive only as derivatives.** Check `K:\gjesus\MRI` once, off-peak.
+> - Low: **ask Claudia about B08's `20240424_120501_I01Tdnrn01_1_2`**: its folder says mouse 01 and its subject file says 02 (Q8).
+> - Low: **the 3 X1 rows use the generic-DICOM shape** (`series/` + a `dicom` block). Their project link mirrors the whole acquisition folder, sidecar included (§7b).
 
-**`CHANGELOG.md`** (on the ingest, not now):
-> 2026-10-0x — Drives' DICOM stream: …
+**`CHANGELOG.md`:**
+> **2026-10-02 / 04 — Historical drives, DICOM stream (stream B), in true production.**
+> - **Ingested 1,764 acquisitions from the operators' drives:** `0619`, `0420`, `1519` (2020 + 2022), `1319` PET/CT, phantoms/collaborations, Madrid ICON as `XMRI`, and `1019` 2021 image exams.
+> - **Created `AE-biomaGUNE-1319` (`PROJ-0061`)**; `1519` was reopened by the coordinator.
+> - **Applied Ryan's rule:** register an MRI exam only with DICOM, converting with Dicomifier before ingest where possible. 24 exams with no reconstructed image are kept as other data, with a README.
+> - **Found that the 2026-06 kenia pull silently skipped every study whose name the ingest regex cannot parse** (1,568 drive exams; D3).
+> - **Found the "50T" scanner-model bug.**
+> - **Checked every link** for stream F's silent-merge hazard.
+> - Review: `tasks/drives_dicom_review.md`.
 
 **`historical_drives_closeout_plan.md` Step 5 item 4:**
-> Phase 1 ✅ 2026-10-02 (`drives_dicom_review.md`); Q1–Q7 to Ryan.
+> ✅ DONE 2026-10-04: +1,764 acquisitions, verified (`drives_dicom_review.md` §7b). Open: Q8 (Claudia), and the BACKLOG items above.
