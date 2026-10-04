@@ -137,11 +137,13 @@ def split_dest(dest, project_folder):
     return sub, name
 
 
-def _plan_tree(H, NP, base, rows, members, by_key, proj, frozen):
+def _plan_tree(H, NP, nas, base, rows, members, by_key, proj, frozen):
     """One Planner pass over a project's rows with `frozen` ({folder node key: rendered path}: the tree's _PATHMAP
     plus the decisions taken so far). -> (planner, items, dests)."""
     planner = H.Planner(base, strategy="gain")          # A's default, pinned: $HP_STRATEGY must not change a plan
     planner.fixed = dict(frozen)
+    if hasattr(planner, "load_index"):                  # A, 2026-10-04: pin the files already placed (their _INDEX path)
+        planner.load_index(os.path.join(nas, base, H.INDEX_NAME))     # so a re-plan after the index step is exact
     items = []
     for r in sorted(rows, key=lambda x: x["acq_id"]):
         m = members[r["acq_id"]]
@@ -178,7 +180,7 @@ def plan_destinations(rows, members, nas, by_key=None, projects=None):
         p0 = H.Planner(base)
         p0.load_pathmap(os.path.join(nas, base, H.PATHMAP_NAME))
         nas_frozen = dict(p0.fixed)
-        planner, items, dests = _plan_tree(H, NP, base, rs, members, by_key, proj, nas_frozen)
+        planner, items, dests = _plan_tree(H, NP, nas, base, rs, members, by_key, proj, nas_frozen)
         frozen = dict(nas_frozen)
         for it in items:                                  # (1) a study folder of any file is one for all of them
             ri = it.extra["ri"]
@@ -190,9 +192,9 @@ def plan_destinations(rows, members, nas, by_key=None, projects=None):
                 label = planner.roots[(tag, nk)]
                 frozen[nk] = f"{tag}\\{H.short_name(label, planner.short[nk]) if nk in planner.short else label}"
         if frozen != nas_frozen:
-            planner, items, dests = _plan_tree(H, NP, base, rs, members, by_key, proj, frozen)
+            planner, items, dests = _plan_tree(H, NP, nas, base, rs, members, by_key, proj, frozen)
         for _ in range(4):                                # (2) freeze all decisions: the plan must not move
-            p2, i2, d2 = _plan_tree(H, NP, base, rs, members, by_key, proj, {**nas_frozen, **planner.nodes})
+            p2, i2, d2 = _plan_tree(H, NP, nas, base, rs, members, by_key, proj, {**nas_frozen, **planner.nodes})
             if d2 == dests:
                 break
             planner, items, dests = p2, i2, d2

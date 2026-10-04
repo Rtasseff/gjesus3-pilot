@@ -320,7 +320,9 @@ calls A's functions (A's worktree is imported read-only, without writing bytecod
   therefore (1) renders a folder that is the study folder of any file as a study folder for everything in it, and (2)
   re-plans with every decision frozen until nothing changes (a fixed point). **Re-planning after any of the index merges gives
   the 153 listed destinations again** (checked against the real trees and against the rehearsal's merged copy: 0 differ), and
-  the index step freezes the folders of the whole plan at its first run.
+  the index step freezes the folders of the whole plan at its first run. (A's own `Planner.load_index`, which pins files
+  already placed and which A added at 11:16 on 2026-10-04 for the same kind of drift, is used too, so a re-plan after the
+  merge returns each merged file's recorded path exactly.)
 
 | list | rows | GB | originals | projects | links removed |
 |---|---:|---:|---:|---|---:|
