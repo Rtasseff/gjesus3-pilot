@@ -20,7 +20,7 @@ from pathlib import Path
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
     metadata_sidecar, provenance, resolver, enrichment, locking,
-    subjects_table, project_naming, user_tables,
+    subjects_table, project_naming, user_tables, unparsed,
 )
 import create_project as create_project_mod
 import animal_db
@@ -1800,17 +1800,31 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     return acq_id_str, True
 
 
-def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
+def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
+              unparsed_report=None):
     """Run batch ingestion from a batch config.
+
+    `unparsed_report`: optional path. Every parse target (for MRI: every study
+    folder) whose name matched no filename_parse rule is written there as a CSV
+    (ingest/unparsed.py), right after discovery, so it survives a later crash.
+    Written in --dry-run too; it is a plain file at the path given, never a
+    registry. The BATCH SUMMARY lists the same targets either way.
 
     Returns list of (acq_id, success) tuples.
     """
-    cases = config.expand_batch(cfg, nas_root=nas_root)
+    unparsed_records = []
+    cases = config.expand_batch(cfg, nas_root=nas_root, unparsed=unparsed_records)
     # Stamp ingest_config onto every case (set in main()).
     ingest_config_path = cfg.get("_ingest_config_path", "")
     for case in cases:
         case["ingest_config"] = ingest_config_path
     log(f"Batch: {len(cases)} cases discovered")
+    if unparsed_records:
+        log(f"{unparsed.headline(unparsed_records)}; NOTHING under them will be "
+            f"ingested (listed in the BATCH SUMMARY).", "WARN")
+    if unparsed_report:
+        n_rows = unparsed.write_csv(unparsed_records, unparsed_report)
+        log(f"Unparsed report: {n_rows} row(s) -> {unparsed_report}")
 
     # Pre-flight: if any case will hit the animal DB for subject enrichment but
     # credentials are absent, warn ONCE up front — otherwise every subject
@@ -1871,6 +1885,17 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
         print(f"  Registered WITHOUT a project link (name taken): {len(refused)}")
         for aid, why in refused:
             print(f"    {aid}: {why}")
+    if unparsed_records:
+        # Not counted in Total/Failed above: these never became cases. Loud on
+        # purpose -- before 2026-10-05 they left only per-exam SKIP lines.
+        print(f"  {unparsed.headline(unparsed_records)}")
+        print("  NOTHING under them was ingested:")
+        for line in unparsed.detail_lines(unparsed_records):
+            print(f"    {line}")
+        if unparsed_report:
+            print(f"  Full list (paths, reasons): {unparsed_report}")
+        else:
+            print("  Full list (paths, reasons): re-run with --unparsed-report <file.csv>")
     print()
     return results
 
@@ -2019,6 +2044,18 @@ def main():
             "index + every per-project index (the old always-on behaviour)."
         ),
     )
+    parser.add_argument(
+        "--unparsed-report",
+        metavar="CSV",
+        help=(
+            "Batch configs only: also write every parse target (for MRI, every "
+            "study folder) whose name matched no filename_parse rule to this CSV, "
+            "one row per study folder with its exam-folder count, path and "
+            "reason. Written in --dry-run too. It is a plain report at the path "
+            "you give (keep it off the NAS registries/ folder), not a registry. "
+            "The BATCH SUMMARY lists the same study folders either way."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -2066,6 +2103,9 @@ def main():
         log(f"Ingest config: {ingest_config_rel}")
 
     touched_acq_ids = []
+    if args.unparsed_report and args.interactive:
+        log("--unparsed-report is ignored in interactive mode (no discovery, "
+            "so nothing can go unparsed).", "WARN")
     if args.interactive:
         run_interactive(
             nas_root,
@@ -2085,9 +2125,13 @@ def main():
             results = run_batch(
                 cfg, nas_root,
                 dry_run=args.dry_run, nas_unc=nas_unc, delete_source=args.delete_source,
+                unparsed_report=args.unparsed_report,
             )
             touched_acq_ids = [aid for aid, ok in results if ok and aid]
         else:
+            if args.unparsed_report:
+                log("--unparsed-report is ignored for a single-case config (no "
+                    "discovery, so nothing can go unparsed).", "WARN")
             # Single-case config — validate + resolve registry: block.
             cfg["ingest_config"] = ingest_config_rel
             try:

@@ -357,17 +357,41 @@ function renderTable(cases) {
     `<tbody>${rows.join("")}</tbody></table>`;
 }
 
-// "Dropped" = folders that matched the scan pattern but aren't scans. For
-// ParaVision that's the housekeeping siblings (AdjResult, subject, …) beside the
-// numbered exam folders — expected and harmless. Show them plainly so the
-// "N dropped" count never reads as an error.
-function renderDropped(dropped) {
+// Two different things reach this box, and they must never read alike:
+//  - NOT PARSED study folders: the study's NAME matches no naming rule, so NONE
+//    of its exams is ingested. One entry per study (grouped in preview.py), loud,
+//    with its exam-folder count. Until 2026-10-05 these appeared here one line
+//    per exam, labelled housekeeping: the silent skip (STATUS §0 D3).
+//  - housekeeping: folders that matched the scan pattern but aren't scans (the
+//    AdjResult / subject / … siblings beside the numbered exam folders) —
+//    expected and harmless, shown plainly so the count never reads as an error.
+function unparsedLabel(u) {
+  const ex = u.n_exam_folders || 0;
+  const other = (u.n_matches || 0) - ex;
+  if (!ex) return `${u.n_matches} match(es)`;
+  return `${ex} exam folder(s)` + (other > 0 ? ` + ${other} other entr${other === 1 ? "y" : "ies"}` : "");
+}
+
+function renderDropped(dropped, unparsed) {
   const box = $("#dropped");
-  if (!dropped || !dropped.length) { box.innerHTML = ""; box.style.display = "none"; return; }
-  const names = dropped.map((d) => esc(d.name)).join(", ");
-  box.innerHTML = `<span class="muted">${dropped.length} non-scan folder(s) skipped ` +
-    `(normal ParaVision housekeeping, nothing to ingest): ${names}</span>`;
-  box.style.display = "";
+  const studies = unparsed || [];
+  const housekeeping = (dropped || []).filter((d) => !d.unparsed);
+  const parts = [];
+  if (studies.length) {
+    const nEx = studies.reduce((n, u) => n + (u.n_exam_folders || 0), 0);
+    parts.push(`<h4>⚠ ${studies.length} study folder(s) NOT PARSED — the name matches no ` +
+      `naming rule, so NONE of their ${nEx} exam folder(s) will be ingested. ` +
+      `Tell the Data Office:</h4><ul>` +
+      studies.map((u) => `<li><code>${esc(u.target)}</code> — ${esc(unparsedLabel(u))}</li>`).join("") +
+      "</ul>");
+  }
+  if (housekeeping.length) {
+    const names = housekeeping.map((d) => esc(d.name)).join(", ");
+    parts.push(`<span class="muted">${housekeeping.length} non-scan folder(s) skipped ` +
+      `(normal ParaVision housekeeping, nothing to ingest): ${names}</span>`);
+  }
+  box.innerHTML = parts.join("");
+  box.style.display = parts.length ? "" : "none";
 }
 
 let lastDicomifier = null;   // {available, version} after a preview; null before
@@ -423,12 +447,18 @@ async function preview() {
     }
     renderProjectSummary(lastCases);
     renderCollisions(d.collisions, d.existing_targets);
-    renderDropped(d.dropped);
+    renderDropped(d.dropped, d.unparsed);
     renderTable(lastCases);
 
+    const unparsed = d.unparsed || [];
+    const nHousekeeping = (d.dropped || []).filter((x) => !x.unparsed).length;
     let s = `<strong>${d.n_new}</strong> new scan(s) would be ingested`;
     if (d.n_already_ingested) s += `; ${d.n_already_ingested} already ingested (skipped)`;
-    if (d.n_dropped) s += `; ${d.n_dropped} non-scan folder(s) skipped`;
+    if (unparsed.length) {
+      const nEx = unparsed.reduce((n, u) => n + (u.n_exam_folders || 0), 0);
+      s += `; <strong>⚠ ${unparsed.length} study folder(s) NOT PARSED (${nEx} exam folder(s) NOT ingested)</strong>`;
+    }
+    if (nHousekeeping) s += `; ${nHousekeeping} non-scan folder(s) skipped`;
     s += `; ${d.n_matched} scanned.`;
     $("#summary").innerHTML = s;
 
