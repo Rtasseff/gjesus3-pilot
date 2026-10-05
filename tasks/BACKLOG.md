@@ -2223,6 +2223,27 @@ It is the wrong call for a database, which would model the relationship directly
     enough value to justify demanding compliance. A system that earns more trust may earn a
     different boundary — but it must move by agreement, not by a tool assuming it.
 
+## 🔹 Per-user access logging: the feasibility study is done; nothing is switched on (2026-10-05)
+
+**Asked by Ryan, 2026-10-05:** can per-user access be logged on the gjesus3 share and the web apps
+(Finder, Project Manager)? The study is [`access_logging_feasibility.md`](access_logging_feasibility.md);
+every claim in it is tagged as documented, from the repo, or inferred.
+
+- **The NAS: yes.** QuLog Center's SMB access log records user, PC, path and action. It covers the
+  whole NAS, cannot be limited to one folder, and slows file transfer slightly. The NAS administrator
+  switches it on; the repo points to institute IT.
+- **The Finder: no.** It is a static HTML file opened over SMB; only the file read is visible.
+  Serving it over HTTP with Windows sign-in would change that.
+- **The Project Manager: not today.** It is a local program per PC that writes provenance rows only.
+  An audit log stamped with the Windows username is about a day's work; the planned server-era app
+  gets identity for free.
+- **Before any of them:** the DPO's sign-off, a retention limit, and notice to staff and their
+  representatives (GDPR Art. 5, 13, 30, 35; LOPDGDD art. 87; Estatuto de los Trabajadores art. 64.5(f)).
+
+- [ ] Ryan's choice, when he wants one. The study lists four options (ask IT read-only questions;
+  open the DPO conversation; fix the purpose; a short NAS trial with a forwarded copy) and makes no
+  choice.
+
 ## Server-era identity — logged-in user drives ownership + edit rights (2026-08-11)
 
 Context: a **dedicated RDM server for gjesus3 is expected in ~2 months (≈ Oct 2026)**. All
