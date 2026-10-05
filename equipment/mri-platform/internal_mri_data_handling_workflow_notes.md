@@ -296,6 +296,8 @@ The project folder name is set by the platform / instrument software:
 
 The first `<YYYYMMDD>_<time code>` prefix is the *FTP server-side* timestamp of when the folder was created. The remaining components are duplicated (`_<group and date>_<short sample id>_<short project id>` appears twice) plus a trailing `_1_1` — that's a quirk of how the platform writes the folder name, not a meaningful pattern.
 
+**The `<time code>` is the study start (`HHMMSS`).** It matches the study's `subject` file (`SUBJECT_date`) in every study sampled (92 of 92, 2026-10-05), and all 12,825 production MRI acquisitions with a study folder carry it. Since 2026-10-05 its `HHMM` is the per-study part of the project link name (`discovered.study_time` in `mri_bruker.yaml`), because one animal can have two studies on one day: a repeat session, a `_bis` study, or a time-point series. See [10_TOOLS §2.1.5](../../mfb-rdm-docs/10_TOOLS.md).
+
 Per-component breakdown:
 
 | Component | Meaning | Example |

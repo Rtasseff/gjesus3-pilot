@@ -83,10 +83,17 @@ def main(argv=None):
             project_abs = os.path.normpath(os.path.join(nas, folder_rel.lstrip("/")))
             proj_folders[project_abs].add(actual_b)
             src = raw_file_path(nas, r)
-            dest = os.path.join(project_abs, "raw_linked", link_name)
-            if os.path.exists(dest):
+            # 2026-10-05: a dated name that already exists counts only if it IS this
+            # acquisition's file (linker.inspect_link_target); a different file there is a
+            # collision, so the slide keeps its date-less link (the guard below).
+            state, dest, detail = linker.inspect_link_target(project_abs, link_name, src)
+            if state == linker.LINK_OWN:
                 ok_slides.add((project_abs, actual_b))
                 stats["skipped_exist"] += 1
+                continue
+            if state == linker.LINK_TAKEN:
+                print(f"  COLLISION {acq}: raw_linked/{link_name} is taken ({detail}) -- left alone")
+                stats["errors"] += 1
                 continue
             if args.dry_run:
                 ok_slides.add((project_abs, actual_b))

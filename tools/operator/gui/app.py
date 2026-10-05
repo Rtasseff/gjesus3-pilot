@@ -144,8 +144,11 @@ MRI_LABEL = "Internal MRI (Bruker ParaVision)"
 _MRI_MODEL_MAP = {"7T": "Bruker BioSpec 7T", "11.7T": "Bruker BioSpec 11.7T"}
 # discovered.* fields offered as link-name palette chips (the scan-name +
 # protocol fields the mri_bruker template exposes), plus resolver-supplied extras.
+# `study_time` (HHMM of the study folder's YYYYMMDD_HHMMSS_ prefix) is the per-study
+# part of the default link name since 2026-10-05: without it two studies of one
+# animal on one day collide (the ingest refuses the second).
 MRI_LINK_PALETTE_KEYS = [
-    "mri_exam_number", "mri_recon_indices", "mri_sequence_name",
+    "mri_exam_number", "mri_recon_indices", "study_time", "mri_sequence_name",
     "animal_num", "project_code", "mri_study_name",
 ]
 # The full fixed resolver-context token set (same as the microscopy palette),

@@ -137,16 +137,23 @@ def main(argv=None):
             continue
 
         raw_linked = os.path.join(project_abs, "raw_linked")
-        dest = os.path.join(raw_linked, link_name)
         # NB: the WSL run left EMPTY link-folder shells (parent dir created, then
-        # os.link EPERM'd on the first file). So existence != complete — compare
-        # the DICOM count. create_hardlink is idempotent (links only missing files).
+        # os.link EPERM'd on the first file). So existence != complete. Since
+        # 2026-10-05 the inspection is by file identity (linker.inspect_link_target):
+        # complete -> skip; only some of its own files (or an empty shell) -> complete
+        # it; a folder holding another acquisition's files -> a collision, never
+        # merged into (the old DICOM-count test counted a partner's files as ours).
         src_n = sum(1 for fn in os.listdir(data_dir) if fn.lower().endswith(".dcm"))
-        dst_n = (sum(1 for fn in os.listdir(dest) if fn.lower().endswith(".dcm"))
-                 if os.path.isdir(dest) else 0)
-        if dst_n >= src_n:
+        state, dest, detail = linker.inspect_link_target(project_abs, link_name, data_dir)
+        if state == linker.LINK_OWN:
             stats["skipped_complete"] += 1
             continue
+        if state == linker.LINK_TAKEN:
+            print(f"  COLLISION {acq_id}: raw_linked/{link_name} is taken ({detail}) -- left alone")
+            stats["errors"] += 1
+            continue
+        dst_n = (sum(1 for fn in os.listdir(dest) if fn.lower().endswith(".dcm"))
+                 if os.path.isdir(dest) else 0)
         if args.dry_run:
             print(f"  [dry-run] {acq_id} -> raw_linked/{link_name}  (have {dst_n}/{src_n})")
             stats["created"] += 1

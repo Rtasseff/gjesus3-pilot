@@ -10,7 +10,9 @@ Outputs:
   read-only too). For folder-primary acquisitions (`<ACQ-ID>.data/` for
   internal MRI + NI) directories cannot be hard-linked on Windows, so the
   link is a REAL folder filled with one hard link per file. See
-  `create_hardlink` and tasks.md §3.1 for the decision record.
+  `create_hardlink` and tasks.md §3.1 for the decision record. A link name
+  that is already taken is refused (`LinkCollisionError`), never merged into
+  (2026-10-05; `inspect_link_target` is the read-only check).
 - lnk (LEGACY, superseded): Windows .lnk shortcut targeting the primary via
   UNC path, created via PowerShell WScript.Shell. Kept for reference / the
   porting seam; `create_hardlink` is the path used by ingest. Researchers
@@ -131,6 +133,125 @@ def canonical_to_unc(canonical_path, nas_unc_root):
     return f"\\\\{root}\\{rel}"
 
 
+class LinkCollisionError(Exception):
+    """`raw_linked/<link_name>` is taken by something that is not this acquisition's own files.
+
+    Raised by `create_hardlink` instead of writing into the destination
+    (2026-10-05). Before that, a taken name was silently MERGED: a folder
+    primary was linked file by file into the other acquisition's folder, and a
+    file primary was silently skipped, so the second acquisition got no link
+    of its own and no error (stream F, 2026-10-04: 209 production acquisitions).
+
+    Deliberately NOT an `OSError`: ingest Step 12 and `manager/raw_import`
+    queue an `OSError` to `registries/pending_links.csv` for a later relink
+    pass, and relinking a taken name would only collide again. A collision
+    needs a distinct name, which is a person's decision.
+    """
+
+    def __init__(self, dest, reason):
+        super().__init__(f"project link name already taken: {dest} ({reason})")
+        self.dest = dest
+        self.reason = reason
+
+
+# What `inspect_link_target` can say about `raw_linked/<link_name>`.
+LINK_FREE = "free"        # nothing there: the link can be created
+LINK_OWN = "own"          # exactly this acquisition's files, complete: nothing to do
+LINK_PARTIAL = "partial"  # only this acquisition's files (or an empty folder), some missing: completable
+LINK_TAKEN = "taken"      # anything else: never written into
+
+PENDING_STANDIN_SUFFIX = ".PENDING-LINK.txt"
+
+
+def _primary_files(raw_primary_abs):
+    """``{relative path: absolute path}`` of a folder primary's files (normcased keys)."""
+    out = {}
+    for root, _dirs, files in os.walk(raw_primary_abs):
+        for fn in files:
+            full = os.path.join(root, fn)
+            out[os.path.normcase(os.path.relpath(full, raw_primary_abs))] = full
+    return out
+
+
+def _samefile(a, b):
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def inspect_link_target(project_folder_abs, link_name, raw_primary_abs=None):
+    """Read-only: what sits at ``<project>/raw_linked/<link_name>``, and is it this acquisition's?
+
+    Returns ``(state, dest, detail)`` where ``state`` is one of:
+
+    - ``LINK_FREE``: nothing there.
+    - ``LINK_OWN``: this acquisition's link, complete. A file primary: the
+      same file (``os.path.samefile``). A folder primary: every one of its
+      files, each the same file as the raw file at the same relative path,
+      and no other file.
+    - ``LINK_PARTIAL`` (folder primary only): only this acquisition's own
+      files, but not all of them, or an empty folder (an interrupted run, or
+      the empty shell a mount that cannot hard-link leaves behind). Completing
+      it adds only this acquisition's files, so nothing is merged.
+    - ``LINK_TAKEN``: anything else. A different file, another acquisition's
+      files (a merge), a folder where a file belongs or the reverse.
+
+    ``raw_primary_abs=None`` is the check a NEW acquisition makes before its
+    copy (ingest Step 5.5). Its raw files do not exist yet, so nothing at the
+    name can be its own: anything there, even an empty folder, or the
+    ``<name>.PENDING-LINK.txt`` stand-in of a link still queued for another
+    acquisition, is ``LINK_TAKEN``.
+
+    ``detail`` is a short human-readable reason ("" when free).
+    """
+    dest = os.path.join(project_folder_abs, "raw_linked", link_name)
+    new_acquisition = raw_primary_abs is None or not os.path.exists(raw_primary_abs)
+    if not os.path.lexists(dest):
+        if new_acquisition and os.path.exists(dest + PENDING_STANDIN_SUFFIX):
+            return (LINK_TAKEN, dest,
+                    f"claimed by a queued link ({link_name}{PENDING_STANDIN_SUFFIX}, "
+                    f"registries/pending_links.csv)")
+        return LINK_FREE, dest, ""
+    if new_acquisition:
+        what = "a folder" if os.path.isdir(dest) else "a file"
+        return (LINK_TAKEN, dest,
+                f"{what} with this name already exists; a new acquisition's link "
+                f"name must be unused")
+
+    if not os.path.isdir(raw_primary_abs):
+        # File primary: the one name must be this very file.
+        if os.path.isdir(dest):
+            return LINK_TAKEN, dest, "a folder sits where this file's link belongs"
+        if _samefile(dest, raw_primary_abs):
+            return LINK_OWN, dest, "already this acquisition's link"
+        return LINK_TAKEN, dest, "a different file has this name"
+
+    # Folder primary: a real folder holding only this acquisition's files.
+    if not os.path.isdir(dest):
+        return LINK_TAKEN, dest, "a file sits where this acquisition's link folder belongs"
+    own = _primary_files(raw_primary_abs)
+    present = 0
+    foreign = []
+    for root, _dirs, files in os.walk(dest):
+        for fn in files:
+            full = os.path.join(root, fn)
+            rel = os.path.normcase(os.path.relpath(full, dest))
+            src = own.get(rel)
+            if src is not None and _samefile(full, src):
+                present += 1
+            else:
+                foreign.append(os.path.relpath(full, dest))
+    if foreign:
+        return (LINK_TAKEN, dest,
+                f"the folder holds {len(foreign)} file(s) that are not this "
+                f"acquisition's, e.g. {foreign[0]!r}")
+    if present == len(own):
+        return LINK_OWN, dest, "already this acquisition's link"
+    return (LINK_PARTIAL, dest,
+            f"holds {present} of this acquisition's {len(own)} files and nothing else")
+
+
 def create_hardlink(project_folder_abs, link_name, raw_primary_abs, dry_run=False):
     """Create a hard link (or folder of hard links) in <project>/raw_linked/.
 
@@ -152,6 +273,12 @@ def create_hardlink(project_folder_abs, link_name, raw_primary_abs, dry_run=Fals
       hard-linked). The flat `.data` layout means this is normally a single
       level of DICOMs, but the walk handles nesting defensively.
 
+    **Never merges (2026-10-05).** The destination is inspected first
+    (`inspect_link_target`). A name taken by anything that is not exactly this
+    acquisition's own files raises `LinkCollisionError` and nothing is
+    written. Before this, a taken folder name was filled in with the second
+    acquisition's files and a taken file name was skipped, both silently.
+
     Args:
         project_folder_abs: Absolute local path to the project folder on the
             machine running the script (e.g. ``J:\\gjesus3-data\\projects\\my-project``).
@@ -162,24 +289,34 @@ def create_hardlink(project_folder_abs, link_name, raw_primary_abs, dry_run=Fals
             either a single file or the ``<ACQ-ID>.data`` folder. MUST be on
             the same NAS volume as ``project_folder_abs`` (hard links cannot
             cross volumes).
-        dry_run: If True, return the would-be destination without creating it.
+        dry_run: If True, create nothing: return the would-be destination,
+            after the same read-only collision check (a taken name still
+            raises `LinkCollisionError`).
 
     Returns:
         Absolute path to the created (or would-be) link / folder.
 
     Raises:
+        LinkCollisionError: If the name is taken by anything that is not
+            exactly this acquisition's own files (not an OSError, so callers
+            never queue it for a relink).
         RuntimeError: If ``raw_primary_abs`` does not exist.
         OSError: If the hard link cannot be created (e.g. cross-volume, or the
             filesystem does not support hard links).
 
-    Idempotent: an existing file link, or an already-present file inside the
-    folder-of-links, is left untouched — so a partially-created folder is
-    completed on a re-run.
+    Idempotent: re-running for the same acquisition is a no-op when its link
+    is complete, and completes a folder-of-links that holds only some of its
+    own files (an interrupted run, or an empty shell).
     """
     raw_linked_dir = os.path.join(project_folder_abs, "raw_linked")
     dest = os.path.join(raw_linked_dir, link_name)
 
     if dry_run:
+        if raw_primary_abs and os.path.exists(raw_primary_abs):
+            state, dest, detail = inspect_link_target(
+                project_folder_abs, link_name, raw_primary_abs)
+            if state == LINK_TAKEN:
+                raise LinkCollisionError(dest, detail)
         return dest
 
     if not os.path.exists(raw_primary_abs):
@@ -187,10 +324,17 @@ def create_hardlink(project_folder_abs, link_name, raw_primary_abs, dry_run=Fals
             f"raw primary not found, cannot hard-link: {raw_primary_abs!r}"
         )
 
+    state, dest, detail = inspect_link_target(project_folder_abs, link_name, raw_primary_abs)
+    if state == LINK_TAKEN:
+        raise LinkCollisionError(dest, detail)
+    if state == LINK_OWN:
+        return dest
+
     os.makedirs(raw_linked_dir, exist_ok=True)
 
     if os.path.isdir(raw_primary_abs):
-        # Folder primary -> real folder of per-file hard links.
+        # Folder primary -> real folder of per-file hard links. The folder is
+        # free, or holds only this acquisition's own files (checked above).
         os.makedirs(dest, exist_ok=True)
         for root, _dirs, files in os.walk(raw_primary_abs):
             rel = os.path.relpath(root, raw_primary_abs)
@@ -203,9 +347,8 @@ def create_hardlink(project_folder_abs, link_name, raw_primary_abs, dry_run=Fals
                     os.link(src_f, dst_f)
         return dest
 
-    # File primary -> single hard link.
-    if not os.path.exists(dest):
-        os.link(raw_primary_abs, dest)
+    # File primary -> single hard link (the name is free: checked above).
+    os.link(raw_primary_abs, dest)
     return dest
 
 

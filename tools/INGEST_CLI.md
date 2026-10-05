@@ -108,12 +108,16 @@ The pipeline fills these itself: `acq_id`, `registration_datetime`, `primary_kin
 By default, the project link placed under `/projects/<proj>/raw_linked/` is named after `original_name` (e.g. the `.czi` filename or the collaborator zip name). For systematic-naming environments (internal MRI, future internal NI) where the *source* identifier is a folder path + numeric position, the default would collide when multiple sessions land in the same project (e.g. four animals with the same exam number). Set `link_filename:` at the top level of the YAML to override. (The link is a hard link since 2026-06-02 — the resolved value is the link name verbatim, with no extension; see [10_TOOLS §2.1.1](../mfb-rdm-docs/10_TOOLS.md).)
 
 ```yaml
-# Internal MRI default — unique per (animal, exam, reconstruction):
-link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
-# Resolved example: MRI_jrc_251016_m17_0424_20251016_29_3
+# Internal MRI default — unique per (animal, study, exam, reconstruction):
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.study_time}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
+# Resolved example: MRI_m17_0424_20251016_0838_29_3
 ```
 
+`${discovered.study_time}` (added 2026-10-05) is the study start time, `HHMM`, from the ParaVision study folder's `YYYYMMDD_HHMMSS_` prefix. Without it, two studies of one animal on one day get the same name for every exam number they share. Links made before 2026-10-05 keep the names they were made with.
+
 The resolver context includes every `discovered.*` field (see the per-instrument template header for the full reference card per instrument), every resolved registry field (`${sample_id}`, `${instrument}`, etc.), and the computed `${acq_id}` + `${acq_date}` (YYYYMMDD). Unresolved `${X}` references log a WARN and leave the literal in place — better than silently producing a broken name.
+
+**A link name that is already taken is refused (2026-10-05).** Before anything is copied, the ingest checks the project's `raw_linked/` for the resolved name. If anything is already there (another acquisition's link, any file or folder, or the `.PENDING-LINK.txt` stand-in of a link still queued), that case **fails**: nothing is copied or registered, and the log and batch summary say which name is taken. `--dry-run` runs the same check, and also flags two cases in one batch that would get the same name. The fix is a distinct name (edit `link_filename:`), or, if the case is a re-export of data already ingested, not ingesting it. Earlier, the second acquisition was silently merged into the first one's link folder.
 
 ### Preclinical metadata surface — `subject:` / `condition:` / `anatomy:` (Phase 3)
 
@@ -194,7 +198,7 @@ tools/configs/
 |------------|----------|-------|
 | Zeiss AxioScan 7 (`ZWSI`, `.czi`) | [`tools/templates/instruments/axioscan7.yaml`](templates/instruments/axioscan7.yaml) | MFB filename convention; auto-create projects from filename's `<project>` chunk; default `link_filename: ${instrument}_${original_name}` |
 | Zeiss Cell Observer cells-mode (`CELL`, `.czi`) | [`tools/templates/instruments/cell_observer_cells.yaml`](templates/instruments/cell_observer_cells.yaml) | Path-and-filename parse for live-cell / cell-assay workflows (Ainhize-acquired); default `link_filename: ${instrument}_${original_name}` |
-| Internal MRI / Bruker ParaVision (`MRI`, folder bundle) | [`tools/templates/instruments/mri_bruker.yaml`](templates/instruments/mri_bruker.yaml) | Folder-as-primary layout, `regex:` extract on the messy FTP folder name, `reconstructions:` flag, default `link_filename: MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}` |
+| Internal MRI / Bruker ParaVision (`MRI`, folder bundle) | [`tools/templates/instruments/mri_bruker.yaml`](templates/instruments/mri_bruker.yaml) | Folder-as-primary layout, `regex:` extract on the messy FTP folder name, `reconstructions:` flag, default `link_filename: MRI_${sample_id}_${acq_date}_${discovered.study_time}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}` |
 
 Each template's **header comment block lists every `discovered.*` field** the operator can reference in resolver-evaluated YAML fields — the per-instrument reference card.
 

@@ -323,13 +323,13 @@ function renderCollisions(cols, existing) {
   const box = $("#collisions");
   const parts = [];
   if (cols && cols.length) {
-    parts.push(`<strong>⚠ ${cols.length} link-name collision(s)</strong> — two or more scans would write the SAME link name into the SAME project (one would overwrite the other). Make the link name unique (keep exam/recon/sample), or split the run:`);
+    parts.push(`<strong>⚠ ${cols.length} link-name collision(s)</strong> — two or more scans would get the SAME link name in the SAME project. The ingest refuses every scan after the first (nothing is copied for them). Make the link name unique (keep study time/exam/recon/sample), or split the run:`);
     parts.push("<ul>" + cols.map((c) =>
       `<li><code>${esc(c.link_filename)}</code> in <code>${esc(c.project_name)}</code> ← ${c.acq_ids.length} scans: ${esc(c.acq_ids.join(", "))}</li>`
     ).join("") + "</ul>");
   }
   if (existing && existing.length) {
-    parts.push(`<strong>⚠ ${existing.length} link target(s) already exist on the RDM System</strong> for a different acquisition — ingesting would collide with a previously-linked scan: ${existing.slice(0, 6).map((e) => `<code>${esc(e.link_filename)}</code>`).join(", ")}${existing.length > 6 ? " …" : ""}`);
+    parts.push(`<strong>⚠ ${existing.length} link name(s) are already taken on the RDM System</strong> by a previously-linked scan — the ingest refuses these scans (nothing is copied for them) until they get a distinct link name: ${existing.slice(0, 6).map((e) => `<code>${esc(e.link_filename)}</code>`).join(", ")}${existing.length > 6 ? " …" : ""}`);
   }
   box.innerHTML = parts.join("<br>");
   box.style.display = parts.length ? "" : "none";
