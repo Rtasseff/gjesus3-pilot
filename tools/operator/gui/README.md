@@ -134,9 +134,11 @@ The spec defaults to `ONEFILE = True` — one self-extracting `gjesus3_ingest.ex
 chosen so the data office can drop a single file onto the NAS
 (`...\tools\gjesus3_ingest.exe`) and run it in place. (Set `ONEFILE = False` in
 the spec for the faster-starting one-folder build, where operators copy the whole
-folder locally.) The deployed production exe is the ~95 MB single-file build;
-it was last rebuilt and redeployed **2026-09-04** (token-valued MRI destination
-project), 95,897,468 bytes.
+folder locally.) The deployed production exe is the ~96 MB single-file build;
+it was last rebuilt and redeployed **2026-10-05** (a taken project link name is
+refused, never merged; the MRI link name carries the study time), 96,015,460
+bytes, sha256 `54c641f1…253732`. Previous: 2026-09-04 (token-valued MRI
+destination project), 95,897,468 bytes.
 
 > **⚠️ Build OUTSIDE OneDrive.** This repo lives under a OneDrive-synced folder,
 > and OneDrive locks PyInstaller's build artifacts mid-build (`PermissionError`
@@ -189,7 +191,12 @@ Then confirm, on disk, the things only a real commit produces:
 | microscopy: a real `.czi` batch | exercises `czifile`/`numpy`/`tifffile` |
 
 The 2026-09-04 rebuild was verified exactly this way (4 MRI acquisitions across
-two auto-created projects, 24 hard links).
+two auto-created projects, 24 hard links). So was the 2026-10-05 one, which adds a
+**link-collision check**: plant a file under one exam's link name in the test NAS's
+`raw_linked\`. The preview must show it as taken, and the real commit must refuse
+that exam at Step 5.5, with nothing copied, while committing the others. It also
+added a real `.czi` (one small LSM 900 primary) to close the microscopy row. Record:
+`tasks/link_collision_fix_review.md` §12.
 
 ### Deploying to the NAS
 
