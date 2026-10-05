@@ -1231,11 +1231,11 @@ studies it globbed and dropped**, because nothing recorded them. Every other los
 system leaves a trace (`pending_dicom_regen.csv`, `pending_subject_metadata.csv`, the
 `no-source` status). This one leaves none.
 
-- [ ] **Make unparsed matches loud.** When `expand_batch` globs a path and `filename_parse` yields
+- [x] *(✅ Done 2026-10-05, merge `188d737`: a NOT PARSED section, `--unparsed-report <csv>`, and the lists in the GUI and `mri-ingest`. The durable `pending_unparsed.csv` queue was not built; it is STATUS §0.4 N5.)* **Make unparsed matches loud.** When `expand_batch` globs a path and `filename_parse` yields
   no match, it should end up somewhere durable — a skipped-items report per run at minimum, ideally
   a `pending_unparsed.csv` in the same spirit as the other queues. **This is a code change to
   `ingest/config.py`** (approved by Ryan, 2026-10-05, D3).
-- [ ] **Then quantify the historical damage**: re-glob the kenia tree (or the staged mirror) with
+- [x] *(✅ Done 2026-10-05: `tasks/mri_unparsed_rescan_review.md`. 1,481 study folders / 11,602 exam folders match neither regex; 59 / 451 are MFB data missing from gjesus3. The follow-ups are STATUS §0.4.)* **Then quantify the historical damage**: re-glob the kenia tree (or the staged mirror) with
   the ingest's own pattern, run each match through both regexes, and count the non-matchers. Until
   that is done, "the historical MRI pull is complete" is an assumption, not a fact.
 - [ ] Do **not** fix this by relaxing the regex globally. `m?` was used for the single-study G1
@@ -1370,6 +1370,8 @@ it was reconstructable at all.
 
 ## 🔸 MODERATE — internal MRI older than ~2022-01 exists ONLY on researcher shares (2026-08-21)
 
+**⚠️ Update 2026-10-05 (D3 re-scan, verified): the scanner's horizon is now 2024-01-05.** The 2022–23 studies were deleted around 2026-08-26, the day PV 6's data folder last changed. Everything gjesus3 pulled in June is safe in `/raw/`. Anything it did not pull from before 2024 is now only on researcher shares, or lost: 57 MFB study folders (STATUS §0.4 N6).
+
 **Cause established for a gap that first showed up as "why isn't `Proyecto 1019` in the registry?"**
 
 The bulk historical MRI ingest (2026-06-13/14; **all 10,330 MRI rows**) read the **scanner host** —
@@ -1388,7 +1390,7 @@ scanner's retention horizon when we pulled.
 
 - [ ] **The general consequence, which is bigger than 1019:** any internal MRI older than ~2022-01
   is recoverable *only* from researcher shares. Nobody has surveyed how much that is.
-- [ ] Ask the platform manager whether there is an actual retention policy, or whether the horizon
+- [ ] *(Now urgent: STATUS §0.4 N1.)* Ask the platform manager whether there is an actual retention policy, or whether the horizon
   simply drifts — that determines whether this recurs.
 
 ### The concrete case: `Proyecto 1019` (2021)
@@ -2169,7 +2171,7 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
 - [ ] **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T.
   - Production is unaffected: the 11.7T rows stream B ingested set `instrument_model` explicitly.
   - Fix it before any 11.7T ingest relies on auto-derivation.
-- [ ] 🔺 **Re-pull from kenia the sessions the regex skipped, before the retention horizon passes them.** That means the `0721` `_biod` sessions (May 2023) and any other unparsed study. It depends on STATUS §0 D3(a).
+- [ ] *(2026-10-05: too late for 2022–23, which the scanner deleted around 2026-08-26. The May 2023 `0721` `_biod` sessions survive only as the drives' NIfTI exports. The 2024–26 MFB studies still on the scanner are STATUS §0.4 N1.)* 🔺 **Re-pull from kenia the sessions the regex skipped, before the retention horizon passes them.** That means the `0721` `_biod` sessions (May 2023) and any other unparsed study. It depends on STATUS §0 D3(a).
 - [ ] **Ask the `S:\gnuclear` owner about 18 Molecubes `FDK` reconstructions** of Marina's `1321` CTs (Aug 2023). They are in the snapshot but not in production (`drives_dicom_review.md` Q6).
 - [ ] **The DICOM-regen worklist assumes a re-pull from the platform host.** That is false for data from external drives, so convert before ingest, from the staging (`tools/drive_staging/convert_staged_exams.py`).
 - [ ] Low: **about 83 `1519` sessions from 2020 survive only as derivatives.** Check `K:\gjesus\MRI` once, off-peak.
