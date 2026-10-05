@@ -119,7 +119,12 @@ The streams that ingested on 2026-10-04 checked every planned link name first, a
   - **Repaired:** 589 links created, and 1,900 foreign names removed from the 7 folders. Each removed file stays reachable through its own acquisition's link.
   - **The final audit:** MISSING 0, POLLUTED 0, OK 19,070.
   - **Verified** by the stream and independently by the coordinator. The record is `tasks/link_collision_fix_review.md`.
-- [ ] **Redeploy the operator GUI exe with the fixed linker** (Ryan's go, 2026-10-05). In progress; see the review §12.
+- [x] *(✅ Done 2026-10-05.)* **Redeploy the operator GUI exe with the fixed linker** (Ryan's go).
+  - It was built from `main` `0c49278` and smoke-tested on a throwaway NAS, including a real refused collision at Step 5.5.
+  - It is deployed to `J:\gjesus3-data\tools\gjesus3_ingest.exe` (SHA-256 `54c641f1…`). The previous exe is backed up in `C:\Users\rtasseff\temp\gjesus3_exe_backup_20261005_150003\`.
+  - `tools\docs\microscopy_guide.html` was refreshed to the repo version.
+  - The record is the review §12.
+- [ ] Low (optional): rebuild `gjesus3_manager.exe` (the Project Manager) with the new linker. Its raw import already refuses a taken name, so this is for consistency only.
 - [ ] Low: make `provenance.has_entry_for_output` compare `output_path` case-insensitively. The share is case-insensitive, so 16 acquisitions carry a provenance row for a link that was never made; the repair has now made those links.
 - [ ] **Audit and repair (Ryan's decision):** list the affected acquisitions (an inode check of each link folder), then add the missing links under distinct names. Additive only: project folders are researcher-owned (05_PROJECTS §3a).
 - [x] The first m12 study of 2026-07-10 avoided it with a scoped config (a `_study1147` suffix).

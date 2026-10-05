@@ -172,7 +172,7 @@ The genuinely in-flight items (kept tight — everything else is in
   - **✅ Project link collisions fixed and repaired (2026-10-05).**
     - The linker refuses a taken name, and MRI link names carry the study time.
     - 589 missing links were created and 7 polluted folders cleaned; the final audit shows 0 missing and 0 polluted.
-    - The GUI exe redeploy is in progress.
+    - The operator GUI exe has been rebuilt with the fix and redeployed (2026-10-05, hash-verified, the old exe backed up).
     - Record: `tasks/link_collision_fix_review.md`.
   - **✅ The same-timestamp clean-up (gate rule R4, stream D) is done: all 4 approved lists, 153 acquisitions (2026-10-04/05).** The last list, `roi_crops` (81, 184 GB), ran on 2026-10-05 on Ryan's instruction. Its run is `RET-20261005-104956-623`; every check passed, and all 81 files hash identical to the drive copies. *(History of the line below:)*
   - **🔶 The same-timestamp clean-up (gate rule R4, stream D): 3 of the 4 approved lists are done (2026-10-04).** Review: `tasks/drives_r4_cleanup_review.md`.
