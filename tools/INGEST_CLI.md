@@ -1,6 +1,6 @@
 # `ingest_raw.py` — CLI Reference
 
-*Last Updated: 2026-09-30*
+*Last Updated: 2026-10-05*
 
 One-page reference for the raw-data ingest tool. For the master map of every tool in this directory, see [`tools/INDEX.md`](INDEX.md). For the operational ("when do I run this, what do I do next") view, see [`mfb-rdm-docs/11_OPERATIONS.md §3.2`](../mfb-rdm-docs/11_OPERATIONS.md). For the full config-schema specification, see [`mfb-rdm-docs/10_TOOLS.md §2.1`](../mfb-rdm-docs/10_TOOLS.md).
 
@@ -50,6 +50,38 @@ By default a CLI ingest does **not** touch the researcher Finder. The global `re
 | `--nas-unc <unc>` | — | `$GJESUS3_UNC` or `\\GJESUS3\gjesus3` | Legacy `.lnk` porting-seam only — **not used by the current hard-link linker** (hard links use local NAS-volume paths). Retained for backward compatibility; safe to omit. |
 | `--project <name-or-id>` | — | — | Project applied to every row this run — a project **name** or a `PROJ-NNNN` id. Resolved at Step 9.5 and recorded as `project_id`. Overrides any value the YAML sets. |
 | `--delete-source` | — | off | Remove the source file/folder after copy + verify succeed. Parent day folder is never touched. Default OFF for safety; opt in per batch. |
+| `--unparsed-report <file.csv>` | — | off | Batch configs: also write every study folder whose name matched no `filename_parse` rule to this CSV, one row per study folder (see [below](#study-folders-that-match-no-parse-rule-not-parsed)). Written in `--dry-run` too. A plain report at the path you give: keep it out of the NAS `registries\` folder. |
+
+---
+
+## Study folders that match no parse rule (`NOT PARSED`)
+
+*(✅ 2026-10-05, Ryan, STATUS §0 D3.)* When a batch finds a match but the config's `filename_parse` rule (its `regex:`, or its `separator` + `fields`) cannot parse the name, **nothing under that name is ingested**. For MRI the rule runs on the **study folder** (`source: parent_name`), so one study name that does not parse drops every exam in the study. Until 2026-10-05 the only trace was one `[expand_batch] SKIP <exam>: …` line per exam, among thousands. That is how `jrc250526_145_0522` (the `m` was left out at the console) went unnoticed for two months.
+
+The run now says so in three places, `--dry-run` included:
+
+- one `[expand_batch] NOT PARSED: …` line right after discovery, plus a `WARN` with the count;
+- a **NOT PARSED** section in the BATCH SUMMARY, with one line per study folder and its exam-folder count. An exam folder is a folder holding `acqp` and `method`, the same test the ingest itself uses:
+
+  ```
+    NOT PARSED: 4 study folder(s) (10 exam folders) matched no filename_parse rule
+    NOTHING under them was ingested:
+      jl260707_1225_m26   1 exam folder
+      jrc221003_0721_m45  3 exam folders
+      jrc250526_145_0522  4 exam folders + 1 other entry
+      jrc260709_phantom   2 exam folders
+  ```
+
+- with **`--unparsed-report <file.csv>`**, the full list as a CSV, one row per study folder. Its columns: `target` (the study folder name), `n_exam_folders`, `n_matches`, `target_path`, `source`, `rule`, `reason`, `pattern`, `config`, `staging_dir`, `matches` (the dropped `<study>/<exam>` names) and `reported_at`. It is written right after discovery, so it survives a batch that fails later. There is no default location: put it beside your batch notes (for example `D:\projects\gjesus3\<batch>\unparsed.csv`), never in the NAS `registries\` folder.
+
+The operator front-ends show the same list. The MRI page of the ingest GUI names each study folder with its exam count, apart from the harmless housekeeping folders, and `mri-ingest` prints the block last, at the confirm prompt.
+
+**What to do with one.** Nothing is lost: the study simply did not go in. Do **not** loosen the shared regex to make it parse (the standing direction is to report, not guess). Ingest it with a scoped one-off config whose `pattern` names exactly that study, as `tools/configs/mri_0522_m145_irene.yaml` does for `jrc250526_145_0522` and the `tools/configs/mri_july_1125/mri_phantom_*.yaml` configs do for the phantoms. Another group's study (initials such as `jl`) is reported too; gjesus3 has so far left those out of scope.
+
+**What this report does not cover:**
+- a `filter:` miss (a deliberate exclusion), a `path_parse` depth mismatch and a non-scan sibling folder: each keeps its own SKIP line;
+- a name starting with `.`: the glob never returns it at all;
+- a study nested as `<study>\Other data\<exam>`: it is reported, but under the name `Other data` (its `target_path` names the real study).
 
 ---
 
