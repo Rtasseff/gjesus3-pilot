@@ -1984,6 +1984,7 @@ place the system promises to be authoritative.
 - These ingests are outside the 2026-10-01 pre-approval, so each needs **Ryan's go**.
 
 - [x] *(Done 2026-10-04: Ryan chose the Data Office, from the scanner; operator `Irene`.)* Decide who ingests them, and how: the Data Office from the scanner, or the operators through the GUI.
+- [ ] **Ask the MRI operators (Irene) to ingest the 5 protocol-1025 sessions of 2026-10-01/02** (m25–m29) through the normal GUI/CLI path. Then check that they are registered.
 - [x] *(Done 2026-10-04: the 9 protocol-1125 sessions, 141 acquisitions. The 5 protocol-1025 sessions of 10-01/02 stay with the operators.)* Ingest the 9 protocol-1125 sessions, and later the 1025 ones, once each operator is known. Each is a normal `mri-ingest`, run from Windows.
 - [x] *(Done 2026-10-04: Ryan said yes; ingested with a blank project, 69 acquisitions.)* Decide whether the 5 phantom/QC studies belong in gjesus3: `jrc260611_SPION`, `jrc_260612_phantom_SPION_RGD`, `jrc260708_phantom`, `jrc260709_phantom` and `jrc260818_Phantom_MnACC`. Their names carry no `m<animal>_<protocol>`, so the ingest regex does not parse them (the silent skip, STATUS §0 D3).
 - [ ] Run the reconciliation again on a schedule. It is read-only: an SFTP listing plus a registry read.
@@ -2070,15 +2071,21 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
 ## 🔺 HIGH — historical drives: the 2b mapping round (Ryan's worksheet) (2026-10-04)
 
 - [ ] **Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv`.** Only the 62 `A` rows matter; a blank row stays in holding.
+  *(2026-10-05: the worksheet was regenerated from the final manifest (290 groups) and shared with Jesus's group as a workbook: `J:\gjesus3-data\projects\_Historical drives - assign to projects (2026-10).xlsx`. It is temporary. When answers come back, join them into the CSV **by `group key`** and follow the runbook.)*
 - [ ] **A session applies it,** following `tasks/drives_nonraw_2b_2c_followup.md`: `remap`, then `apply-raw` (projects on the blank-project raw rows; write-once-if-blank), then `copy --from-holding`. The holding folder is already filled, so D: is not needed.
 - [ ] **Before the D: staging is erased,** keep the record manifest off D: (runbook §2.6). The current one is `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.
 
 ## 🔸 MODERATE — historical drives: holding-folder access, and the held material (2026-10-04)
 
-- [ ] **Holding-folder ACL:** `staging\historical_drives_unassigned\` inherits `staging\`, so the `GJesus` group can modify, not only read. Ryan decides whether it should be read-only for the group.
+- [x] *(Decided 2026-10-05, Ryan: no change. The holding folder keeps `staging\`'s permissions.)* **Holding-folder ACL:** `staging\historical_drives_unassigned\` inherits `staging\`, so the `GJesus` group can modify, not only read. Ryan decides whether it should be read-only for the group.
 - [ ] **Aperio `.svs` (15 files, from the Drive zuri TUNEL zips) and TopSpin NMR (671 experiments)** are held: the instruments are not onboarded, and NMR is not imaging. Revisit if either is ever registered.
 - [ ] Low: **`catalog.py` does not open nested archives.** `nonraw_placement.py nested` is the stopgap; fold it in if the catalog is reused for another drive.
 - [ ] Low: **`historical_paths.py` is now the destination rule for all drive material placed on gjesus3** (streams A, C and D). Consider promoting it into `05_PROJECTS`; that is a spec change, so the Data Office decides.
+
+## 🔹 LOW — small follow-ups from the historical drives (2026-10-05)
+
+- [ ] **`AE-biomaGUNE-0118` ("118 LUCIA"): the animal links are held until Lucia confirms.** The 147 files' project was corrected from `118` to `0118` (Ryan approved, 2026-09-29), but their subject/animal links to the facility DB were held. Ask Lucia, or Ainhize, the operator, whether the animal numbers in those files belong to protocol `0118`. If so, set the subject links.
+- [ ] **The CoS hub's historical-drives `HANDOFF.md` (§7.2, §8.6) still uses the microscope stand name to identify the instrument.** That reading is wrong: the device serial identifies it (`tools/reference/microscopy_instruments.yaml`). Correct those two sections when the hub is next touched; it lives outside this repo.
 
 ## Metadata database — retire the CSV registries (2026-08-12)
 
