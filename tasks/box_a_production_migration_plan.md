@@ -66,7 +66,7 @@ and the port is almost entirely about this list.
 | **Creds** | Animal-facility DB (read-only) | `C:\Users\rtasseff\.my.cnf` **and** WSL `~/.my.cnf` | 104 B each. Path overridable via `GJESUS3_MYCNF` (`tools/animal_db.py:81`). |
 | | MRI scanner SFTP | `C:\Users\rtasseff\.ssh\gjesus3_mri.cred` | 69 B, INI `[mri]`. **Windows only — WSL does not have it.** A deliberate shared copy also sits on the NAS at `tools\docs\` (see the memory note; do not re-flag or move it). |
 | | GitHub | `~\.ssh\id_ed25519` | **Mint a NEW key for Box A** — separately revocable. |
-| | Molecubes tunnel | WSL `~/.ssh/id_ed25519_molecubes_tunnel` | Only if that op moves (§5). |
+| | Molecubes tunnel | The box's **public** key (the `molecubes-box` line of WSL `~/.ssh/authorized_keys`, hardened) · the rehearsal key WSL `~/.ssh/id_ed25519_molecubes_tunnel` · the Data Office key that logs into the box (WSL `~/.ssh/id_ed25519`) | **The op moves** (§5, B2 decided 2026-10-01). Box A needs the box's public line, restrictions included. To log into the box, mint a **new** key on Box A and authorize it on the box through the tunnel. No private key moves. |
 | | ReDIB VPS | `~\.ssh\id_ed25519_vps` | Not gjesus3. Stays here. |
 | **Windows env** | Python **3.13.14** + the 7 packages in `tools/requirements.txt` | Store build here — **do not repeat that on Box A**, see §6 Phase 1 | pydicom, pyyaml, tqdm, czifile, pymysql, paramiko, flask |
 | **WSL env** | Ubuntu 24.04.3 LTS, miniforge3, envs `dicomifier-pilot` + `xnatpic` | `dicomifier-pilot` rebuilds from the committed `tools/dicomifier-pilot.environment.yml` — that one is free. `xnatpic` is the XNAT trial and **stays here**. |
@@ -198,7 +198,7 @@ silently defeating recursive greps.
 | `vps-backup` | ❌ | ✅ keep | ReDIB Portal, not gjesus3. Needs `X:` and the VPS key. |
 | `omero-web-forward` | ❌ | ✅ keep | Image-server trial. **Box A is not sufficient to host it.** |
 | `xnat-web-forward` | ❌ | ✅ keep | Same. |
-| `molecubes-tunnel` | ❓ **decide** | ✅ for now | See below. |
+| `molecubes-tunnel` | ✅ **moves** (B2, decided 2026-10-01) | ✅ until cut-over | See below. |
 
 **`molecubes-tunnel` is the one RDM op with a real cost to move.** The Molecubes PET/CT
 acquisition box (`192.168.0.180`) is NAT'd and cannot be reached inbound — it **dials out to
@@ -208,6 +208,15 @@ access to that box is rare and scheduled*. It is genuinely an RDM operation and 
 "none locally" rule it should move — but it should move **deliberately and second**, once
 Box A is otherwise live, not as a line item inside this port. Until then it is the one
 documented exception to "no RDM ops on the dev box."
+
+**Update 2026-10-01 — it moves, and the move needs no visit.** Ryan decided B2: the tunnel
+goes to Box A with everything else, and Box A's single ingest web app will pull NI data
+through it (BACKLOG "Ingest from one place"). The access cost above is gone. The tunnel went
+live on 2026-10-01, so the acquisition box can be re-pointed **through the tunnel itself**,
+make-before-break: a second LaunchAgent dials Box A and is proven, and only then is the old
+one removed. Procedure:
+[`live_machine_remote_access.md` §10](../equipment/nuclear-imaging/live_machine_remote_access.md).
+"Deliberately and second" still stands.
 
 ---
 
@@ -309,7 +318,11 @@ recalls a known memory.
 
 ### Phase 6 — `molecubes-tunnel`
 
-Separate decision, separate visit (§5). Not part of the port.
+~~Separate decision, separate visit (§5).~~ **Decided 2026-10-01 (B2): it moves, with no
+visit.** Still not part of the port itself: it runs once Box A is otherwise live. Re-point the
+acquisition box through the live tunnel, make-before-break, following
+[`live_machine_remote_access.md` §10](../equipment/nuclear-imaging/live_machine_remote_access.md).
+Finish with `.\ops unschedule molecubes-tunnel` on this workstation.
 
 ---
 
@@ -318,7 +331,7 @@ Separate decision, separate visit (§5). Not part of the port.
 | # | Decision | Note |
 |---|---|---|
 | **B1** | **Does the GUI exe keep being built on the dev box?** Recommendation: **yes.** PyInstaller, the throwaway-test-NAS verification loop, and the worktree flow are development. Box A pulls and at most deploys. Nothing about the frozen build needs the production box. |
-| **B2** | **`molecubes-tunnel`** — move to Box A (needs the acquisition box reconfigured, rare physical access) or leave here as the documented exception? |
+| **B2** | **`molecubes-tunnel`** — move to Box A (needs the acquisition box reconfigured, rare physical access) or leave here as the documented exception? | ✅ **DECIDED 2026-10-01 (Ryan): move it.** The "rare physical access" cost no longer applies: with the tunnel live, the box is re-pointed through it, make-before-break (§5, Phase 6). |
 | **B3** | **Does Box A need a `dicomifier-pilot` env at all**, or is ParaVision→DICOM regeneration a Data-Office activity that stays on dev? Phase 2 assumes Box A gets it; dropping it removes a WSL/conda dependency from the production box. |
 | **B4** | **Repo path on Box A** — `D:\gjesus3\gjesus3-pilot` is assumed throughout. Confirm, because it goes into `instance.local.ps1` and determines the memory slug. |
 

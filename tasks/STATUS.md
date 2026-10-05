@@ -588,17 +588,35 @@ The genuinely in-flight items (kept tight — everything else is in
   needs, per operator machine: the SFTP credential file `~/.ssh/gjesus3_mri.cred`
   (data office, out-of-band — the one prerequisite that blocks MRI on a fresh
   machine), reachability of the scanner host, and the NAS mount.
-- **NI live-box sync — go-live.** The live-machine sync code is built and verified
-  end-to-end in a sandbox (it is a config, not a new orchestrator — the existing
-  `ingest_raw` does the walk). The remaining gate is **Gate-0**: confirm `os.link`
-  (hard-link) behaviour on the live NI Mac's CIFS mount, then a vetted one-shot
-  ingest per researcher. Archive-mode NI is already done and is the durable
-  source-of-truth; live sync is the forward path for active project data.
-  **Remote access to the box is being established** so Gate-0 no longer needs a
-  physical access slot — reverse SSH tunnel, workstation half verified 2026-08-06,
-  box half installed at the next access window. See
-  [`../equipment/nuclear-imaging/live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md).
-  Gate-0 is the first real task for that tunnel (NI-RA-05).
+- **NI live-box sync — the next NI step.** The goal: researchers who operate the Molecubes
+  scanner themselves ingest as close to acquisition as possible, with as few extra steps as
+  possible. The first strategy is a sync command they run on the acquisition Mac. The code is
+  built on branch **`feat/ni-live-hardening`** (not merged; its entry point is
+  `tasks/RESUME_ni_live.md` **on that branch**) and waits on on-box merge gates. Archive-mode NI
+  is already done and is the durable source of truth; live sync is the forward path for active
+  project data. **Hard links on the Mac are settled:** the old "Gate-0" was answered `ENOTSUP`
+  on the box, and those links are deferred to `pending_links.csv` / `relink_pending.py`, both on
+  `main`.
+  - ✅ **The Mac can be operated from the Data Office since 2026-10-01.** The reverse SSH tunnel
+    is LaunchAgent-driven and hardened, and `wsl -d Ubuntu -- ssh -p 2222 molecubes@localhost`
+    logs in without a password. So the gates can be developed and run from here, not in the
+    acquisition room. See
+    [`../equipment/nuclear-imaging/live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md).
+  - ⚠️ **The Mac's `gjesus3` mount does not stay up** (Ryan, 2026-10-01; cause unknown). It is
+    the sync's destination, so it must stay mounted before researchers can sync from the Mac.
+    Diagnose over the tunnel. One lead, not a diagnosis: it is mounted by the Bonjour name
+    `GJESUS3._smb._tcp.local`, while both `gnuclear` mounts use an IP or DNS name. **Also
+    decide whose credentials it uses.** Today it is Ryan's personal account, a superuser
+    ([`03_RAW_STORAGE`](../mfb-rdm-docs/03_RAW_STORAGE.md) permission model), so a
+    researcher's sync would run with Full rights on `raw/` rather than an operator's
+    write-but-not-modify.
+  - ⚠️ **The branch is 111 commits behind `main`** (2026-10-01). A dry-run merge conflicts in 7
+    files, including `tools/ingest_raw.py` and `tools/ingest/metadata_sidecar.py`. Catch up
+    before any new sync work.
+  - **After the sync (Ryan, 2026-10-01): one ingest web app on Box A** for every instrument. It
+    pulls NI data through the tunnel, so operators can leave the room when the scan ends. The
+    tunnel moves to Box A without a visit (B2 decided). See [`BACKLOG.md`](BACKLOG.md)
+    "Ingest from one place".
 - ✅ **NI historical pull from `S:\gnuclear` — DONE IN TRUE PRODUCTION 2026-08-13.**
   Branch `feat/ni-gnuclear-historical` (not pushed). **NI went from 132 to 1,640 rows** —
   **1,508 acquisitions / 192.0 GB** ingested in 7 researcher batches, **0 failed, 0 validator
