@@ -61,6 +61,7 @@ python tools/animal_db.py --check                  # "OK"
 python tools/validate_registries.py --nas-root "J:\gjesus3-data" --no-enrichment > baseline_validate.txt
 #    expected on 2026-09-30: 10,314 errors, ALL "column 'operator' still contains unsubstituted
 #    template syntax '<REQUIRED - set via mri-ingest ...>'" (STATUS §0 D1); 0 warnings.
+#    Since 2026-10-05 (D1(a)): 0 errors; the cells hold `pending-claim`, reported on one info line.
 ```
 
 **Once, before B15 / B16 (G1):** reopen the two closed projects. Dry-run both first; the dry run may

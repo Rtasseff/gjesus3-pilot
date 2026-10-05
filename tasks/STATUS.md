@@ -26,7 +26,7 @@ would need a new decision from him, it is written into this section and the work
 
 | # | Ryan's ruling, in his words | Where it stands |
 |---|---|---|
-| **D1(a)** | "NOW. Replace the placeholder on the 10,314 MRI operator cells with a hold value meaning "awaiting claim". You choose the token, document it where the blank sentinel is documented, and make the validator accept it; no OK from me needed on the name. Done when the validator passes with 0 errors and only those 10,314 cells changed." | NOW: in progress |
+| **D1(a)** | "NOW. Replace the placeholder on the 10,314 MRI operator cells with a hold value meaning "awaiting claim". You choose the token, document it where the blank sentinel is documented, and make the validator accept it; no OK from me needed on the name. Done when the validator passes with 0 errors and only those 10,314 cells changed." | **✅ Done 2026-10-05.** The token is **`pending-claim`**. It is documented where blank = unknown is documented (06_REGISTRIES §2.3 and §2.3a-bis, 08_METADATA §4.7.2) and in the GLOSSARY. The validator accepts it in `operator` (one info line) and reports an ERROR when it is the whole value of any other column (merge `2b891d5`; 36/36 suites). **The write** (`tools/repair_operator_hold.py --apply --expect 10314`): **exactly 10,314 cells changed**, all MRI, `operator` only. The tool verified it, and so did an independent byte oracle; the other 8 registry files are byte-identical. **Validator: exit 0, 0 errors, 0 warnings; `operator awaiting claim (pending-claim): 10314`.** The sidecars keep the old text until (c), and the Finder shows the new value after its 03:00 rebuild. Backups: `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261005_preD1a\` and `…\gjesus3_operator_hold_20261005\`. |
 | **D1(b)** | "NOW, build only, do not send. A claim list for Jesús's group: one row per session or folder (not per acquisition) with project, date, session name and acquisition count, plus blank columns for who ran it. Make it similar to the projects xlsx we just did … You can put it in projects folder as well because more people will have some access to that. … I send it at the pilot re-launch and set the claim window then." | **✅ Built 2026-10-05, not sent:** `J:\gjesus3-data\projects\_MRI sessions - who ran them (2026-10).xlsx`. **926 sessions** (one row per session folder on the scanner), **21 projects** (4 of them closed), 10,314 acquisitions, 2022-01-10 → 2026-06-05. Sheets: Read me (the claim window's end is left blank for Ryan), Sessions to claim (yellow: Who ran it, Notes, Answered by; a grey session key), Projects, Acquisitions. Ryan sends it at the pilot re-launch. |
 | **D1(c)** | "LATER. After the claim window closes, blank whatever is still unclaimed. Record it in BACKLOG, dated to the window end; do nothing now." | In [`BACKLOG.md`](BACKLOG.md) (the 🔺 `operator` item), due when the claim window closes. Ryan sets the window at the pilot re-launch. |
 | **D2** | "I am emailing Irene today. When her answer arrives: if 37, repair by the recovery-tool pattern in BACKLOG (HIGH, 2026-08-21), 19 sidecars and 19 registry rows, ACQ-IDs kept; if 39, record it and close." | Waiting on Irene's answer. No decision is left for Ryan. [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-21) |
@@ -75,10 +75,10 @@ All read-only, seconds to run:
 # row count (compare against the §1 table)
 python -c "import csv,io;print(sum(1 for _ in csv.DictReader(io.open(r'J:\gjesus3-data\registries\registry_raw.csv',encoding='utf-8-sig',newline=''))))"
 
-# D1 -- is the validator still red, and red ONLY for `operator`?
+# the validator -- green since 2026-10-05 (D1(a)); ANY error now is new, so read it
 PYTHONPATH=tools python tools/validate_registries.py --nas-root "J:\gjesus3-data" --no-enrichment
-#   expected today: FAILED, exactly 10,314 errors, ALL of them the `operator` placeholder.
-#   A DIFFERENT count means something new happened -- do not wave it off as "the known red".
+#   expected: validation OK, 0 errors, 0 warnings, and the info line
+#   "operator awaiting claim (pending-claim): 10314" (until D1(c) blanks the unclaimed).
 
 # D7 -- what is still queued for DICOM regeneration
 python -c "import csv,io,collections;print(collections.Counter(r['status'] for r in csv.DictReader(io.open(r'J:\gjesus3-data\registries\pending_dicom_regen.csv',encoding='utf-8-sig',newline=''))))"

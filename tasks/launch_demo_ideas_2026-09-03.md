@@ -181,7 +181,7 @@ Being straight about limits buys credibility for everything else, and pre-empts 
    searches her own name she may see **390 of her 942** acquisitions, in the room, at launch.
    **2,119 acquisitions are affected. I can normalise these to the documented lowercase convention
    in a few minutes if you want it done tonight — say the word.**
-2. **Don't run `validate_registries` live.** It exits FAILED with 10,314 errors — all one known
+2. *(Out of date since 2026-10-05: the validator now passes with 0 errors, STATUS §0 D1(a).)* **Don't run `validate_registries` live.** It exits FAILED with 10,314 errors — all one known
    cosmetic placeholder in `operator` (STATUS §0 D1). Correct, expected, and impossible to explain
    quickly on a projector.
 3. **Search by subject id, project, or instrument** — those are clean and impressive.

@@ -1454,7 +1454,7 @@ over them.
   login artifact. *Unai* is a real person here (NI Platform Manager), which makes guessing more
   tempting and no more correct. **Leave it blank; ask.**
 
-## 🔺 HIGH — the `operator` column carries a template instruction on 10,314 rows (2026-08-20)
+## 🔺 HIGH — the `operator` column carries a template instruction on 10,314 rows (2026-08-20) — (a) and (b) ✅ done 2026-10-05; (c) open
 
 **✅ DECIDED 2026-10-05 (Ryan, STATUS §0 D1), in three parts:**
 - **(a) NOW:** "Replace the placeholder on the 10,314 MRI operator cells with a hold value meaning "awaiting claim". You choose the token, document it where the blank sentinel is documented, and make the validator accept it; no OK from me needed on the name. Done when the validator passes with 0 errors and only those 10,314 cells changed."
@@ -1486,7 +1486,7 @@ than smeared across 10,314 production cells. This is the same reasoning applied 
 `S:\gnuclear` pull, where `operator` was deliberately left blank because it was not recoverable
 from the paths.
 
-**It now blocks the validator.** The new `check_template_residue` (shipped 2026-08-20, ERROR-level)
+*(Resolved 2026-10-05 by (a): the cells hold `pending-claim`, and the validator passes with 0 errors.)* **It blocked the validator until then.** The new `check_template_residue` (shipped 2026-08-20, ERROR-level)
 correctly flags every one, so `validate_registries` currently exits **FAILED with 10,314 errors**
 on production, emitting 10,315 lines. Verified: the check has **zero false positives** — across
 all six registry CSVs it fires on nothing but this column. So the check is right and the data is
@@ -1494,8 +1494,13 @@ wrong, but until this is settled the validator cannot serve as a gate for anythi
 
 - [x] *(✅ Decided 2026-10-05, Ryan: a hold value now, a claim list, then blank whatever is unclaimed when the claim window closes.)* **Decide the representation** (recommend: blank). It is the only decision here — the write
   itself is the same byte-level, delimited, no-BOM/CRLF-preserving edit already done twice.
+- [x] *(✅ Done 2026-10-05: merge `2b891d5`; `tools/repair_operator_hold.py` wrote exactly 10,314 cells, verified by the tool and independently; the validator: exit 0, 0 errors, `operator awaiting claim (pending-claim): 10314`.)* **(a) The hold value `pending-claim`.**
 - [x] *(✅ (b) built 2026-10-05, not sent: `J:\gjesus3-data\projects\_MRI sessions - who ran them (2026-10).xlsx`, 926 sessions in 21 projects. Answers join back by the grey `session key`, the study-folder part of `original_name`.)* **(b) The claim list.**
 - [ ] **(c) LATER, due when the claim window closes** (Ryan sets the window at the pilot re-launch; the date goes here then). Blank whatever is still unclaimed: every `operator` cell still holding the hold value becomes empty. Do nothing before the window closes.
+  - The tool is ready: `tools/repair_operator_hold.py --from pending-claim --to-blank --apply --expect N --backup-dir <new>`.
+  - The claimed names go in at the same time, joined by the claim list's `session key`, the study-folder part of `original_name`.
+  - **The sidecars:** `user_supplied.operator` on these rows still holds the old instruction text, because Ryan's rule for (a) was "only those 10,314 cells". Write each final value (a claimed name, or blank) to the sidecars too, by the recovery-tool pattern, so the column and the sidecar agree again (06 §2.3a-bis).
+  - For MRI, 06 §2.3a-bis says operator == researcher, and `researcher` is blank on all 10,314. Whether a claimed name also fills `researcher` is Ryan's call at (c).
 - [ ] **Collapse repeated identical findings in the validator regardless.** 10,315 lines for one
   defect class is the saturated-warning-channel item below, reproduced in the error channel — report
   a class once with a count and a few example rows. A future recurrence on 10k rows would be just
