@@ -5,6 +5,7 @@ acquisition the old silent merge left without a link its own link. Additive only
     python tools/repair_link_collisions.py audit  --nas-root "J:\\gjesus3-data" --out <dir>
     python tools/repair_link_collisions.py repair --nas-root "J:\\gjesus3-data" --out <dir>            (dry run)
     python tools/repair_link_collisions.py repair --nas-root "J:\\gjesus3-data" --out <dir> --execute  (writes)
+    python tools/repair_link_collisions.py prune-foreign --nas-root "J:\\gjesus3-data" --out <dir> [--execute]
 
 WHY. Until 2026-10-05 `linker.create_hardlink` merged a second acquisition into a link name that
 was already taken: a folder primary was linked file by file into the first acquisition's folder,
@@ -45,6 +46,19 @@ new convention; any other MISSING acquisition is reported for a decision, not li
 `--include-file-primaries`, which gives a FILE-primary victim (microscopy `.czi`) the rule the
 historical-drives ingest already uses in raw_linked\\: `<INSTR>_<stem>_<YYYYMMDD><ext>`, else
 `<INSTR>_<stem>_<ACQ-ID><ext>`. Use it only with an explicit decision.
+
+PRUNE-FOREIGN (dry run unless --execute; Ryan, 2026-10-05: "remove the foreign links from the
+POLLUTED folders, foreign names only"). For each POLLUTED folder, the directory entries whose file
+belongs to ANOTHER acquisition are removed, and nothing else: never a file of the folder's own
+acquisition, never a file of no live acquisition, never the last name of anything. Each name is
+removed only if the very same file (os.path.samefile) is also reachable from its own acquisition's
+raw primary AND from that acquisition's own complete link (run `repair` first). --execute backs up
+each touched project's provenance.csv and index.html plus a manifest of every name it will remove
+(SHA-256 verified), appends one provenance event per folder BEFORE touching it (write-ahead;
+file_type `hardlink-removed`, as the retire tool does), re-checks every precondition just before
+each removal, verifies each folder is then exactly its own acquisition's files
+(linker.inspect_link_target -> own), and regenerates the touched projects' index.html. A re-run
+finds nothing to remove.
 """
 import argparse
 import contextlib
@@ -81,6 +95,8 @@ POLLUTED_FIELDS = ["project_id", "project_name", "link", "kind", "n_files", "com
                    "owners", "unknown_files", "missing_victims"]
 PLAN_FIELDS = ["project_id", "project_name", "acq_id", "action", "new_link", "reason", "partners",
                "raw_primary", "n_files"]
+PRUNE_FIELDS = ["project_id", "project_name", "folder", "owner", "name", "file_id", "file_owner",
+                "file_owner_link", "action", "reason"]
 
 
 # ------------------------------------------------------------------------------------ file ids
@@ -391,11 +407,17 @@ def audit(nas, only=None, log=print):
         # under a case-variant name (`LSM9_lipofectamine_1.czi` vs `LSM9_Lipofectamine_1.czi`)
         # still got a row of its own -- a record of a link that was never made.
         created_for = defaultdict(set)
+        names_for = defaultdict(set)    # acq -> every link name provenance says was created for it
         for pr in read_csv(os.path.join(folder, "provenance.csv")):
             outp = (pr.get("output_path") or "").replace("\\", "/").strip()
-            if outp.lower().startswith("raw_linked/"):
-                created_for[outp[len("raw_linked/"):]].update(
-                    re.findall(r"ACQ-\d{8}-[A-Z0-9]+-\d{3}", pr.get("input_refs") or ""))
+            if not outp.lower().startswith("raw_linked/"):
+                continue
+            if (pr.get("file_type") or "") not in ("hardlink", "hardlink-folder"):
+                continue   # e.g. a `hardlink-removed` event (retire, prune-foreign) records no creation
+            acqs = re.findall(r"ACQ-\d{8}-[A-Z0-9]+-\d{3}", pr.get("input_refs") or "")
+            created_for[outp[len("raw_linked/"):]].update(acqs)
+            for a in acqs:
+                names_for[a].add(outp[len("raw_linked/"):])
         in_entries = defaultdict(set)   # acq -> entry names holding any of its files
         for name, e in entries.items():
             e["owners"] = Counter(owner.get(fid) for fid in e["ids"])
@@ -460,6 +482,15 @@ def audit(nas, only=None, log=print):
                                       "acquisition's", own_link=partial[0])
                 continue
             # None of its files anywhere: a merge where every file name clashed, or a pruned link.
+            # A link provenance says was created for it, under a name that no longer exists in any
+            # case, was removed after it was made (e.g. a repaired link a researcher later deleted):
+            # pruned, never re-made. (A name that still exists in another case is the false row a
+            # case-variant victim got, so it does not count.)
+            gone = sorted(n for n in names_for.get(acq, ()) if by_lower.get(n.lower()) is None)
+            if gone:
+                out(r, "RESEARCHER-PRUNED", f"a link created for it ({gone[0]}, provenance) has since "
+                                            f"been removed", planned_name=planned_old_name(nas, r))
+                continue
             planned = planned_old_name(nas, r)
             hit = by_lower.get(planned.lower())
             if hit is not None:
@@ -648,15 +679,215 @@ def execute_repair(nas, plan, by, backup_root=BACKUP_ROOT, log=print, regenerate
     return made, errors
 
 
+# ------------------------------------------------------------------------------- prune-foreign
+
+def tree_names(path):
+    """[(relative path as on disk, file id)] of every file under a folder."""
+    out, stack = [], [("", path)]
+    while stack:
+        rel, d = stack.pop()
+        for name, (fid, is_dir) in list_ids(d).items():
+            r = os.path.join(rel, name) if rel else name
+            if is_dir:
+                stack.append((r, os.path.join(d, name)))
+            else:
+                out.append((r, fid))
+    return sorted(out)
+
+
+def plan_prune(nas, results, polluted):
+    """One row per file in every POLLUTED folder that is not the folder's own: `remove` when every
+    precondition holds, else `keep` with the reason. Read-only; the owner's files are not listed."""
+    live = {r["acq_id"]: r for r in read_csv(os.path.join(nas, "registries", "registry_raw.csv"))}
+    projects = {p["project_id"]: p for p in read_csv(os.path.join(nas, "registries", "registry_projects.csv"))}
+    status = {(a["project_id"], a["acq_id"]): a for a in results}
+    plan = []
+    for e in polluted:
+        pid, folder = e["project_id"], e["link"]
+        base = {"project_id": pid, "project_name": e["project_name"], "folder": folder}
+        owners = [o for o in (e.get("complete_for") or "").split(";") if o]
+        if len(owners) != 1 or owners[0] not in live:
+            plan.append(dict(base, owner=";".join(owners), action="keep",
+                             reason="not exactly one live acquisition owns this folder completely"))
+            continue
+        owner = owners[0]
+        pdir = os.path.join(nas, projects[pid]["folder_location"].strip("/").replace("/", os.sep))
+        fabs = os.path.join(pdir, "raw_linked", folder)
+        own_ids = set((primary_ids(nas, live[owner])[1] or {}).values())
+        cands = {}   # file id -> (acquisition, its raw relpath -> path, its own link folder or file)
+        for item in (e.get("owners") or "").split(";"):
+            acq = item.split(":")[0]
+            if not acq or acq == owner or acq not in live:
+                continue
+            prim, ids = primary_ids(nas, live[acq])
+            st = status.get((pid, acq), {})
+            link = (st.get("own_link") or "").split(";")[0] if st.get("class") == "OK" else ""
+            for rel, fid in (ids or {}).items():
+                cands[fid] = (acq, os.path.join(prim, rel) if rel else prim,
+                              (os.path.join(pdir, "raw_linked", link, rel) if rel else
+                               os.path.join(pdir, "raw_linked", link)) if link else "", link)
+        for rel, fid in tree_names(fabs):
+            if fid in own_ids:
+                continue
+            row = dict(base, owner=owner, name=rel, file_id=fid)
+            if fid not in cands:
+                plan.append(dict(row, action="keep", reason="a file of no live acquisition (never removed)"))
+                continue
+            acq, raw_path, link_path, link = cands[fid]
+            row.update(file_owner=acq, file_owner_link=link)
+            here = os.path.join(fabs, rel)
+            if not link:
+                plan.append(dict(row, action="keep", reason=f"{acq} has no complete link of its own "
+                                                            f"in this project yet (run repair first)"))
+            elif not (_samefile(here, raw_path) and _samefile(here, link_path)):
+                plan.append(dict(row, action="keep", reason="not the same file as its raw file and its "
+                                                            "own link's copy"))
+            else:
+                plan.append(dict(row, action="remove", reason=f"also in /raw/ and in {acq}'s own link {link}"))
+    return plan
+
+
+def _samefile(a, b):
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def _remove_name(path, survivor):
+    """Remove ONE name of a file that lives on under `survivor` (the retire tool's pattern): a
+    read-only attribute is per FILE, shared by every name, so it is cleared only if the delete needs
+    it, and then restored on the survivor."""
+    import stat as _stat
+    try:
+        os.remove(path)
+        return
+    except PermissionError:
+        if not getattr(os.stat(path), "st_file_attributes", 0) & 1:   # FILE_ATTRIBUTE_READONLY
+            raise
+    os.chmod(path, _stat.S_IWRITE)
+    try:
+        os.remove(path)
+    finally:
+        os.chmod(survivor, _stat.S_IREAD)
+
+
+def execute_prune(nas, plan, by, backup_root=BACKUP_ROOT, log=print, regenerate_index=True):
+    """Remove the plan's `remove` names (backup and write-ahead provenance first). Returns
+    (removed, errors, verified folders, folders checked)."""
+    projects = {p["project_id"]: p for p in read_csv(os.path.join(nas, "registries", "registry_projects.csv"))}
+    live = {r["acq_id"]: r for r in read_csv(os.path.join(nas, "registries", "registry_raw.csv"))}
+    todo = [x for x in plan if x["action"] == "remove"]
+    folders = sorted({(x["project_id"], x["folder"], x["owner"]) for x in plan if x.get("owner")})
+    if not todo:
+        log("nothing to remove")
+    touched = sorted({x["project_id"] for x in todo})
+    stamp = f"{dt.datetime.now():%Y%m%d_%H%M%S}"
+    if todo:
+        bk = os.path.join(backup_root, f"gjesus3_link_prune_backup_{stamp}")
+        if os.path.exists(bk):
+            raise SystemExit(f"STOP: backup dir {bk} exists")
+        os.makedirs(bk)
+        for pid in touched:
+            folder = os.path.join(nas, projects[pid]["folder_location"].strip("/").replace("/", os.sep))
+            for fn in ("provenance.csv", "index.html"):
+                src = os.path.join(folder, fn)
+                if os.path.isfile(src):
+                    dst = os.path.join(bk, f"{pid}_{fn}")
+                    shutil.copy2(src, dst)
+                    if _sha256(src) != _sha256(dst):
+                        raise SystemExit(f"STOP: backup of {src} does not verify")
+        manifest = os.path.join(bk, "prune_manifest.csv")
+        write_csv(manifest, PRUNE_FIELDS, todo)
+        log(f"backup: {bk} ({len(touched)} projects + the manifest of {len(todo)} names, verified)")
+    today = dt.date.today().isoformat()
+    sv = provenance.software_version_string("repair_link_collisions.py")
+    removed = errors = 0
+    by_folder = defaultdict(list)
+    for x in todo:
+        by_folder[(x["project_id"], x["folder"], x["owner"])].append(x)
+    for (pid, fname, owner), items in sorted(by_folder.items()):
+        pdir = os.path.join(nas, projects[pid]["folder_location"].strip("/").replace("/", os.sep))
+        fabs = os.path.join(pdir, "raw_linked", fname)
+        own_ids = set((primary_ids(nas, live[owner])[1] or {}).values())
+        names_now = dict(tree_names(fabs))           # the folder as it is right now: relpath -> file id
+        for acq in sorted({x["file_owner"] for x in items}):
+            mine = [x for x in items if x["file_owner"] == acq]
+            link = mine[0]["file_owner_link"]
+            prim = raw_primary_path(nas, live[acq])
+            rel_of = {i: r for r, i in (primary_ids(nas, live[acq])[1] or {}).items()}
+            # Write-ahead: the event first, so a crash leaves a record that names what was underway.
+            provenance.append_entry(os.path.join(pdir, "provenance.csv"), {
+                "output_path": f"raw_linked/{fname}",
+                "output_name": fname,
+                "file_type": "hardlink-removed",
+                "date_created": today,
+                "creator": by,
+                "input_refs": acq,
+                "process_description": (
+                    f"Link-collision cleanup (repair_link_collisions.py prune-foreign): removed {len(mine)} "
+                    f"hard-link names of {acq}'s files from this folder, where the old linker had merged "
+                    f"them (fixed 2026-10-05). {acq} keeps every file in /raw/ and in its own link "
+                    f"raw_linked/{link}; this folder now holds only {owner}'s files"),
+                "software_version": sv,
+                "parameters_ref": "",
+                "lab_notebook_ref": "",
+                "notes": f"repair_link_collisions: {acq} foreign-names-removed",
+            }, unique_on=("output_path", "notes"))
+            for x in mine:
+                here = os.path.join(fabs, x["name"])
+                try:
+                    # Every precondition again, from disk, right before this one removal.
+                    fid = names_now.get(x["name"])
+                    rel = rel_of.get(fid) if fid is not None else None
+                    raw_path = link_path = None
+                    if rel is not None:
+                        raw_path = os.path.join(prim, rel) if rel else prim
+                        link_path = (os.path.join(pdir, "raw_linked", link, rel) if rel
+                                     else os.path.join(pdir, "raw_linked", link))
+                    if (fid is None or fid in own_ids or rel is None or str(fid) != str(x["file_id"])
+                            or not (_samefile(here, raw_path) and _samefile(here, link_path))):
+                        raise RuntimeError("a precondition no longer holds; left as it is")
+                    _remove_name(here, raw_path)
+                    if os.path.lexists(here):
+                        raise RuntimeError("still present after removal")
+                    if not (os.path.exists(raw_path) and os.path.exists(link_path)):
+                        raise RuntimeError("its raw file or own-link copy is gone")
+                    removed += 1
+                except Exception as e:  # noqa: BLE001 -- counted and reported; the rest continue
+                    errors += 1
+                    log(f"  ERROR {pid} {fname}/{x['name']}: {type(e).__name__}: {e}")
+            log(f"  {pid} {fname}: removed {len(mine)} names of {acq}")
+    verified = 0
+    for pid, fname, owner in folders:
+        if owner not in live:   # e.g. "A;B": no single owner, so nothing was removed there
+            log(f"  NOT VERIFIED {pid} {fname}: no single live owner ({owner})")
+            continue
+        pdir = os.path.join(nas, projects[pid]["folder_location"].strip("/").replace("/", os.sep))
+        state, _d, detail = linker.inspect_link_target(pdir, fname, raw_primary_path(nas, live[owner]))
+        if state == linker.LINK_OWN:
+            verified += 1
+        else:
+            log(f"  NOT VERIFIED {pid} {fname}: {state} ({detail})")
+    if regenerate_index and todo:
+        for pid in touched:
+            cmd = [sys.executable, os.path.join(TOOLS, "generate_index.py"), "--nas-root", nas, "--project", pid]
+            rc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            log(f"  index {pid}: rc={rc.returncode}")
+            if rc.returncode:
+                errors += 1
+    return removed, errors, verified, len(folders)
+
+
 # ----------------------------------------------------------------------------------------- cli
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("cmd", choices=["audit", "repair"])
+    ap.add_argument("cmd", choices=["audit", "repair", "prune-foreign"])
     ap.add_argument("--nas-root", required=True)
     ap.add_argument("--out", required=True, help="folder for the CSV reports (off the NAS)")
     ap.add_argument("--project", action="append", help="limit to this project (name or PROJ-id); repeatable")
-    ap.add_argument("--execute", action="store_true", help="repair: write (default: dry run)")
+    ap.add_argument("--execute", action="store_true", help="repair / prune-foreign: write (default: dry run)")
     ap.add_argument("--include-file-primaries", action="store_true",
                     help="repair: also link non-MRI FILE-primary victims under <INSTR>_<stem>_<YYYYMMDD><ext> "
                          "(else <INSTR>_<stem>_<ACQ-ID><ext>) -- only with an explicit decision")
@@ -675,6 +906,24 @@ def main(argv=None):
     print(f"audit took {(dt.datetime.now() - t0).seconds}s -> {args.out}")
     if args.cmd == "audit":
         return 0
+    if args.cmd == "prune-foreign":
+        plan = plan_prune(nas, results, polluted)
+        write_csv(os.path.join(args.out, "link_prune_plan.csv"), PRUNE_FIELDS, plan)
+        c = Counter(x["action"] for x in plan)
+        print(f"prune plan: {dict(c)} in {len({(x['project_id'], x['folder']) for x in plan})} folders "
+              f"-> {os.path.join(args.out, 'link_prune_plan.csv')}")
+        for (pid, folder), n in sorted(Counter((x["project_id"], x["folder"]) for x in plan
+                                               if x["action"] == "remove").items()):
+            print(f"  remove {n:4d} foreign names from {pid} raw_linked/{folder}")
+        for x in [x for x in plan if x["action"] != "remove"][:10]:
+            print(f"  KEEP {x['project_id']} {x['folder']}/{x.get('name', '')}: {x['reason']}")
+        if not args.execute:
+            print("DRY RUN: nothing written. Re-run with --execute in an approved write window.")
+            return 0
+        removed, errors, verified, checked = execute_prune(nas, plan, args.by)
+        print(f"prune: {removed} names removed, {errors} errors; {verified} of {checked} folders now "
+              f"exactly their own acquisition's files")
+        return 1 if errors or verified != checked else 0
     plan = plan_repair(nas, results, include_file_primaries=args.include_file_primaries)
     write_csv(os.path.join(args.out, "link_repair_plan.csv"), PLAN_FIELDS, plan)
     c = Counter(x["action"] for x in plan)
