@@ -20,6 +20,15 @@ WHAT IT CHECKS
       placeholder. ERROR — this is what let a literal "Bruker BioSpec
       <7T|11.7T>" sit in 10,314 production instrument_model cells through
       repeated clean validator runs (fixed 2026-08-20; see CHANGELOG).
+    - the operator hold value `pending-claim` (ingest.registry.OPERATOR_HOLD,
+      "awaiting claim"; 06_REGISTRIES §2.3a-bis) is accepted in the `operator`
+      column -- neither an ERROR nor a WARN; the rows are counted and reported
+      as one info line -- and is an ERROR when it is the WHOLE value of any
+      OTHER column (stripped, case-insensitive): the token means one thing
+      only. A note that merely mentions it in running text is documentation,
+      not drift, and is not reported. The template-residue check above is not
+      relaxed for it (the token carries no template syntax, so it passes that
+      check on its own).
     - sample_type, when set, is in the controlled vocab
       {tissue, organism, cells, material, phantom}.
     - canonical_path starts with /raw/ and the acquisition folder exists on
@@ -147,6 +156,9 @@ class Issues:
     def __init__(self):
         self.errors = []
         self.warnings = []
+        # Rows whose `operator` is the hold value. A count for print_report's one
+        # info line -- deliberately NOT a warning (that channel is saturated).
+        self.operator_hold = 0
 
     def error(self, msg, acq_id=None):
         self.errors.append((acq_id, msg))
@@ -298,6 +310,36 @@ def check_template_residue(row, label, issues):
             issues.error(
                 f"column '{col}' still contains unsubstituted template "
                 f"syntax {m.group()!r} (full value: {val!r})", label)
+
+
+# ---- The `operator` hold value (ERROR outside `operator`) ----------------
+
+def check_operator_hold(row, label, issues):
+    """The hold value `pending-claim` (registry.OPERATOR_HOLD) means ONE thing: this
+    acquisition's operator is not known yet and a claim is open (06_REGISTRIES
+    §2.3a-bis). Blank is the other, final, state: unknown.
+
+    In `operator` it is ACCEPTED -- explicitly, not merely because it happens to
+    carry no template syntax -- and counted in issues.operator_hold for
+    print_report's info line. In any OTHER column it is an ERROR when the WHOLE
+    cell, stripped and compared case-insensitively, is the token: the token used
+    as a value in `researcher`, `notes`, ... is drift, and a token that means one
+    thing only must not be able to drift. A cell that merely MENTIONS it in running
+    text ("claimed by Irene 2026-11; was pending-claim") is documentation, not a
+    defect, and is not reported.
+    """
+    hold = registry.OPERATOR_HOLD
+    for col, value in row.items():
+        # A DictReader row with surplus fields carries a list under the key None.
+        if not isinstance(value, str) or not value:
+            continue
+        if col == "operator":
+            if value == hold:
+                issues.operator_hold += 1
+        elif value.strip().lower() == hold.lower():
+            issues.error(
+                f"column '{col}' holds the operator hold value {hold!r}, which is "
+                f"valid in the 'operator' column only (full value: {value!r})", label)
 
 
 def check_subjects_registry(registries_dir, issues):
@@ -512,6 +554,11 @@ def validate(nas_root, check_enrich=True):
         # --no-enrichment is set.
         check_template_residue(row, label, issues)
 
+        # 5b. the operator hold value: accepted (and counted) in `operator`, an
+        # ERROR as the whole value of any other column. Registry-cell only, like
+        # step 5.
+        check_operator_hold(row, label, issues)
+
         # 6. sample_type controlled vocab (blank allowed)
         sample_type = (row.get("sample_type") or "").strip()
         if sample_type and sample_type not in SAMPLE_TYPE_VOCAB:
@@ -580,6 +627,9 @@ def print_report(issues, n_rows):
     print(f"rows checked: {n_rows}")
     print(f"errors:       {len(issues.errors)}")
     print(f"warnings:     {len(issues.warnings)}")
+    # Informational only: not an error, not a warning (06_REGISTRIES §2.3a-bis).
+    print(f"operator awaiting claim ({registry.OPERATOR_HOLD}): "
+          f"{issues.operator_hold}")
     print()
 
     if issues.errors:
