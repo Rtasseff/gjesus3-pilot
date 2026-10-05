@@ -260,6 +260,100 @@ def main():
         check(all(x["action"] == "blocked" for x in plan2) and len(plan2) == n_missing - 2,
               "a second repair plans nothing new (only the blocked file-primary victims remain)")
 
+        print("prune-foreign")
+        # A second polluted folder: M1 (2 frames), then M2 (4 frames, the same name) -> M2's frames
+        # 3-4 sit in M1's folder; M2 has NO link of its own yet; plus a researcher's note in it.
+        M1 = mri("ACQ-20260710-MRI-014", STUDY1, 20, 2)
+        M2 = mri("ACQ-20260710-MRI-015", STUDY2, 20, 4)
+        with open(os.path.join(reg, "registry_raw.csv"), "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=registry.REGISTRY_FIELDS, extrasaction="ignore")
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+        old_merge(proj, n(20), M1)
+        old_merge(proj, n(20), M2)
+        write(os.path.join(proj, "raw_linked", n(20), "notes.txt"), b"a researcher's note")
+        cdir, ddir = os.path.join(proj, "raw_linked", n(5)), os.path.join(proj, "raw_linked", act["ACQ-20260710-MRI-004"][1])
+        c_ids = {os.stat(os.path.join(C, f)).st_ino for f in os.listdir(C)}
+        d_link_before = R.tree_names(ddir)
+        with contextlib.redirect_stdout(io.StringIO()):
+            res3, pol3, _ = R.audit(nas, log=lambda *a, **k: None)
+        check(sorted(p["link"] for p in pol3) == sorted([n(5), n(20)]), "two polluted folders")
+        pplan = R.plan_prune(nas, res3, pol3)
+        rm = [x for x in pplan if x["action"] == "remove"]
+        keep = [x for x in pplan if x["action"] == "keep"]
+        check(len(rm) == 12 and all(x["folder"] == n(5) and x["file_owner"] == "ACQ-20260710-MRI-004"
+                                    for x in rm), "12 removals planned: D's names in C's folder")
+        check(sorted(x["name"] for x in keep) == ["notes.txt", "recon1_frame03.dcm", "recon1_frame04.dcm"],
+              "kept: M2's names (M2 has no link of its own yet) and the researcher's note")
+        check(not any(x.get("file_id") in c_ids for x in pplan), "the owner's files are never in the plan")
+        check(len(os.listdir(cdir)) == 15, "planning wrote nothing")
+        with tempfile.TemporaryDirectory() as bk:
+            removed, errors, verified, checked = R.execute_prune(
+                nas, pplan, "test", backup_root=bk, log=lambda *a, **k: None, regenerate_index=False)
+            check((removed, errors) == (12, 0), f"12 names removed, 0 errors (got {removed}, {errors})")
+            check((verified, checked) == (1, 2), f"C's folder verified; M1's not, as expected (got {verified}/{checked})")
+            check(any(f == "prune_manifest.csv" for d in os.listdir(bk) for f in os.listdir(os.path.join(bk, d))),
+                  "the manifest of names is backed up before any removal")
+        check(linker.inspect_link_target(proj, n(5), C)[0] == linker.LINK_OWN,
+              "C's folder is now exactly C's files")
+        check({os.stat(os.path.join(cdir, f)).st_ino for f in os.listdir(cdir)} == c_ids,
+              "every one of C's own files is still there")
+        check(R.tree_names(ddir) == d_link_before and all(os.path.isfile(os.path.join(D, f)) for f in os.listdir(D)),
+              "D keeps every file in /raw/ and in its own link (never the last name)")
+        check(len(os.listdir(os.path.join(proj, "raw_linked", n(20)))) == 5, "M1's folder untouched")
+        prov = list(csv.DictReader(open(os.path.join(proj, "provenance.csv"), encoding="utf-8")))
+        ev = [p for p in prov if p.get("file_type") == "hardlink-removed"]
+        check(len(ev) == 1 and ev[0]["output_path"] == f"raw_linked/{n(5)}"
+              and ev[0]["input_refs"] == "ACQ-20260710-MRI-004", "one provenance event, for C's folder")
+
+        print("prune-foreign: after M2 gets its own link")
+        with contextlib.redirect_stdout(io.StringIO()):
+            res4, _p, _ = R.audit(nas, log=lambda *a, **k: None)
+        with tempfile.TemporaryDirectory() as bk:
+            R.execute_repair(nas, [x for x in R.plan_repair(nas, res4) if x["acq_id"] == "ACQ-20260710-MRI-015"],
+                             "test", backup_root=bk, log=lambda *a, **k: None, regenerate_index=False)
+        with contextlib.redirect_stdout(io.StringIO()):
+            res5, pol5, _ = R.audit(nas, log=lambda *a, **k: None)
+        pplan5 = R.plan_prune(nas, res5, pol5)
+        check(sorted((x["action"], x["name"]) for x in pplan5) ==
+              [("keep", "notes.txt"), ("remove", "recon1_frame03.dcm"), ("remove", "recon1_frame04.dcm")],
+              "now M2's two names are removable; the note never is")
+        with tempfile.TemporaryDirectory() as bk:
+            removed, errors, verified, checked = R.execute_prune(
+                nas, pplan5, "test", backup_root=bk, log=lambda *a, **k: None, regenerate_index=False)
+        check((removed, errors) == (2, 0), "M2's 2 names removed")
+        with contextlib.redirect_stdout(io.StringIO()):
+            res6, pol6, _ = R.audit(nas, log=lambda *a, **k: None)
+        cls6 = {x["acq_id"]: x["class"] for x in res6}
+        check(pol6 == [] and cls6["ACQ-20260710-MRI-003"] == "OK" and cls6["ACQ-20260710-MRI-014"] == "OK-EXTRA",
+              "POLLUTED 0: C is OK, M1 is OK-EXTRA (the researcher's note stays)")
+        n_events = sum(1 for p in csv.DictReader(open(os.path.join(proj, "provenance.csv"), encoding="utf-8"))
+                       if p.get("file_type") == "hardlink-removed")
+        with tempfile.TemporaryDirectory() as bk:
+            again = R.execute_prune(nas, R.plan_prune(nas, res6, pol6), "test", backup_root=bk,
+                                    log=lambda *a, **k: None, regenerate_index=False)
+        check(again[:2] == (0, 0) and n_events == 2 and sum(
+              1 for p in csv.DictReader(open(os.path.join(proj, "provenance.csv"), encoding="utf-8"))
+              if p.get("file_type") == "hardlink-removed") == 2, "a re-run removes nothing and adds no event")
+
+        print("a repaired link a researcher later deletes is never re-made")
+        b_link = os.path.join(proj, "raw_linked", act["ACQ-20260710-MRI-002"][1])
+        for f in os.listdir(b_link):
+            os.remove(os.path.join(b_link, f))
+        os.rmdir(b_link)
+        with contextlib.redirect_stdout(io.StringIO()):
+            res7, _p, _ = R.audit(nas, log=lambda *a, **k: None)
+        cls7 = {x["acq_id"]: x["class"] for x in res7}
+        check(cls7["ACQ-20260710-MRI-002"] == "RESEARCHER-PRUNED", f"B is RESEARCHER-PRUNED (got {cls7['ACQ-20260710-MRI-002']})")
+        check("ACQ-20260710-MRI-002" not in {x["acq_id"] for x in R.plan_repair(nas, res7)}, "... and not re-planned")
+
+        print("reopen_project ignores removal events")
+        import reopen_project
+        names = reopen_project.link_names_from_provenance([os.path.join(proj, "provenance.csv")])
+        check(names.get("ACQ-20260710-MRI-004") == act["ACQ-20260710-MRI-004"][1],
+              "D's link name is its own repaired link, not C's folder named in the removal event")
+
     print()
     if FAILED:
         print(f"{len(FAILED)} CHECK(S) FAILED")

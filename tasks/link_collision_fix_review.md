@@ -1,9 +1,12 @@
 # Review: project link names are never merged into; the repair of what the old merge left (branch `feat/link-collision-fix`)
 
 **Date:** 2026-10-05 · **Stream:** link-collision fix, a subagent of the coordinator (`gj3-handoff`) ·
-**Status:** 🔶 **code, convention, tests and the read-only audit are done on the branch; the repair is dry-run only.**
-Nothing in production has been written. Waiting on: the coordinator's review and a write window for the repair, and
-**Ryan's confirmation of the exact MRI link-name form (§3)** before the merge.
+**Status:** ✅ **code, convention and tests merged to `main` (70c5023, 2026-10-05) after the coordinator's review.**
+**Ryan's answers (2026-10-05), all approved:** (1) the MRI link-name form `MRI_<sample>_<date>_<HHMM>_<exam>_<recons>` is
+**confirmed**; (2) **add the 389 microscopy links too**, with the drives naming rule (`--include-file-primaries`); (3)
+**remove the foreign links from the 7 polluted folders**, foreign names only; (4) rebuild, smoke-test and redeploy the GUI
+exe (a separate phase, C). The coordinator granted the write window for phases A (the repair) and B (the polluted folders);
+their results are in §11.
 
 **In one paragraph.** The linker now refuses a taken project link name instead of merging into it, and the ingest checks the
 name before copying, so a collision fails the case cleanly. The MRI link name gains the study start time. A file-id audit of
@@ -89,7 +92,7 @@ affected.
 | `operator/collisions.py` (GUI preview) | in-batch check case-sensitive on the link name; on-NAS check `os.path.exists` | case-insensitive (Windows/SMB); the on-NAS check is the engine's own `inspect_link_target(…, None)`, so an empty shell or a queued stand-in shows too. GUI message text corrected (it said "one would overwrite the other") |
 | `drive_staging/ingest_plan.py` farm | staging farm on D:, not a project link | no change (already refuses a non-`samefile` target) |
 
-## 3. The MRI link-name convention — the proposal for Ryan's confirmation
+## 3. The MRI link-name convention — ✅ confirmed by Ryan (2026-10-05)
 
 **Proposed form:** `MRI_${sample_id}_${acq_date}_${discovered.study_time}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`
 
@@ -296,16 +299,16 @@ These record an **approved logic change** (Ryan, 2026-10-05), so they are more t
 
 ## 9. Open points
 
-1. **Ryan: confirm the MRI link-name form** (§3), `MRI_<sample>_<date>_<HHMM>_<exam>_<recons>`, before the merge.
-2. **Coordinator: a write window** for the 200 MRI links (§6, procedure above). It does not depend on the merge: the tool runs
-   from this worktree, and its names are the §3 form (if Ryan picks another form, re-plan first).
-3. **Ryan: the 389 microscopy acquisitions.** Same defect, same additive remedy, but outside the approved "209" and outside
-   the MRI convention. Include them with `--include-file-primaries` (§6), or not.
-4. **Ryan: the 7 polluted folders** (§7): leave, or remove only the foreign names (recommended), or rename.
-5. ⏸ **The operator GUI exe redeploy (Ryan's go).** Until it is rebuilt from `main`, the deployed GUI still runs the **old
-   linker (silent merge)** and the old MRI template, so a second same-day study ingested through the GUI can still merge.
-   The audit tool finds that afterwards. The Project Manager exe also bundles the linker, but its import already refused a
-   taken name (`raw_import.plan`), so only a race reaches the old behaviour there.
+1. ✅ **The MRI link-name form** (§3): confirmed by Ryan, 2026-10-05.
+2. ✅ **The write window:** granted by the coordinator after the merge; phases A and B are in §11.
+3. ✅ **The 389 microscopy acquisitions:** Ryan approved them, with the drives naming rule (`--include-file-primaries`); linked
+   in phase A.
+4. ✅ **The 7 polluted folders:** Ryan approved removing the foreign names only; done in phase B.
+5. ⏸ **The operator GUI exe** (approved by Ryan: rebuild, smoke-test, redeploy): phase C, which starts only when the
+   coordinator says so, after verifying A and B. Until then the deployed GUI still runs the **old linker (silent merge)** and
+   the old MRI template, so a second same-day study ingested through the GUI can still merge; the audit tool finds that
+   afterwards. The Project Manager exe also bundles the linker, but its import already refused a taken name
+   (`raw_import.plan`), so only a race reaches the old behaviour there.
 6. **The 12 empty-primary acquisitions in a collision** are not linked (§6). If the 2026-10-04 line ("never as empty rows")
    leads to retiring empty rows, they go with them.
 7. **`provenance.has_entry_for_output` is case-sensitive** on a case-insensitive share (§5, 16 false rows). The linker
@@ -317,43 +320,102 @@ These record an **approved logic change** (Ryan, 2026-10-05), so they are more t
 
 **`tasks/STATUS.md`** (a line in the current-work list):
 
-> **Project link collisions (2026-10-05, branch `feat/link-collision-fix`, not merged).** The linker now refuses a taken link
-> name instead of silently merging, and the ingest checks the name before copying. The MRI link name gains the study start
-> time (`MRI_<sample>_<date>_<HHMM>_<exam>_<recons>`; form awaiting Ryan's confirmation). A file-id audit of every project
-> found **589 acquisitions without their own link** (200 MRI from the 2026-06-14 regen batches, 389 Cell Observer / LSM 900
-> from the 2026-06-15 best-guess ingests) and 7 polluted MRI link folders. The 200 MRI links are dry-run clean and wait for a
-> window; the 389 microscopy and the 7 polluted folders wait on Ryan; the GUI exe redeploy waits on Ryan's go. Review:
+> **Project link collisions: fixed and repaired (2026-10-05).** The linker refuses a taken project link name instead of
+> silently merging, and the ingest checks the name before copying. MRI link names carry the study start time
+> (`MRI_<sample>_<date>_<HHMM>_<exam>_<recons>`, confirmed by Ryan). The repair gave **589 acquisitions their own link**
+> (200 MRI from the 2026-06-14 regen batches; 389 Cell Observer / LSM 900 from the 2026-06-15 best-guess ingests) and removed
+> **1,900 foreign names from the 7 polluted MRI folders**; a re-audit by file id shows MISSING 0 and POLLUTED 0. **Next:**
+> the operator GUI exe rebuild and redeploy (phase C, approved by Ryan), after which GUI ingests stop merging too. Review:
 > `tasks/link_collision_fix_review.md`.
 
 **`CHANGELOG.md`** (new row at the top):
 
-> | 2026-10-05 | R. Tasseff | **A project link name is never merged into any more, and MRI link names gain the study time.**
-> Ryan approved "fix code + repair". **Code:** `linker.create_hardlink` refuses a name held by anything that is not exactly
-> the acquisition's own files (`LinkCollisionError`, deliberately not an `OSError`, so it is never queued for a relink); the
-> ingest checks the name before copying (new Step 5.5, also in `--dry-run`), so a taken name fails the case with nothing
-> copied or registered; every link-making tool reports a taken name as a collision. **Convention:** the MRI default
-> `link_filename` adds `${discovered.study_time}` (HHMM of the study folder's timestamp): two studies of one animal on one
-> day no longer share names. Forward only. **Audit** (every project, by file id): 18,474 OK, **589 without their own link**
-> (200 MRI, all from the 2026-06-14 regen batches, reconciling with stream F's 209; and 389 Cell Observer / LSM 900 from the
-> 2026-06-15 best-guess ingests, where repeated file names were skipped silently), 7 polluted MRI folders, 2 pruned by
-> researchers. **Found:** provenance idempotence is case-sensitive on a case-insensitive share, so 16 skipped acquisitions
-> carry a provenance row for a link that was never made. **Repair:** additive, dry run clean (200 MRI links; the 389 microscopy
-> optional); nothing removed. 35 of 35 test suites pass. |
-
-(Then, after the window, the numbers actually created.)
+> | 2026-10-05 | R. Tasseff | **A project link name is never merged into any more; MRI link names gain the study time;
+> the old merges are repaired.** **Code** (merged, 70c5023): `linker.create_hardlink` refuses a name held by anything that
+> is not exactly the acquisition's own files (`LinkCollisionError`, deliberately not an `OSError`, so it is never queued for a
+> relink); the ingest checks the name before copying (new Step 5.5, also in `--dry-run`), so a taken name fails the case with
+> nothing copied or registered; every link-making tool reports a taken name as a collision. **Convention** (confirmed by
+> Ryan): the MRI default `link_filename` adds `${discovered.study_time}` (HHMM of the study folder's timestamp), so two
+> studies of one animal on one day no longer share names. Forward only. **Audit** (every project, by file id): 589
+> acquisitions without their own link (200 MRI, all from the 2026-06-14 regen batches, reconciling with stream F's 209; 389
+> Cell Observer / LSM 900 from the 2026-06-15 best-guess ingests, where repeated file names were skipped silently) and 7
+> polluted MRI folders. **Repair** (Ryan approved all of it): 589 links added (MRI under the new name, microscopy as
+> `<INSTR>_<stem>_<YYYYMMDD><ext>`), 0 errors, verified file by file; 1,900 foreign names removed from the 7 folders, each now
+> exactly its own acquisition's files; backups first, provenance for every link and removal. Re-audit: MISSING 0, POLLUTED 0.
+> **Found:** provenance idempotence is case-sensitive on a case-insensitive share, so 16 skipped acquisitions carried a
+> provenance row for a link that was never made. 35 of 35 test suites pass. |
 
 **`tasks/BACKLOG.md`**, the 🔺 HIGH item "a second acquisition with an existing link name silently gets the first one's
-files (2026-10-04)":
+files (2026-10-04)", can close, with one follow-up kept:
 
-- [x] **Code:** `create_hardlink` refuses a taken name (`LinkCollisionError`); the ingest checks before copying; tests
-  (`tools/test_link_collisions.py`).
-- [x] **Template:** the MRI `link_filename` gains `${discovered.study_time}` (form pending Ryan's confirmation).
+- [x] **Code:** `create_hardlink` refuses a taken name (`LinkCollisionError`); the ingest checks before copying; tests.
+- [x] **Template:** the MRI `link_filename` gains `${discovered.study_time}` (form confirmed by Ryan, 2026-10-05).
 - [x] **Audit:** `tools/repair_link_collisions.py audit`: 589 MISSING (200 MRI + 389 microscopy), 7 POLLUTED, 2 pruned.
-- [ ] **Repair, MRI (approved):** 200 links, dry run clean; waiting for a window.
-- [ ] **Decision (Ryan):** the 389 Cell Observer / LSM 900 acquisitions without their own link (`--include-file-primaries`).
-- [ ] **Decision (Ryan):** the 7 polluted MRI link folders (`tasks/link_collision_audit/link_polluted.csv`).
-- [ ] **Redeploy (Ryan's go):** the operator GUI exe, which still runs the old linker and template.
+- [x] **Repair:** 589 links added; 1,900 foreign names removed from the 7 polluted folders. MISSING 0, POLLUTED 0.
+- [ ] **Redeploy:** the operator GUI exe (phase C, approved by Ryan), which still runs the old linker and template.
 - [ ] (LOW) `provenance.has_entry_for_output`: compare `output_path` case-insensitively.
 
-And the LOW item **"MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14)"** is superseded by
-this work: its two `0219` pairs are in the MRI repair plan.
+And the LOW item **"MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14)"** is resolved by this
+work: its two `0219` pairs (`ACQ-20220124-MRI-006` and `-008`) now have their own links.
+
+## 11. The write window (2026-10-05): phases A and B
+
+The coordinator granted the window after the merge (70c5023), for A and B only; I was the only production writer.
+
+### Phase A — the repair (589 links)
+
+- **The plan, checked before writing:** a fresh dry run matched the reviewed plan row for row (589 rows, all `create`, the
+  same names), so production had not moved since the review.
+- **Run from `main`'s code** (70c5023; my phase-B edits were stashed for the run):
+  `repair --include-file-primaries --execute --by "Data Office (link-collision repair 2026-10-05)"`, 14:22 to 14:33.
+- **Backup first:** `C:\Users\rtasseff\temp\gjesus3_link_repair_backup_20261005_142901\` holds the `provenance.csv` and
+  `index.html` of the 13 touched projects, each verified by SHA-256 before any write.
+- **Result: 589 links created, 0 errors.** 200 MRI (`0721` 145, `1022` 53, `0219` 2; 21,977 files) under the §3 name, and 389
+  Cell Observer / LSM 900 (360 dated names, 29 ACQ-ID names). The tool checked each link as exactly its files right after
+  making it, appended one provenance row per link, and regenerated the 13 projects' `index.html` (rc 0 for each).
+- **Independent verification** (plain `os.path.samefile`, file by file, not the tool's code): all 589 links, 22,366 files.
+  Every link holds exactly its acquisition's raw files (the same names, the same files, nothing else), every provenance row
+  is present and correct, and every touched `index.html` was rewritten after the backup. **0 problems.**
+- **Re-audit** (`main`'s code, every project, by file id): **MISSING 0** (was 589), OK **19,063** (was 18,474: + 589),
+  POLLUTED 7 (unchanged, as expected), RESEARCHER-PRUNED 2, EMPTY-PRIMARY 319, CLOSED-PROJECT 1,166. No registry file was
+  written: their modification times all predate the run.
+
+### Phase B — the 7 polluted folders
+
+- **The removal mode** (`repair_link_collisions.py prune-foreign`, branch commit 6dc3e98, tests in
+  `test_repair_link_collisions.py`, 35/35 suites). A name is removed only if its file belongs to ANOTHER live acquisition
+  **and** the very same file (`os.path.samefile`) is also in `/raw/` and in that acquisition's own complete link. It never
+  removes an owner's file, a file of no acquisition, or the last name of anything. Every precondition is re-checked from disk
+  right before each removal.
+- **Provenance:** one write-ahead event per (folder, foreign acquisition): `output_path` the folder, `file_type`
+  `hardlink-removed`, `input_refs` the acquisition whose names were removed (the retire tool's convention). That makes 7 events
+  in all, not one per file; the per-name record is the manifest below. `reopen_project` now ignores `hardlink-removed` rows when
+  it collects link names to restore, so these events never send it to a folder that is not the acquisition's.
+- **Dry run first:** 1,900 names to remove, 0 to keep. Per folder this is exactly the audit's foreign count, every name belongs
+  to the one listed partner, and that partner's own link is its phase-A link.
+- **Run:** `prune-foreign --execute --by "Data Office (link-collision cleanup 2026-10-05)"`, 14:41 to 14:45. **Backup
+  first:** `C:\Users\rtasseff\temp\gjesus3_link_prune_backup_20261005_144502\` holds `PROJ-0010` and `PROJ-0019`'s
+  `provenance.csv` and `index.html`, plus `prune_manifest.csv` (every name removed, with its file id, owner and own link: the
+  record needed to reverse it), all SHA-256 verified.
+- **Result: 1,900 names removed, 0 errors; 7 of 7 folders now exactly their own acquisition's files** (`inspect_link_target`
+  → `own`); `index.html` regenerated for both projects (rc 0).
+
+| Folder | Its own acquisition | Names removed (of) | Files left |
+|---|---|---:|---:|
+| `0721` `MRI_m201_0721_20240422_10_1` | `ACQ-20240422-MRI-001` | 155 (`-017`) | 5 |
+| `0721` `MRI_m236_0721_20250306_4_1` | `ACQ-20250306-MRI-022` | 308 (`-030`) | 112 |
+| `0721` `MRI_m262_0721_20250602_3_1` | `ACQ-20250602-MRI-007` | 102 (`-024`) | 10 |
+| `0721` `MRI_m262_0721_20250602_4_1` | `ACQ-20250602-MRI-008` | 308 (`-025`) | 112 |
+| `0721` `MRI_m268_0721_20250612_3_1` | `ACQ-20250612-MRI-023` | 308 (`-030`) | 112 |
+| `0721` `MRI_m289_0721_20251117_4_1` | `ACQ-20251117-MRI-016` | 308 (`-029`) | 112 |
+| `1022` `MRI_m113_1022_20251217_2_1` | `ACQ-20251217-MRI-008` | 411 (`-021`) | 9 |
+
+- **Independent verification** (plain `os.stat` / `os.path.samefile`): each of the 7 folders holds exactly its own
+  acquisition's raw files (the same names, the same files, nothing else); every one of the 1,900 removed names is gone, and its
+  file is still in `/raw/` and in its own acquisition's link (the same file, the same id); one event per folder. **0 problems.**
+  No registry file was written.
+- **Final re-audit** (every project, by file id): **POLLUTED 0, MISSING 0**, OK **19,070** (= 18,474 + 589 + 7), no link
+  entry holds more than one acquisition's files; RESEARCHER-PRUNED 2, EMPTY-PRIMARY 319 and CLOSED-PROJECT 1,166 unchanged.
+
+Records in [`link_collision_audit/`](link_collision_audit/): `executed_repair_plan.csv` (A), `after_repair_link_audit_summary.txt`
+(after A), `link_prune_plan_dry_run.csv` and `executed_prune_manifest.csv` (B), `final_link_audit_summary.txt` (after B).

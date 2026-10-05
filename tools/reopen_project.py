@@ -75,7 +75,12 @@ def closeout_backup_dir(project_id):
 
 
 def link_names_from_provenance(paths):
-    """acq_id -> the LAST hard-link name recorded for it across the given provenance files."""
+    """acq_id -> the LAST hard-link name recorded for it across the given provenance files.
+
+    Only rows that record a link being CREATED (`hardlink` / `hardlink-folder`) count: a
+    `hardlink-removed` event (the retire tool; repair_link_collisions prune-foreign, which removes an
+    acquisition's merged-in names from ANOTHER acquisition's folder) names a link that is not, or
+    is no longer, that acquisition's own."""
     names = {}
     for p in paths:
         if not p or not os.path.isfile(p):
@@ -85,7 +90,7 @@ def link_names_from_provenance(paths):
                 acq = (r.get("input_refs") or "").strip()
                 name = (r.get("output_name") or "").strip()
                 if acq.startswith("ACQ-") and name and not name.lower().endswith(".lnk") \
-                        and (r.get("file_type") or "").startswith("hardlink"):
+                        and (r.get("file_type") or "") in ("hardlink", "hardlink-folder"):
                     names[acq] = name
     return names
 
