@@ -169,6 +169,11 @@ The genuinely in-flight items (kept tight — everything else is in
   - **2026-10-04, Ryan's decisions and the day's writes:** see the close-out plan's "Decisions of 2026-10-04".
     - **Written and verified:** +578 drives MRI/PET-CT rows; 4 paperwork projects (`PROJ-0062`…`0065`); `1519` and `0320` reopened; retire v2 merged.
     - **Approved and queued:** the non-raw copies (short-path layout with an index), the holding folder, `LEONE`'s new content into `DTS24`'s folder, D's 153 retirements, and the dot-file plus 14 nested `.czi`.
+  - **✅ Project link collisions fixed and repaired (2026-10-05).**
+    - The linker refuses a taken name, and MRI link names carry the study time.
+    - 589 missing links were created and 7 polluted folders cleaned; the final audit shows 0 missing and 0 polluted.
+    - The GUI exe redeploy is in progress.
+    - Record: `tasks/link_collision_fix_review.md`.
   - **✅ The same-timestamp clean-up (gate rule R4, stream D) is done: all 4 approved lists, 153 acquisitions (2026-10-04/05).** The last list, `roi_crops` (81, 184 GB), ran on 2026-10-05 on Ryan's instruction. Its run is `RET-20261005-104956-623`; every check passed, and all 81 files hash identical to the drive copies. *(History of the line below:)*
   - **🔶 The same-timestamp clean-up (gate rule R4, stream D): 3 of the 4 approved lists are done (2026-10-04).** Review: `tasks/drives_r4_cleanup_review.md`.
     - **The analysis:** of the 819 files in 247 groups, 469 are derivatives (251.8 GB) and 350 stay in `/raw/`. `ID65_PB_lung_20x_scale.czi` also stays: it is the only record of its acquisition.

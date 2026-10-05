@@ -112,8 +112,15 @@ Found by stream F while previewing the first m12 study of 2026-07-10.
 
 The streams that ingested on 2026-10-04 checked every planned link name first, and verified each acquisition's link folder strictly afterwards.
 
-- [ ] **Code:** `create_hardlink` must refuse (raise) when an existing file in the destination is not the same file (`os.path.samefile`), instead of skipping it. Test it with two acquisitions of one name.
-- [ ] **Template:** give the MRI `link_filename` a per-study part (the study start time, or the ACQ-ID), so a same-day repeat cannot collide.
+- [x] *(✅ Done 2026-10-05, merged `70c5023`. `LinkCollisionError`, not an `OSError`, so it is never queued; ingest Step 5.5 checks before the copy, also in `--dry-run`; every relink caller judges by file id; tests in `tools/test_link_collisions.py`.)* **Code:** `create_hardlink` must refuse (raise) when an existing file in the destination is not the same file (`os.path.samefile`), instead of skipping it. Test it with two acquisitions of one name.
+- [x] *(✅ Done 2026-10-05; the form was confirmed by Ryan: `MRI_<sample>_<date>_<HHMM>_<exam>_<recons>`, applied to new links.)* **Template:** give the MRI `link_filename` a per-study part (the study start time, or the ACQ-ID), so a same-day repeat cannot collide.
+- [x] *(✅ Done 2026-10-05, Ryan approved; `tools/repair_link_collisions.py`, merged `0c49278`.)*
+  - **The audit** (every project, by file id) found 589 acquisitions without their own link (200 MRI, plus 389 Cell Observer and LSM 900 from the June best-guess ingests) and 7 polluted MRI folders.
+  - **Repaired:** 589 links created, and 1,900 foreign names removed from the 7 folders. Each removed file stays reachable through its own acquisition's link.
+  - **The final audit:** MISSING 0, POLLUTED 0, OK 19,070.
+  - **Verified** by the stream and independently by the coordinator. The record is `tasks/link_collision_fix_review.md`.
+- [ ] **Redeploy the operator GUI exe with the fixed linker** (Ryan's go, 2026-10-05). In progress; see the review §12.
+- [ ] Low: make `provenance.has_entry_for_output` compare `output_path` case-insensitively. The share is case-insensitive, so 16 acquisitions carry a provenance row for a link that was never made; the repair has now made those links.
 - [ ] **Audit and repair (Ryan's decision):** list the affected acquisitions (an inode check of each link folder), then add the missing links under distinct names. Additive only: project folders are researcher-owned (05_PROJECTS §3a).
 - [x] The first m12 study of 2026-07-10 avoided it with a scoped config (a `_study1147` suffix).
 - [x] Stream B's drive batches (2026-10-04) were guarded by `tools/drive_staging/check_link_collisions.py` before writing and `verify_links_strict.py` after. All of B's links are exact.
@@ -2472,7 +2479,7 @@ they simply land as skipped placeholders.
   marked `no-source` — if a ParaVision-reconstruction path is ever built, those
   are its candidate input (they have raw k-space but no `2dseq`).
 
-## MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14)
+## MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14) — ✅ superseded 2026-10-05 by the 🔺 link-collision item (its two `0219` pairs were repaired)
 
 **Priority: LOW (data-safe; near-term MRI template fix).** Found
 during the no-DICOM regen relink (`tools/relink_mri_regen.py`, 2026-06-14): the MRI
