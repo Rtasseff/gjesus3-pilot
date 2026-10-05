@@ -2,9 +2,9 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** ✅ DECIDED (reframe captured 2026-05-20; §5.6/§5.7 added 2026-05-26 after round-8 NI redo)
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-10-05 (the live scale is one dated registry count plus a pointer to `tasks/STATUS.md` §1, the single source). Prior: 2026-06-26.
 
-> **The two-tier model is IMPLEMENTED and live.** Tier 2 (gjesus3, the research-facing working layer) is in true production since the 2026-06-10 restart — ~13,555 acquisitions in `/raw/`, ~50 projects, alongside the Tier 1 platform archives described below.
+> **The two-tier model is IMPLEMENTED and live.** Tier 2 (gjesus3, the research-facing working layer) is in true production since the 2026-06-10 restart — 27,034 acquisitions in `/raw/` on 2026-10-05 (current figures: [`tasks/STATUS.md` §1](../tasks/STATUS.md#1-current-state--true-production)), alongside the Tier 1 platform archives described below.
 
 ---
 

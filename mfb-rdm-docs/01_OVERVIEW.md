@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** ✅ Current
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-10-05 (the live scale is one dated registry count plus a pointer to `tasks/STATUS.md` §1, the single source). Prior: 2026-06-26.
 
 ---
 
@@ -14,7 +14,7 @@ This document describes the purpose, scope, and constraints of the MFB gjesus3 r
 
 > ## ✅ Status: TRUE PRODUCTION
 >
-> **gjesus3 is live and holding real, retained research data.** The system has been in **true production since the 2026-06-10 restart**. As of 2026-06-26 it holds **~13,555 registered acquisitions** across microscopy, MRI, and nuclear imaging, organised into **~50 projects** and covering **~715 subjects** (see [06_REGISTRIES](06_REGISTRIES.md)).
+> **gjesus3 is live and holding real, retained research data.** The system has been in **true production since the 2026-06-10 restart**. On 2026-10-05 it held **27,034 registered acquisitions** across microscopy, MRI, and nuclear imaging, organised into projects (see [06_REGISTRIES](06_REGISTRIES.md)). The current figures are kept in one place only: [`tasks/STATUS.md` §1](../tasks/STATUS.md#1-current-state--true-production).
 >
 > **The pilot phase is complete and historical.** During the pilot, each instrument iterated *test → purge → accept*, and after the team exhibition the whole quasi-production dataset was **purged on 2026-06-10** and the container restarted as true production. **That purge has already happened. There is no future exhibition, purge, or restart pending.** All data deposited now is real and kept for the long term — treat the registry and `/raw/` with production care. ("Done" in this system means "done in true production.")
 >
@@ -172,7 +172,7 @@ These were the original design-intent criteria. With the system now in true prod
 
 | # | Design-intent criterion | Status |
 |---|-------------------------|--------|
-| 1 | **All new acquisitions** from covered modalities are deposited and registered within defined timelines | ✅ **Achieved** — all six in-scope instruments (AxioScan 7, Cell Observer, LSM 900, Bruker ParaVision MRI, Molecubes/MILabs PET·SPECT·CT) are operational; **~13,555 acquisitions** registered in `registry_raw.csv`, each with a JSON metadata sidecar. |
+| 1 | **All new acquisitions** from covered modalities are deposited and registered within defined timelines | ✅ **Achieved** — all six in-scope instruments (AxioScan 7, Cell Observer, LSM 900, Bruker ParaVision MRI, Molecubes/MILabs PET·SPECT·CT) are operational; **27,034 acquisitions** registered in `registry_raw.csv` on 2026-10-05 (current figure: [`tasks/STATUS.md` §1](../tasks/STATUS.md#1-current-state--true-production)), each with a JSON metadata sidecar. |
 | 2 | **Publication archives** can demonstrate complete provenance for all included outputs | 🕗 **Deferred** — the provenance + project-link machinery is live (hard links, registry, enrichment writer); the `publications/` area itself is intentionally empty/planned until the first package is assembled (see [04_PUBLICATIONS](04_PUBLICATIONS.md)). |
 | 3 | **Any published figure** can be traced to its source raw data within 15 minutes | ✅ **Achieved** — the [registries/index.html Finder](../tools/FINDER.md) (live since 2026-06-23; a global index rebuilt on a daily schedule, plus a per-project `index.html` refreshed when an ingest writes into that project) makes any acquisition searchable in seconds, and project folders hold hard links straight back to `/raw/`. |
 | 4 | **Researchers comply** without significant resistance or workarounds | ✅ **Largely achieved** — a single frozen Windows operator GUI, `gjesus3_ingest.exe` (microscopy + MRI pages), was deployed to the NAS on 2026-06-24, reducing deposit to a few clicks; the non-blocking enrichment model means missing metadata never blocks an ingest. |

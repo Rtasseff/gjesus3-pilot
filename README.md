@@ -12,7 +12,7 @@ gjesus3 is the **research-facing working layer** for MFB imaging data in the 5-y
 
 > **✅ TRUE PRODUCTION since 2026-06-10.** All data is real and retained long-term.
 >
-> **~13,555 acquisitions** in `/raw/` · **~50 projects** (each hard-linked to its raw data) · **~715 subjects** in the subject registry · **all instruments live** (microscopy, MRI, Nuclear Imaging) · **operator GUI** (`gjesus3_ingest.exe`) and the **Finder** (`registries/index.html`) deployed.
+> **27,034 acquisitions** in `/raw/` on 2026-10-05 (the current figures are kept in one place only: [`tasks/STATUS.md` §1](tasks/STATUS.md#1-current-state--true-production)) · **all instruments live** (microscopy, MRI, Nuclear Imaging) · **operator GUI** (`gjesus3_ingest.exe`) and the **Finder** (`registries/index.html`) deployed.
 
 The dated history of how the system got here — the earlier pilot, the per-instrument test rounds, and the 2026-06-10 production restart — lives in [`CHANGELOG.md`](CHANGELOG.md).
 
