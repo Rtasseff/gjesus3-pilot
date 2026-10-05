@@ -27,13 +27,13 @@ would need a new decision from him, it is written into this section and the work
 | # | Ryan's ruling, in his words | Where it stands |
 |---|---|---|
 | **D1(a)** | "NOW. Replace the placeholder on the 10,314 MRI operator cells with a hold value meaning "awaiting claim". You choose the token, document it where the blank sentinel is documented, and make the validator accept it; no OK from me needed on the name. Done when the validator passes with 0 errors and only those 10,314 cells changed." | NOW: in progress |
-| **D1(b)** | "NOW, build only, do not send. A claim list for Jesús's group: one row per session or folder (not per acquisition) with project, date, session name and acquisition count, plus blank columns for who ran it. Make it similar to the projects xlsx we just did … You can put it in projects folder as well because more people will have some access to that. … I send it at the pilot re-launch and set the claim window then." | NOW: in progress |
+| **D1(b)** | "NOW, build only, do not send. A claim list for Jesús's group: one row per session or folder (not per acquisition) with project, date, session name and acquisition count, plus blank columns for who ran it. Make it similar to the projects xlsx we just did … You can put it in projects folder as well because more people will have some access to that. … I send it at the pilot re-launch and set the claim window then." | **✅ Built 2026-10-05, not sent:** `J:\gjesus3-data\projects\_MRI sessions - who ran them (2026-10).xlsx`. **926 sessions** (one row per session folder on the scanner), **21 projects** (4 of them closed), 10,314 acquisitions, 2022-01-10 → 2026-06-05. Sheets: Read me (the claim window's end is left blank for Ryan), Sessions to claim (yellow: Who ran it, Notes, Answered by; a grey session key), Projects, Acquisitions. Ryan sends it at the pilot re-launch. |
 | **D1(c)** | "LATER. After the claim window closes, blank whatever is still unclaimed. Record it in BACKLOG, dated to the window end; do nothing now." | In [`BACKLOG.md`](BACKLOG.md) (the 🔺 `operator` item), due when the claim window closes. Ryan sets the window at the pilot re-launch. |
 | **D2** | "I am emailing Irene today. When her answer arrives: if 37, repair by the recovery-tool pattern in BACKLOG (HIGH, 2026-08-21), 19 sidecars and 19 registry rows, ACQ-IDs kept; if 39, record it and close." | Waiting on Irene's answer. No decision is left for Ryan. [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-21) |
 | **D3** | "NOW. Make the ingest report every study folder that matches neither regex (code change on a branch, with tests), then re-scan the historical sources read-only and report the count. Reconcile it with the drives DICOM review §5 as it stands after the weekend." | NOW: in progress |
 | **D4, D5** | "SegBioMed's decisions, not mine. Move both to the SegBioMed memo/backlog and off §0. Apply nothing." | Moved to the SegBioMed memo (REPLY 7) and the [`BACKLOG.md`](BACKLOG.md) item "the curated-datasets pilot returned 19 spec gaps". Nothing applied. |
 | **D6** | "Held until SegBioMed starts, after the leadership write-up. Off §0, into BACKLOG with that trigger." | Moved to [`BACKLOG.md`](BACKLOG.md) 🕗 "mint the `SegBioMed` project", with that trigger. |
-| **D7** | "NOW. Flip the five header-only exams to terminal no-source." | NOW: in progress |
+| **D7** | "NOW. Flip the five header-only exams to terminal no-source." | **✅ Done 2026-10-05.** The five worklist rows went `pending` → `no-source` (`backfill_dicom_regen.py --apply --mark-no-source`, limited to the five ACQ-IDs). **Verified:** only those five rows changed, and only `status`; the worklist is now not-applicable 365, regenerated 164, no-source 99, pending 0; the invariant holds (`backfill_pending_dicom.py --dry-run`: 0 to add). **Checked first, read-only:** the scanner still holds the study, and its copy matches the staged one: none of the five has a `2dseq` or a `fid`. Exam 7 (a cine) holds only `rawdata.job0/1`, which Dicomifier cannot use; a ParaVision reconstruction on the scanner would still be possible. Backup: `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261005_preD7\`. |
 | **D8** | "Held until there is pull. Order: the cardiac MRI segmentation pipeline on the image servers first, then MILabs, then the SegBioMed project minted with a first fibrosis project. Into BACKLOG with that order." | Moved to [`BACKLOG.md`](BACKLOG.md) 🕗 "held until there is pull", in that order. |
 | **D9** | "Closed. The mixed-now, converge-later assumption holds." | Closed. [`../mfb-rdm-docs/12_CURATED_DATASETS.md`](../mfb-rdm-docs/12_CURATED_DATASETS.md) CDS-03 is ✅ DECIDED. |
 
@@ -51,15 +51,15 @@ would need a new decision from him, it is written into this section and the work
 | **H3** | **Claudia's `nrn01`/`nrn02`** (Q8): one external study whose folder says mouse 01 and whose subject file says 02. It keeps the subject file's value unless Claudia says otherwise. | A wrong mouse label looks like data | `tasks/drives_dicom_review.md` Q8 |
 | **H4** | **Lucia, `AE-biomaGUNE-0118`:** the animal links of 147 files wait until Lucia (or Ainhize) confirms the animal numbers belong to `0118`. | Low: the files are in the right project; only the subject links are missing | [`BACKLOG.md`](BACKLOG.md) 🔹 small follow-ups |
 | **H5** | **The CoS hub's stand-name reading** (its historical-drives `HANDOFF.md` §7.2/§8.6). | Low: a future session reading the hub could identify an instrument wrongly | [`BACKLOG.md`](BACKLOG.md) 🔹 small follow-ups |
-| **H6** | **The 365 + 94 legacy MRI placeholders** (empty rows from before the 2026-10-04 line): retire them, or leave them. | None: the state is consistent | [`BACKLOG.md`](BACKLOG.md) 🔸 "existing MRI rows that fall outside the 2026-10-04 line" |
+| **H6** | **The 365 + 99 legacy MRI placeholders** (94, plus the five D7 rows since 2026-10-05) (empty rows from before the 2026-10-04 line): retire them, or leave them. | None: the state is consistent | [`BACKLOG.md`](BACKLOG.md) 🔸 "existing MRI rows that fall outside the 2026-10-04 line" |
 | **H7** | **Another group's (`jl`) study nested in m3's folder** on the scanner: tell the `jl` group, or not. | None for gjesus3 | [`BACKLOG.md`](BACKLOG.md) 🔹 |
 
 *(The holding-folder ACL is decided: no change, Ryan 2026-10-05.)*
 
 ### 0.3 While Ryan is away (asked for 2026-10-05, each reported as a verified result or a count)
 
-- **Front doors:** one current registry figure plus a pointer to §1 as the single source.
-- **Merge `docs/ni-tunnel-live`** if it is docs-only and `main`'s checks pass.
+- **Front doors:** one current registry figure plus a pointer to §1 as the single source. **✅ Done 2026-10-05 (`e86b31b`):** README, GLOSSARY, 00_INDEX, 01_OVERVIEW (twice) and 13 now say 27,034 acquisitions on 2026-10-05 and link §1. §1 was brought up to date first (64 projects, 1,288 subjects, per-instrument counts).
+- **Merge `docs/ni-tunnel-live`** if it is docs-only and `main`'s checks pass. **✅ Merged 2026-10-05 (`4625f38`):** one commit, six `.md` files; `main` passed 35/35 test suites first. Two conflicts in the record files were resolved by hand. The worktree stays for its own session.
 - **Feasibility only, no build:** can per-user access be logged on the gjesus3 share and the web apps (Finder, Project Manager)? What is possible, what it costs, and who would have to switch it on.
 
 **Where the SegBioMed conversation lives:** the full exchange with the SegBioMed project is appended to
@@ -82,7 +82,7 @@ PYTHONPATH=tools python tools/validate_registries.py --nas-root "J:\gjesus3-data
 
 # D7 -- what is still queued for DICOM regeneration
 python -c "import csv,io,collections;print(collections.Counter(r['status'] for r in csv.DictReader(io.open(r'J:\gjesus3-data\registries\pending_dicom_regen.csv',encoding='utf-8-sig',newline=''))))"
-#   expected: not-applicable 365, regenerated 162, no-source 94, pending 5 (the D7 header-only exams)
+#   expected: not-applicable 365, regenerated 164, no-source 99, pending 0 (the five D7 exams were flipped 2026-10-05)
 
 # curated datasets -- should be 4 rows
 python -c "import csv,io;print(len(list(csv.DictReader(io.open(r'J:\gjesus3-data\registries\registry_datasets.csv',encoding='utf-8-sig',newline='')))))"

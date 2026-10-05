@@ -1494,6 +1494,7 @@ wrong, but until this is settled the validator cannot serve as a gate for anythi
 
 - [x] *(✅ Decided 2026-10-05, Ryan: a hold value now, a claim list, then blank whatever is unclaimed when the claim window closes.)* **Decide the representation** (recommend: blank). It is the only decision here — the write
   itself is the same byte-level, delimited, no-BOM/CRLF-preserving edit already done twice.
+- [x] *(✅ (b) built 2026-10-05, not sent: `J:\gjesus3-data\projects\_MRI sessions - who ran them (2026-10).xlsx`, 926 sessions in 21 projects. Answers join back by the grey `session key`, the study-folder part of `original_name`.)* **(b) The claim list.**
 - [ ] **(c) LATER, due when the claim window closes** (Ryan sets the window at the pilot re-launch; the date goes here then). Blank whatever is still unclaimed: every `operator` cell still holding the hold value becomes empty. Do nothing before the window closes.
 - [ ] **Collapse repeated identical findings in the validator regardless.** 10,315 lines for one
   defect class is the saturated-warning-channel item below, reproduced in the error channel — report
@@ -2126,7 +2127,7 @@ The researcher's own conversions sit in the study folder: `NIFTI\`, 30 files (32
 
 Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is registered only with a reconstructed image stored as DICOM. Spectroscopy and calibration exams are not registered, and neither are reconstructions that cannot be converted to DICOM.
 
-**The conflict:** production already holds MRI rows registered as empty placeholders before the line existed. The 2026-07-16 drain of the DICOM-regen worklist (10_TOOLS §3.8) left **365 rows `not-applicable`** (spectroscopy/calibration: STEAM/PRESS/WOBBLE) and **94 `no-source`**.
+**The conflict:** production already holds MRI rows registered as empty placeholders before the line existed. The 2026-07-16 drain of the DICOM-regen worklist (10_TOOLS §3.8) left **365 rows `not-applicable`** (spectroscopy/calibration: STEAM/PRESS/WOBBLE) and **94 `no-source`**. *(99 `no-source` since 2026-10-05: the five header-only G1 exams were flipped on Ryan's ruling, STATUS §0 D7.)*
 
 - [ ] Count them afresh, from `registries/pending_dicom_regen.csv` and from `/raw/` folders with an empty `.data\`.
 - [ ] **Decide (Ryan):**
