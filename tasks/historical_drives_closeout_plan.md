@@ -260,7 +260,7 @@ coordinator:**
 
 **Still open, waiting on Ryan:**
 
-1. **`roi_crops` (81 ROI re-saves, 184 GB):** the last of stream D's approved lists. The permission system refused its `--execute`. Ryan either tells the coordinator to run the six steps in `tasks/drives_r4_cleanup_review.md` §14c, or runs them himself.
+1. **✅ DONE 2026-10-05:** `roi_crops` was run by the coordinator on Ryan's instruction and verified. *(Was:)* **`roi_crops` (81 ROI re-saves, 184 GB):** the last of stream D's approved lists. The permission system refused its `--execute`. Ryan either tells the coordinator to run the six steps in `tasks/drives_r4_cleanup_review.md` §14c, or runs them himself.
 2. **The link-folder merge** (BACKLOG 🔺): 209 acquisitions on multi-study animal-days have no project link folder of their own. Ryan decides on the audit and repair.
 3. **The 2b mapping worksheet** (BACKLOG 🔺): `tasks/drives_nonraw_mapping_worksheet.csv`, 62 `A` rows. The runbook is `tasks/drives_nonraw_2b_2c_followup.md`.
 4. **Smaller decisions:**
@@ -521,7 +521,7 @@ In rough order:
      manifests).
    - **Same exclusions as item 2:** software, system files and personal/admin hits. The holding
      folder is group-readable.
-3. **🔶 Clean up the same-timestamp groups (stream D, merged):**
+3. **✅ Clean up the same-timestamp groups:** all 4 lists, 153 acquisitions. `roi_crops` ran 2026-10-05 on Ryan's instruction (`RET-20261005-104956-623`), and every check passed. *(Earlier status:)* **🔶 Clean up the same-timestamp groups (stream D, merged):**
    - **Done 2026-10-04:** 3 of 4 lists, 72 acquisitions, verified.
    - **⚠️ `roi_crops` (81) is on hold:** the permission system refused it, and it waits for Ryan (review §14c has the six steps).
    - **Waiting:** the 61 no-project derivatives and proposal (c).

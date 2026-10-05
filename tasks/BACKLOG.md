@@ -355,8 +355,7 @@ the file name or the image dimensions) identifies the acquisition. The bytes do 
 shared under *different* names is ZEN's scene splits, stitched copies and region extracts. Those
 are the same acquisition, but not always the same pixels.
 
-- [ ] **Clean up the drives ingest's same-timestamp groups after the run (2026-10-01).** *(2026-10-04: analysed by pixel check, giving 469 derivatives and 350 to stay; the review is `tasks/drives_r4_cleanup_review.md`. **3 of 4 approved lists are executed** (72). Left to do:
-  - `roi_crops` (81; on hold, because the permission system refused it);
+- [ ] **Clean up the drives ingest's same-timestamp groups after the run (2026-10-01).** *(2026-10-04: analysed by pixel check, giving 469 derivatives and 350 to stay; the review is `tasks/drives_r4_cleanup_review.md`. **All 4 approved lists are executed** (153; `roi_crops` on 2026-10-05). Left to do:
   - the 61 derivatives waiting for item 2b;
   - proposal (c), 255 files, on hold;
   - the 50 `1321` files on their drive path, which item 2b may regroup;
