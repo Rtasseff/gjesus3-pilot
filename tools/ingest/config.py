@@ -16,6 +16,7 @@ from . import (
     paravision_metadata,
     registry,
     resolver,
+    unparsed as unparsed_mod,
     user_tables,
 )
 from . import dicom_headers as dicom_headers_mod
@@ -363,8 +364,31 @@ def _validate_enrichment_blocks(cfg, disco):
     }
 
 
-def expand_batch(cfg, nas_root=None):
+def _note_unparsed(groups, rule, pattern, err, parse_target, parse_source,
+                   match_path, is_dir, original_name, config_path, staging_dir):
+    """Record one match dropped by a filename_parse failure under its parse
+    target (ingest/unparsed.py). Called on the failure path only, so a batch
+    that parses pays nothing for it (the exam test is two stats per match)."""
+    unparsed_mod.note(
+        groups, target=parse_target,
+        target_path=(str(Path(match_path).parent)
+                     if parse_source == "parent_name" else match_path),
+        source=parse_source, rule=rule, pattern=pattern, reason=str(err),
+        original_name=original_name,
+        is_exam=bool(is_dir) and _is_paravision_exam(match_path),
+        config=config_path, staging_dir=staging_dir,
+    )
+
+
+def expand_batch(cfg, nas_root=None, unparsed=None):
     """Expand a batch config into a list of validated, registry-resolved cases.
+
+    `unparsed` (optional, a list): when given, one record per parse TARGET whose
+    name matched no `filename_parse` rule is appended to it -- for a ParaVision
+    batch, one per study folder, with how many exam folders it held (see
+    ingest/unparsed.py for the record). The return value is unchanged, so callers
+    that don't pass it behave exactly as before. Every caller also gets one
+    `[expand_batch] NOT PARSED: ...` line on stdout when any target was dropped.
 
     Schema:
 
@@ -420,6 +444,13 @@ def expand_batch(cfg, nas_root=None):
     # (parent folder of the match — useful when the meaningful name is
     # one level up, as for Bruker ParaVision exam folders).
     parse_source = parse_cfg.get("source", "name")
+
+    # Parse targets the filename_parse rule could not parse, grouped (one
+    # record per target, e.g. per study folder). Always collected so the
+    # NOT PARSED line below reaches every caller; handed to the caller's
+    # `unparsed` list at the end. See ingest/unparsed.py.
+    unparsed_groups = {}
+    unparsed_config = cfg.get("_ingest_config_path") or ""
 
     # path_parse: free-form named levels between staging_dir and the file.
     # Each level becomes a discovered.<name>. Requires a recursive glob
@@ -599,6 +630,9 @@ def expand_batch(cfg, nas_root=None):
         # collision, since that's the historical behaviour).
         if parse_fields or parse_regex:
             parsed = {}
+            # A parse failure drops this match AND names its target in the
+            # NOT PARSED report (the SKIP line keeps its format: the GUI
+            # preview parses it).
             if parse_regex:
                 try:
                     parsed.update(filename_parser.parse_regex(
@@ -606,6 +640,10 @@ def expand_batch(cfg, nas_root=None):
                     ))
                 except filename_parser.FilenameParseError as e:
                     print(f"[expand_batch] SKIP {match_basename}: {e}")
+                    _note_unparsed(unparsed_groups, "regex", parse_regex, e,
+                                   parse_target, parse_source, match_path,
+                                   is_dir, rel_match, unparsed_config,
+                                   staging_dir)
                     continue
             if parse_fields:
                 try:
@@ -614,6 +652,11 @@ def expand_batch(cfg, nas_root=None):
                     ))
                 except filename_parser.FilenameParseError as e:
                     print(f"[expand_batch] SKIP {match_basename}: {e}")
+                    _note_unparsed(unparsed_groups, "positional",
+                                   f"separator={parse_sep!r} fields={list(parse_fields)}",
+                                   e, parse_target, parse_source, match_path,
+                                   is_dir, rel_match, unparsed_config,
+                                   staging_dir)
                     continue
             # filter
             skip = False
@@ -780,6 +823,19 @@ def expand_batch(cfg, nas_root=None):
         if unused:
             print(f"[expand_batch] WARN: {unused} case_table row(s) matched no "
                   f"file under {staging_dir}")
+
+    # The parse targets dropped above, as one line every caller sees, and as
+    # structured records for the callers that asked for them. (Worded without
+    # "SKIP"/"WARN": drive_staging/ingest_check.py counts those words.)
+    unparsed_records = list(unparsed_groups.values())
+    if unparsed_records:
+        names = sorted(r["target"] for r in unparsed_records)
+        shown = ", ".join(names[:10]) + (
+            f", ... (+{len(names) - 10} more)" if len(names) > 10 else "")
+        print(f"[expand_batch] {unparsed_mod.headline(unparsed_records)} -- "
+              f"nothing under them is ingested: {shown}")
+    if unparsed is not None:
+        unparsed.extend(unparsed_records)
 
     if not cases:
         print(
