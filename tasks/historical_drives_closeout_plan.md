@@ -272,7 +272,13 @@ coordinator:**
    - Lucia (the `0118` animal links);
    - the hub's stand-name reading.
 
-**The D: erase (Step 4). Ryan's go is needed: it is his drive, and it cannot be undone.**
+**✅ The D: erase is DONE (2026-10-05, Ryan approved the plan):**
+- **(a) Records kept on the NAS:** `J:\gjesus3-data\staging\historical_drives_records\`, 2,590 files, 5.1 GB, each SHA-256-verified at copy, with `README.txt` and `records_manifest.csv`. They are both drives' `manifest.csv` and inventories, all of `_analysis\`, and `_tools\`.
+- **(b) Deleted:** the 47 `*_identifiers.csv` files (patient DOBs); none remains and none was kept.
+- **(c) Erased:** `D:\projects\gjesus3\staging\` (5,853 GB: the drive trees, `_extract\`, `_analysis\` and `_tools\`), and stream A's scratch (22 GB). D: free space went 583 → 6,458 GB.
+- **Untouched:** D:'s older folders (`_p3test`, `data_test`, `dicomifier_pilot`, `home`), which are outside this effort.
+
+*(The plan as written:)* **The D: erase (Step 4). Ryan's go is needed: it is his drive, and it cannot be undone.**
 Everything from the drives is now in gjesus3 or accounted for: ingested, placed, held, or deliberately excluded with a reason. Two exceptions: `roi_crops` (still in `/raw/` as live acquisitions, so nothing is lost), and the 61 derivatives plus proposal (c), which are in `/raw/` too.
 
 Before the erase:
