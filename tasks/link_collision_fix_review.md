@@ -419,3 +419,43 @@ The coordinator granted the window after the merge (70c5023), for A and B only; 
 
 Records in [`link_collision_audit/`](link_collision_audit/): `executed_repair_plan.csv` (A), `after_repair_link_audit_summary.txt`
 (after A), `link_prune_plan_dry_run.csv` and `executed_prune_manifest.csv` (B), `final_link_audit_summary.txt` (after B).
+
+## 12. Phase C (2026-10-05): the operator GUI exe rebuilt, smoke-tested and redeployed
+
+Ryan's go: "Now, after the merge." Done per `tools/operator/gui/README.md` ("Freeze to a single `.exe`", "Verify a frozen
+build with a REAL commit", "Deploying to the NAS").
+
+- **Build** from `main` at **0c49278** (the worktree fast-forwarded first; `tools/` identical to `main`), outside OneDrive:
+  `python -m PyInstaller --noconfirm --workpath D:/_build --distpath D:/_dist tools/operator/gui/gjesus3_ingest.spec`.
+  **Versions:** Python 3.13.14 (the Microsoft Store build, as before), PyInstaller 6.18.0 (contrib hooks 2025.11), on
+  Windows 11 10.0.26200; Flask 3.1.3, paramiko 5.0.0, czifile 2026.4.30, tifffile 2026.1.14, numpy 2.4.1, PyYAML 6.0.3,
+  pydicom 3.0.2. Three benign hidden-import warnings (`pycparser.lextab` / `yacctab`, `scipy.special._cdflib`).
+  **Output:** `D:\_dist\gjesus3_ingest.exe`, 96,015,460 bytes, sha256
+  `54c641f100787dc95374392ce0687a8c294ff46e862831fc394ca78e29253732`.
+- **Smoke test of the frozen exe** (never production: a throwaway test NAS from `make_test_nas.py`, at
+  `C:\Users\rtasseff\temp\gjesus3_exe_smoke_20261005b\`; scratch `LOCALAPPDATA`, so no operator setting was touched):
+  - both pages render; the static files, the bundled help pages, the seed recipes and the **new** `mri.js` (the corrected
+    collision message) all load from the bundle;
+  - an MRI preview of three exams of a real study shows the **new link-name form**, `MRI_m17_0424_20251016_0838_<exam>_1`, with
+    `discovered.study_time = 0838` from the bundled template;
+  - a link name planted in the test NAS's `raw_linked\` is shown as taken in the preview, with its reason;
+  - a **REAL commit** (not a dry run, as the README requires): the taken-name exam is **refused at Step 5.5 with nothing
+    copied or registered**; the other two commit, each with `README.txt`, `metadata.json` and `checksums.json`, a link that is
+    exactly its DICOMs (`samefile`), `subject_ids` `17-AE-biomaGUNE-0424` from the facility DB through the bundle,
+    `instrument_model` `Bruker BioSpec 7T`, and a provenance row; nothing queued to `pending_links.csv`;
+  - a **real `.czi` commit** (one small LSM 900 primary copied off production read-only): `czifile` reads it inside the
+    bundle, and the project is auto-created in the test NAS, with README, the microscopy sidecar block and a `samefile` link.
+  - All checks passed. A first run had one false FAIL from my own script (it counted `<ACQ-ID>.data` sub-folders as
+    acquisition folders); after fixing it, the whole test was re-run end to end on a fresh test NAS, and everything passed.
+- **Deploy** (`J:\gjesus3-data\tools\` = `\\gjesus3\gjesus3\gjesus3-data\tools\`, where operators launch the exe in place):
+  - **Backup first,** to a fresh dated folder: `C:\Users\rtasseff\temp\gjesus3_exe_backup_20261005_150003\`, holding the
+    previous exe (sha256 `0a35bf4e074b0381257a8a47bbe1d8d4df38c4c842ae336d0649f64e97f40783`, 95,897,468 bytes, the 2026-09-04
+    build) and the two help pages, each verified by SHA-256, with `SHA256SUMS.txt`;
+  - the build was copied to `gjesus3_ingest.exe.new`, hashed, and only then `os.replace`d onto the target. **The deployed file
+    hashes `54c641f1…253732`, equal to the build** (also re-hashed over the UNC path), 96,015,460 bytes; no `.new` was left behind;
+  - `tools\docs\microscopy_guide.html` updated to the repo version (sha256 `3ad4d2f9…`: the August GUI features, already in
+    the exe's bundled help, had never reached the standalone copy); `mri_guide.html` was already identical;
+  - **launched from the NAS** (the UNC path the operators' shortcuts use): it serves both pages and the new `mri.js`, and an MRI
+    preview shows the new link-name form. Every smoke and launch process was stopped afterwards.
+- **Not changed:** `gjesus3_manager.exe` (the Project Manager), whose import already refused a taken name in its plan; only a
+  race reaches the old linker there. A rebuild is optional, for a later session.
