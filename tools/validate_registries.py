@@ -23,9 +23,12 @@ WHAT IT CHECKS
     - the operator hold value `pending-claim` (ingest.registry.OPERATOR_HOLD,
       "awaiting claim"; 06_REGISTRIES §2.3a-bis) is accepted in the `operator`
       column -- neither an ERROR nor a WARN; the rows are counted and reported
-      as one info line -- and is an ERROR in any OTHER column: the token means
-      one thing only. The template-residue check above is not relaxed for it
-      (the token carries no template syntax, so it passes that check on its own).
+      as one info line -- and is an ERROR when it is the WHOLE value of any
+      OTHER column (stripped, case-insensitive): the token means one thing
+      only. A note that merely mentions it in running text is documentation,
+      not drift, and is not reported. The template-residue check above is not
+      relaxed for it (the token carries no template syntax, so it passes that
+      check on its own).
     - sample_type, when set, is in the controlled vocab
       {tissue, organism, cells, material, phantom}.
     - canonical_path starts with /raw/ and the acquisition folder exists on
@@ -318,9 +321,12 @@ def check_operator_hold(row, label, issues):
 
     In `operator` it is ACCEPTED -- explicitly, not merely because it happens to
     carry no template syntax -- and counted in issues.operator_hold for
-    print_report's info line. In any OTHER column it is an ERROR (case-insensitive,
-    anywhere in the cell, free text included): a token that means one thing only
-    must not be able to drift into `researcher`, `notes`, ....
+    print_report's info line. In any OTHER column it is an ERROR when the WHOLE
+    cell, stripped and compared case-insensitively, is the token: the token used
+    as a value in `researcher`, `notes`, ... is drift, and a token that means one
+    thing only must not be able to drift. A cell that merely MENTIONS it in running
+    text ("claimed by Irene 2026-11; was pending-claim") is documentation, not a
+    defect, and is not reported.
     """
     hold = registry.OPERATOR_HOLD
     for col, value in row.items():
@@ -330,7 +336,7 @@ def check_operator_hold(row, label, issues):
         if col == "operator":
             if value == hold:
                 issues.operator_hold += 1
-        elif hold.lower() in value.lower():
+        elif value.strip().lower() == hold.lower():
             issues.error(
                 f"column '{col}' holds the operator hold value {hold!r}, which is "
                 f"valid in the 'operator' column only (full value: {value!r})", label)
@@ -549,7 +555,8 @@ def validate(nas_root, check_enrich=True):
         check_template_residue(row, label, issues)
 
         # 5b. the operator hold value: accepted (and counted) in `operator`, an
-        # ERROR in any other column. Registry-cell only, like step 5.
+        # ERROR as the whole value of any other column. Registry-cell only, like
+        # step 5.
         check_operator_hold(row, label, issues)
 
         # 6. sample_type controlled vocab (blank allowed)

@@ -6,8 +6,9 @@ template instruction become the hold value "awaiting claim", the validator accep
 those cells change.
 
   1. validate_registries: `pending-claim` is accepted in `operator` (0 errors, 0 warnings, counted
-     in one info line), is an ERROR in any other column, and the template-residue check still
-     rejects the old placeholder.
+     in one info line), is an ERROR when it is the whole value of any other column (stripped,
+     any case; a note that merely mentions it is not reported), and the template-residue check
+     still rejects the old placeholder.
   2. repair_operator_hold.py: dry run writes nothing; --apply changes exactly the matching
      `operator` cells (the placeholder is stored QUOTED, because it contains a comma), keeps
      no-BOM / CRLF and every other byte, verifies itself against a backup and restores it on a
@@ -219,9 +220,9 @@ def test_validator_accepts_hold_in_operator():
 
 
 def test_validator_errors_on_hold_elsewhere():
-    print("validate_registries rejects the hold value outside `operator`:")
+    print("validate_registries rejects the hold value as the whole value of another column:")
     rows = [reg_row("ACQ-20220118-MRI-001", operator=HOLD, researcher=HOLD),
-            reg_row("ACQ-20220118-MRI-002", operator=HOLD, notes=f"waiting: {HOLD.upper()} for now"),
+            reg_row("ACQ-20220118-MRI-002", operator=HOLD, notes=" Pending-Claim "),
             reg_row("ACQ-20220118-MRI-003", operator=HOLD)]
     with tempfile.TemporaryDirectory() as d:
         nas = write_nas(d, registry_bytes(rows), rows)
@@ -229,9 +230,9 @@ def test_validator_errors_on_hold_elsewhere():
         errs = [(a, m) for a, m in issues.errors]
         check(len(errs) == 2, f"exactly 2 ERRORs (got {len(errs)})")
         check(any(a == "ACQ-20220118-MRI-001" and "'researcher'" in m for a, m in errs),
-              "an ERROR on the `researcher` cell, tagged with the acq id")
+              "an ERROR on a `researcher` cell that is the token, tagged with the acq id")
         check(any(a == "ACQ-20220118-MRI-002" and "'notes'" in m for a, m in errs),
-              "an ERROR on a free-text cell, whatever the case")
+              "an ERROR on a `notes` cell that is ' Pending-Claim ' (stripped, whatever the case)")
         check(not any(a == "ACQ-20220118-MRI-003" for a, _m in errs), "a clean hold row is not reported")
         check(issues.operator_hold == 3, "all 3 operator cells still count as hold rows")
 
@@ -239,6 +240,29 @@ def test_validator_errors_on_hold_elsewhere():
     vr.check_operator_hold({"operator": HOLD, "researcher": "", "notes": None, None: ["x"]}, "A", iss)
     check(not iss.errors and iss.operator_hold == 1,
           "a blank cell, a None and surplus fields (a list under key None) do not crash it")
+
+
+def test_validator_ignores_a_note_that_mentions_the_hold():
+    print("validate_registries does not report a note that merely mentions the hold value:")
+    rows = [reg_row("ACQ-20220118-MRI-001", operator="Irene", notes="claimed by Irene 2026-11; was pending-claim"),
+            reg_row("ACQ-20220118-MRI-002", operator="Marta", notes=f"{HOLD.upper()} until the claim round ended"),
+            reg_row("ACQ-20220118-MRI-003", operator=HOLD)]
+    with tempfile.TemporaryDirectory() as d:
+        nas = write_nas(d, registry_bytes(rows), rows)
+        issues, _n = validate(nas)
+        check(not issues.errors, f"0 errors (got {[m for _a, m in issues.errors]})")
+        check(not issues.warnings, "0 warnings")
+        check(issues.operator_hold == 1, "only the one operator cell is counted; the mentions are not")
+
+    # The rule, cell by cell: a cell is reported only when, stripped, it IS the token.
+    cases = ((HOLD, True), (" Pending-Claim ", True), (HOLD.upper(), True), ("\t" + HOLD + "\r\n", True),
+             ("claimed by Irene 2026-11; was pending-claim", False), (HOLD + " and more", False),
+             ("was " + HOLD, False), ("not-" + HOLD, False), (HOLD + "s", False), ("", False), ("   ", False))
+    for value, flagged in cases:
+        iss = vr.Issues()
+        vr.check_operator_hold({"operator": "", "notes": value}, "A", iss)
+        check(bool(iss.errors) == flagged,
+              f"{value!r} in another column: {'an ERROR' if flagged else 'not reported'}")
 
 
 def test_residue_check_unchanged():
@@ -654,6 +678,7 @@ def main():
     for fn in (test_constant,
                test_validator_accepts_hold_in_operator,
                test_validator_errors_on_hold_elsewhere,
+               test_validator_ignores_a_note_that_mentions_the_hold,
                test_residue_check_unchanged,
                test_field_spans,
                test_dry_run_writes_nothing,
