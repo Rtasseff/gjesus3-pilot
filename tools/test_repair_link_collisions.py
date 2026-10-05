@@ -18,6 +18,12 @@ A scratch NAS reproduces what the OLD linker did (2026-10-04 and before: `makedi
   P1 + P2 two file primaries (microscopy), one name: P2 skipped -> P2 MISSING, repair BLOCKED
           (no new convention outside MRI)
   Z       in a closed project -> CLOSED-PROJECT
+  K       an MRI acquisition with an EMPTY primary whose planned name is E's -> EMPTY-PRIMARY, with
+          E named as the partner (a collision with nothing to link)
+  L1 + L2 file primaries whose names differ only in case (Windows only): L2 was skipped, yet the
+          case-sensitive provenance check gave it a row -> L2 MISSING, not "pruned"
+  P3      a third same-day `slide.czi` -> with --include-file-primaries P2 gets the dated name and
+          P3 falls back to the ACQ-ID name
 
 Then the repair: a dry run plans B and D under the new MRI convention (the study time from their
 own study folder) and writes nothing; --execute links them, verifies, adds provenance, removes
@@ -92,6 +98,7 @@ def main():
         def mri(acq, study, exam, nframes, project="PROJ-0001", recons="1"):
             canon = f"/raw/DICOM/2026/2026-07/{acq}/"
             d = os.path.join(nas, canon.strip("/"), acq + ".data")
+            os.makedirs(d, exist_ok=True)
             for i in range(1, nframes + 1):
                 write(os.path.join(d, f"recon1_frame{i:02d}.dcm"), f"{acq}-{i}".encode())
             write(os.path.join(nas, canon.strip("/"), "metadata.json"), json.dumps(
@@ -130,6 +137,10 @@ def main():
         mri("ACQ-20260710-MRI-012", STUDY1, 13, 2, project="PROJ-0002")  # Z: closed project
         P1 = czi("ACQ-20260710-ZWSI-001", "slide.czi")
         P2 = czi("ACQ-20260710-ZWSI-002", "sub/slide.czi")
+        P3 = czi("ACQ-20260710-ZWSI-003", "other/slide.czi")
+        mri("ACQ-20260710-MRI-013", STUDY2, 7, 0)                       # K: empty primary
+        L1 = czi("ACQ-20260710-ZWSI-004", "a/Lipo_1.czi")
+        L2 = czi("ACQ-20260710-ZWSI-005", "b/lipo_1.czi")
 
         with open(os.path.join(reg, "registry_raw.csv"), "w", encoding="utf-8", newline="") as f:
             w = csv.DictWriter(f, fieldnames=registry.REGISTRY_FIELDS, extrasaction="ignore")
@@ -160,6 +171,13 @@ def main():
         os.remove(os.path.join(r_, "recon1_frame02.dcm"))
         old_merge(proj, "ZWSI_slide.czi", P1)
         old_merge(proj, "ZWSI_slide.czi", P2)   # skipped silently
+        old_merge(proj, "ZWSI_slide.czi", P3)   # skipped silently
+        old_merge(proj, "ZWSI_Lipo_1.czi", L1)
+        old_merge(proj, "ZWSI_lipo_1.czi", L2)  # Windows: the same name -> skipped silently ...
+        for acq, nm in (("ACQ-20260710-ZWSI-004", "ZWSI_Lipo_1.czi"), ("ACQ-20260710-ZWSI-005", "ZWSI_lipo_1.czi")):
+            provenance.append_entry(os.path.join(proj, "provenance.csv"), {   # ... yet both get a row
+                "output_path": f"raw_linked/{nm}", "output_name": nm, "file_type": "hardlink",
+                "input_refs": acq})
 
         print("audit")
         quiet = io.StringIO()
@@ -172,7 +190,11 @@ def main():
                 "ACQ-20260710-MRI-007": "RESEARCHER-PRUNED", "ACQ-20260710-MRI-008": "OK",
                 "ACQ-20260710-MRI-009": "OK-EXTRA", "ACQ-20260710-MRI-010": "PARTIAL-OWN",
                 "ACQ-20260710-MRI-011": "PENDING-LINK", "ACQ-20260710-MRI-012": "CLOSED-PROJECT",
-                "ACQ-20260710-ZWSI-001": "OK", "ACQ-20260710-ZWSI-002": "MISSING"}
+                "ACQ-20260710-ZWSI-001": "OK", "ACQ-20260710-ZWSI-002": "MISSING",
+                "ACQ-20260710-ZWSI-003": "MISSING", "ACQ-20260710-MRI-013": "EMPTY-PRIMARY",
+                "ACQ-20260710-ZWSI-004": "OK"}
+        if sys.platform == "win32":
+            want["ACQ-20260710-ZWSI-005"] = "MISSING"
         for acq, c in want.items():
             check(cls.get(acq) == c, f"{acq} -> {c} (got {cls.get(acq)})")
         by = {x["acq_id"]: x for x in results}
@@ -182,7 +204,10 @@ def main():
               and polluted[0]["complete_for"] == "ACQ-20260710-MRI-003"
               and polluted[0]["missing_victims"] == "ACQ-20260710-MRI-004",
               "one polluted folder: C's, holding D's files")
-        check(per["PROJ-0001"][1]["MISSING"] == 3 and per["PROJ-0002"][1]["CLOSED-PROJECT"] == 1,
+        check(by["ACQ-20260710-MRI-013"]["partners"] == "ACQ-20260710-MRI-005",
+              "the empty-primary acquisition names E as the holder of its planned name")
+        n_missing = 5 if sys.platform == "win32" else 4
+        check(per["PROJ-0001"][1]["MISSING"] == n_missing and per["PROJ-0002"][1]["CLOSED-PROJECT"] == 1,
               "per-project counts")
 
         print("repair: dry run")
@@ -196,6 +221,12 @@ def main():
               "D planned under the new convention")
         check(act.get("ACQ-20260710-ZWSI-002", ("",))[0] == "blocked",
               "the microscopy victim is blocked (no new convention outside MRI): a decision")
+        plan_fp = R.plan_repair(nas, results, include_file_primaries=True)
+        act_fp = {x["acq_id"]: (x["action"], x.get("new_link", "")) for x in plan_fp}
+        check(act_fp.get("ACQ-20260710-ZWSI-002") == ("create", "ZWSI_slide_20260710.czi"),
+              f"--include-file-primaries: P2 gets the dated name (got {act_fp.get('ACQ-20260710-ZWSI-002')})")
+        check(act_fp.get("ACQ-20260710-ZWSI-003") == ("create", "ZWSI_slide_ACQ-20260710-ZWSI-003.czi"),
+              f"... and P3, same day, falls back to the ACQ-ID name (got {act_fp.get('ACQ-20260710-ZWSI-003')})")
         check(sorted(os.listdir(os.path.join(proj, "raw_linked"))) == before
               and open(os.path.join(proj, "provenance.csv"), "rb").read() == prov_before,
               "the dry run wrote nothing")
@@ -226,7 +257,8 @@ def main():
               "B and D now audit OK")
         check(cls2["ACQ-20260710-MRI-003"] == "POLLUTED", "C is still listed POLLUTED")
         plan2 = R.plan_repair(nas, results2)
-        check([x["action"] for x in plan2] == ["blocked"], "a second repair plans nothing new")
+        check(all(x["action"] == "blocked" for x in plan2) and len(plan2) == n_missing - 2,
+              "a second repair plans nothing new (only the blocked file-primary victims remain)")
 
     print()
     if FAILED:

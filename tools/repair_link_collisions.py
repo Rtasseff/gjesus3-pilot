@@ -41,7 +41,10 @@ index.html to a fresh dated folder off the NAS (SHA-256 verified), then per acqu
 (linker.create_hardlink, which refuses a taken name), a check that the link is exactly its files,
 and a provenance row; then regenerates each touched project's index.html. Nothing is removed or
 replaced. A re-run is a no-op (a repaired acquisition audits as OK). Only MRI acquisitions have a
-new convention; any other MISSING acquisition is reported for a decision, not linked.
+new convention; any other MISSING acquisition is reported for a decision, not linked -- unless
+`--include-file-primaries`, which gives a FILE-primary victim (microscopy `.czi`) the rule the
+historical-drives ingest already uses in raw_linked\\: `<INSTR>_<stem>_<YYYYMMDD><ext>`, else
+`<INSTR>_<stem>_<ACQ-ID><ext>`. Use it only with an explicit decision.
 """
 import argparse
 import contextlib
@@ -266,11 +269,24 @@ def _mri_template():
     return t["link_filename"], t["auto_discover"]["filename_parse"]["regex"]
 
 
+def file_primary_names(row):
+    """Candidate names for a FILE-primary acquisition whose link name was taken: the rule the
+    historical-drives ingest already uses for raw_linked\\ (ingest_plan.py "link names: unique per
+    project", nonraw_placement.link_names_for; and relink_axioscan_collisions' dated names):
+    `<INSTR>_<stem>_<YYYYMMDD><ext>`, then `<INSTR>_<stem>_<ACQ-ID><ext>` (always unique)."""
+    base = (row.get("original_name") or "").replace("\\", "/").rstrip("/").split("/")[-1] or row["acq_id"]
+    stem, ext = os.path.splitext(base)
+    inst = row.get("instrument") or "RAW"
+    day = (row.get("acquisition_datetime") or "")[:10].replace("-", "") or row["acq_id"].split("-")[1]
+    return [f"{inst}_{stem}_{day}{ext}", f"{inst}_{stem}_{row['acq_id']}{ext}"]
+
+
 def new_convention_name(nas, row):
     """(name, why): the current internal-MRI convention's link name for an existing row, or
     (None, reason). The study time comes from the row's own study folder (its original_name)."""
     if row.get("instrument") != "MRI":
-        return None, "no new link-name convention for this instrument (MRI only) -- needs a decision"
+        return None, ("no new link-name convention for this instrument (MRI only) -- needs a decision; "
+                      "proposed with --include-file-primaries: <INSTR>_<stem>_<YYYYMMDD><ext>")
     template, rx = _mri_template()
     on = (row.get("original_name") or "").replace("\\", "/").strip("/")
     if "/" not in on:
@@ -370,12 +386,15 @@ def audit(nas, only=None, log=print):
         by_lower = {n.lower(): n for n in entries}
         # Who each link name was created for (provenance: the first creator's row survives, since
         # appends are idempotent on output_path). Tells a pruned link apart from a merge victim
-        # when none of an acquisition's files are left anywhere.
+        # when none of an acquisition's files are left anywhere. Keyed by the EXACT name: the
+        # idempotence check is case-sensitive while the share is not, so an acquisition skipped
+        # under a case-variant name (`LSM9_lipofectamine_1.czi` vs `LSM9_Lipofectamine_1.czi`)
+        # still got a row of its own -- a record of a link that was never made.
         created_for = defaultdict(set)
         for pr in read_csv(os.path.join(folder, "provenance.csv")):
             outp = (pr.get("output_path") or "").replace("\\", "/").strip()
             if outp.lower().startswith("raw_linked/"):
-                created_for[outp[len("raw_linked/"):].lower()].update(
+                created_for[outp[len("raw_linked/"):]].update(
                     re.findall(r"ACQ-\d{8}-[A-Z0-9]+-\d{3}", pr.get("input_refs") or ""))
         in_entries = defaultdict(set)   # acq -> entry names holding any of its files
         for name, e in entries.items():
@@ -396,7 +415,16 @@ def audit(nas, only=None, log=print):
                 continue
             mine = set(ids.values())
             if not mine:
-                out(r, "EMPTY-PRIMARY", "the raw primary holds no files; nothing to compare by file id")
+                # Nothing to compare by file id, and nothing a link could carry. Still say whether its
+                # planned name is held by another acquisition (a collision with nothing to repair).
+                planned = planned_old_name(nas, r)
+                hit = by_lower.get(planned.lower())
+                o = []
+                if hit is not None:
+                    o = others(hit, acq) or sorted(created_for.get(hit, set()) - {acq})
+                out(r, "EMPTY-PRIMARY", "the raw primary holds no files" + (
+                    f"; its planned link name {hit} is held by another acquisition" if o else ""),
+                    partners=";".join(o), planned_name=planned)
                 continue
             exact, complete, partial = [], [], []
             for name in sorted(in_entries.get(acq, ())):
@@ -440,7 +468,7 @@ def audit(nas, only=None, log=print):
                     out(r, "PARTIAL-OWN", "its planned link name is an empty folder (a shell)",
                         own_link=hit, planned_name=planned)
                     continue
-                if acq in created_for.get(hit.lower(), ()):
+                if acq in created_for.get(hit, ()):
                     out(r, "RESEARCHER-PRUNED", f"its own link {hit} was created for it (provenance) "
                                                 f"and its files have since left it", planned_name=planned)
                     continue
@@ -496,8 +524,12 @@ def write_audit(out_dir, results, polluted, per_project):
 
 # -------------------------------------------------------------------------------------- repair
 
-def plan_repair(nas, results):
-    """One plan row per MISSING acquisition: create / done / blocked. Read-only."""
+def plan_repair(nas, results, include_file_primaries=False):
+    """One plan row per MISSING acquisition: create / complete / done / blocked. Read-only.
+
+    MRI: the current MRI convention's name. Any other instrument is blocked (no approved
+    convention) unless `include_file_primaries`, when a FILE primary gets the first free name of
+    `file_primary_names` -- the option the coordinator / Ryan decide on."""
     live = {r["acq_id"]: r for r in read_csv(os.path.join(nas, "registries", "registry_raw.csv"))}
     projects = {p["project_id"]: p for p in read_csv(os.path.join(nas, "registries", "registry_projects.csv"))}
     plan, claimed = [], {}
@@ -513,20 +545,34 @@ def plan_repair(nas, results):
             continue
         folder = os.path.join(nas, p["folder_location"].strip("/").replace("/", os.sep))
         prim = raw_primary_path(nas, row)
-        name, why = new_convention_name(nas, row)
-        if not name:
+        if row.get("instrument") != "MRI" and include_file_primaries and os.path.isfile(prim):
+            candidates, why = file_primary_names(row), "file-primary rule"
+        else:
+            name, why = new_convention_name(nas, row)
+            candidates = [name] if name else []
+        if not candidates:
             plan.append(dict(base, action="blocked", reason=why, raw_primary=prim))
             continue
-        key = (a["project_id"], name.lower())
-        if key in claimed:
-            plan.append(dict(base, action="blocked", new_link=name, raw_primary=prim,
-                             reason=f"the same new name is planned for {claimed[key]}"))
+        chosen = None
+        for name in candidates:
+            key = (a["project_id"], name.lower())
+            if key in claimed:
+                last = f"the same new name is planned for {claimed[key]}"
+                continue
+            state, _dest, detail = linker.inspect_link_target(folder, name, prim)
+            if state == linker.LINK_TAKEN:
+                last = f"{name} is taken: {detail}"
+                continue
+            chosen = (name, state, detail)
+            claimed[key] = a["acq_id"]
+            break
+        if not chosen:
+            plan.append(dict(base, action="blocked", new_link=candidates[-1], raw_primary=prim, reason=last))
             continue
-        claimed[key] = a["acq_id"]
-        state, _dest, detail = linker.inspect_link_target(folder, name, prim)
-        action = {"free": "create", "own": "done", "partial": "complete"}.get(state, "blocked")
+        name, state, detail = chosen
+        action = {"free": "create", "own": "done", "partial": "complete"}[state]
         plan.append(dict(base, action=action, new_link=name, raw_primary=prim,
-                         reason=detail if state != "free" else "name free"))
+                         reason=(f"{why}; name free" if state == "free" else detail)))
     return plan
 
 
@@ -579,8 +625,8 @@ def execute_repair(nas, plan, by, backup_root=BACKUP_ROOT, log=print, regenerate
                 "input_refs": x["acq_id"],
                 "process_description": (
                     "Link-collision repair (repair_link_collisions.py): this acquisition's own link. "
-                    "Its link name had been taken by another acquisition and the old linker merged it "
-                    "silently (fixed 2026-10-05)"),
+                    "Its link name had been taken by another acquisition and the old linker merged or "
+                    "skipped it silently (fixed 2026-10-05)"),
                 "software_version": provenance.software_version_string("repair_link_collisions.py"),
                 "parameters_ref": "",
                 "lab_notebook_ref": "",
@@ -611,6 +657,9 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="folder for the CSV reports (off the NAS)")
     ap.add_argument("--project", action="append", help="limit to this project (name or PROJ-id); repeatable")
     ap.add_argument("--execute", action="store_true", help="repair: write (default: dry run)")
+    ap.add_argument("--include-file-primaries", action="store_true",
+                    help="repair: also link non-MRI FILE-primary victims under <INSTR>_<stem>_<YYYYMMDD><ext> "
+                         "(else <INSTR>_<stem>_<ACQ-ID><ext>) -- only with an explicit decision")
     ap.add_argument("--by", default="Data Office", help="repair: provenance `creator`")
     args = ap.parse_args(argv)
     for s in (sys.stdout, sys.stderr):
@@ -626,7 +675,7 @@ def main(argv=None):
     print(f"audit took {(dt.datetime.now() - t0).seconds}s -> {args.out}")
     if args.cmd == "audit":
         return 0
-    plan = plan_repair(nas, results)
+    plan = plan_repair(nas, results, include_file_primaries=args.include_file_primaries)
     write_csv(os.path.join(args.out, "link_repair_plan.csv"), PLAN_FIELDS, plan)
     c = Counter(x["action"] for x in plan)
     print(f"repair plan: {dict(c)} -> {os.path.join(args.out, 'link_repair_plan.csv')}")
