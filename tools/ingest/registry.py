@@ -69,6 +69,9 @@ REGISTRY_FIELDS = [
     "notes",
 ]
 
+# The `operator` hold value, "awaiting claim" (blank means unknown): 06_REGISTRIES §2.3a-bis.
+OPERATOR_HOLD = "pending-claim"
+
 
 def read_registry(registry_path):
     """Read registry CSV and return list of row dicts.
