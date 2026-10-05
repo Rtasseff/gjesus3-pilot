@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-10-02
+**Last Updated:** 2026-10-05
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -18,30 +18,53 @@ things genuinely in flight. It deliberately stays short.
 
 ## 0. ⚠️ DECISIONS WAITING ON RYAN — read this first after a break
 
-**Nothing below is blocked on work. Each item is blocked on a decision.** The evidence is gathered,
-written down, and linked; none of it needs re-deriving. Ordered by cost-of-getting-it-wrong, not by
-effort.
+**Ryan ruled on every open item on 2026-10-05.** His rulings are recorded below in his words. He is
+away **2026-10-12 → 10-18**, and **nothing here needs him before 10-19.** If carrying out a ruling
+would need a new decision from him, it is written into this section and the work stops there.
 
-**The one rule that covers all of them:** where a value is unknown, it has been left **blank or
-`pending`** rather than guessed. Every item below is safe to leave alone indefinitely — the system
-is internally consistent as it stands.
+### 0.1 Ryan's rulings of 2026-10-05 (each ✅ DECIDED 2026-10-05, Ryan)
 
-| # | Decision | Cost of delay | Detail |
+| # | Ryan's ruling, in his words | Where it stands |
+|---|---|---|
+| **D1(a)** | "NOW. Replace the placeholder on the 10,314 MRI operator cells with a hold value meaning "awaiting claim". You choose the token, document it where the blank sentinel is documented, and make the validator accept it; no OK from me needed on the name. Done when the validator passes with 0 errors and only those 10,314 cells changed." | NOW: in progress |
+| **D1(b)** | "NOW, build only, do not send. A claim list for Jesús's group: one row per session or folder (not per acquisition) with project, date, session name and acquisition count, plus blank columns for who ran it. Make it similar to the projects xlsx we just did … You can put it in projects folder as well because more people will have some access to that. … I send it at the pilot re-launch and set the claim window then." | NOW: in progress |
+| **D1(c)** | "LATER. After the claim window closes, blank whatever is still unclaimed. Record it in BACKLOG, dated to the window end; do nothing now." | In [`BACKLOG.md`](BACKLOG.md) (the 🔺 `operator` item), due when the claim window closes. Ryan sets the window at the pilot re-launch. |
+| **D2** | "I am emailing Irene today. When her answer arrives: if 37, repair by the recovery-tool pattern in BACKLOG (HIGH, 2026-08-21), 19 sidecars and 19 registry rows, ACQ-IDs kept; if 39, record it and close." | Waiting on Irene's answer. No decision is left for Ryan. [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-21) |
+| **D3** | "NOW. Make the ingest report every study folder that matches neither regex (code change on a branch, with tests), then re-scan the historical sources read-only and report the count. Reconcile it with the drives DICOM review §5 as it stands after the weekend." | NOW: in progress |
+| **D4, D5** | "SegBioMed's decisions, not mine. Move both to the SegBioMed memo/backlog and off §0. Apply nothing." | Moved to the SegBioMed memo (REPLY 7) and the [`BACKLOG.md`](BACKLOG.md) item "the curated-datasets pilot returned 19 spec gaps". Nothing applied. |
+| **D6** | "Held until SegBioMed starts, after the leadership write-up. Off §0, into BACKLOG with that trigger." | Moved to [`BACKLOG.md`](BACKLOG.md) 🕗 "mint the `SegBioMed` project", with that trigger. |
+| **D7** | "NOW. Flip the five header-only exams to terminal no-source." | NOW: in progress |
+| **D8** | "Held until there is pull. Order: the cardiac MRI segmentation pipeline on the image servers first, then MILabs, then the SegBioMed project minted with a first fibrosis project. Into BACKLOG with that order." | Moved to [`BACKLOG.md`](BACKLOG.md) 🕗 "held until there is pull", in that order. |
+| **D9** | "Closed. The mixed-now, converge-later assumption holds." | Closed. [`../mfb-rdm-docs/12_CURATED_DATASETS.md`](../mfb-rdm-docs/12_CURATED_DATASETS.md) CDS-03 is ✅ DECIDED. |
+
+**The 10-04 close-out list** (Ryan, 2026-10-05). Two of these rulings arrived after the work was done:
+- `roi_crops`: "I am handling it today." **✅ Done 2026-10-05:** run by the coordinator on Ryan's instruction that day; 81 retired and verified.
+- The D: erase: "not before 10-19. I give the go myself." **⚠️ Already done on 2026-10-05,** on Ryan's approval earlier that day ("your plan is solid, you have my approval"). It cannot be undone, and nothing remains to do. The records are kept at `J:\gjesus3-data\staging\historical_drives_records\`.
+- "The 209 link folders, the 2b worksheet (62 rows) and the smaller decisions: held until 10-19. Keep them in STATUS §0, ordered by cost of delay." **The 209 link folders were ✅ fixed on 2026-10-05** on Ryan's go (589 links made; the final audit shows 0 missing and 0 polluted). The rest is §0.2.
+
+### 0.2 Held until 2026-10-19, ordered by cost of delay
+
+| # | Item | Cost of delay | Detail |
 |---|---|---|---|
-| **D1** | **`operator` on 10,314 MRI rows** still holds the literal `<REQUIRED - set via mri-ingest --operator, or replace here>`. **This makes `validate_registries` exit FAILED with 10,314 errors** — so the validator cannot gate anything until it is settled. **Recommendation: blank them** (the documented unknown sentinel, already on 1,583 rows). Do **not** derive from `acqp.ACQ_operator` — it reads `nmr`, a shared login, not a person. | The validator is red, so a *real* new error would hide in the noise | [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-20) |
-| **D2** | **`jrc260224_m39_0525` is probably animal 37, not 39** — 19 production acquisitions (`ACQ-20260224-MRI-020`…`-038`). The facility DB logs MRI 7T on 2026-02-24 for `31,32,`**`37`**`,38,43,44`; five of six match the registry and the sole mismatch is this session. Animal 39's MRI is logged 02-25, where a separate session already exists. Irene's own copy says `m37`. **Ask Irene — one sentence settles it.** | A wrong subject id resolves cleanly and looks like data (the PROJ-0056 lesson) | [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-21) |
-| **D3** | **Unparsed ParaVision studies are dropped silently.** A folder token that matches neither ingest regex is globbed, parsed to nothing, and skipped with **no error and no worklist row**. One instance found (recovered as G1); **how many the kenia pull dropped is unknown because nothing recorded them.** Needs (a) a code change to report unparseable matches, then (b) a re-glob to quantify the historical damage. **Measured on the historical drives (2026-10-02):** 1,568 exams sit in studies that match neither ingest regex, and **0 of them are in production**. They include 526 post-horizon `1519` `_weekN` exams, now ingested from the drives, and nine May 2023 `0721` `_biod` sessions, which are on the drives only as NIfTI (the raw is probably still on kenia). See `tasks/drives_dicom_review.md` §5. | Until (b) runs, "the historical MRI pull is complete" is an assumption | [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-21) |
-| **D4** | **19 schema gaps from the curated-datasets pilot** — `sample_unit`, plural `label_formats`, `file_role`, `label_origin`/`review_status`, ordered multi-ACQ reference, `recon_index`, `spatial_reference`, a verification enum, a `corrects` cross-reference. All change documented schema, so none were applied. | The four promoted datasets encode workarounds that a settled schema would replace | [`BACKLOG.md`](BACKLOG.md) MODERATE + `projects\Imaging\SegBioMed\harvest\DS-SEG_definitions_draft.md` §C/§E/§F |
-| **D5** | **`DS-SEG-0001` v1.1 is prepared and NOT applied.** It corrects a slice-order swap on `jrc211209_m85_1019` found by `DS-SEG-0004`'s pixel evidence. Overwriting an already-promoted dataset is a §7 revision; both agents stopped at that gate. **Production v1.0 is internally consistent and the defect is documented in three places.** Mask files are unchanged either way. | Low — v1.0 is consistent, just known-imperfect | `projects\Imaging\SegBioMed\harvest\DS-SEG-0001_v1.1_proposed\` (v1.0-vs-v1.1 diff + one-command apply) |
-| **D6** | **Mint the `SegBioMed` project** and attach the **854** project-less 2021 acquisitions + the 5 Dec-2021 `1019` sessions the datasets cite. Deliberately not done — protocol→project is a convention, not a rule, and this is the call that decides where segmentation-supporting imaging lives. | None — ACQ-IDs are the durable identity; provenance already resolves 100% without a project | SegBioMed memo §G9 / D11 |
-| **D7** | **5 header-only G1 exams** (`ACQ-20260821-MRI-001…004` + `ACQ-20250526-MRI-094`) have **no `2dseq` and no `fid`** — un-regenerable. Flipping them to terminal `no-source` is human-gated in [`../mfb-rdm-docs/11_OPERATIONS.md`](../mfb-rdm-docs/11_OPERATIONS.md) §5.5 step 6. Left `pending`, which is the honest state. | None | [`BACKLOG.md`](BACKLOG.md) |
-| **D8** | **MILabs VECTor onboarding** — an in-service instrument with **zero acquisitions** in the registry. Blocks the 2026 Imalytics lung study. Real integration work (no instrument code, no ingest path, no extractor, no `OI` code). SegBioMed has been told to expect a long wait. | The instrument keeps generating unarchived data | [`BACKLOG.md`](BACKLOG.md) MODERATE (2026-08-21) |
-| **D9** | **`CDS-03` — label formats per ecosystem.** SegBioMed's recommendation: `.nii.gz` labelmap + JSON sidecar as the working format, DICOM-SEG for interchange, vendor originals kept authoritative. `.voi`→NIfTI is convertible but **not lossless as one file**. Working assumption is mixed-now-converge-later. | None — mixed is already the working assumption | [`../mfb-rdm-docs/12_CURATED_DATASETS.md`](../mfb-rdm-docs/12_CURATED_DATASETS.md) §CDS-03 |
+| **H1** | **The 2b mapping:** which project each held group of drive files belongs to (the 62 `A` rows). It is with Jesús's group as the workbook `J:\gjesus3-data\projects\_Historical drives - assign to projects (2026-10).xlsx` (290 groups). New project names need Ryan's approval, and the registry part needs his go. | 54,721 files sit in `staging\historical_drives_unassigned\`, outside every project, where researchers do not look. The 61 derivatives and proposal (c) wait on it too. | [`BACKLOG.md`](BACKLOG.md) 🔺 2b; runbook `tasks/drives_nonraw_2b_2c_followup.md` |
+| **H2** | **The five protocol-1025 MRI sessions of 2026-10-01/02** (m25–m29) are on the scanner only. The ask is that the operators (Irene) ingest them through the GUI. | MFB data on one machine, unregistered; who ran it gets harder to recall | [`BACKLOG.md`](BACKLOG.md) 🔸 "14 MFB animal sessions" |
+| **H3** | **Claudia's `nrn01`/`nrn02`** (Q8): one external study whose folder says mouse 01 and whose subject file says 02. It keeps the subject file's value unless Claudia says otherwise. | A wrong mouse label looks like data | `tasks/drives_dicom_review.md` Q8 |
+| **H4** | **Lucia, `AE-biomaGUNE-0118`:** the animal links of 147 files wait until Lucia (or Ainhize) confirms the animal numbers belong to `0118`. | Low: the files are in the right project; only the subject links are missing | [`BACKLOG.md`](BACKLOG.md) 🔹 small follow-ups |
+| **H5** | **The CoS hub's stand-name reading** (its historical-drives `HANDOFF.md` §7.2/§8.6). | Low: a future session reading the hub could identify an instrument wrongly | [`BACKLOG.md`](BACKLOG.md) 🔹 small follow-ups |
+| **H6** | **The 365 + 94 legacy MRI placeholders** (empty rows from before the 2026-10-04 line): retire them, or leave them. | None: the state is consistent | [`BACKLOG.md`](BACKLOG.md) 🔸 "existing MRI rows that fall outside the 2026-10-04 line" |
+| **H7** | **Another group's (`jl`) study nested in m3's folder** on the scanner: tell the `jl` group, or not. | None for gjesus3 | [`BACKLOG.md`](BACKLOG.md) 🔹 |
 
-**Where the conversation lives:** the full exchange with the SegBioMed project — six replies each
-way, including every correction and its evidence — is appended to
-`projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`. Read it if any of D2/D4/D5/D6/D9
-needs context.
+*(The holding-folder ACL is decided: no change, Ryan 2026-10-05.)*
+
+### 0.3 While Ryan is away (asked for 2026-10-05, each reported as a verified result or a count)
+
+- **Front doors:** one current registry figure plus a pointer to §1 as the single source.
+- **Merge `docs/ni-tunnel-live`** if it is docs-only and `main`'s checks pass.
+- **Feasibility only, no build:** can per-user access be logged on the gjesus3 share and the web apps (Finder, Project Manager)? What is possible, what it costs, and who would have to switch it on.
+
+**Where the SegBioMed conversation lives:** the full exchange with the SegBioMed project is appended to
+`projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md` (REPLY 7 carries the 2026-10-05
+rulings). Read it if D2's or the SegBioMed items' context is needed.
 
 ### Re-verifying this page before you trust it
 

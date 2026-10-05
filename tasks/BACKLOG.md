@@ -1082,7 +1082,37 @@ disappears. It only stands on its own if we decide to keep archive-as-primary.
 - [ ] Record the decision in [`08_METADATA`](../mfb-rdm-docs/08_METADATA.md) / the external-data
   section so the next collaborator drop does not re-litigate it.
 
+## 🕗 HELD until there is pull — three builds, in Ryan's order (2026-10-05)
+
+**Ryan, 2026-10-05 (STATUS §0 D8):** "Held until there is pull. Order: the cardiac MRI segmentation
+pipeline on the image servers first, then MILabs, then the SegBioMed project minted with a first
+fibrosis project."
+
+Nothing here starts until there is pull: a concrete demand from the people who would use it.
+
+1. [ ] **The cardiac MRI segmentation pipeline, on the image servers.**
+2. [ ] **MILabs VECTor onboarding.** See the 🔸 MODERATE item below.
+3. [ ] **The `SegBioMed` project, minted with a first fibrosis project.** See also the 🕗 item
+   "mint the `SegBioMed` project", which has its own trigger (D6).
+
+## 🕗 HELD — mint the `SegBioMed` project and attach its acquisitions (2026-08-21; held 2026-10-05)
+
+**Ryan, 2026-10-05 (STATUS §0 D6):** "Held until SegBioMed starts, after the leadership write-up."
+
+**Trigger:** the SegBioMed project starts, after the leadership write-up. Do nothing before then.
+
+- **What it is:** mint the `SegBioMed` project and attach the **854** project-less 2021
+  acquisitions, plus the 5 Dec-2021 `1019` sessions the datasets cite (SegBioMed memo §G9 / D11).
+- **Why it was not done:** protocol→project is a convention, not a rule, and this is the call that
+  decides where segmentation-supporting imaging lives.
+- **Cost of waiting: none.** ACQ-IDs are the durable identity, and provenance already resolves 100%
+  without a project.
+- Ryan's D8 order puts "the SegBioMed project minted with a first fibrosis project" third, after
+  the cardiac MRI segmentation pipeline and MILabs (the item above).
+
 ## 🔸 MODERATE — onboard the MILabs VECTor: an in-service instrument with zero acquisitions in gjesus3 (2026-08-21)
+
+**🕗 HELD until there is pull (Ryan, 2026-10-05, D8).** It is second in Ryan's order: see "held until there is pull" above.
 
 **`registry_raw.csv` contains 0 MILabs acquisitions.** All 1,640 nuclear-imaging rows are
 `Molecubes (PET/SPECT/CT)`. The **MILabs VECTor has never been approached for integration** — no
@@ -1126,6 +1156,8 @@ What the parameter file already gives us, for free, whenever this is built:
 
 ## 🔺 HIGH — a ParaVision study whose folder token deviates is dropped SILENTLY by the ingest (2026-08-21)
 
+**✅ DECIDED 2026-10-05 (Ryan, STATUS §0 D3):** "NOW. Make the ingest report every study folder that matches neither regex (code change on a branch, with tests), then re-scan the historical sources read-only and report the count. Reconcile it with the drives DICOM review §5 as it stands after the weekend."
+
 **Found by ingesting the one session the historical MRI pull missed** (SegBioMed census request
 G1). The cause is not a coverage gap — it is that **the ingest cannot report what it could not
 parse.**
@@ -1154,7 +1186,7 @@ system leaves a trace (`pending_dicom_regen.csv`, `pending_subject_metadata.csv`
 - [ ] **Make unparsed matches loud.** When `expand_batch` globs a path and `filename_parse` yields
   no match, it should end up somewhere durable — a skipped-items report per run at minimum, ideally
   a `pending_unparsed.csv` in the same spirit as the other queues. **This is a code change to
-  `ingest/config.py` — needs Ryan.**
+  `ingest/config.py`** (approved by Ryan, 2026-10-05, D3).
 - [ ] **Then quantify the historical damage**: re-glob the kenia tree (or the staged mirror) with
   the ingest's own pattern, run each match through both regexes, and count the non-matchers. Until
   that is done, "the historical MRI pull is complete" is an assumption, not a fact.
@@ -1180,7 +1212,9 @@ report-the-unseen fix above covers it too, if the report compares the glob with 
 ## 🔺 HIGH — `jrc260224_m39_0525` is probably animal 37, not 39 (2026-08-21)
 
 **19 production acquisitions** (`ACQ-20260224-MRI-020` … `-038`) may carry the wrong subject.
-**Not changed — needs Ryan or Irene.** Raised by the SegBioMed census (G2), then investigated here.
+**Not changed.** Raised by the SegBioMed census (G2), then investigated here.
+
+**✅ DECIDED 2026-10-05 (Ryan, STATUS §0 D2):** "I am emailing Irene today. When her answer arrives: if 37, repair by the recovery-tool pattern in BACKLOG (HIGH, 2026-08-21), 19 sidecars and 19 registry rows, ACQ-IDs kept; if 39, record it and close." So her answer alone decides it; no further decision is needed.
 
 The **animal-facility DB** logs an `MRI 7T` procedure per animal per date. For protocol 0525:
 
@@ -1201,9 +1235,10 @@ holds only 2 PET/CT acquisitions and no MRI.
 folder name is derived from it — so the scanner and the archive are **one source, not two**. It is
 also precisely the field that produced the `+21` offset error in the 2026 MILabs lung study.
 
-- [ ] **Ask Irene.** One sentence settles it; every other route is inference.
-- [ ] If confirmed: repair via the recovery-tool pattern (rebuild the `subject:` block from the DB,
+- [ ] **Ask Irene.** One sentence settles it; every other route is inference. *(Ryan is emailing her, 2026-10-05.)*
+- [ ] **If 37:** repair via the recovery-tool pattern (rebuild the `subject:` block from the DB,
   keep the ACQ-IDs), as `recover_subject_ids_proj0056.py` did. 19 sidecars + 19 registry rows.
+  **If 39:** record the answer and close this item.
 - [ ] Whatever the answer, **the DB cross-check that found this should be a validator check** — see
   the plausibility-checks item; "the facility DB logs no procedure for this subject on this
   acquisition date" would have caught PROJ-0056 *and* this, automatically.
@@ -1215,7 +1250,9 @@ provenance traceability**) and, as asked, reported where `12_CURATED_DATASETS.md
 than inventing conventions. **Consolidated in
 `projects\Imaging\SegBioMed\harvest\DS-SEG_definitions_draft.md` §C/§E/§F.**
 
-**Not applied — every item changes documented schema, which is Ryan's call.** Headline set:
+**✅ Ruled 2026-10-05 (Ryan, STATUS §0 D4, D5):** "SegBioMed's decisions, not mine. Move both to the SegBioMed memo/backlog and off §0. Apply nothing." Both are with the SegBioMed project now (memo REPLY 7, `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`). gjesus3 applies nothing until SegBioMed decides.
+
+**Not applied.** Every item changes documented schema. Headline set:
 
 | Gap | Why it bit |
 |---|---|
@@ -1230,13 +1267,13 @@ than inventing conventions. **Consolidated in
 | verification is yes/no | needs an enum (`direct-ncc`, `inferred-patient-space-rule`, `none`) |
 | no `corrects` cross-reference | `DS-SEG-0004` found and documents a defect in `DS-SEG-0001` v1.0 |
 
-- [ ] Rule on the schema additions, then have the datasets re-emitted against the settled shape.
-- [ ] **`DS-SEG-0001` v1.1 is prepared and NOT applied** — `harvest\DS-SEG-0001_v1.1_proposed\`
+- [ ] **SegBioMed** rules on the schema additions (D4, moved 2026-10-05). Then the datasets are re-emitted against the settled shape.
+- [ ] *(D5: SegBioMed's decision since 2026-10-05; apply nothing.)* **`DS-SEG-0001` v1.1 is prepared and NOT applied** — `harvest\DS-SEG-0001_v1.1_proposed\`
   (v1.0-vs-v1.1 diff + one-command apply). It corrects a slice-order swap on `jrc211209_m85_1019`
   found by `DS-SEG-0004`'s pixel evidence. Overwriting an already-promoted dataset is a §7 revision;
   both agents stopped at that gate. Mask files are unchanged either way; production v1.0 is
   internally consistent with the defect documented in three places.
-- [ ] `CDS-03` (label formats) — their recommendation: `.nii.gz` labelmap + JSON sidecar as the
+- [x] *(✅ Closed 2026-10-05, Ryan, D9: "The mixed-now, converge-later assumption holds." `12_CURATED_DATASETS` CDS-03 is DECIDED.)* `CDS-03` (label formats) — their recommendation: `.nii.gz` labelmap + JSON sidecar as the
   working format, DICOM-SEG for interchange, originals kept as the authoritative vendor record.
   `.voi` → NIfTI is **convertible but not lossless as one file** (overlapping VOIs, contour
   geometry, reference-grid binding). Mixed-now-converge-later stands.
@@ -1371,6 +1408,11 @@ over them.
 
 ## 🔺 HIGH — the `operator` column carries a template instruction on 10,314 rows (2026-08-20)
 
+**✅ DECIDED 2026-10-05 (Ryan, STATUS §0 D1), in three parts:**
+- **(a) NOW:** "Replace the placeholder on the 10,314 MRI operator cells with a hold value meaning "awaiting claim". You choose the token, document it where the blank sentinel is documented, and make the validator accept it; no OK from me needed on the name. Done when the validator passes with 0 errors and only those 10,314 cells changed."
+- **(b) NOW, build only, do not send:** a claim list for Jesús's group, one row per session. Ryan sends it at the pilot re-launch and sets the claim window then.
+- **(c) LATER:** "After the claim window closes, blank whatever is still unclaimed."
+
 Found while repairing the `instrument_model` placeholder the same day (CHANGELOG 2026-08-20).
 **The identical 10,314 rows** carry, in the **`operator`** column, the literal string:
 
@@ -1402,8 +1444,9 @@ on production, emitting 10,315 lines. Verified: the check has **zero false posit
 all six registry CSVs it fires on nothing but this column. So the check is right and the data is
 wrong, but until this is settled the validator cannot serve as a gate for anything else.
 
-- [ ] **Decide the representation** (recommend: blank). It is the only decision here — the write
+- [x] *(✅ Decided 2026-10-05, Ryan: a hold value now, a claim list, then blank whatever is unclaimed when the claim window closes.)* **Decide the representation** (recommend: blank). It is the only decision here — the write
   itself is the same byte-level, delimited, no-BOM/CRLF-preserving edit already done twice.
+- [ ] **(c) LATER, due when the claim window closes** (Ryan sets the window at the pilot re-launch; the date goes here then). Blank whatever is still unclaimed: every `operator` cell still holding the hold value becomes empty. Do nothing before the window closes.
 - [ ] **Collapse repeated identical findings in the validator regardless.** 10,315 lines for one
   defect class is the saturated-warning-channel item below, reproduced in the error channel — report
   a class once with a count and a few example rows. A future recurrence on 10k rows would be just
@@ -2084,7 +2127,7 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
 - [ ] **Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv`.** Only the 62 `A` rows matter; a blank row stays in holding.
   *(2026-10-05: the worksheet was regenerated from the final manifest (290 groups) and shared with Jesus's group as a workbook: `J:\gjesus3-data\projects\_Historical drives - assign to projects (2026-10).xlsx`. It is temporary. When answers come back, join them into the CSV **by `group key`** and follow the runbook.)*
 - [ ] **A session applies it,** following `tasks/drives_nonraw_2b_2c_followup.md`: `remap`, then `apply-raw` (projects on the blank-project raw rows; write-once-if-blank), then `copy --from-holding`. The holding folder is already filled, so D: is not needed.
-- [ ] **Before the D: staging is erased,** keep the record manifest off D: (runbook §2.6). The current one is `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.
+- [x] *(✅ Done 2026-10-05, before the erase: it is at `J:\gjesus3-data\staging\historical_drives_records\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.)* **Before the D: staging is erased,** keep the record manifest off D: (runbook §2.6). The current one is `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.
 
 ## 🔸 MODERATE — historical drives: holding-folder access, and the held material (2026-10-04)
 

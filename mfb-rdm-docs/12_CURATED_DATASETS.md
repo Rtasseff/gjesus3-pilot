@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)
 **Status:** 🔶 DRAFT — **approved for pilot deployment** (CDS-01 decided 2026-08-21)
-**Last Updated:** 2026-08-21
+**Last Updated:** 2026-10-05 (✅ CDS-03 decided: no mandated label format; mixed now, converge later). Prior: 2026-08-21.
 
 ---
 
@@ -346,6 +346,6 @@ What is **not** in initial scope:
 |----|----------|-------|--------|
 | CDS-01 | Include curated datasets area in pilot or defer to Phase 2? | Data Mgmt Lead + PI | ✅ **DECIDED 2026-08-21 — include, as a pilot**, triggered by the SegBioMed segmentation harvest |
 | CDS-02 | Who are the designated curators beyond Data Mgmt Lead? | Data Mgmt Lead | 🔶 Draft — **answered for now (2026-08-21): nobody.** The Data Office is the Data Management Lead (Ryan Tasseff) plus delegated agents; there is no second or backup curator. Revisit when someone outside the Data Office wants to promote a dataset. |
-| CDS-03 | Label format standardization: should we mandate specific formats per ecosystem? (e.g., OME-TIFF for microscopy, NIfTI for DICOM) | Data Mgmt Lead | 🔶 Draft |
+| CDS-03 | Label format standardization: should we mandate specific formats per ecosystem? (e.g., OME-TIFF for microscopy, NIfTI for DICOM) | Data Mgmt Lead | ✅ **DECIDED 2026-10-05 (Ryan) — no format is mandated: mixed now, converge later.** The working assumption holds: `.nii.gz` labelmap + JSON sidecar as the working format, DICOM-SEG for interchange, and vendor originals kept as the authoritative record (the SegBioMed pilot's recommendation). |
 | CDS-04 | How to handle labels that span multiple acquisitions (e.g., a registered atlas built from many MRI scans)? | Data Mgmt Lead | 📋 Future |
 | CDS-05 | Integration with ML training pipelines — do we need a standard manifest format for data loaders? | Data Mgmt Lead | 📋 Future |
