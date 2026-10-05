@@ -61,6 +61,12 @@ cs = [case("ACQ-1", "X", "AE-biomaGUNE-0424"), case("ACQ-2", "X", "ae-biomagune-
 cols = collisions.find_link_collisions(cs)
 check(len(cols) == 1, "case-different spellings of one project collide")
 
+# ...and so do two spellings of one LINK name (2026-10-05).
+cs = [case("ACQ-1", "MRI_M12_x", "p"), case("ACQ-2", "MRI_m12_x", "p")]
+cols = collisions.find_link_collisions(cs)
+check(len(cols) == 1, "case-different spellings of one link name collide")
+check(cols and cols[0]["link_filename"] == "MRI_M12_x", "the first spelling is displayed")
+
 print("on-NAS existing-target check:")
 with tempfile.TemporaryDirectory() as nas:
     # A project whose folder == its name (no proj- prefix), recorded in the
@@ -93,6 +99,22 @@ with tempfile.TemporaryDirectory() as nas:
     hits = collisions.find_existing_link_targets(
         [case("ACQ-7", "L1", "brand-new-project")], nas)
     check(len(hits) == 1, "not-yet-created project falls back to folder == name")
+
+    # 2026-10-05: the same rule the ingest pre-flight enforces. An EMPTY folder
+    # under the name is taken too, and so is a name whose link is still queued
+    # (its `.PENDING-LINK.txt` stand-in exists).
+    os.makedirs(os.path.join(linkdir, "MRI_empty_shell"))
+    open(os.path.join(linkdir, "MRI_queued.PENDING-LINK.txt"), "w").close()
+    hits = collisions.find_existing_link_targets(
+        [case("ACQ-6", "MRI_empty_shell", "P0424"), case("ACQ-5", "MRI_queued", "P0424"),
+         case("ACQ-4", "MRI_free", "P0424")], nas)
+    check(sorted(h["acq_id"] for h in hits) == ["ACQ-5", "ACQ-6"],
+          "an empty folder and a queued stand-in are both flagged; a free name is not")
+    check(all(h.get("detail") for h in hits), "each hit says why")
+    if sys.platform == "win32":
+        check(len(collisions.find_existing_link_targets(
+            [case("ACQ-3", "mri_EXISTING", "P0424")], nas)) == 1,
+            "the existing-target check is case-insensitive on Windows/SMB")
 
 print()
 if _fail:

@@ -24,7 +24,8 @@ WHAT IT DOES, in this order (so a failure part-way leaves the project `closed` a
      created with linker.create_hardlink under its original name (from the project's provenance --
      current, then the close-out backup), else the name its ingest config's link_filename resolves to,
      else the original_name's basename; each created link gets a provenance row. A name already taken
-     by a DIFFERENT file is a collision: reported, never replaced. Nothing is ever deleted;
+     by a DIFFERENT file, or by a folder holding any file that is not this acquisition's, is a
+     collision: reported, never replaced or merged into (linker.inspect_link_target). Nothing is ever deleted;
   5. under the registry lock, through ingest/projects_registry.update_row: status -> active, notes +=
      "Reopened YYYY-MM-DD (<reason>)", start_date / last_activity recomputed from the project's
      acquisition dates (the 2026-07-14 definition; blank dates excluded);
@@ -248,17 +249,17 @@ def main(argv=None):
                   f"(same link template, e.g. two sessions of one animal on one day) -- not created")
             continue
         planned[link.lower()] = aid
-        dest = os.path.join(raw_linked, link)
-        if os.path.exists(dest):
-            if is_same(dest, primary):
-                stats["present"] += 1
-                continue
-            if os.path.isdir(primary) and os.path.isdir(dest):
-                pass  # a partial folder-of-links: create_hardlink completes it additively
-            else:
-                stats["collision"] += 1
-                print(f"  COLLISION {aid}: raw_linked/{link} exists and is NOT this acquisition -- left alone")
-                continue
+        # linker.inspect_link_target (2026-10-05): complete -> present; a folder holding only some of
+        # this acquisition's own files -> completed additively; anything else (another acquisition's
+        # files, even mixed with this one's) -> a collision, never merged into.
+        state, _dest, detail = linker.inspect_link_target(folder, link, primary)
+        if state == linker.LINK_OWN:
+            stats["present"] += 1
+            continue
+        if state == linker.LINK_TAKEN:
+            stats["collision"] += 1
+            print(f"  COLLISION {aid}: raw_linked/{link} exists and is NOT this acquisition ({detail}) -- left alone")
+            continue
         by_source[src] += 1
         if dry:
             stats["created"] += 1
@@ -282,6 +283,9 @@ def main(argv=None):
                 "notes": f"Project reopened {today} ({args.reason})",
             })
             stats["created"] += 1
+        except linker.LinkCollisionError as ex:   # taken since the check above: reported, left alone
+            stats["collision"] += 1
+            print(f"  COLLISION {aid}: {ex} -- left alone")
         except Exception as ex:  # noqa: BLE001 -- counted; the status is not flipped on errors
             stats["error"] += 1
             print(f"  ERROR {aid}: {type(ex).__name__}: {ex}")

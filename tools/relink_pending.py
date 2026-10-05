@@ -16,7 +16,8 @@ Windows workstation mounting the same NAS — proven by the historical
 using exactly the same `linker.create_hardlink` that ingest uses. On success it removes
 the `<link_name>.PENDING-LINK.txt` stand-in, writes the provenance entry, and flips the
 row's `status` to `linked`. Idempotent: an already-present link is left as-is and the
-row is still marked `linked`.
+row is still marked `linked`. A name taken by anything else (another acquisition's link)
+is reported as a COLLISION and the row stays `pending`: nothing is merged (2026-10-05).
 
 Usage (from Windows)
 --------------------
@@ -78,12 +79,24 @@ def main(argv):
             continue
 
         if args.dry_run:
-            dest = os.path.join(project_folder_abs, "raw_linked", link_name)
-            print(f"  [dry-run] would link {acq} -> {dest}")
+            state, dest, detail = linker.inspect_link_target(
+                project_folder_abs, link_name, raw_primary_abs)
+            if state == linker.LINK_TAKEN:
+                print(f"  [dry-run] COLLISION {acq}: {dest} is taken ({detail}); "
+                      f"would be left pending")
+                failed += 1
+            else:
+                print(f"  [dry-run] would link {acq} -> {dest} ({state})")
             continue
 
         try:
             link_path = linker.create_hardlink(project_folder_abs, link_name, raw_primary_abs)
+        except linker.LinkCollisionError as e:
+            # Never merged into (2026-10-05). The row stays pending: the link
+            # needs a distinct name, which is a person's decision.
+            print(f"  COLLISION {acq}: {e} -- left pending; give it a distinct link_name")
+            failed += 1
+            continue
         except OSError as e:
             print(f"  FAIL {acq}: {e} (is this mount hard-link-capable?)")
             failed += 1

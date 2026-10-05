@@ -147,6 +147,104 @@ def _rollback_uncommitted(dest_dir, log_fn=log):
         log_fn(f"Could not roll back {dest_dir}: {e}", "WARN")
 
 
+def _raw_primary_path(cfg_single, raw_acq_dir, acq_id_str):
+    """The raw primary a project link points at (ingest Step 12's dispatch).
+
+    Folder primary whose `primary_file_name` is an internal bundle
+    (`<ACQ-ID>.data`, NI/MRI v2) -> that bundle; legacy MRI folder layout
+    (`primary_file_name == acq_id`) -> the acquisition folder itself; a single
+    file primary (microscopy `.czi`, collaborator zip/rar) -> that file.
+    """
+    primary = cfg_single.get("primary_file_name", "")
+    primary_kind = cfg_single.get("primary_kind", "")
+    if primary and primary_kind == "folder" and primary != acq_id_str:
+        return os.path.join(raw_acq_dir, primary)
+    if primary and primary_kind == "folder":
+        return raw_acq_dir
+    if primary and not primary.endswith("/"):
+        return os.path.join(raw_acq_dir, primary)
+    return raw_acq_dir
+
+
+def _link_name_for(cfg_single, acq_id_str, acq_date, original_name):
+    """The project link name: the resolved `link_filename:` (operator-controlled
+    top-level YAML field), else `original_name`. This is the name the legacy
+    .lnk used, minus the `.lnk` suffix. A trailing slash is allowed in the
+    template as a "links to a folder" hint and is stripped here."""
+    link_template = cfg_single.get("link_filename") or ""
+    link_name = None
+    if link_template:
+        link_name = resolver.resolve_link_filename(
+            link_template, cfg_single, acq_id_str, acq_date,
+        )
+        if link_name:
+            link_name = link_name.rstrip("/").rstrip("\\")
+    return link_name or original_name
+
+
+def _preflight_project_link(cfg_single, nas_root, acq_id_str, acq_date,
+                            original_name, planned_links=None):
+    """Step 5.5: refuse a taken project link name BEFORE anything is copied.
+
+    A link name that is already taken in the project's `raw_linked/` used to
+    be merged into silently at Step 12, after the commit (stream F,
+    2026-10-04). Checking here, before the copy, lets the case FAIL cleanly:
+    nothing is copied or registered, and the operator gives it a distinct
+    name. It runs in `--dry-run` too, so a preview shows the collision.
+
+    Read-only. Resolves the project the way Step 9.5 will (without creating
+    anything) and the link name the way Step 12 will, and records the plan on
+    `cfg_single["_link_plan"]` so Step 12 links exactly the name checked here.
+    `planned_links` (dry run only) is a dict shared across one batch's cases,
+    so two cases that would take the same name are caught even though a dry
+    run creates neither link.
+
+    Returns ``(ok, message)``; ``message`` is None when there is nothing to
+    report (no project, or an auto-create project that does not exist yet).
+    """
+    project_name = project_naming.normalize_project_name(
+        cfg_single.get("project_name", "")
+    )
+    if not project_name:
+        return True, None
+    projects_registry = os.path.join(nas_root, "registries", "registry_projects.csv")
+    proj_id, canon_name, folder_rel = linker.resolve_project(projects_registry, project_name)
+    probe = dict(cfg_single)
+    probe["project_name"] = canon_name or project_name
+    if proj_id:
+        probe["project_id"] = proj_id
+    link_name = _link_name_for(probe, acq_id_str, acq_date, original_name)
+    cfg_single["_link_plan"] = {
+        "project_id": proj_id or "",
+        "project_name": probe["project_name"],
+        "link_name": link_name,
+    }
+    where = f"{probe['project_name']}/raw_linked/{link_name}"
+
+    if planned_links is not None:
+        # Keyed by the case's source, not its ACQ-ID: a dry run reserves no id,
+        # so two cases of one batch can preview the same ACQ-ID.
+        key = ((proj_id or probe["project_name"]).lower(), link_name.lower())
+        me = cfg_single.get("source_path") or original_name
+        other = planned_links.get(key)
+        if other and other != me:
+            return False, (f"project link {where} is also planned for {other} in this "
+                           f"batch; two acquisitions cannot share one link name")
+        planned_links[key] = me
+
+    if not (proj_id and folder_rel):
+        # Auto-create pending (or the project is unknown): its folder does not
+        # exist yet, so no link in it can be taken.
+        if (cfg_single.get("ingest") or {}).get("auto_create_projects"):
+            return True, f"project link {where} (the project will be created)"
+        return True, f"no project link: project '{project_name}' not found"
+    project_folder_abs = os.path.normpath(os.path.join(nas_root, folder_rel.lstrip("/")))
+    state, _dest, detail = linker.inspect_link_target(project_folder_abs, link_name, None)
+    if state == linker.LINK_TAKEN:
+        return False, f"project link {where} is already taken: {detail}"
+    return True, f"project link {where} (free)"
+
+
 def _normalize_reconstructions(value):
     """Normalise the YAML `reconstructions:` value to a set of index strings
     or None (== keep all).
@@ -685,7 +783,8 @@ def copy_paravision_exam(source_path, dest_dir, reconstructions, log_fn):
     return checksums
 
 
-def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_source=False):
+def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_source=False,
+                  planned_links=None):
     """Run the ingestion workflow for a single acquisition.
 
     Args:
@@ -698,9 +797,14 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         delete_source: If True (or cfg's delete_source_after_ingest is True),
             remove the source file/folder after a successful verify. The
             parent of source_path is never touched.
+        planned_links: dry run only: a dict shared across one batch's cases
+            (run_batch passes it) so two cases planning the same project link
+            name are reported even though a dry run creates neither link.
 
     Returns:
-        Tuple of (acq_id_str, success_bool).
+        Tuple of (acq_id_str, success_bool). A case refused because its
+        project link name is taken returns success False, with the reason on
+        ``cfg_single["_failure"]``.
     """
     source_path = cfg_single["source_path"]
     original_name = cfg_single.get("original_name") or Path(source_path).name
@@ -992,6 +1096,29 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             "ERROR",
         )
         return acq_id_str, False
+
+    # --- Step 5.5: Project-link pre-flight (2026-10-05) ---
+    # A project link name that is already taken is refused HERE, before the
+    # copy, so the case fails cleanly (nothing copied, nothing registered).
+    # Before this, Step 12 silently merged a second acquisition into the
+    # first one's link folder after the commit. Runs in --dry-run too. The
+    # ACQ-ID reserved above stays reserved (ids are never reused).
+    link_ok, link_msg = _preflight_project_link(
+        cfg_single, nas_root, acq_id_str, acq_date, original_name,
+        planned_links=planned_links if dry_run else None,
+    )
+    if not link_ok:
+        cfg_single["_failure"] = link_msg
+        log(
+            f"Refusing {original_name}: {link_msg}. Nothing was copied or "
+            f"registered. Give this acquisition a distinct link name (the "
+            f"config's link_filename:), or check whether it is a duplicate of "
+            f"the acquisition that already holds the name.",
+            "ERROR",
+        )
+        return acq_id_str, False
+    if link_msg:
+        log(f"  Link:        {link_msg}")
 
     if dry_run:
         log("[DRY RUN] Would create folder and copy files. Skipping.")
@@ -1515,40 +1642,20 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             raw_acq_dir = os.path.normpath(
                 os.path.join(nas_root, canonical_path.lstrip("/"))
             )
-            # Resolve which raw primary the link points at, based on
-            # primary_kind and whether primary_file_name names something
-            # nested inside the acq folder (NI/MRI v2: <ACQ-ID>.data) or IS
-            # the acq folder itself (legacy MRI folder layout). A folder
-            # primary becomes a real folder of per-file hard links; a file
-            # primary becomes a single hard link (see linker.create_hardlink).
-            primary = cfg_single.get("primary_file_name", "")
+            # Which raw primary the link points at: a folder primary becomes a
+            # real folder of per-file hard links; a file primary a single hard
+            # link (see linker.create_hardlink).
             primary_kind = cfg_single.get("primary_kind", "")
-            if primary and primary_kind == "folder" and primary != acq_id_str:
-                # NI/MRI v2: primary is an internal data bundle (<ACQ-ID>.data).
-                raw_primary_abs = os.path.join(raw_acq_dir, primary)
-            elif primary and primary_kind == "folder":
-                # Legacy MRI folder layout: primary_file_name == acq_id_str.
-                raw_primary_abs = raw_acq_dir
-            elif primary and not primary.endswith("/"):
-                # Single-file primary (microscopy .czi, collaborator zip/rar).
-                raw_primary_abs = os.path.join(raw_acq_dir, primary)
+            raw_primary_abs = _raw_primary_path(cfg_single, raw_acq_dir, acq_id_str)
+            # Link name: the one the Step 5.5 pre-flight checked, when the
+            # project resolved the same way there (it was not auto-created in
+            # between); else resolved now, the same way.
+            plan = cfg_single.get("_link_plan") or {}
+            if (plan.get("link_name") and plan.get("project_id") == project_id
+                    and plan.get("project_name") == cfg_single.get("project_name")):
+                link_name = plan["link_name"]
             else:
-                raw_primary_abs = raw_acq_dir
-            # Link name = resolved `link_filename:` (operator-controlled top-
-            # level YAML field), falling back to original_name. This is the
-            # same name the legacy .lnk used, minus the `.lnk` suffix.
-            link_template = cfg_single.get("link_filename") or ""
-            link_name = None
-            if link_template:
-                link_name = resolver.resolve_link_filename(
-                    link_template, cfg_single, acq_id_str, acq_date,
-                )
-                if link_name:
-                    # Trailing slash allowed in the template as a "links to a
-                    # folder" hint; strip it so the name is filesystem-clean.
-                    link_name = link_name.rstrip("/").rstrip("\\")
-            if not link_name:
-                link_name = original_name
+                link_name = _link_name_for(cfg_single, acq_id_str, acq_date, original_name)
 
             def _queue_pending_link(exc):
                 # Hard links need a hard-link-capable mount. On the NI Mac (SMB)
@@ -1650,6 +1757,19 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 fid = provenance.append_entry(prov_path, entry)
                 if fid:
                     log(f"Appended provenance entry {fid} to {prov_path}")
+            except linker.LinkCollisionError as e:
+                # The name was free at the Step 5.5 pre-flight and is taken
+                # now (a concurrent writer, or a project created in between).
+                # The acquisition IS committed; only its project link is
+                # missing. NOT queued to pending_links.csv: a relink of a
+                # taken name would only collide again.
+                cfg_single["_link_refused"] = str(e)
+                log(
+                    f"Project link NOT created for {acq_id_str}: {e}. The "
+                    f"acquisition is registered; it needs a distinct link name "
+                    f"(nothing was written into the existing link).",
+                    "ERROR",
+                )
             except OSError as e:
                 log(f"Could not create hard link: {e}", "WARN")
                 _queue_pending_link(e)
@@ -1707,6 +1827,9 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
         )
 
     results = []
+    # Dry run only: the project link names planned so far in this batch, so two
+    # cases that would take one name are reported (a dry run creates neither).
+    planned_links = {} if dry_run else None
     for i, case in enumerate(cases):
         log(f"\n{'='*60}")
         log(f"Case {i+1}/{len(cases)}: {case.get('source_path', '?')}")
@@ -1722,6 +1845,7 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
         acq_id_str, ok = ingest_single(
             case, nas_root,
             dry_run=dry_run, nas_unc=nas_unc, delete_source=delete_source,
+            planned_links=planned_links,
         )
         results.append((acq_id_str, ok))
 
@@ -1738,7 +1862,15 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
         print("  Failed cases:")
         for i, (aid, ok) in enumerate(results):
             if not ok:
-                print(f"    Case {i+1}: {cases[i].get('source_path', '?')}")
+                why = cases[i].get("_failure")
+                print(f"    Case {i+1}: {cases[i].get('source_path', '?')}"
+                      + (f"\n      -> {why}" if why else ""))
+    refused = [(aid, c.get("_link_refused")) for (aid, ok), c in zip(results, cases)
+               if ok and c.get("_link_refused")]
+    if refused:
+        print(f"  Registered WITHOUT a project link (name taken): {len(refused)}")
+        for aid, why in refused:
+            print(f"    {aid}: {why}")
     print()
     return results
 
