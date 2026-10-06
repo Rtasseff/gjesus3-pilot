@@ -33,6 +33,7 @@ The drives 1+2 approval model (Ryan, 2026-10-02), applied to this drive:
 | **N** | PET/CT: the 202 reconstructions production lacks (A1 §4) | `feat/drive3-petct` · `drive3-petct` | gate, then Ryan's go | building |
 | **C** | Cell Observer: the 5,115 `.czi` production lacks, 643 GB (A1 §5) | `feat/drive3-czi` · `drive3-czi` | gate, then Ryan's go | building |
 | **M** | MRI: the 3,309 image exams production lacks (all `0118` to `AE-biomaGUNE-0118`), and the CNIC pig images as `XMRI` in a new project `CNIC-HEARDS` (A1 §2–3; Ryan's rulings of 2026-10-06) | `feat/drive3-mri` · `drive3-mri` | gate, then Ryan's go | to build |
+| **P2** | A second placement batch: the 3,830 files stream M does not register (71 unconvertible exams, 45 `2dseq`-only reconstructions, the other `m175`/`m178` reconstructions, 31 pig-folder files taken BY PATH: four are MATLAB files named `thumbs.cache`/`folders.cache`), and the pig masks from holding into `CNIC-HEARDS` (2b `copy --from-holding`) | built by stream M's session with P's tool | the coordinator's gate (copies) | to build |
 | **S** | The curated cine-mask dataset CAND-A (A3) | none yet | §0.5 M3 (M. Jesús's answers), then curator approval (12 §6.2) | waiting |
 
 **Not in any stream yet:** `biomaGUNE MJ` (last, by Ryan's order; A2 §6 has its inventory); the data from the Axioscan

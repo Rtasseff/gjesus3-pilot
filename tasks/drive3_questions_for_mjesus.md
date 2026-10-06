@@ -117,7 +117,11 @@ in no project).
 facility has `0619`'s animal 174 born in **2021**, two years after the scan. **Which animal or protocol was this?**
 *If nobody knows:* it is registered with no project.
 
-**14. (Optional, larger) 1,443 Cell Observer images with no project in their folder names.** If someone can spend an
+**14. A 2021 MRI session labelled `m145b`** (protocol `0619`, 2021-07-26, 22 exams). Animal 145 has its own session that
+day, and the animal facility logs an MRI that day for animals 145, 146, 152 and 153, so `m145b` is probably **animal 146**.
+**Which animal was it?** *If nobody knows:* it is registered under `0619` with no animal.
+
+**15. (Optional, larger) 1,443 Cell Observer images with no project in their folder names.** If someone can spend an
 hour on it, we can send a short workbook (one row per folder, with dates and example file names) to assign them, as we
 did for the operators' drives. *If not:* they are stored with no project, findable by date and name.
 
