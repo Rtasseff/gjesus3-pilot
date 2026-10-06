@@ -554,9 +554,10 @@ approve"). Inputs: `out\p2\` from `mri_16_p2_lists.py`, built from `out\for_stre
 
 ### 12.2 Production commands (copy-only; the window procedure of `drive3_placement_gate.md` §5)
 
-**Order and windows.** P2a writes `provenance.csv` and the index documents of `0118`, `0619`, `1019`, the projects Part 1
-links into: **run it before §7 or after §7 step 3, never during Part 1.** P2b runs **after §7 step 6** (the project exists
-and P01's links are in). PowerShell, from this worktree (or `main` once merged), `$env:PYTHONDONTWRITEBYTECODE=1`,
+**Order and windows (✅ the coordinator, 2026-10-06).** **P2a after §7 step 3**; **P2b after §7 step 6** (the project
+exists and P01's links are in). Both copy-only. P2a writes `provenance.csv` and the index documents of `0118`, `0619`,
+`1019`: **neither batch may run during Part 1, nor while a Cell Observer batch is writing provenance into `0619` or
+`1019`.** PowerShell, from this worktree (or `main` once merged), `$env:PYTHONDONTWRITEBYTECODE=1`,
 `$env:PYTHONPATH='tools'`:
 
 ```powershell
@@ -605,6 +606,9 @@ python $NP --out "$O\runs_P2b" --nas $NAS copy --manifest $K --scratch $SCR --pr
 python $NP --out "$O\runs_P2b" --nas $NAS copy --manifest $K --scratch $SCR --project CNIC-HEARDS --from-holding --execute
 python $NP --out "$O\runs_P2b" --nas $NAS verify --manifest $K --project CNIC-HEARDS
 python $PV verify --manifest $K --nas $NAS --snapshot "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_P2b_masks" --project CNIC-HEARDS --rehash sample
+# 6. The README for the 165 pig files left in holding (§12.3 P2-a), outside the placement tree (metadata\)
+Copy-Item 'tools\configs\drive3_mri\README_CNIC-HEARDS_pig_files_in_holding.txt' "$NAS\projects\CNIC-HEARDS\metadata\"
+(Get-FileHash "$NAS\projects\CNIC-HEARDS\metadata\README_CNIC-HEARDS_pig_files_in_holding.txt").Hash -eq (Get-FileHash 'tools\configs\drive3_mri\README_CNIC-HEARDS_pig_files_in_holding.txt').Hash   # True
 ```
 
 **Stop conditions:** a plan count other than 12.1's; a refusal of a new kind; a dry run with destinations already present
@@ -616,5 +620,5 @@ snapshot of each window lists what was there before (`p_verify.py`); the holding
 
 | # | Item | Recommendation |
 |---|---|---|
-| **P2-a** | **165 pig files (2.43 GB) stay in holding**: 148 `Split` volumes (`.mhd` + `.raw`) and 17 masks of `HEARDSMRI2444P_1_2000`. Their 2b group key `D3||Otros\Segmentaciones ITK SNAP` (no claim) also holds two mouse London segmentations (`Segmentaciones ratones\…\jrc200708_m53_london_1_1\Segmentation_time11/12_m53.nii.gz`), and a 2b mapping moves whole groups. | Leave them in holding for now (`out\p2\p2b_unmapped_pig.csv` lists them), and say so in `CNIC-HEARDS`'s README. The clean fix is a path-level mapping in `remap` (a small change to stream P's tool, with a test): not built here, by the coordinator's "no new analysis". Mapping the whole group would put the two mouse files into a pig project: not recommended. |
-| **P2-b** | The tool change (`keep_despite_name`) is in stream P's shared tool. | Review with this branch; it is opt-in per row and cannot affect batch 1. |
+| **P2-a** ✅ **decided (coordinator, 2026-10-06): they stay in holding**; `CNIC-HEARDS\metadata\README_CNIC-HEARDS_pig_files_in_holding.txt` says so (§12.2 step 6); a path-level remap goes to the BACKLOG. | **165 pig files (2.43 GB) stay in holding**: 148 `Split` volumes (`.mhd` + `.raw`) and 17 masks of `HEARDSMRI2444P_1_2000`. Their 2b group key `D3||Otros\Segmentaciones ITK SNAP` (no claim) also holds two mouse London segmentations (`Segmentaciones ratones\…\jrc200708_m53_london_1_1\Segmentation_time11/12_m53.nii.gz`), and a 2b mapping moves whole groups. | Leave them in holding for now (`out\p2\p2b_unmapped_pig.csv` lists them), and say so in `CNIC-HEARDS`'s README. The clean fix is a path-level mapping in `remap` (a small change to stream P's tool, with a test): not built here, by the coordinator's "no new analysis". Mapping the whole group would put the two mouse files into a pig project: not recommended. |
+| **P2-b** ✅ reviewed and accepted (coordinator, 2026-10-06) | The tool change (`keep_despite_name`) is in stream P's shared tool. | Opt-in per row; cannot affect batch 1. |
