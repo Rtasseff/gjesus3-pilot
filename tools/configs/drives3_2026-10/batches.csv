@@ -1,0 +1,6 @@
+batch,bucket,instrument,files,gb,projects,members,auto_create,needs_decision
+C01,CELL-pilot,CELL,42,2.2,AE-biomaGUNE-0424;AE-biomaGUNE-0522;AE-biomaGUNE-0619;AE-biomaGUNE-1019,0,N,
+C02,CELL-project,CELL,1657,234.1,AE-biomaGUNE-0424;AE-biomaGUNE-0522;AE-biomaGUNE-0619,0,N,
+C03,CELL-project,CELL,1441,234.0,AE-biomaGUNE-0619;AE-biomaGUNE-1019,0,N,
+C04,CELL-noproject,CELL,1488,164.6,(none),0,N,
+C05,CELL-biomaGUNE-MJ,CELL,327,2.9,AE-biomaGUNE-0522;AE-biomaGUNE-1123;AE-biomaGUNE-1422,0,N,
