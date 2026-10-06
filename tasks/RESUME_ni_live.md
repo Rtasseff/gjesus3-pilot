@@ -5,6 +5,8 @@ before migrating to a new worktree and restarting the session, so **assume the a
 zero memory of any of this** — everything needed is here or in the docs this points to.
 **Updated 2026-10-01:** the NI Mac is now reachable from the Data Office (§0). §0 is the current
 order of work and overrides anything older below that disagrees with it.
+**Updated 2026-10-06:** caught up with `main`. **All four merge gates pass ON THE MAC** against a
+scratch NAS with synthetic data. What is left is the gjesus3 mount and the real-data runs (§0).
 
 ---
 
@@ -54,15 +56,17 @@ wsl -d Ubuntu -- ssh -p 2222 molecubes@localhost      # no password; lands on mo
 ```
 
 The full record (how it works, checks, removal, the visit, and the Box A move) is
-`equipment/nuclear-imaging/live_machine_remote_access.md`. **That update is on branch
-`docs/ni-tunnel-live`** (worktree `gjesus3-dev\ni-tunnel-live`, commit `9a98832`, off `main`
-`48080b9`), **not on this branch**, to keep this branch's catch-up small. Merge it into `main`
-first, and step 1 brings it here. Until then, the copy of that doc on this branch is stale (it
-still says the box half is not installed).
+`equipment/nuclear-imaging/live_machine_remote_access.md` (on `main` since `4625f38`, and here since
+the 2026-10-06 merge).
 
 **Do these in order:**
 
-1. **Catch up with `main`.** This branch is **19 ahead / 111 behind** local `main` `48080b9`
+1. ✅ **DONE 2026-10-06: caught up with `main`** by merge `df3874a` (303 commits, 7 conflicts resolved
+   by hand; see the commit message). 40 test suites pass, plus the new end-to-end
+   `tools/test_ni_live_e2e.py` (the real operator command, as a subprocess, from a copy staged the
+   way gnuclear has it, against a scratch NAS; it simulates gate 3 by making `os.link` raise
+   ENOTSUP). Backup tag `backup/ni-live-pre-merge-20261006`. The original plan, kept for history:
+   This branch was **19 ahead / 111 behind** local `main` `48080b9`
    (2026-10-01). A dry run (`git merge-tree --write-tree main HEAD`, which writes nothing)
    conflicts in **7 files**:
    - **code:** `tools/ingest_raw.py`, `tools/ingest/metadata_sidecar.py` — resolve carefully,
@@ -82,14 +86,66 @@ still says the box half is not installed).
    commits replaying over code conflicts, consider `git merge main` (one resolution pass) instead
    of a rebase (possibly the same `ingest_raw.py` hunk several times) — Ryan's call. Either way,
    the push needs explicit permission.
-2. **Get the Mac's `gjesus3` mount to stay up.** It is the sync's destination, and Ryan reports
+2. **Get the Mac's `gjesus3` mount to stay up.** ⬅ **NEXT.** **Findings, 2026-10-06** (read-only):
+   - It was **not mounted** at 18:16. There was no reboot (uptime 25 days); `molecubes` is
+     logged in at the console.
+   - **No password is saved for it.** The keychain item for `GJESUS3._smb._tcp.local` has
+     `acct = "No user account"`, so once it drops nothing can bring it back. The gnuclear mounts
+     have keychain items for `nuclearuser`.
+   - **MacMounter** (`/usr/local/bin/macmounter.py`, LaunchAgent `com.irouble.macmounter`, configs
+     in `~/.macmounter/*.conf`) keeps only the **scanner PCs** mounted, over sshfs into
+     `~/Documents/volumes/` (`remiW11` is where the researcher data lives). It manages neither
+     gnuclear nor gjesus3.
+   - `GJESUS3` resolves only through Bonjour (`GJESUS3.local` → 10.10.1.73), not through DNS.
+     Port 445 on 10.10.1.73 is reachable from the Mac.
+   - Sleep is off (`sleep 0`, `disksleep 0`).
+   - **Credentials: Ryan's own call, recorded in his August notes**
+     (`S:\gnuclear\2026\Jesus\Ryan\ni-live-test\notes.txt`): "I will need to get a login
+     specifically for this account… It is not safe to login with my account which has full
+     permissions on gjesus3." So the fix is a **dedicated gjesus3 account for the NI Mac**, with
+     the operator permission profile plus registry write, and its password in the `molecubes`
+     keychain.
+   - The way to keep it up is Ryan's/Unai's call; both need writes on the Mac, so they need
+     approval. Either (a) a MacMounter `.conf` like the existing ones, mounting
+     `//<account>@10.10.1.73/gjesus3` with `mount_smbfs`, which is the platform's own pattern and
+     retries forever; or (b) a Login Item, which only re-mounts at login.
+   - Original note: Ryan reports
    it drops (cause unknown). On 2026-10-01 16:32 it was mounted as
    `//rtasseff@GJESUS3._smb._tcp.local/gjesus3` on `/Volumes/gjesus3` (SMB 3.1.1). Both
    `gnuclear` mounts use an IP or DNS name instead — a lead, not a diagnosis. Diagnose over the
    tunnel, read-only first. **Also needs Ryan's decision:** the mount uses his personal
    credentials, a superuser under the permission model, so every researcher's sync would write
    with Full rights on `raw/` rather than an operator's write-but-not-modify.
-3. **Run the on-box merge gates (§4) over the tunnel.** Stage a fresh copy of `tools/` on
+3. **Run the on-box merge gates (§4) over the tunnel.** ✅ **2026-10-06: gates 1–4 all PASS on
+   the Mac**, against a scratch NAS in Ryan's gnuclear folder, using synthetic data.
+   - **The test kit:** `S:\gnuclear\2026\Jesus\Ryan\ni-sync-test\`, containing `ni-ingest`,
+     `tools/`, `box/ryan/` (synthetic), `nas/`, `nas2/`, `nas3/` (scratch), and `README.txt`.
+     The corrections file is `Ryan\ni_corrections_ryan.csv`.
+   - **The results:**
+     - Gate 1: one row per recon.
+     - Gate 2: the correction moved the session to 0325 with `session_extra`, while
+       `original_name` stayed uncorrected.
+     - Gate 3: real `Errno 45` from `os.link`, with 3 rows in `pending_links.csv`.
+     - Gate 4: re-sync gave 0 new; a late `recon_2` landed in 0325 with the tracer; the
+       corrections file was untouched.
+   - **The footprint:** 6–35 s per run under `nice -n 19`; 1-minute load ≤2.5.
+   - **Verified by snapshot:** every write landed in `Ryan\` (the kit, plus
+     `ni_corrections_ryan.csv`).
+   - **What is still box-only:**
+     - (i) the merged code on the **real** researcher tree. A `--plan` on `irene` is a full
+       recursive read over sshfs, so it needs a quiet slot; pass `--corrections` (absolute,
+       into `Ryan\`) or `--plan` writes into `Jesus\irene\`.
+     - (ii) a `--go` into **real** gjesus3, once step 2 is done. Each run needs Ryan's
+       go-ahead.
+     - In June the old code took **35 min for 127 cases** on the box, so the first real
+       `--go` should cover one session (see §4).
+   - **New facts:**
+     - **The Mac has no `ni-ingest` command.** The new launcher `tools/operator/ni-ingest.sh`
+       is staged as `<dir>/ni-ingest`.
+     - **A corrections file the Mac creates is read-only from Windows.** Its owner is
+       `nuclearuser`, and `GJesus` has RX on gnuclear. So researchers edit it **on the Mac**,
+       where Excel and Numbers are installed. The runbook says so.
+   - Original note: Stage a fresh copy of `tools/` on
    `gnuclear` first (§4). Gate 3 needs the `gjesus3` mount from step 2. A `--go` writes to
    production, so treat each run as a production operation. ✅ **The platform manager (Unai)
    has OK'd running the sync tests on the box remotely** (2026-10-02, asked by Ryan). The rest of
@@ -118,8 +174,9 @@ still says the box half is not installed).
 
 ## 1. Where things stand
 
-- **Branch `feat/ni-live-hardening`** — ⚠️ **as of 2026-10-01: 19 commits ahead of `main`, 111
-  behind** (it drifted again; the catch-up is step 1 of §0). Last rebased onto **local** `main`
+- **Branch `feat/ni-live-hardening`**: ✅ **0 behind `main` as of the 2026-10-06 merge `df3874a`**
+  (main `2466e83`). It was 19 ahead / 111 behind on 2026-10-01. **Catch up again by merging `main`**
+  (not by rebasing). The branch has a merge commit now, and a rebase would flatten it. Last rebased onto **local** `main`
   `85af9d6` on 2026-08-12; before that `origin/main` `6b2ef41` on 2026-08-07 and `dde99fc` on
   2026-08-06 — we had silently drifted 69 commits behind once, don't let that happen again.
 - **⚠️ REBASE ONTO LOCAL `main`, NOT `origin/main`.** As of 2026-08-12 local `main`
@@ -241,7 +298,7 @@ No `--go` ingest has **ever** run on the box. The 2026-08-05 session stopped at 
 |---|---|---|
 | 1 | A real `--go` producing `.../recon_N` registry rows (one acquisition per reconstruction). | ✅ passes locally (2026-08-07) |
 | 2 | A corrected session showing a `session_extra` block in its `metadata.json`. | ✅ passes locally |
-| 3 | `registries/pending_links.csv` written with `ENOTSUP` / `darwin` rows. **This file exists on neither NAS today.** | ❌ **box only** — hard links succeed on Windows, so this can only fail-and-queue on the Mac. Runnable **over the tunnel** since 2026-10-01; needs the Mac's `gjesus3` mount up (§0 step 2). |
+| 3 | `registries/pending_links.csv` written with `ENOTSUP` / `darwin` rows. **This file exists on neither NAS today.** | ✅ simulated off-box (`test_ni_live_e2e.py`), and ✅ **on the Mac 2026-10-06** with a real `Errno 45` against a scratch NAS on gnuclear. Still to see: the same on the gjesus3 mount (§0 step 2). |
 | 4 | A second sync: idempotent (0 new), and a **late reconstruction registering into an already-corrected session with the correction still applied.** | ✅ passes locally |
 
 Gate 4 is the acceptance test for the persistent-corrections change and is the one most

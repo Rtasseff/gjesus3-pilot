@@ -16,6 +16,10 @@ ni-ingest <your folder> --live --go       # 2. sync it
 `<your folder>` is your own data folder on the box, e.g.
 `/Users/molecubes/Documents/volumes/remiW11/data/irene`.
 
+`ni-ingest` is a small launcher on the shared `gnuclear` drive. Type its full path (the
+data office gives it to you), e.g. `/Volumes/gnuclear/…/ni-ingest`. Nothing is installed
+on the Mac. `gjesus3` must be connected in Finder.
+
 Step 1 writes nothing to gjesus3 and changes nothing on your box. If it says
 **"nothing new to review"**, skip straight to step 2 — that is the normal case once
 you've synced before.
@@ -36,7 +40,8 @@ You don't have to name that file or remember where it is — the tool finds it a
 `ni_corrections_<your name>.csv` and it lives in your own folder on the shared
 `gnuclear` drive, alongside your other nuclear-imaging files.
 
-Open it in Excel. It looks like:
+Open it in Excel **on the Mac**. From a Windows PC the file is read-only for you (the Mac
+creates it, and `gnuclear` lets the group read but not change it). It looks like:
 
 | session_path | project | animal_codes | extra_metadata |
 |---|---|---|---|
@@ -114,6 +119,14 @@ to try to clear an error; a stuck sync is safe to leave alone.
 
 ## For the data office
 
+- **The launcher** is `tools/operator/ni-ingest.sh`, staged as `<dir>/ni-ingest` beside
+  `<dir>/tools/`. It runs `/usr/local/bin/python3` (3.10; a non-interactive ssh shell
+  finds the system 3.8 first), sets `PYTHONPATH`, writes no `__pycache__`, and defaults
+  the NAS root to `/Volumes/gjesus3/gjesus3-data` unless `GJESUS3_ROOT` is set. Not mounted
+  means a clean "NAS root does not look valid" exit with nothing written.
+- **Test runs:** `--plan` writes the corrections file into the *researcher's* gnuclear
+  folder. For a test that must stay out of it, pass `--corrections` with an **absolute**
+  path (a relative one lands in the shell's current directory).
 - Live sync builds its config in memory from
   `tools/templates/instruments/molecubes_ni_live.yaml`. **There is no per-batch YAML.**
 - **Corrections: one file per researcher, on `gnuclear`, kept forever.**
