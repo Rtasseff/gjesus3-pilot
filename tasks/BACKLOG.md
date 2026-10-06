@@ -2211,6 +2211,25 @@ drives staged so far. They are tool choices for the Data Office, not decisions f
   Recommendation: keep skipping them, but log each skipped folder with its file count, so a recycle bin with content
   is noticed before the drive goes back.
 
+## 🔸 MODERATE — after the platform-archive MRI ingest: check the drive-3 MRI against the originals, and re-trace the segmentations (Ryan, 2026-10-06)
+
+Ryan has SSH access to the platform's own archive of older MRI (where the acquisition
+machine's data goes as it fills) and will ingest from it after the M. Jesús drive.
+Two things follow:
+
+- **Check the drive-3 MRI against the originals.** Stream M ingests 3,309 exams from M. Jesús's copies (Ryan's M2:
+  "make a note of them and the fact that we need to check them against the originals"). Its gate lists every study.
+  Compare each with the archive's copy (DICOM bytes, or pixels where re-exported), and record the result. The archive
+  ingest must use the same `original_name` form (`<study>/<exam>`) so that it skips these studies instead of
+  registering them twice.
+- **Re-run the drive-3 segmentation trace** (`tools/drive_staging/drive3/a3_run_all.py`) once the archive's 2019–2021
+  studies are in: today those cohorts trace at 0–7 % only because their MRI is missing. The masks are kept (placed, or in
+  the staged copy until `biomaGUNE MJ` is done) for exactly this.
+
+- [ ] The archive ingest (Ryan's next step).
+- [ ] The drive-3 MRI checked against the originals.
+- [ ] A3's trace re-run; the curated-dataset candidates (CAND-A and others) updated.
+
 ## 🔸 MODERATE — the `S:\gnuclear` discovery gives up on a path whose first parse finds no code (2026-10-06)
 
 Found by the drive-3 assessment (A1 R4, `tasks/drive3_raw_coverage.md`). `ni_gnuclear_discover.analyse()` looks further up

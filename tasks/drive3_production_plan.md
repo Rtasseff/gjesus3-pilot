@@ -32,7 +32,7 @@ The drives 1+2 approval model (Ryan, 2026-10-02), applied to this drive:
 | **P** | Non-raw placement into project folders and the holding folder (A2's plan) | `feat/drive3-placement` · `drive3-placement` | the coordinator's gate (copies only) | building |
 | **N** | PET/CT: the 202 reconstructions production lacks (A1 §4) | `feat/drive3-petct` · `drive3-petct` | gate, then Ryan's go | building |
 | **C** | Cell Observer: the 5,115 `.czi` production lacks, 643 GB (A1 §5) | `feat/drive3-czi` · `drive3-czi` | gate, then Ryan's go | building |
-| **M** | MRI: the 3,309 image exams production lacks, and protocol `0118` (A1 §2–3) | `feat/drive3-mri` · `drive3-mri` (not cut yet) | §0.5 M1 and M2, then gate and go | waiting on Ryan |
+| **M** | MRI: the 3,309 image exams production lacks (all `0118` to `AE-biomaGUNE-0118`), and the CNIC pig images as `XMRI` in a new project `CNIC-HEARDS` (A1 §2–3; Ryan's rulings of 2026-10-06) | `feat/drive3-mri` · `drive3-mri` | gate, then Ryan's go | to build |
 | **S** | The curated cine-mask dataset CAND-A (A3) | none yet | §0.5 M3 (M. Jesús's answers), then curator approval (12 §6.2) | waiting |
 
 **Not in any stream yet:** `biomaGUNE MJ` (last, by Ryan's order; A2 §6 has its inventory); the data from the Axioscan
@@ -65,7 +65,10 @@ and the Leica that are not gjesus3's (A1 R6; waits on M. Jesús, then the Charit
 1. Every ingested file's SHA-256 matched against the drive manifest; every placed file against it too.
 2. The evidence copied to `J:\gjesus3-data\staging\historical_drives_records\drive3_MJesus_WX22D623YP29\` (manifest,
    inventory, copy and verify logs, `drive_info.txt`), SHA-256-verified.
-3. The staged copy (`J:\_staging_drive3_MJ\`, 1,681 GB) deleted, **on Ryan's go**. The owner keeps her drive; staging
+3. **Before the staged copy goes:** `biomaGUNE MJ` triaged and placed (it holds more segmentations; Ryan, 2026-10-06:
+   "do not loose those segmentations"), and the raw that is not registered (the foreign Axioscan and Leica files, the
+   MRI exams that cannot be converted) copied to the holding folder.
+4. The staged copy (`J:\_staging_drive3_MJ\`, 1,681 GB) deleted, **on Ryan's go**. The owner keeps her drive; staging
    is not a backup.
 
 ## Log
