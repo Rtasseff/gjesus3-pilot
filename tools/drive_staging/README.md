@@ -89,7 +89,8 @@ python stage_copy.py verify        D:\...\staging\drive1_<label>   # re-hash <ou
   Recycle Bin can hold files the owner deleted and `found.000` holds fragments that
   `chkdsk` recovered, so if either is on a drive, look at it by hand before the drive
   goes back.
-- **Stage to a local disk, not to the NAS.** The NAS is **not byte-faithful for macOS
+- **A NAS destination works, with one known difference.** The third drive was staged to the
+  NAS share root, outside `gjesus3-data`. The NAS is **not byte-faithful for macOS
   AppleDouble files** (`._*`). On the third drive, seven `._.DS_Store` files read back
   different from what was written to `J:` (4,096 bytes written, 368 read: the QNAP
   folds AppleDouble data into extended attributes). A local disk is faithful: a copy
