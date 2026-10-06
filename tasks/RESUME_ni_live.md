@@ -8,6 +8,37 @@ order of work and overrides anything older below that disagrees with it.
 
 ---
 
+## ⛔ Rules for working on the Molecubes Mac (Ryan, 2026-10-06), before ANY ssh to it
+
+These apply to every command and script that touches the Mac, including side effects of programs we run there.
+
+1. **One free write zone: `gnuclear\2026\Jesus\Ryan`.**
+   - It is `S:\gnuclear\2026\Jesus\Ryan` on the workstation and `/Volumes/gnuclear/2026/Jesus/Ryan` on the Mac (share `//nuclearuser@10.10.1.92/gnuclear`, checked 2026-10-06).
+   - Writing there needs no approval. Prefer writing it from the workstation through `S:`, which costs the Mac nothing.
+2. **Every other write by the Mac needs Ryan's approval first, or Ryan runs it himself in his own ssh terminal.**
+   - That covers:
+     - the local disk;
+     - `~`, including `~/.ssh` and `~/Library/LaunchAgents`;
+     - pip installs;
+     - other gnuclear / gnuclear2$ folders;
+     - settings;
+     - logs, caches, `__pycache__` and temp files a tool creates.
+   - Check where a tool writes before running it.
+   - A `--go` to production gjesus3 needs a go-ahead for each run.
+3. **Never delete, move, rename or overwrite anything on the Mac that we did not write.** Even for our own files, remove only what we can prove we created.
+4. **Read anywhere, but keep the footprint small.**
+   - No recursive walks over big trees, and no bulk copies or hashing.
+   - Read one session or folder at a time, and copy at most a few small files.
+   - Keep commands short. Leave no background or long-running processes.
+   - Run heavier steps only outside acquisitions, after checking the load, under `nice -n 19` / `taskpolicy -b`.
+   - Develop and test off-box. The Mac is for the final checks only.
+
+Why: the Mac is the platform manager's (§3). Erasing, overwriting or a slow box costs us equipment access, and getting access back took a month. His 2026-10-02 OK covers the remote *sync tests* only.
+
+**Python on the Mac:** non-interactive ssh finds `/usr/bin/python3` (3.8.9). The 3.10 the tools ran with (pyyaml etc.) is `/usr/local/bin/python3`, which a login Terminal, i.e. what operators use, finds first. Over the tunnel, call `/usr/local/bin/python3` explicitly or use `bash -l`.
+
+---
+
 ## 0. ▶ Start here — the order of work (2026-10-01)
 
 **The goal (Ryan, 2026-10-01).** NI researchers operate the Molecubes scanner themselves. They
