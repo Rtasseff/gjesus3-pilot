@@ -1485,6 +1485,8 @@ over them.
 
 ## 🔺 HIGH — the `operator` column carries a template instruction on 10,314 rows (2026-08-20) — (a) and (b) ✅ done 2026-10-05; (c) open
 
+**Found 2026-10-06, for (c):** project `provenance.csv` files copy the acquisition's `operator` into each link row's `creator`. **9,288 rows in 19 MRI projects still carry the old placeholder** (`<REQUIRED - set via mri-ingest --operator, or replace here>`), which (a) did not touch, and the **546 rows written by the 1121 reopen carry `pending-claim`** (`tools/reopen_project.py` line ~282 copies `operator`). The validator does not read project provenance, and project folders are not the system of record (05_PROJECTS §3a), so nothing is wrong in the registry. When (c) runs, give these `creator` cells the claimed name or blank as well. Separately, consider whether a link the system recreates should name the tool or the Data Office as its creator, not the operator.
+
 **✅ DECIDED 2026-10-05 (Ryan, STATUS §0 D1), in three parts:**
 - **(a) NOW:** "Replace the placeholder on the 10,314 MRI operator cells with a hold value meaning "awaiting claim". You choose the token, document it where the blank sentinel is documented, and make the validator accept it; no OK from me needed on the name. Done when the validator passes with 0 errors and only those 10,314 cells changed."
 - **(b) NOW, build only, do not send:** a claim list for Jesús's group, one row per session. Ryan sends it at the pilot re-launch and sets the claim window then.
