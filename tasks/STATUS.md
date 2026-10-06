@@ -248,7 +248,8 @@ The genuinely in-flight items (kept tight — everything else is in
     - the PET/CT reconstructions not in production (202): stream N, built and dry-run, then Ryan's go;
     - the Cell Observer files (5,115, 643 GB): stream C, through the drives' gate (re-saves, same-timestamp groups, claims), then Ryan's go;
     - the descriptions (17, with the drive's wording first), once M1 is answered;
-    - the label-meaning and slice-order evidence goes to SegBioMed (their D4/D5).
+    - **✅ the label-meaning and slice-order evidence went to SegBioMed** (their D4/D5) on 2026-10-06, as REPLY 8 in `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`. Nothing was applied.
+    - **Streams P, N and C are cut and building** (2026-10-06; worktrees `drive3-placement`, `drive3-petct`, `drive3-czi`). Each ends in a gate document; nothing reaches production before the coordinator's gate, and the ingests not before Ryan's go.
   - **Waiting on Ryan:** §0.5 M1, M2 and M3, and later the go for each gated ingest.
   - **At close-out:** every ingested file is checked against the drive manifest, and the evidence is copied to `J:\gjesus3-data\staging\historical_drives_records\`. Then the staged copy is deleted, on Ryan's go.
 - **Historical microscopy on external drives: ✅ `.czi` INGEST DONE IN TRUE PRODUCTION, verified and merged (2026-10-02, `0f052d5`).**
