@@ -1311,7 +1311,10 @@ def main():
 
     with open(os.path.join(args.out, "run_summary.txt"), "w", encoding="utf-8") as f:
         f.write(f"run {dt.datetime.now().isoformat(timespec='seconds')}\n")
-        f.write(f"manifest files: {n_manifest} (drive1 {len(manifests['drive1'])}, drive2 {len(manifests['drive2'])})\n")
+        # every drive in DRIVES, in order: "(drive1 N, drive2 M)" for drives 1+2 as before; a wrapper
+        # for another drive (drive3/a2_claims.py) no longer has to fake empty drive1/drive2 manifests
+        per_drive = ", ".join(f"{d} {len(m)}" for d, m in manifests.items())
+        f.write(f"manifest files: {n_manifest} ({per_drive})\n")
         f.write(f"archive members listed: {len(items) - n_manifest}\n")
         f.write(f"valid protocol codes in DB: {len(db.valid)}\n")
         f.write(f"DB lookups this run (uncached): {db.lookups}\n")
