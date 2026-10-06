@@ -237,7 +237,7 @@ The genuinely in-flight items (kept tight — everything else is in
       - **The candidate:** CAND-A, 3,234 LV/RV cine masks from 189 sessions and 161 animals (§0.5 M3).
       - **Two open SegBioMed questions answered:** the 0/1/2 labels are blood pools, and DS-SEG-0001's slice order checks out by pixels (confirming DS-SEG-0004's `m85` correction).
       - *Coordinator checks:* DS-SEG-0004's 178 reader files were re-hashed and found on the drive, and one CAND-A stack was re-traced with an independent loader (11 of 11 slices at NCC 1.0000).
-  - **Going ahead within the rulings.** Each production write is serialised and verified by the coordinator, as for drives 1+2:
+  - **Going ahead within the rulings** (the plan and its streams: [`drive3_production_plan.md`](drive3_production_plan.md)). Each production write is serialised and verified by the coordinator. As for drives 1+2 (Ryan, 2026-10-02), copies into project folders are the coordinator's to approve, while **each ingest, and the reopens of `1521` and `0618`, take Ryan's go after the coordinator has gated the dry run**:
     - **✅ `AE-biomaGUNE-1121` reopened 2026-10-06** (ruled), with `tools/reopen_project.py`, after a dry run. **Verified independently:** only `registry_projects.csv` changed, and in it only PROJ-0009's `status` (closed → active) and `notes`; its format is unchanged; all 546 link folders hold exactly their acquisition's `.dcm` files, and all 12,867 are hard links of `/raw/` (0 problems); the validator is unchanged (0 errors, 0 warnings, the 10,314 `pending-claim` info line). Backups: `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261006_pre1121reopen\` and the tool's own `…\gjesus3_reopen_backup_20261006_115911_AE-biomaGUNE-1121\`. `-1521` and `-0618` reopen at placement, for their 19 documents (05 §4.y: reopened case by case when new data turns up);
     - **the non-raw placement**, on A2's plan:
       - one study folder per content;
@@ -245,11 +245,11 @@ The genuinely in-flight items (kept tight — everything else is in
       - the 25 files drives 1+2 placed under another project also go into drive 3's;
       - holding for the pig set, the group's 3D Slicer tool and the model outputs.
       - The placement code first has to learn a third drive (`historical_paths.py` and the READMEs know two);
-    - the PET/CT reconstructions not in production (202);
-    - the Cell Observer files (5,115, 643 GB), after the drives' gate (re-saves, same-timestamp groups, claims);
+    - the PET/CT reconstructions not in production (202): stream N, built and dry-run, then Ryan's go;
+    - the Cell Observer files (5,115, 643 GB): stream C, through the drives' gate (re-saves, same-timestamp groups, claims), then Ryan's go;
     - the descriptions (17, with the drive's wording first), once M1 is answered;
     - the label-meaning and slice-order evidence goes to SegBioMed (their D4/D5).
-  - **Waiting on Ryan:** §0.5 M1, M2 and M3.
+  - **Waiting on Ryan:** §0.5 M1, M2 and M3, and later the go for each gated ingest.
   - **At close-out:** every ingested file is checked against the drive manifest, and the evidence is copied to `J:\gjesus3-data\staging\historical_drives_records\`. Then the staged copy is deleted, on Ryan's go.
 - **Historical microscopy on external drives: ✅ `.czi` INGEST DONE IN TRUE PRODUCTION, verified and merged (2026-10-02, `0f052d5`).**
   - **8,790 acquisitions, 3.85 TB:** `CELL` 8,061, `LSM9` 387, `ZWSI` 4, `XMIC` 338. The registry went 16,437 → **25,227**.
