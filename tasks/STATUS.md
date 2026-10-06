@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-10-05
+**Last Updated:** 2026-10-06
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -76,6 +76,16 @@ So nothing that leaves the scanner is lost. *(Corrected 2026-10-06: the first ve
 | **N4** | **`jr250416_m1_0423_1`** (7 images, 2025). Its initials were typed `jr`, so the `jrc` pull filter missed it. Ingest it? | Low, as for N1 | review §7; §8 R6 |
 | **N6** | **The 57 MFB study folders from 2022 that the June upload skipped** (23 animal sessions of `0619`, `0618`, `0721` and `0220`; 34 phantom and coil tests). They are off the acquisition machine and expected in the platform's archive. Ingest them from there with the platform manager's agreement, or leave them. | Low: the platform's archive keeps them | review §6; §8 R4 |
 | **N7** | **Ermal's 8 `0118` sessions of 2021 on `K:`** (141 exam folders): ingest them? | Low: `K:` does not age off | review §3 (c); §8 R3 |
+
+### 0.5 New from the M. Jesús drive (2026-10-06)
+
+The third historical drive (§2) arrived with Ryan's rulings of 2026-09-30, made with the CoS hub. One of them meets a
+project created the same day. The rest of the drive's decisions will be added here as one block when the read-only
+assessment lands.
+
+| # | Decision | Cost of delay | Detail |
+|---|---|---|---|
+| **M1** | **Protocol `0118`, the Monocrotalina half.** Ruled 2026-09-30: `0118` becomes two projects, `Proyecto-0118-rats-hipoxia` and `Proyecto-0118-Monocrotalina`. But `AE-biomaGUNE-0118` (PROJ-0060) was created the same day by the drives 1+2 ingest, for Lucia's histology (`118 LUCIA`). Its description already reads "rat; `Proyecto 0118 Monocrotalina`", and drive 1's `Proyecto 0118 Monocrotalina` documents are already in its folder. **Recommendation:** keep `AE-biomaGUNE-0118` as the Monocrotalina project with no rename (a rename moves its folder and rewrites 140 registry rows and their links), and create only `Proyecto-0118-rats-hipoxia`, as ruled. | Low: the hipoxia project goes ahead as ruled; only the Monocrotalina documents on this drive (28) wait | §2, "The M. Jesús drive" |
 
 **Where the SegBioMed conversation lives:** the full exchange with the SegBioMed project is appended to
 `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md` (REPLY 7 carries the 2026-10-05
@@ -197,6 +207,26 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **The M. Jesús drive (third historical drive): 🔶 TAKEN OVER 2026-10-06; a read-only assessment is running.**
+  - **What it is:** M. Jesús's own working drive (`MJesus-MFB-biomaGUNE`, WD serial `WX22D623YP29`), on loan on 2026-09-29 and since returned to her. The CoS hub staged it to `J:\_staging_drive3_MJ\drive3_MJesus_WX22D623YP29\`, outside `gjesus3-data`: **621,969 files, 1.57 TiB, 0 read errors, and a clean verify.** The 7 verify failures are AppleDouble `._.DS_Store` files that the NAS rewrites; each was re-read from the drive and matched. The hub's brief and evidence are in `...\DataInfra\gjesus3-archive\historical-mjesus-drive\` (`HANDOFF.md`, `records\`); a snapshot is on `D:\projects\gjesus3\drive3_analysis\hub_records_snapshot_20261006\`. The staged copy is one of two copies (the owner has the drive), so it stays until ingest checksums match its manifest.
+  - **Ryan's rulings of 2026-09-30, made with the hub** (recorded here so that they outlive its brief):
+    - material goes inside the matching existing project, and that project's description gains the drive's own wording (e.g. `AE-biomaGUNE-0525` ← `Proyecto 0525 2DG y manosa`);
+    - a new project only after its code is confirmed in the animal-facility DB, never guessed;
+    - identify what is already in `/raw/`, dedup by SHA-256 only, and ingest only raw that is genuinely absent;
+    - **reopen `AE-biomaGUNE-1519` and `-1121`** and redo their links. 1519 was reopened on 2026-10-04 by stream B; **1121 remains**;
+    - **`0118` is one protocol with two projects**, `Proyecto-0118-rats-hipoxia` (28 Bruker studies that production lacks) and `Proyecto-0118-Monocrotalina` (documents only); see §0.5 M1. The name form `Proyecto-XXXX-abc` is for a second project under a real protocol; `Project-NNNN` stays for codes that are not protocols (05_PROJECTS §2a.7);
+    - the **331 Bruker studies** the hub found missing from production are a note for Ryan, not an action;
+    - exclude junk (`desktop.ini`, `Thumbs.db`, AppleDouble) and two WD installers;
+    - closed projects should be **moved, not deleted** (`projects_closed\`), with a "close a project" action in the Project Manager. This is a proposal for Ryan ([`BACKLOG.md`](BACKLOG.md)).
+  - **The hub's brief predates the drives 1+2 work:** `0118`, `0521`, `1319` and `1420` now have projects (PROJ-0060…0065), and `1519`, `1019` and `0320` are reopened.
+  - **First measurement (2026-10-06, read-only):** an index of every file production `/raw/` holds (516,577 files from 27,034 `checksums.json`) shows **117,212 of the drive's files (67 of 1,681 GB) byte-identical to production.** In `Microscopio\`, only 448 of 5,834 `.czi`/`.lif` match, so most of its ~900 GB is not in production by bytes; re-saves are still to be ruled out. Production MRI holds DICOM only, so the drive's Bruker `fid`/`2dseq` files are not expected to match.
+  - **Running now:**
+    - three read-only assessments on `review/drive3-mjesus-assessment`: **A1** raw coverage (MRI per exam, PET, microscopy, DICOM), **A2** projects, descriptions and the non-raw placement plan (with the `projects_closed\` proposal), and **A3** the segmentations as a curated-dataset candidate (Ryan, 2026-10-06: *"if it matches raw data in production, we should consider starting the process of making it an official curated data set"*);
+    - the **`stage_copy.py` v1.5** adoption on `feat/stage-copy-v15`. The repo had v1.1. The v1.5 master survived the D: erase in `J:\gjesus3-data\staging\historical_drives_records\_tools\`.
+  - **Next:**
+    - review the three reports, and put the decisions they raise into §0.5 as one block;
+    - then the production streams: reopen 1121, the descriptions, the hipoxia project and its MRI, the placement, and the microscopy that is genuinely new;
+    - at close-out, copy the evidence to `J:\gjesus3-data\staging\historical_drives_records\`, as for drives 1 and 2 (the hub keeps only evidence once the product has taken a drive over).
 - **Historical microscopy on external drives: ✅ `.czi` INGEST DONE IN TRUE PRODUCTION, verified and merged (2026-10-02, `0f052d5`).**
   - **8,790 acquisitions, 3.85 TB:** `CELL` 8,061, `LSM9` 387, `ZWSI` 4, `XMIC` 338. The registry went 16,437 → **25,227**.
   - **Projects:** one created (`AE-biomaGUNE-0118` = PROJ-0060); `0219` and `1019` reopened. **5,055 acquisitions have a blank project:** Ryan's list, `tasks/drives_blank_project_list.csv`.

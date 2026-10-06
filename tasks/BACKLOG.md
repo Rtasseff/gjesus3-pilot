@@ -798,6 +798,29 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
     (a), (b) and (d) are not re-decided here; with no additional institute policy, today's practice
     stands.
 
+## 🔸 MODERATE — closed projects should be MOVED, not deleted: a `projects_closed\` tier and a "close a project" action (Ryan, 2026-09-30)
+
+Ryan's direction, made with the CoS hub over the M. Jesús drive (its `HANDOFF.md` §7.3; STATUS §2):
+
+- A closed project is **moved** to `projects_closed\`, not deleted. Cold storage on a separate device can come later,
+  and compression is an option.
+- Once that tier is settled, the **Project Manager gains a "close a project" action** that moves the folder.
+- Ryan then asks the researchers to **review every project**: who owns it, whether it is closed, and whether it should
+  have been a project at all. That review is also the forum for the open naming convention (05_PROJECTS §9).
+
+**Why it came up:** `AE-biomaGUNE-1519` and `-1121` were closed and their folders deleted, as 05_PROJECTS prescribes,
+and then both had to be reopened when drive material for them arrived (1519 on 2026-10-04; 1121 is pending, STATUS §2).
+
+**The spec contradicts itself today:** 05_PROJECTS §1 calls projects working space that is "closed and deleted", and §4
+ends the lifecycle at `DELETED`; §4.x says that until the tool exists, projects should not be deleted. A moved-not-deleted
+tier resolves it. This is a spec change owned by gjesus3; **Ryan owns the call.** The smallest spec and tool change is
+being written up by the drive-3 assessment (A2, `tasks/drive3_projects_and_placement.md`).
+
+- [ ] Ryan's call on `projects_closed\`.
+- [ ] The spec change (05_PROJECTS §1, §4, §4.x), and the close-out rule in STATUS §1 ("folder deleted").
+- [ ] The Project Manager "close a project" action.
+- [ ] The researchers' review of every project (Ryan).
+
 ## 🔸 MEDIUM — reconsider a `status` column for retired acquisitions, instead of the tombstone file (2026-10-01)
 
 **Decided for now (Ryan, 2026-10-01):** a retired ACQ-ID leaves `registry_raw.csv` and is recorded
@@ -1369,6 +1392,8 @@ it was reconstructable at all.
   segmentation and histology under one subject id.
 
 ## 🔸 MODERATE — internal MRI older than ~2022-01 exists ONLY on researcher shares (2026-08-21)
+
+**Update 2026-10-06: the M. Jesús drive is one of those shares.** It holds 639 Bruker studies; the CoS hub counted 331 of them (188 GB) absent from production on 2026-09-30, most from before 2022. They are being re-measured against today's registry (STATUS §2, assessment A1). Ryan's ruling: a note for him, not an action, except the 28 `0118` hipoxia studies, which go into the new `Proyecto-0118-rats-hipoxia`.
 
 **⚠️ Update 2026-10-05 (D3 re-scan, verified): the scanner's horizon is now 2024-01-05.** The 2022–23 studies were deleted around 2026-08-26, the day PV 6's data folder last changed. Everything gjesus3 pulled in June is safe in `/raw/`. **Not a loss (Ryan, 2026-10-06):** the platform moves the data to its own archive before it clears the acquisition machine, and keeps a deep-storage copy. So what gjesus3 did not pull, such as the 57 MFB study folders of STATUS §0.4 N6, is reachable through the platform manager.
 
