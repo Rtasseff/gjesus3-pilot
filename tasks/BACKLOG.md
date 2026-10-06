@@ -2191,6 +2191,22 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
 - 11_OPERATIONS §5.5 already notes that WSL cannot hard-link there.
 - Plan a window by file count. A native-DICOM study with no project could be written from Windows instead.
 
+## 🔹 LOW — `stage_copy.py` 1.5: four known limits found when it was adopted (2026-10-06)
+
+The adoption's review and test found these (`tools/drive_staging/README.md`; merge `82d4e97`). None affected the three
+drives staged so far. They are tool choices for the Data Office, not decisions for Ryan.
+
+- **A filename that is not valid Unicode** (a lone UTF-16 surrogate, e.g. an emoji cut by the name-length limit) cannot
+  enter the UTF-8 manifest. The bytes are copied, the run ends `errors 1` while `errors.csv` stays empty, and `verify`
+  stops with a traceback after hashing everything. It fails safe (no false PASS). A fix touches the three writers and
+  `load_manifest`, which `catalog.py` and `ingest_plan.py` share.
+- **`copy` exits 0 when files failed.** The README's release check covers it; a non-zero exit would be safer for scripts.
+- **The circuit breaker also counts failures that are not the drive's** (e.g. 25 names in a row the destination cannot
+  hold), and the only override is the `CONSECUTIVE_FAIL_LIMIT` constant.
+- **`$RECYCLE.BIN`, `System Volume Information` and `found.000` at the drive root are skipped with no log line.**
+  Recommendation: keep skipping them, but log each skipped folder with its file count, so a recycle bin with content
+  is noticed before the drive goes back.
+
 ## 🔸 MODERATE — the drives' DICOM stream: follow-ups (stream B, 2026-10-04)
 
 - [ ] **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T.
