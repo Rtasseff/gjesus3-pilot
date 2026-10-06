@@ -179,6 +179,53 @@ def test_cli():
     print("CLI")
     rc = H.main(["dest", "--base", BASE, "--drive", "D1", "--relpath", r"R\P\a.txt", "--root", r"R\P"])
     check(rc == 0, "dest returns 0")
+    rc = H.main(["dest", "--base", BASE, "--drive", "D3", "--relpath", r"Pili y Mili\Proyecto 1019 X\a.txt",
+                 "--root", r"Pili y Mili\Proyecto 1019 X"])
+    check(rc == 0, "dest accepts the third drive (D3)")
+
+
+def test_third_drive():
+    print("the third drive (M. Jesus's working drive, 2026-10-06): its own tag, label and README line")
+    check(H.TAGS["D3"] == "MJesus-MFB" and H.DRIVE_LABELS["D3"] == "drive3_MJesus-MFB", f"D3 -> {H.TAGS['D3']}")
+    check(H.TAGS["D1"] == "FRIO-X6" and H.TAGS["D2"] == "MFB-Disco-2", "drives 1 and 2 unchanged")
+    it3 = H.Item(id="m", drive="D3", relpath=r"Pili y Mili\Proyecto 1019 Envejecimiento y dieta\MRI\x.xlsx",
+                 root=H.claim_root_segments(r"Pili y Mili\Proyecto 1019 Envejecimiento y dieta"))
+    d = H.Planner(BASE).plan([it3])["m"]
+    check(d == BASE + r"\MJesus-MFB\Proyecto 1019 Envejecimiento y dieta\MRI\x.xlsx", d)
+    check(H.original_display("D3", r"Otros\a.docx") == r"drive3_MJesus-MFB\Otros\a.docx", "original path names drive 3")
+    # the same study folder name on drive 1 and drive 3 in one tree: separate tags, no " (2)"
+    it1 = H.Item(id="f", drive="D1", relpath=r"Z\Proyecto 1019 Envejecimiento y dieta\MRI\x.xlsx",
+                 root=H.claim_root_segments(r"Z\Proyecto 1019 Envejecimiento y dieta"))
+    it3 = H.Item(id="m", drive="D3", relpath=r"Pili y Mili\Proyecto 1019 Envejecimiento y dieta\MRI\x.xlsx",
+                 root=H.claim_root_segments(r"Pili y Mili\Proyecto 1019 Envejecimiento y dieta"))
+    d = H.Planner(BASE).plan([it1, it3])
+    check(d["f"].endswith(r"\FRIO-X6\Proyecto 1019 Envejecimiento y dieta\MRI\x.xlsx")
+          and d["m"].endswith(r"\MJesus-MFB\Proyecto 1019 Envejecimiento y dieta\MRI\x.xlsx"), str(d))
+    # a frozen drive-1 _PATHMAP.csv never renames or shadows drive-3 folders (node keys carry the drive)
+    tmp = tempfile.mkdtemp(prefix="hp_d3_")
+    try:
+        p = H.Planner(BASE)
+        p.plan([it1])
+        pm = os.path.join(tmp, H.PATHMAP_NAME)
+        H.write_pathmap(pm, p.pathmap_rows())
+        q = H.Planner(BASE)
+        q.load_pathmap(pm)
+        it3b = H.Item(id="m", drive="D3", relpath=r"Pili y Mili\Proyecto 1019 Envejecimiento y dieta\MRI\x.xlsx",
+                      root=H.claim_root_segments(r"Pili y Mili\Proyecto 1019 Envejecimiento y dieta"))
+        d3 = q.plan([it3b])["m"]
+        check(d3 == BASE + r"\MJesus-MFB\Proyecto 1019 Envejecimiento y dieta\MRI\x.xlsx", f"beside frozen D1: {d3}")
+        check(all(k.startswith("D1:") for k in q.fixed) and any(k.startswith("D3:") for k in q.nodes),
+              "the merged pathmap keeps D1's entries and adds D3's")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    # a deterministic short name is the same whichever drive it is on
+    check(H.short_name("Proyecto 1019 Envejecimiento y dieta") == "Proyecto 1019 Envejecimi~c3e8",
+          "the 1019 study folder shortens to drive 1's name (Proyecto 1019 Envejecimi~c3e8)")
+    # the project README names all three drives, and keeps the first two as they were
+    for s in ("FRIO-X6\\", "2322E4A111E7", "MFB-Disco-2\\", "2322E4A112BD", "MJesus-MFB\\", "WX22D623YP29"):
+        check(s in H.PROJECT_README, f"PROJECT_README names {s}")
+    check("segmentations" in H.PROJECT_README and "_INDEX.csv" in H.PROJECT_README,
+          "PROJECT_README covers drive 3's classes and still points at _INDEX.csv")
 
 
 if __name__ == "__main__":
@@ -191,5 +238,6 @@ if __name__ == "__main__":
     test_pinned_files()
     test_uniqueness()
     test_cli()
+    test_third_drive()
     print(f"\n{'FAILED: ' + str(len(FAILS)) if FAILS else 'all passed'}")
     sys.exit(1 if FAILS else 0)

@@ -9,7 +9,7 @@ later 2b mapping and the 2c holding folder). Ryan, 2026-10-02: no paths that thr
 THE RULE
   <base>\\<tag>\\<root label>\\<path below the root>\\<file>
     base   projects\\<project>\\working\\historical_drives   (or staging\\historical_drives_unassigned)
-    tag    FRIO-X6 | MFB-Disco-2                            (the drive)
+    tag    FRIO-X6 | MFB-Disco-2 | MJesus-MFB               (the drive; TAGS below)
     root   the OUTERMOST claim-root folder of the file's project on its path (a study folder such as
            `Proyecto 1019 Envejecimiento y dieta`); everything ABOVE it is dropped -- the drive's
            wrapper folders, the researcher folders, an archive's name and its repeated top folder.
@@ -54,8 +54,11 @@ BUDGET = 240
 COMPONENT_MAX = 255
 KEEP = 24
 KEEP_LEVELS = (24, 12, 6)  # graded shortening: a later run may cut NEW folders harder (old ones are frozen)
-TAGS = {"D1": "FRIO-X6", "D2": "MFB-Disco-2"}
-DRIVE_LABELS = {"D1": "drive1_FRIO-X6", "D2": "drive2_MFB-Disco-2"}
+# The drives, by the code the catalogs use. D3 is M. Jesus's own working drive (WD My Passport, serial
+# WX22D623YP29, volume label MJesus-MFB-biomaGUNE), staged 2026-09-29/30; its tag is the volume label
+# shortened the way the first two were made (A2, tasks/drive3_projects_and_placement.md §4.1).
+TAGS = {"D1": "FRIO-X6", "D2": "MFB-Disco-2", "D3": "MJesus-MFB"}
+DRIVE_LABELS = {"D1": "drive1_FRIO-X6", "D2": "drive2_MFB-Disco-2", "D3": "drive3_MJesus-MFB"}
 NESTED_SEP = "!"
 ARCHIVE_EXT = (".zip", ".7z", ".rar")
 INDEX_NAME, PATHMAP_NAME, README_NAME, ORIGIN_NAME = "_INDEX.csv", "_PATHMAP.csv", "README.txt", "_ORIGIN.txt"
@@ -502,13 +505,19 @@ Historical drive material for this project
 ==========================================
 
 What this folder is
-  Files from two operator external drives (FRIO X6, serial 2322E4A111E7, and
-  MFB Disco 2, serial 2322E4A112BD) that belong to this project but are not raw
-  acquisitions: exported images (.tif), figures, slides, documents, analysis
-  files, scale-bar copies. The raw acquisitions themselves are in gjesus3's
-  archive and are linked in this project's raw_linked\\ folder.
+  Files from the lab's historical external drives that belong to this project
+  but are not raw acquisitions: exported images (.tif), figures, slides,
+  documents, analysis files, segmentations and derived image volumes (NIfTI,
+  MetaImage), scale-bar copies. The raw acquisitions themselves are not here:
+  gjesus3 registers them in its archive, and links each registered one in this
+  project's raw_linked\\ folder.
 
-  FRIO-X6\\ and MFB-Disco-2\\ hold what came from each drive.
+  Each drive has its own folder here (only the drives that held material for
+  this project appear):
+    FRIO-X6\\       operator drive FRIO X6, serial 2322E4A111E7
+    MFB-Disco-2\\   operator drive MFB Disco 2, serial 2322E4A112BD
+    MJesus-MFB\\    a researcher's working drive (WD My Passport, serial
+                   WX22D623YP29, labelled MJesus-MFB-biomaGUNE)
 
 The folder names were shortened
   Windows cannot open very long paths, so:
