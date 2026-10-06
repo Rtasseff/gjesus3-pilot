@@ -6,6 +6,8 @@
 
 ## Summary
 
+> **Update 2026-10-06 (Ryan):** the 2022–23 studies left the acquisition machine for the platform's own archive, so nothing is lost, and the urgency in items 5–6 and in §5–§6 no longer applies.
+
 1. **The ingest now reports every study folder whose name matches no `filename_parse` rule**: one record per study folder with its exam-folder count, a NOT PARSED section in the BATCH SUMMARY, `--unparsed-report <file.csv>`, and the same list on the GUI's MRI page and in `mri-ingest` (§9). No regex was relaxed. 36/36 test suites pass.
 2. **The count: 1,481 study folders holding 11,602 exam folders match neither production regex** across the three sources (1,472 distinct names; G1 is on both kenia and K:).
    - kenia: 1,364 / 9,869;
@@ -187,6 +189,8 @@ Notes:
 
 ## 5. ⚠️ The horizon: the urgent part
 
+> **Update 2026-10-06 (Ryan): not a loss.** The platform clears the acquisition machine when its disk fills (it now keeps about two years) and moves the data to the platform's own archive first, with a deep-storage copy as well (Ryan, 2026-10-06). The studies below are expected there, reachable through the platform manager, and the urgency in this section no longer applies.
+
 **It moved two years in four months.**
 - **Today:**
   - PV 7: 3,050 dated studies, 2024-01-05 → 2026-10-05.
@@ -217,6 +221,8 @@ Notes:
 **(b?) is older still:** 41 of its 140 folders are from 2024 H1, and its oldest is 2024-01-08. If Ryan wants any of them, they come first.
 
 ## 6. ⚠️ Damage already done: the June skip list
+
+> **Update 2026-10-06 (Ryan): not a loss.** The platform clears the acquisition machine when its disk fills (it now keeps about two years) and moves the data to the platform's own archive first, with a deep-storage copy as well (Ryan, 2026-10-06). The studies below are expected there, reachable through the platform manager, and the urgency in this section no longer applies.
 
 - **The June bulk load knew.** Its selection file (`D:\projects\mri\mri_jrc_manifest.csv`, 2026-06-12) lists 1,080 `jrc` study folders on kenia:
   - 935 marked to ingest;
