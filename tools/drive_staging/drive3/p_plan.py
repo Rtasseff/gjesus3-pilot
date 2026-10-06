@@ -30,6 +30,9 @@ THE CALLS (HANDOFF §1 of feat/drive3-placement; tasks/drive3_production_plan.md
       volumes of Otros\\Segmentaciones ITK SNAP\\Segmentacion 2DG RATAS (the 2019 rat predictions).
   P1  (this stream's own, following the drives 1+2 precedent) the one .zip A2 placed whole is expanded,
       as every drives 1+2 archive was (Ryan, 2026-10-02: no zips): its 2 members are placed, not the zip.
+  N1  (coordinator, 2026-10-06, found by stream N) the 49 PMOD DICOM exports (A1 pet_files.csv, kind
+      pmod-export: SUV-scaled and co-registered volumes) are derivatives no stream planned. A2 left them to A1
+      because they are DICOM by content; they join A2's rows here, decided by A2's own rules (pmod_rows).
   A2's readings R1-R4, its "one study folder per content" dedup (D3) and D8 stand as A2 applied them.
 
 DECISIONS IN THE MANIFEST: place (copied in the project windows), holding (copied in the holding window),
@@ -233,7 +236,7 @@ def decide(a2rows, projects, root_of, zip_members=None):
              "verdict": "" if a["verdict"] == "NO-CLAIM" else a["verdict"], "reading": a["reading"],
              "a2_dec": a["dec_rec"], "a2_project": a["rec_project"], "a2_dest": a["dest"],
              "root": a["root_rec"] or "", "project": "", "decision": "", "hold": "", "call": "", "note": "",
-             "held_was": ""}
+             "held_was": "", "n1": a.get("n1", "")}
         pre = a2_pre(a)
         mo = model_output(a["relpath"]) if pre in ("candidate", "unattributed") else ""
         if mo:                                                         # C5
@@ -277,6 +280,9 @@ def decide(a2rows, projects, root_of, zip_members=None):
                 w["note"] = "zero-byte: counted, not placed"
         else:
             raise SystemExit(f"STOP: unknown A2 decision {a['dec_rec']!r} for {a['relpath']}")
+        if w["n1"]:                                                    # N1: stream N's PMOD exports
+            n1 = "N1: a PMOD DICOM export (stream N), non-raw by A2's rules"
+            w["call"] = f"{n1}; {w['call']}" if w["call"] else n1
         work.append(w)
     return content_and_dedup(work)
 
@@ -372,6 +378,91 @@ def researchers(relpaths):
     for r in it(os.path.join(A2_CLAIMS, "file_claims.csv")):
         if r["relpath"] in want and r.get("researcher"):
             out[r["relpath"]] = r["researcher"]
+    return out
+
+
+# ------------------------------------------------------------- non-raw files A2 did not own (N1)
+
+PET_FILES = os.path.join(ANALYSIS, "a1", "pet_files.csv")
+PMOD_CLASS = "pmod-dicom"     # DICOM by its DICM preamble (Manufacturer PMOD): a derived volume, not raw
+
+
+def pmod_rows(projects, raw_shas, root_of, say):
+    """N1 (coordinator, 2026-10-06, from stream N): the PMOD DICOM exports (SUV-scaled and co-registered
+    volumes, Manufacturer PMOD; A1 pet_files.csv kind = pmod-export) are derivatives that no stream planned.
+    They are DICOM by content, so A2 left them to A1; they are placed as non-raw by A2's OWN rules, as rows
+    in A2's plan format: the engine's claim, A2's readings, A2's first decision (biomaGUNE MJ deferred;
+    already in /raw/ -- read live; already placed or held by drives 1+2), and A2's study folder. decide()
+    then applies the calls and the dedup to them with every other row. -> rows like placement_plan.csv's."""
+    import a2_placement as A2P
+    import project_claims as PC
+    want = {r["relpath"] for r in it(PET_FILES) if r.get("kind") == "pmod-export"}
+    files = {r["relpath"]: r for r in it(A2_FILES) if r["relpath"] in want}
+    fcl = {r["relpath"]: r for r in it(os.path.join(A2_CLAIMS, "file_claims.csv")) if r["relpath"] in want}
+    cl_by_id = {c["claim_id"]: c for c in it(os.path.join(A2_CLAIMS, "claims.csv"))}
+    with open(os.path.join(A2_CLAIMS, "db_cache.json"), encoding="utf-8") as fh:
+        cache = json.load(fh)
+    if set(files) != want:
+        raise SystemExit(f"STOP: {len(want - set(files))} PMOD exports are not in A2's files.csv")
+    out = []
+    for rel in sorted(want):
+        f = dict(files[rel])
+        f["animal_token"] = fcl.get(rel, {}).get("animal_token", "")
+        f["proposed_project"] = fcl.get(rel, {}).get("proposed_project", f.get("proposed_project", ""))
+        ep = A2P.engine_project(f)
+        reading, rp = "", ""
+        if not ep:                                   # A2's readings R1-R3 (R4 are folder prefixes, below)
+            c = cl_by_id.get(f["claim_id"])
+            m = re.match(r"nested claims disagree: nearest (\d{4}) \(C\) vs outer (\d{4}); nearest is unresolved",
+                         f["conflict"])
+            if f["claim_id"] == "CL-1344" and not A2P.contradicted_0522(f, cache, PC.is_data):
+                reading, rp = "R1", "AE-biomaGUNE-0522"
+            elif f["claim_id"] == "CL-0772":
+                reading, rp = "R2", "AE-biomaGUNE-1019"
+            elif m and c and A2P.DATE_TOKEN_EVIDENCE in c["evidence"] and f"AE-biomaGUNE-{m.group(2)}" in projects:
+                reading, rp = "R3", f"AE-biomaGUNE-{m.group(2)}"
+            for rid, (prefix, proj) in A2P.NO_CODE_ROOTS.items():
+                if not reading and rel.startswith(prefix + "\\"):
+                    reading, rp = rid, proj
+        proj = ep or rp
+        if proj == P0118:
+            proj = "Proyecto-0118-Monocrotalina" if rel.startswith(MONO_PREFIX) else "Proyecto-0118-rats-hipoxia"
+        placed = set(f["placed12"].split(";")) - {""}
+        folder = (P0118 if proj in A2_0118_NAMES else proj)
+        if f["top"] == "biomaGUNE MJ":
+            dec = "deferred-biomaGUNE-MJ"
+        elif int(f["size"]) == 0:
+            dec = "exclude-zero-byte"
+        elif f["sha256"] in raw_shas:
+            dec = "in-raw"
+        elif proj and folder in placed:
+            dec = "already-placed"
+        elif proj and placed:
+            dec = "placed-elsewhere"
+        elif proj:
+            st = (projects.get(folder) or {}).get("status", "").strip().lower()
+            dec = "closed-project" if st == "closed" else "place"
+        elif placed:
+            dec = "already-placed"
+        elif f["holding12"]:
+            dec = "already-in-holding"
+        else:
+            dec = "holding"
+        root = ""
+        if dec in ("place", "closed-project"):
+            if reading.startswith("R4"):
+                root = "|".join(H.norm(s) for s in A2P.NO_CODE_ROOTS[reading.split("-")[0]][0].split("\\"))
+            else:
+                root = root_of(rel, folder)
+            if not root:
+                raise SystemExit(f"STOP: no study folder for the PMOD export {rel} in {folder}")
+        out.append({"relpath": rel, "top": f["top"], "size": f["size"], "sha256": f["sha256"], "cls": PMOD_CLASS,
+                    "claim_id": f["claim_id"], "verdict": f["verdict"], "reading": reading, "dec_rec": dec,
+                    "rec_project": proj, "dest": "", "root_rec": root, "placed12": f["placed12"],
+                    "conflict": f["conflict"], "n1": "Y"})
+    c = collections.Counter(r["dec_rec"] for r in out)
+    say(f"N1 PMOD exports (stream N, A1 kind pmod-export): {len(out)} files, {len({r['sha256'] for r in out})} "
+        f"distinct, {gb(sum(int(r['size']) for r in out))} GB; A2's first decision: {dict(c)}")
     return out
 
 
@@ -519,6 +610,8 @@ def compare_with_a2(work, rows):
         new_dest = r["dest_rel"] if r["decision"] in ("place", "holding", "held") else ""
         if mem:
             cause = "P1 archive member (new row)"
+        elif w.get("n1"):
+            cause = "N1 PMOD export (not in A2's plan; stream N)"
         elif r["decision"] == "expanded":
             cause = "P1 archive expanded, not copied whole"
         elif w["call"].startswith("C5"):
@@ -610,6 +703,13 @@ def cmd_plan(args):
     say(f"A2 plan rows: {len(a2rows):,} ({A2_PLAN})")
     zm = zip_members_of(a2rows, manifest, say)
     root_of = claim_roots()
+    if args.raw_index:
+        raw_shas = {r["sha256"] for r in it(args.raw_index)}
+        say(f"/raw/ (live index of today): {len(raw_shas)} distinct SHA-256 from {args.raw_index}")
+    else:
+        import p_verify
+        raw_shas = {r["sha256"] for r in p_verify.live_raw_index(args.nas, say)}
+    a2rows += pmod_rows(projects, raw_shas, root_of, say)                      # N1
     work = decide(a2rows, projects, root_of, zm)
     researcher = researchers([w["relpath"] for w in work])
     rows = manifest_rows(work, projects, researcher)
@@ -649,9 +749,11 @@ def cmd_plan(args):
     say("\nAGAINST A2's PLAN (kind, A2 decision, this decision, destination): files")
     for k, v in sorted(stats.items(), key=lambda kv: (kv[0][0] != "same", kv[0])):
         say(f"  {v:7,d}  {k}")
-    total = len(a2rows) + owners.get("A1", 0) + owners.get("junk", 0)
-    say(f"\nreconciliation: A2 rows {len(a2rows):,} + A1 {owners.get('A1', 0):,} + junk {owners.get('junk', 0):,} = "
-        f"{total:,}; drive manifest {len(manifest):,} -> {'OK' if total == len(manifest) else 'MISMATCH'}")
+    n1 = sum(1 for a in a2rows if a.get("n1"))             # A1-owned in A2's split, planned here (N1)
+    total = len(a2rows) + owners.get("A1", 0) - n1 + owners.get("junk", 0)
+    say(f"\nreconciliation: A2's rows {len(a2rows) - n1:,} + N1 {n1} + A1 {owners.get('A1', 0) - n1:,} (A2's split "
+        f"{owners.get('A1', 0):,} less the N1 rows) + junk {owners.get('junk', 0):,} = {total:,}; drive manifest "
+        f"{len(manifest):,} -> {'OK' if total == len(manifest) else 'MISMATCH'}")
     if total != len(manifest):
         fails.append("reconciliation with the drive manifest")
     with io.open(os.path.join(out, "plan.log"), "w", encoding="utf-8") as f:
@@ -730,6 +832,28 @@ def cmd_release(args):
 
 
 HANDOVER_KINDS = ("derivative", "notregistered", "companion", "other")
+JUNK_NAMES = {"desktop.ini": "ruled", "thumbs.db": "ruled", ".ds_store": "ruled",       # Ryan's list, 09-30
+              "folders.cache": "A2's addition", "thumbs.cache": "A2's addition"}
+WD_INSTALLERS = {"otros\\install western digital software for windows.exe",
+                 "otros\\install western digital software for mac.dmg"}
+
+
+def junk_reason(relpath):
+    """The drive's junk, by A2's rules (a2_common.classify): '' if the file is not junk. A later batch must
+    never place what batch 1 excluded (a stream's list of an exam folder can sweep a desktop.ini in)."""
+    name = relpath.split("\\")[-1]
+    low = name.lower()
+    if low in JUNK_NAMES:
+        return f"{JUNK_NAMES[low]}: {name}"
+    if name.startswith("._"):
+        return "ruled: macOS AppleDouble ._ file"
+    if relpath.lower() in WD_INSTALLERS:
+        return "ruled: WD installer"
+    if low in ("icon\r", "icon"):
+        return "A2's addition: macOS folder-icon file"
+    if low.startswith("~$") or (low.startswith("~wrl") and low.endswith(".tmp")):
+        return "A2's addition: Office temporary file"
+    return ""
 
 
 def cmd_handover(args):
@@ -787,6 +911,13 @@ def cmd_handover(args):
         size, sha = manifest[rel]
         if h.get("sha256") and h["sha256"].strip() != sha:
             refused.append((rel, "sha256 differs from the drive manifest"))
+            continue
+        junk = junk_reason(rel)
+        if junk:
+            refused.append((rel, f"junk, never placed ({junk})"))
+            continue
+        if size == 0:
+            refused.append((rel, "zero-byte: counted, never placed"))
             continue
         if (rel, "") in earlier:
             refused.append((rel, f"already decided in an earlier batch ({earlier[(rel, '')]})"))
@@ -865,6 +996,8 @@ def main(argv=None):
     p = sub.add_parser("plan")
     p.add_argument("--out", default=OUT_DEFAULT)
     p.add_argument("--no-stat", action="store_true", help="skip stat'ing every destination on the NAS")
+    p.add_argument("--raw-index", default="", help="a live /raw/ index saved today by p_verify.py raw-dedup "
+                                                   "--write-index (default: read every checksums.json now)")
     r = sub.add_parser("release")
     r.add_argument("--manifest", required=True)
     r.add_argument("--hold", required=True, help="e.g. M1-0118, reopen-AE-biomaGUNE-1521")

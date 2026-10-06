@@ -157,6 +157,28 @@ def test_decide():
           "manifest: a member row carries the archive in relpath and archive (the drives 1+2 convention)")
 
 
+def test_n1_pmod_rows():
+    print("N1: stream N's PMOD DICOM exports join A2's rows and follow its rules (one study folder per content)")
+    sha = _sha(b"m122-corregPETCTbody")
+    rows = [dict(a2(r"Pili y Mili\Proyecto 0619 Ratones PAH\PAH y 2-DG Male\PET\Machos\122\m122-corregPETCTbody.dcm",
+                    "place", "AE-biomaGUNE-0619", "pili y mili|proyecto 0619 ratones pah", sha=sha, cls=P.PMOD_CLASS), n1="Y"),
+            dict(a2(r"PET\0619\0619 2DG\Machos\122\m122-corregPETCTbody.dcm", "place", "AE-biomaGUNE-0619",
+                    "pet|0619", sha=sha, cls=P.PMOD_CLASS), n1="Y"),
+            dict(a2(r"PET\0619\0619 2DG\Machos\128\m128-corregPETCT.dcm", "place", "AE-biomaGUNE-0619", "pet|0619",
+                    cls=P.PMOD_CLASS), n1="Y"),
+            dict(a2(r"biomaGUNE MJ\PAH 2DG_Proyecto 0619 (female and male)\Raw data\PET\0619 2DG\Machos\128\m128-corregPETCT.dcm",
+                    "deferred-biomaGUNE-MJ", "AE-biomaGUNE-0619", "", cls=P.PMOD_CLASS), n1="Y")]
+    work = P.decide(rows, PROJECTS, lambda rel, proj: "", None)
+    d = {w["relpath"]: w for w in work}
+    check(d[rows[0]["relpath"]]["decision"] == "place" and d[rows[0]["relpath"]]["call"].startswith("N1"),
+          "the Pili y Mili copy is placed, its reason names N1")
+    check(d[rows[1]["relpath"]]["decision"] == "duplicate-copy", "its PET\\0619 twin (another study folder) is a duplicate-copy")
+    check(d[rows[2]["relpath"]]["decision"] == "place", "a PET\\0619 export with no twin is placed")
+    check(d[rows[3]["relpath"]]["decision"] == "deferred", "biomaGUNE MJ stays deferred")
+    m = P.manifest_rows(work, PROJECTS, {})
+    check(all(r["class"] == "pmod-dicom" for r in m), "class pmod-dicom: DICOM by content, placed as non-raw")
+
+
 def _nas(tmp, projects):
     nas = os.path.join(tmp, "nas")
     os.makedirs(os.path.join(nas, "registries"))
@@ -235,7 +257,9 @@ def test_handover_second_batch():
                  r"Pili y Mili\Proyecto 0619 Ratones PAH\fig.png": b"batch one",
                  r"Pili y Mili\Proyecto 0619 Ratones PAH\raw.czi": b"in raw",
                  r"Pili y Mili\Proyecto 0619 Ratones PAH\again.tif": b"already in the tree",
-                 r"Pili y Mili\Proyecto 0619 Ratones PAH\raw2.czi": b"in raw, no checksums.json"}
+                 r"Pili y Mili\Proyecto 0619 Ratones PAH\raw2.czi": b"in raw, no checksums.json",
+                 r"Pili y Mili\Proyecto 0619 Ratones PAH\MRI\20200101_000000_m1_0619_1_1\7\desktop.ini": b"[.ShellClassInfo]",
+                 r"Pili y Mili\Proyecto 0619 Ratones PAH\MRI\20200101_000000_m1_0619_1_1\7\empty": b""}
         man = os.path.join(tmp, "drive_manifest.csv")
         with open(man, "w", encoding="utf-8", newline="") as f:
             w = csv.writer(f)
@@ -275,6 +299,8 @@ def test_handover_second_batch():
             w.writerow({"relpath": list(files)[5], "kind": "other", "project": "AE-biomaGUNE-0619"})
             w.writerow({"relpath": list(files)[6], "kind": "other", "project": "AE-biomaGUNE-0619"})
             w.writerow({"relpath": list(files)[7], "kind": "other", "project": "AE-biomaGUNE-0619"})
+            for rel in list(files)[8:10]:   # an exam folder's desktop.ini and an empty file, swept in by a list
+                w.writerow({"relpath": rel, "kind": "notregistered:non-image", "project": "AE-biomaGUNE-0619"})
             w.writerow({"relpath": "not\\on the drive.txt", "kind": "other"})
         out = os.path.join(tmp, "b2")
         rc = P.main(["--nas", nas, "handover", "--manifest", b1, "--csv", lst, "--stream", "M", "--out", out])
@@ -282,7 +308,10 @@ def test_handover_second_batch():
         check(rc == 1, "refusals make the run exit non-zero, so they are read")
         check(set(rows) == set(list(files)[:3]) | {list(files)[6]},
               f"refused: the derivative without a parent, the batch-1 file, both /raw/ files (one found through "
-              f"checksums.json, one hashed live), the unknown path ({sorted(rows)})")
+              f"checksums.json, one hashed live), a desktop.ini, an empty file, the unknown path ({sorted(rows)})")
+        check(P.junk_reason(r"a\._x.tif").startswith("ruled") and P.junk_reason(r"a\Thumbs.db").startswith("ruled")
+              and P.junk_reason(r"a\~$doc.docx").startswith("A2") and P.junk_reason(r"a\x.tif") == "",
+              "junk_reason follows A2's rules (checked against A2 on all 621,969 drive files: 0 disagreements)")
         idx = os.path.join(tmp, "live_raw.csv")
         check(V.main(["raw-dedup", "--manifest", b1, "--nas", nas, "--write-index", idx]) == 0, "raw-dedup writes a live index")
         out2 = os.path.join(tmp, "b2b")
@@ -445,6 +474,7 @@ def test_verify_two_trees():
 if __name__ == "__main__":
     test_rules()
     test_decide()
+    test_n1_pmod_rows()
     test_release()
     test_handover_second_batch()
     test_raw_dedup()
