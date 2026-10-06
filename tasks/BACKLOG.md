@@ -2220,8 +2220,8 @@ Two things follow:
 - **Check the drive-3 MRI against the originals.** Stream M ingests 3,309 exams from M. Jesús's copies (Ryan's M2:
   "make a note of them and the fact that we need to check them against the originals"). Its gate lists every study.
   Compare each with the archive's copy (DICOM bytes, or pixels where re-exported), and record the result. The archive
-  ingest must use the same `original_name` form (`<study>/<exam>`) so that it skips these studies instead of
-  registering them twice.
+  ingest must use the same `original_name` form (`<study>/<exam>`) **and date exams by `VisuCreationDate`, as stream M did**,
+  so that it skips these studies instead of registering them twice (stream M gate §8, M-e).
 - **Re-run the drive-3 segmentation trace** (`tools/drive_staging/drive3/a3_run_all.py`) once the archive's 2019–2021
   studies are in: today those cohorts trace at 0–7 % only because their MRI is missing. The masks are kept (placed, or in
   the staged copy until `biomaGUNE MJ` is done) for exactly this.
@@ -2239,7 +2239,8 @@ carry a valid code (`0619`, `1019`, `0320` or `1123`) in their own snapshot path
 
 - [ ] Fix the fallback (a branch, with a test); re-run discovery on the snapshot, read-only, and count what else it
   releases from the 673.
-- [ ] The 100 are ingested with the drive's PET/CT (STATUS §2), from whichever copy the fix makes simplest.
+- [x] *(✅ 2026-10-06, merge `33cfe94`: fixed, and the 100 ingested from the snapshot with the drive's PET/CT.)* The 100 are ingested with the drive's PET/CT (STATUS §2), from whichever copy the fix makes simplest.
+- [ ] **The fix releases 160 more** of the 673 (`1121` 78, `0522` 59, `1019` 16, `1321` 7; 150 DB-confirmed, 10 with no animal parsed; another 20 stay skipped by the timestamp dedup). Each needs the same header check as stream N's before release, then Ryan's go (an ingest). **Until then, never run the `ni_gnuclear_prod_*.yaml` configs for real:** after the fix they would ingest these 160.
 
 ## 🔹 LOW — a home for the group's own analysis tools and trained models (2026-10-06)
 

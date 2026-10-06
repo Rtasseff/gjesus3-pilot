@@ -148,6 +148,28 @@ def recover_project(segs, valid):
     return None
 
 
+def subject_index(dirs):
+    """Index in `dirs` (outermost first) of the level find_subject() takes as the
+    subject folder, or -1 when every level is structural noise.
+
+    The walk UP from the file skips timepoint, noise, frame-index and YYMMDD
+    levels; the first level it does not skip is the subject.
+    """
+    i = len(dirs) - 1
+    while i >= 0:
+        d = dirs[i]
+        parent = dirs[i - 1] if i >= 1 else ""
+        if TIMEPOINT_RE.match(d) or NOISE_RE.match(d) or DATE6_RE.match(d):
+            i -= 1
+            continue
+        # a bare number sitting under a Frames-like level is a frame index
+        if BARE_NUM_RE.match(d) and re.match(r"^(frames?|\d+\s*frames?)$", parent or "", re.I):
+            i -= 1
+            continue
+        break
+    return i
+
+
 def find_subject(segs_below_researcher):
     """Given the directory names between the researcher folder and the DICOM
     (outermost first), return (subject, series, timepoint, folder_date, notes).
@@ -155,7 +177,6 @@ def find_subject(segs_below_researcher):
     `subject` is the first non-noise level walking UP from the file.
     """
     notes = []
-    timepoint = None
     folder_date = None
     dirs = list(segs_below_researcher)
 
@@ -164,26 +185,9 @@ def find_subject(segs_below_researcher):
         if DATE6_RE.match(d) and folder_date is None:
             folder_date = d
 
-    i = len(dirs) - 1
-    while i >= 0:
-        d = dirs[i]
-        parent = dirs[i - 1] if i >= 1 else ""
-        if TIMEPOINT_RE.match(d):
-            if timepoint is None:
-                timepoint = d
-            i -= 1
-            continue
-        if NOISE_RE.match(d):
-            i -= 1
-            continue
-        # a bare number sitting under a Frames-like level is a frame index
-        if BARE_NUM_RE.match(d) and re.match(r"^(frames?|\d+\s*frames?)$", parent or "", re.I):
-            i -= 1
-            continue
-        if DATE6_RE.match(d):
-            i -= 1
-            continue
-        break
+    i = subject_index(dirs)
+    # The timepoint is the deepest timepoint level the walk stepped over.
+    timepoint = next((d for d in reversed(dirs[i + 1:]) if TIMEPOINT_RE.match(d)), None)
 
     if i < 0:
         notes.append("no-subject-folder")
@@ -298,6 +302,21 @@ def analyse(rel, size=0, valid_codes=None):
         else:
             flags.append(f"project-rejected:{project}")
             project = ""
+    elif valid_codes is not None and not project and subject and not p.get("phantom"):
+        # The parser found NO code at all: neither the subject folder nor its
+        # parent leads with one (`IAZ_MJ/0619/Dieta cetogenica/174/`). Before
+        # 2026-10-06 the walk-up ran only for a WRONG code, so these were held
+        # back although a valid code sat higher in their own path (drive-3 A1 R4:
+        # 100 of the 673 held back in 2026-08). Walk up for it the same way, but
+        # only over the levels between the researcher folder and the subject
+        # folder: the subject folder was just parsed as animals (an animal
+        # number must never become a protocol), and the year / group /
+        # researcher levels are never protocols. Phantoms stay without a project.
+        k = subject_index(mid)
+        rec = recover_project(mid[:k], valid_codes) if k > 0 else None
+        if rec:
+            flags.append(f"project-recovered:none->{rec}")
+            project = rec
 
     keys = [ni_live_discover.facility_id(a["number"], project) for a in p["animals"]]
     keys = [k for k in keys if k]
