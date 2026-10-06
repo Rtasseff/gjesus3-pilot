@@ -2239,7 +2239,8 @@ carry a valid code (`0619`, `1019`, `0320` or `1123`) in their own snapshot path
 
 - [ ] Fix the fallback (a branch, with a test); re-run discovery on the snapshot, read-only, and count what else it
   releases from the 673.
-- [ ] The 100 are ingested with the drive's PET/CT (STATUS §2), from whichever copy the fix makes simplest.
+- [x] *(✅ 2026-10-06, merge `33cfe94`: fixed, and the 100 ingested from the snapshot with the drive's PET/CT.)* The 100 are ingested with the drive's PET/CT (STATUS §2), from whichever copy the fix makes simplest.
+- [ ] **The fix releases 160 more** of the 673 (`1121` 78, `0522` 59, `1019` 16, `1321` 7; 150 DB-confirmed, 10 with no animal parsed; another 20 stay skipped by the timestamp dedup). Each needs the same header check as stream N's before release, then Ryan's go (an ingest). **Until then, never run the `ni_gnuclear_prod_*.yaml` configs for real:** after the fix they would ingest these 160.
 
 ## 🔹 LOW — a home for the group's own analysis tools and trained models (2026-10-06)
 
