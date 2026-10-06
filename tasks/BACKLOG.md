@@ -1316,6 +1316,8 @@ also precisely the field that produced the `+21` offset error in the 2026 MILabs
 
 ## 🔸 MODERATE — the curated-datasets pilot returned 19 spec gaps (2026-08-21)
 
+**Update 2026-10-06: the M. Jesús drive adds four** (`tasks/drive3_segmentations_cds.md` §6.1): one value set can carry several meanings, so a dataset needs a per-file label schema; there is no field for "revision of" (`Inicial` → `Revision`); `date_created_precision` needs a value for bulk-copy dates; and a flow label is valid on several exams of one slice, which a single `acq_id` per label does not fit. The same drive answers two of SegBioMed's open questions (the 0/1/2 labels are blood pools; DS-SEG-0001's slice order checks out by pixels): evidence for them, applied by nobody here.
+
 The SegBioMed pilot promoted four datasets (`DS-SEG-0001`…`0004`, all four verified here at **100%
 provenance traceability**) and, as asked, reported where `12_CURATED_DATASETS.md` was thin rather
 than inventing conventions. **Consolidated in
@@ -2206,6 +2208,27 @@ drives staged so far. They are tool choices for the Data Office, not decisions f
 - **`$RECYCLE.BIN`, `System Volume Information` and `found.000` at the drive root are skipped with no log line.**
   Recommendation: keep skipping them, but log each skipped folder with its file count, so a recycle bin with content
   is noticed before the drive goes back.
+
+## 🔸 MODERATE — the `S:\gnuclear` discovery gives up on a path whose first parse finds no code (2026-10-06)
+
+Found by the drive-3 assessment (A1 R4, `tasks/drive3_raw_coverage.md`). `ni_gnuclear_discover.analyse()` looks further up
+an acquisition's path for a protocol code only when its parser found a **wrong** code, not when it found **none**. **100
+of the 673 acquisitions held back in the 2026-08-13 pull** (snapshot `J:\gjesus3-data\staging\ni_gnuclear_20260812\`)
+carry a valid code (`0619`, `1019`, `0320` or `1123`) in their own snapshot path, and the drive holds them too.
+
+- [ ] Fix the fallback (a branch, with a test); re-run discovery on the snapshot, read-only, and count what else it
+  releases from the 673.
+- [ ] The 100 are ingested with the drive's PET/CT (STATUS §2), from whichever copy the fix makes simplest.
+
+## 🔹 LOW — a home for the group's own analysis tools and trained models (2026-10-06)
+
+The M. Jesús drive carries `Otros\PH_analysis_Segmentation_tool`, the group's own 3D Slicer module with trained models
+(2.9 GB), and model outputs (Vicomtech) whose `Reference.txt` names the training animals. None of it belongs to one
+project, and none of it is raw. For now it goes to the drive-3 holding folder (A2 D8, A3 S6).
+
+- [ ] Decide whether in-house tools and models get a home of their own (a code repository for the tool; a dated,
+  read-only folder for model weights), and record which animals trained which model, so that any future benchmark
+  built on a curated dataset (e.g. CAND-A) can exclude them.
 
 ## 🔸 MODERATE — the drives' DICOM stream: follow-ups (stream B, 2026-10-04)
 

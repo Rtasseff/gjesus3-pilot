@@ -77,15 +77,17 @@ So nothing that leaves the scanner is lost. *(Corrected 2026-10-06: the first ve
 | **N6** | **The 57 MFB study folders from 2022 that the June upload skipped** (23 animal sessions of `0619`, `0618`, `0721` and `0220`; 34 phantom and coil tests). They are off the acquisition machine and expected in the platform's archive. Ingest them from there with the platform manager's agreement, or leave them. | Low: the platform's archive keeps them | review §6; §8 R4 |
 | **N7** | **Ermal's 8 `0118` sessions of 2021 on `K:`** (141 exam folders): ingest them? | Low: `K:` does not age off | review §3 (c); §8 R3 |
 
-### 0.5 New from the M. Jesús drive (2026-10-06)
+### 0.5 New from the M. Jesús drive (2026-10-06): three decisions, ordered by cost of delay
 
-The third historical drive (§2) arrived with Ryan's rulings of 2026-09-30, made with the CoS hub. One of them meets a
-project created the same day. The rest of the drive's decisions will be added here as one block when the read-only
-assessment lands.
+The read-only assessment of the third historical drive is done (§2; merge `d659270`). Everything else it raised is within
+Ryan's rulings and is going ahead. **Answering M1 and M2 before 10-12 lets the MRI work run while Ryan is away; nothing
+breaks if they wait.**
 
 | # | Decision | Cost of delay | Detail |
 |---|---|---|---|
-| **M1** | **Protocol `0118`, the Monocrotalina half.** Ruled 2026-09-30: `0118` becomes two projects, `Proyecto-0118-rats-hipoxia` and `Proyecto-0118-Monocrotalina`. But `AE-biomaGUNE-0118` (PROJ-0060) was created the same day by the drives 1+2 ingest, for Lucia's histology (`118 LUCIA`). Its description already reads "rat; `Proyecto 0118 Monocrotalina`", and drive 1's `Proyecto 0118 Monocrotalina` documents are already in its folder. **Recommendation:** keep `AE-biomaGUNE-0118` as the Monocrotalina project with no rename (a rename moves its folder and rewrites 140 registry rows and their links), and create only `Proyecto-0118-rats-hipoxia`, as ruled. | Low: the hipoxia project goes ahead as ruled; only the Monocrotalina documents on this drive (28) wait | §2, "The M. Jesús drive" |
+| **M1** | **Protocol `0118`: one project, not two.** Ryan ruled on 2026-09-30 that `0118` becomes two new projects, `Proyecto-0118-rats-hipoxia` and `Proyecto-0118-Monocrotalina`. The animal-facility DB (re-checked by the coordinator) shows that `0118` ran **two rat PAH models side by side**: a subcutaneous dose plus hypoxia (rats 111–117, 136–137, 152–156, 169–173) and I.P. administration, i.e. monocrotaline (rats 131, 132, 144, 145, 175–178). The drive's folders cross them: the "Ratas hipoxia" MRI folder holds the 2021 monocrotaline rats 175 and 178, and Lucia's histology, already in `AE-biomaGUNE-0118` (PROJ-0060, described as Monocrotalina), is 4 monocrotaline and 2 hypoxia rats. A new Monocrotalina project would receive 3 files: 19 of its 22 are already in `AE-biomaGUNE-0118`. **Recommendation (U):** keep all of `0118` in `AE-biomaGUNE-0118`, with a description that names both models. Ermal's 8 sessions on `K:` (§0.4 N7) join it; for `m175` and `m178`, which the drive holds in two reconstructions, register the one that matches `K:`. **Fallback (E):** `AE-biomaGUNE-0118` stays the Monocrotalina project and only `Proyecto-0118-rats-hipoxia` is created. | The `0118` MRI (28 studies, 526 exams, 0.6 GB as DICOM) and its placement wait; nothing else does | A2 §4.6; A1 §3 |
+| **M2** | **Ingest the drive's MRI that production lacks.** Ryan's 2026-09-30 ruling made this "a note, not an action". **3,309 image exams in 198 studies, +5.3 GB**, nearly all from 2019–2021, which the scanner no longer holds; the platform's archive may hold some of 2021. 3,132 carry the scanner's own DICOM; 177 need DICOM made first (Ryan's 2026-10-04 rule); 71 cannot be converted (29 spectroscopy, 3 with k-space but no image, 39 never acquired) and stay out of the registry as other data. 187 of the 198 studies are confirmed in the animal DB; one, whose animal was born after the scan, is left without a project. The ingest also recovers 6 of the 57 studies of §0.4 N6 (the 2022-01-25 `0619` animals 191–200; N6 falls to 51) and a 2024 `0522` session found nowhere else, and it **makes 1,923 more segmentations traceable** for M3. **Recommendation:** yes, as stream B did: scoped configs, conversion first, an explicit scanner model for the 296 exams from the 11.7 T. **One sub-question:** the drive's 61 `1019` sessions of 2020 go to `AE-biomaGUNE-1019`, as other drive MRI went to its protocol's project, unless Ryan wants them held with the 2021 `1019` acquisitions for the SegBioMed project (D6). Default: `AE-biomaGUNE-1019`. | Low: the staged copy stays until it is done | A1 §2.6, §7 |
+| **M3** | **The curated cine-mask dataset (Ryan's ask of 2026-10-06): one round of questions to M. Jesús.** **CAND-A** is 3,234 LV/RV cine masks (189 sessions, 161 animals, 2021–2024) that trace to production by pixels. Promotion (12 §6.2) needs who drew them, whether they were reviewed and which versions are final. The same round asks where two instruments that are not gjesus3's were (an Axioscan 7 that looks like Biodonostia's, 154 GB, and a Leica SP8 that looks like the London partner's, 6.8 GB). **The 12 questions are written:** [`drive3_questions_for_mjesus.md`](drive3_questions_for_mjesus.md). Ryan sends them when convenient. | Low: the masks are placed in their project folders as work in progress meanwhile (12 §3.2), and the external data stays staged | A3 §7; A1 R6 |
 
 **Where the SegBioMed conversation lives:** the full exchange with the SegBioMed project is appended to
 `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md` (REPLY 7 carries the 2026-10-05
@@ -207,26 +209,48 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
-- **The M. Jesús drive (third historical drive): 🔶 TAKEN OVER 2026-10-06; a read-only assessment is running.**
+- **The M. Jesús drive (third historical drive): 🔶 ASSESSED 2026-10-06 (read-only; merge `d659270`). Production work is next.**
   - **What it is:** M. Jesús's own working drive (`MJesus-MFB-biomaGUNE`, WD serial `WX22D623YP29`), on loan on 2026-09-29 and since returned to her. The CoS hub staged it to `J:\_staging_drive3_MJ\drive3_MJesus_WX22D623YP29\`, outside `gjesus3-data`: **621,969 files, 1,681 GB (1,565.8 GiB), 0 read errors, and a clean verify.** The 7 verify failures are AppleDouble `._.DS_Store` files that the NAS rewrites; each was re-read from the drive and matched. The hub's brief and evidence are in `...\DataInfra\gjesus3-archive\historical-mjesus-drive\` (`HANDOFF.md`, `records\`); a snapshot is on `D:\projects\gjesus3\drive3_analysis\hub_records_snapshot_20261006\`. The staged copy is one of two copies (the owner has the drive), so it stays until ingest checksums match its manifest.
   - **Ryan's rulings of 2026-09-30, made with the hub** (recorded here so that they outlive its brief):
     - material goes inside the matching existing project, and that project's description gains the drive's own wording (e.g. `AE-biomaGUNE-0525` ← `Proyecto 0525 2DG y manosa`);
     - a new project only after its code is confirmed in the animal-facility DB, never guessed;
-    - identify what is already in `/raw/`, dedup by SHA-256 only, and ingest only raw that is genuinely absent;
+    - identify what is already in `/raw/`, dedup by SHA-256 only, and ingest only raw that is genuinely absent ("anything that genuinely should be in `/raw/` and is not, may be ingested");
     - **reopen `AE-biomaGUNE-1519` and `-1121`** and redo their links. 1519 was reopened on 2026-10-04 by stream B; **1121 remains**;
-    - **`0118` is one protocol with two projects**, `Proyecto-0118-rats-hipoxia` (28 Bruker studies that production lacks) and `Proyecto-0118-Monocrotalina` (documents only); see §0.5 M1. The name form `Proyecto-XXXX-abc` is for a second project under a real protocol; `Project-NNNN` stays for codes that are not protocols (05_PROJECTS §2a.7);
-    - the **331 Bruker studies** the hub found missing from production are a note for Ryan, not an action;
+    - **`0118` is one protocol with two projects**, `Proyecto-0118-rats-hipoxia` and `Proyecto-0118-Monocrotalina`: now §0.5 M1, because the animals cross the folders. The name form `Proyecto-XXXX-abc` is for a second project under a real protocol; `Project-NNNN` stays for codes that are not protocols (05_PROJECTS §2a.7);
+    - the **331 Bruker studies** the hub found missing from production are a note for Ryan, not an action: now §0.5 M2;
     - exclude junk (`desktop.ini`, `Thumbs.db`, AppleDouble) and two WD installers;
-    - closed projects should be **moved, not deleted** (`projects_closed\`), with a "close a project" action in the Project Manager. This is a proposal for Ryan ([`BACKLOG.md`](BACKLOG.md)).
+    - closed projects should be **moved, not deleted** (`projects_closed\`), with a "close a project" action in the Project Manager. This is a proposal for Ryan ([`BACKLOG.md`](BACKLOG.md)); A2 §7 has the smallest change and its open questions.
   - **The hub's brief predates the drives 1+2 work:** `0118`, `0521`, `1319` and `1420` now have projects (PROJ-0060…0065), and `1519`, `1019` and `0320` are reopened.
-  - **First measurement (2026-10-06, read-only):** an index of every file production `/raw/` holds (516,577 files from 27,034 `checksums.json`) shows **117,212 of the drive's files (67 of 1,681 GB) byte-identical to production.** In `Microscopio\`, only 448 of 5,834 `.czi`/`.lif` match, so most of its ~900 GB is not in production by bytes; re-saves are still to be ruled out. Production MRI holds DICOM only, so the drive's Bruker `fid`/`2dseq` files are not expected to match.
-  - **Running now:**
-    - three read-only assessments on `review/drive3-mjesus-assessment`: **A1** raw coverage (MRI per exam, PET, microscopy, DICOM), **A2** projects, descriptions and the non-raw placement plan (with the `projects_closed\` proposal), and **A3** the segmentations as a curated-dataset candidate (Ryan, 2026-10-06: *"if it matches raw data in production, we should consider starting the process of making it an official curated data set"*).
   - **✅ `stage_copy.py` v1.5 adopted (merge `82d4e97`, 38/38 suites).** The repo had v1.1. The hub's v1.5 master on D: went with the 2026-10-05 erase; its NAS record (`J:\gjesus3-data\staging\historical_drives_records\_tools\`) is byte-identical to what is now committed, and **the repo is the master copy from now on.** A new test (74 checks, mutation-tested) shows the source is only read and each file opened once. The README carries a release check (`copy` exits 0 even when files failed) and four known limits ([`BACKLOG.md`](BACKLOG.md) 🔹).
-  - **Next:**
-    - review the three reports, and put the decisions they raise into §0.5 as one block;
-    - then the production streams: reopen 1121, the descriptions, the hipoxia project and its MRI, the placement, and the microscopy that is genuinely new;
-    - at close-out, copy the evidence to `J:\gjesus3-data\staging\historical_drives_records\`, as for drives 1 and 2 (the hub keeps only evidence once the product has taken a drive over).
+  - **The assessment:** three read-only parts, each reviewed and spot-checked by the coordinator.
+    - **A1, the raw imaging** ([`drive3_raw_coverage.md`](drive3_raw_coverage.md)): 117,212 files (67.4 GB) are byte-identical to production. Counted by acquisition, production already holds 3,965 of the drive's 7,345 MRI exams (192 of them as pixel-identical re-exports), 290 of 492 PET/CT reconstructions, and 836 of 6,094 microscopy files.
+      - **MRI not in production:** 3,380 exams in 198 studies. 3,132 have the scanner's DICOM, 177 can be converted, 71 cannot. Nearly all are from 2019–2021; adding them is +5.3 GB.
+      - **PET/CT not in production:** 202 reconstructions, 201 of them DB-confirmed. 100 of these were held back in the `S:\gnuclear` snapshot, although their own paths carry a valid code.
+      - **Microscopy not in production:** 5,258 files, 803 GB. 5,115 are Cell Observer files; 116 come from a second Axioscan 7 and 26 from a Leica SP8, neither of them gjesus3's.
+      - The hub's "331 missing studies" are 190. *Coordinator check:* all 190 are absent from the registry by study name.
+    - **A2, projects and placement** ([`drive3_projects_and_placement.md`](drive3_projects_and_placement.md)): every protocol code on the drive is already a gjesus3 project. The non-raw material is 89,640 files (208.7 GB), not the hub's 124 GB, because the hub counted 84.6 GB of `Splits` MetaImage volumes as raw. 19,599 of those files are already placed by the drives 1+2 work.
+      - **To place:** 29,794 files (75.5 GB) in 15 projects now, and 3,975 more after the 1121 reopen. Every path is at most 240 characters.
+      - **`AE-biomaGUNE-1121` reopens cleanly:** 546 links, 0 collisions.
+      - **The `0118` folders cross the protocol's two PAH models** (§0.5 M1). *Coordinator check:* re-queried in the DB.
+    - **A3, the segmentations** ([`drive3_segmentations_cds.md`](drive3_segmentations_cds.md)): 8,617 distinct labels in 12 sets; most of the "segmentation" bytes are images. **3,859 labels (44.8 %) trace to production ACQ-IDs**, 3,003 of them by direct pixel comparison.
+      - **By age:** the cohorts of 2022–2024 trace at 83–100 %, those of 2019–2021 at 0–7 %, because their MRI is not in production (§0.5 M2 would make 1,923 more traceable).
+      - **The candidate:** CAND-A, 3,234 LV/RV cine masks from 189 sessions and 161 animals (§0.5 M3).
+      - **Two open SegBioMed questions answered:** the 0/1/2 labels are blood pools, and DS-SEG-0001's slice order checks out by pixels (confirming DS-SEG-0004's `m85` correction).
+      - *Coordinator checks:* DS-SEG-0004's 178 reader files were re-hashed and found on the drive, and one CAND-A stack was re-traced with an independent loader (11 of 11 slices at NCC 1.0000).
+  - **Going ahead within the rulings.** Each production write is serialised and verified by the coordinator, as for drives 1+2:
+    - reopen `AE-biomaGUNE-1121` (ruled); `-1521` and `-0618` reopen at placement for their 19 documents (05 §4.y: reopened case by case when new data turns up);
+    - **the non-raw placement**, on A2's plan:
+      - one study folder per content;
+      - A2's four evidence readings, which fill blank projects and overrule no claim;
+      - the 25 files drives 1+2 placed under another project also go into drive 3's;
+      - holding for the pig set, the group's 3D Slicer tool and the model outputs.
+      - The placement code first has to learn a third drive (`historical_paths.py` and the READMEs know two);
+    - the PET/CT reconstructions not in production (202);
+    - the Cell Observer files (5,115, 643 GB), after the drives' gate (re-saves, same-timestamp groups, claims);
+    - the descriptions (17, with the drive's wording first), once M1 is answered;
+    - the label-meaning and slice-order evidence goes to SegBioMed (their D4/D5).
+  - **Waiting on Ryan:** §0.5 M1, M2 and M3.
+  - **At close-out:** every ingested file is checked against the drive manifest, and the evidence is copied to `J:\gjesus3-data\staging\historical_drives_records\`. Then the staged copy is deleted, on Ryan's go.
 - **Historical microscopy on external drives: ✅ `.czi` INGEST DONE IN TRUE PRODUCTION, verified and merged (2026-10-02, `0f052d5`).**
   - **8,790 acquisitions, 3.85 TB:** `CELL` 8,061, `LSM9` 387, `ZWSI` 4, `XMIC` 338. The registry went 16,437 → **25,227**.
   - **Projects:** one created (`AE-biomaGUNE-0118` = PROJ-0060); `0219` and `1019` reopened. **5,055 acquisitions have a blank project:** Ryan's list, `tasks/drives_blank_project_list.csv`.
