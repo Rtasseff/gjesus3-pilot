@@ -1,6 +1,6 @@
 # M. Jesús's drive: the Cell Observer `.czi` production lacks — plan, gate and rehearsal (stream C)
 
-**Status:** 🔶 BUILT, DRY-RUN AND REHEARSED, for the coordinator's gate; **nothing written to production** · **Date:** 2026-10-06
+**Status:** 🔶 BUILT, DRY-RUN AND REHEARSED, gated by the coordinator, rulings G2/G3/G5 applied; **nothing written to production** · **Date:** 2026-10-06
 **Branch:** `feat/drive3-czi` · worktree `gjesus3-dev\drive3-czi` · **Plan:** [`drive3_production_plan.md`](drive3_production_plan.md) (stream C)
 **Needs before production:** the coordinator's gate, then **Ryan's go** for each batch (the drive-3 approval model).
 **Built on:** A1 [`drive3_raw_coverage.md`](drive3_raw_coverage.md) §5 · A2 [`drive3_projects_and_placement.md`](drive3_projects_and_placement.md) §1, §4.3 ·
@@ -9,6 +9,25 @@ the drives 1+2 precedent: [`drives_ingest_dryrun_review.md`](drives_ingest_dryru
 **Evidence (regenerable, not backed up):** `D:\projects\gjesus3\drive3_streams\czi\` (`plan\`, `catalog\`, `local\`, `farm\`, `rehearsal_nas\`, `rehearsal_logs\`).
 **Read-only throughout:** `J:\gjesus3-data\` was only read (dry runs included); `J:\_staging_drive3_MJ\` was only read; the
 animal-facility DB got SELECTs only. Units: GB = 10⁹ bytes.
+
+> **Updated 2026-10-06, late afternoon: the coordinator's rulings are applied.** Configs and lists were re-generated;
+> nothing else in the plan moved. A diff of the plan before and after changes only the fields named below; the same
+> 4,955 files and the same batches.
+> - **G3: R5 accepted.** The 151 files in `PAH aged Female_Proyecto 0424` go to `AE-biomaGUNE-0424` (PROJ-0002), each
+>   with its subject (verdict `READING-R5`, all in C05).
+> - **G5: people by folder.** Under `Microscopio\CELL OBS MARTA\`, `operator` = `Marta` (842 files; the token
+>   production's 912 drives 1+2 rows use). Under `Microscopio\Microscopio- MJesus Sanchez 2023\`, `researcher` = `MJ`
+>   (3,719 files; stream N's token). The other 394 files stay blank. The rule is the profile's `people_by_folder`,
+>   applied to the canonical copy after it is chosen, so no canonical choice moved (tested).
+> - **G2: C05 runs last,** after C01–C04 have all been run and verified.
+>
+> **New totals:** 3,453 files to projects (`0424` 480), 3,213 subject links to 182 animals, and 1,502 with a blank project
+> (1,443 no claim, 59 (C)). Where an older count below differs, these totals stand.
+>
+> **Re-checked after the change:**
+> - the case tables against the plan and the farm: PASS (every batch);
+> - `ingest_check` on C01 + C05 (the R5 subjects, and check 8 over all 3,453 link names): every check PASS;
+> - `tools/test_drives_ingest_plan.py`: ALL PASS.
 
 ## Summary
 
@@ -37,14 +56,14 @@ animal-facility DB got SELECTs only. Units: GB = 10⁹ bytes.
 8. **Claims, as the rule says, with A1 reconciled:** of A1's 1,488 no-claim files, 1,287 are planned blank, 80 dropped as
    re-saves, 71 routed to non-raw and 50 out of scope; of its 139 "animal not in the claimed protocol", the engine
    confirms 78 (its nearest claim folder holds the animal), leaves 43 (C) and 17 no-claim, and 1 is non-raw. A2's
-   readings R1–R4 cover no `.czi`. **One new reading is proposed, not applied:** R5, 151 (C) files of the female
-   `0424` cohort (the animal is female in `0424` and male in `1019` every time).
+   readings R1–R4 cover no `.czi`. **A new reading, R5, is accepted (2026-10-06) and applied:** 151 (C) files of the
+   female `0424` cohort (the animal is female in `0424` and male in `1019` every time) go to `0424`.
 9. **New tooling, generalised for a third drive, with tests:** `ingest_plan`/`ingest_check`/`ingest_verify`/
    `run_drives_batch.sh` take a `--profile`; drives 1+2's frozen behaviour is unchanged (their `ingest_verify` prints
    the same before and after); the local mirror, the pixel-check wrapper, the decision rules, the coordinator's
    independent check against the drive manifest. Full suite **38/38**.
-10. **For the coordinator and Ryan (§6.2):** each batch's go; C05 under the "last" order; reading R5; the
-    `ACQ-20230707-CELL-001` repair; researcher/operator (blank by the rule).
+10. **For the coordinator and Ryan (§6.2):** each batch's go; the `ACQ-20230707-CELL-001` repair. G2, G3 and G5
+    were ruled on 2026-10-06 (see the update above).
 
 ---
 
@@ -134,14 +153,14 @@ is pixel-identical to production's `ACQ-20230530-CELL-011` (`…-20x-1.czi`): a 
 
 | Project | | Files | GB | With a subject link | Animals |
 |---|---|---:|---:|---:|---:|
-| `AE-biomaGUNE-0424` | PROJ-0002 | 329 | 10.1 | 329 | 15 |
+| `AE-biomaGUNE-0424` | PROJ-0002 | 480 (329 + R5's 151) | 11.9 | 480 | 16 |
 | `AE-biomaGUNE-0522` | PROJ-0011 | 1,085 | 135.2 | 1,074 | 64 |
 | `AE-biomaGUNE-0619` | PROJ-0004 | 1,197 | 267.3 | 1,002 | 62 |
 | `AE-biomaGUNE-1019` | PROJ-0006 | 544 | 57.8 | 510 | 16 |
 | `AE-biomaGUNE-1123` | PROJ-0014 | 75 | 0.5 | 75 | 13 |
 | `AE-biomaGUNE-1422` | PROJ-0013 | 72 | 0.4 | 72 | 11 |
-| **blank** (1,443 no claim, 210 (C)) | | 1,653 | 166.6 | 0 | 0 |
-| **all** | | **4,955** | **637.8** | **3,062** | **181** |
+| **blank** (1,443 no claim, 59 (C)) | | 1,502 | 164.7 | 0 | 0 |
+| **all** | | **4,955** | **637.8** | **3,213** | **182** |
 
 All six target projects exist and are **active**; **no project is created or reopened**. Every file is `CELL`,
 `instrument_model` `Axio Observer.Z1 / 7` (the stand name the engine reads back from each file), `data_source`
@@ -205,7 +224,7 @@ acquisition); two different claims would blank it as a conflict (none occurs).
 
 | Folder | Files | The engine's reason | Evidence beyond the rule |
 |---|---:|---|---|
-| `biomaGUNE MJ\PAH aged_Proyecto 0424 & 1019 (female and male)\PAH aged Female_Proyecto 0424\Raw data\Microscopio\{0424-8ohdg, 0424-WGA, 0424-Elastic}` | 151 | nearest `0424` (Confirmed) against outer `1019`; the animal is in both, and the DB dates do not separate them | the outer folder names **both** codes; **in all 151 the animal is female in `0424` and male in `1019`**, and the folder is the female cohort's (`c_db_evidence.py`): **proposed reading R5**, §6.2 G3 |
+| `biomaGUNE MJ\PAH aged_Proyecto 0424 & 1019 (female and male)\PAH aged Female_Proyecto 0424\Raw data\Microscopio\{0424-8ohdg, 0424-WGA, 0424-Elastic}` | 151 | nearest `0424` (Confirmed) against outer `1019`; the animal is in both, and the DB dates do not separate them | the outer folder names **both** codes; **in all 151 the animal is female in `0424` and male in `1019`**, and the folder is the female cohort's (`c_db_evidence.py`): **reading R5, accepted 2026-10-06: to `0424` with subjects** |
 | `Male Diets\230512-MTCOI and TOM20 Male Diets 0522\230707-TOM20-MTCOI-10x` | 21 | the file's animal is not in `0522` | the A2 D7 pattern (animals that exist in `0619`); asked of M. Jesús with D7 |
 | `Machos viejos-1019-3\1019-3 Elastic` | 19 | a nearest `0522` that does not resolve, inside `1019` | none |
 | `CELL OBS MARTA\PR_0522_MJS_Paper aging` | 16 | nearest `0424` or `1019` against outer `0522`; the animal is in both | none decisive |
@@ -235,7 +254,7 @@ labels). That is evidence for the mapping round, not a claim.
 facility DB, with fresh SELECTs, to itself. 3,062 files link to 181 animals; the 240 Confirmed files with no animal
 number in their path get no subject (`0619` 195, `1019` 34, `0522` 11). No subject sits on a (C) or blank-project row.
 
-### 1.6 Researcher and operator: none assigned, by the rule
+### 1.6 Researcher and operator (assigned by the coordinator's G5 ruling of 2026-10-06; the analysis below is the reason it was needed)
 
 The claims engine finds **no whole-segment person folder** above any of these files, so `researcher` is blank on all of
 them; and drive 3 has **no operator top folder** of the kind Ryan named on 2026-09-29 (`Cell observer\AINHIZE|Marta`), so
@@ -244,8 +263,8 @@ names are flagged, not assigned; initials are never mapped to people"), **flagge
 `Microscopio\Microscopio- MJesus Sanchez 2023\` (the researcher's own 2023 microscopy, 3,719 planned files) and
 `Microscopio\CELL OBS MARTA\` (Cell Observer images from Marta's folder, 842 planned files: Marta is a Cell
 Observer operator). Reading them as `researcher = M. Jesús` and `operator = Marta` would be an extension of the
-2026-09-29 rule for Ryan to make; the `researcher` column can be back-filled later (as on 2026-07-14), so nothing is lost
-by waiting.
+2026-09-29 rule. **Ruled 2026-10-06 (G5):** `operator` = `Marta` for the 842 files and `researcher` = `MJ` for the
+3,719; the other 394 files stay blank.
 
 ### 1.7 Out of scope, as the brief says (listed in `tasks/drive3_czi_out_of_scope.csv`)
 
@@ -482,20 +501,19 @@ a second shape).
 | # | What | Recommendation / state |
 |---|---|---|
 | G1 | **Each batch needs Ryan's go** after this gate (C01 first, alone) | — |
-| G2 | **C05, `biomaGUNE MJ`** (327 files, 2.9 GB): does Ryan's "`biomaGUNE MJ` last" hold back its `.czi`? | Run it last, or hold it with the rest of that folder: the coordinator's reading of the ruling |
-| G3 | **Reading R5** (151 (C) files in `PAH aged Female_Proyecto 0424`, all in C05): the female cohort's folder, and in all 151 the animal is female in `0424` and male in `1019` | Accept: they move from blank to `AE-biomaGUNE-0424` with their subject links (`readings.csv` status `accepted`, then `plan`, `configs` and step 0 again). Not applied until accepted |
+| G2 | **C05, `biomaGUNE MJ`** (327 files, 2.9 GB): does Ryan's "`biomaGUNE MJ` last" hold back its `.czi`? | **Ruled 2026-10-06:** C05 runs last, after C01–C04 have all been run and verified |
+| G3 | **Reading R5** (151 (C) files in `PAH aged Female_Proyecto 0424`, all in C05): the female cohort's folder, and in all 151 the animal is female in `0424` and male in `1019` | **Accepted 2026-10-06 and applied:** they move from blank to `AE-biomaGUNE-0424` with their subject links (`readings.csv` `accepted`; `plan`, `configs` re-run; `ingest_check` C05 PASS) |
 | G4 | **`ACQ-20230707-CELL-001`**: repair production's primary from `ID187_10x.czi` (§6.1) | Ryan's go; a separate, approved write after this ingest |
-| G5 | **Researcher / operator** stay blank: `Microscopio- MJesus Sanchez 2023` (3,719 planned files) and `CELL OBS MARTA` (842) embed a person, which the 2026-09-29 rule flags and does not assign (§1.6) | Ryan's call, any time later (a back-fill) |
-| G6 | **The 1,653 blank-project files** ([`tasks/drive3_czi_blank_project_preview.csv`](drive3_czi_blank_project_preview.csv)): after the ingest, the list with ACQ-IDs, as drives 1+2 | Into the 2b-style mapping round; 139 of them carry `0522Male` / `0619Female` file-name chunks (the engine rejects a chunk in that position; filename chunks are free-form labels) |
+| G5 | **Researcher / operator** stay blank: `Microscopio- MJesus Sanchez 2023` (3,719 planned files) and `CELL OBS MARTA` (842) embed a person, which the 2026-09-29 rule flags and does not assign (§1.6) | **Ruled 2026-10-06:** operator `Marta` (842), researcher `MJ` (3,719); the rest blank |
+| G6 | **The 1,502 blank-project files** ([`tasks/drive3_czi_blank_project_preview.csv`](drive3_czi_blank_project_preview.csv)): after the ingest, the list with ACQ-IDs, as drives 1+2 | Into the 2b-style mapping round; 139 of them carry `0522Male` / `0619Female` file-name chunks (the engine rejects a chunk in that position; filename chunks are free-form labels) |
 | G7 | **`ID128-1_1019-2_PR.czi`: production holds the annotated twin.** Production's `ACQ-20241021-CELL-003` (PROJ-0006) carries a scale-bar layer; the drive's copy (`CELL OBS MARTA\PR_1019-2_MJS-IAZ\`) is the clean file, 16 of 16 tiles byte-identical. The plan drops the drive copy as a re-save of production (`excluded.csv`). | **Proposed: no action.** The pixels are identical and the scale bar is an overlay in the file's metadata. If Ryan wants the clean file as the record, it is the same in-place repair as §6.1 |
-| G8 | **C03 and C04 not yet resolved by the engine here.** At wrap-up, the copy to D: still lacked 75 of their files (10 in C03, 65 in C04; 155 GB). | Finish the copy with `ingest_plan.py --profile drive3_2026-10 localize` (it skips files already verified), then run §4.1 (`verify-local`, `farm`). Step 0 of each batch runs every §2 check and the dry run before anything is written. Their plan-level invariants (§2 rows 1–5, 9 and 11) already hold |
+| G8 | **C03 and C04 not yet resolved by the engine here.** At wrap-up, the copy to D: still lacked 75 of their files (10 in C03, 65 in C04; 155 GB). | Finish the copy with `ingest_plan.py --profile drive3_2026-10 localize` (it skips files already verified), then run §4.1 (`verify-local`, `farm`). Step 0 of each batch runs every §2 check and the dry run before anything is written. Their plan-level invariants (§2 rows 1–5, 9 and 11) already hold. **2026-10-06, 15:17:** the copy to D: finished, 4,653 files, 539.6 GB, 0 bad (with the 302 copied before: all 4,955 on D:, each kept only on a drive-manifest SHA-256 match), and the farm is complete (4,955 links, 0 errors). The C02 dry run against J: finished: 1,657 cases, `Success: 1657`, `Failed: 0`, 0 SKIP, 0 refused link names, 0 errors. Every planned file is re-hashed from disk by §4.1 (`verify-local`) before C01 |
 | G9 | **The D: working copies** (`local\` 638 GB, `farm\`, `rehearsal_nas\` 5 GB) | Delete them after the coordinator has verified every batch (`c_manifest_check.py`). They are working copies, not a backup. Delete `rehearsal_nas\` now |
 
 **Not settled here, and why:**
-- **Whether Ryan's "last" order covers C05's `.czi`** (G2): a reading of his ruling, the coordinator's.
-- **The project of the 1,653 blank files**: by the rule they stay blank; the evidence for a mapping is in the preview
+- **The project of the 1,502 blank files**: by the rule they stay blank; the evidence for a mapping is in the preview
   list (A1's own reading, the engine's reason), not a decision.
-- **Who made the files** (G5).
+- **Who made the 394 files with no person folder.**
 - **`ID161ki67sma20x-220929-2 - Copy.czi`** is kept under its `- Copy` name (§5): the pixel check cannot say more, and
   nothing is lost either way.
 

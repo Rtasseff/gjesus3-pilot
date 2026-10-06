@@ -188,6 +188,13 @@ PROFILES = {
         "instruments": {"CELL": "CELL"},
         "deprioritised_tops": ("biomaGUNE MJ",),
         "operator_tops": set(),
+        # The coordinator's G5 ruling (2026-10-06): a folder that names its person gives that field, with the
+        # token production already uses -- `Marta` (912 drives 1+2 rows, the 2026-09-29 rule) and `MJ` (stream N's
+        # token for this drive). Applied to the CANONICAL copy after it is chosen, so no canonical choice moves.
+        "people_by_folder": (
+            ("Microscopio\\CELL OBS MARTA\\", "operator", "Marta"),
+            ("Microscopio\\Microscopio- MJesus Sanchez 2023\\", "researcher", "MJ"),
+        ),
         "new_project": None,              # this ingest creates no project
         "xmic_expected": None,
         "note": _D3_NOTE,
@@ -210,7 +217,7 @@ def use_profile(name):
     global PROFILE_NAME, PROFILE, STAGING, CAT, CODES, OUT, FARM, EXTRACT, LOCAL, MANIFEST, A1_FILES
     global CONFIG_DIR, CONFIG_DIR_REL, CONFIG_PREFIX, BATCH_PREFIX, BATCH_CAP, SCRATCH_ROOT, DRIVES
     global INSTRUMENTS, DEPRIORITISED_TOPS, BACKUP_TOP, OPERATOR_TOPS, NEW_PROJECT, NOTE
-    global RESAVE_DECISIONS, DERIVED_DECISIONS, SAME_ACQ_MODE, PROVENANCE, DRIVE_ORDER
+    global RESAVE_DECISIONS, DERIVED_DECISIONS, SAME_ACQ_MODE, PROVENANCE, DRIVE_ORDER, PEOPLE_BY_FOLDER
     if name not in PROFILES:
         raise SystemExit(f"unknown profile {name!r}; known: {sorted(PROFILES)}")
     p = PROFILES[name]
@@ -226,6 +233,7 @@ def use_profile(name):
     DEPRIORITISED_TOPS = p["deprioritised_tops"]
     BACKUP_TOP = DEPRIORITISED_TOPS[0]
     OPERATOR_TOPS, NEW_PROJECT, NOTE = p["operator_tops"], p["new_project"], p["note"]
+    PEOPLE_BY_FOLDER = p.get("people_by_folder", ())
     RESAVE_DECISIONS, DERIVED_DECISIONS = p["resave_decisions"], p["derived_decisions"]
     SAME_ACQ_MODE, PROVENANCE = p["same_acq_mode"], p["provenance"]
     return p
@@ -1274,6 +1282,19 @@ def apply_readings(expected, readings):
     return applied, would
 
 
+def apply_people(expected):
+    """Fill a blank researcher / operator from PEOPLE_BY_FOLDER, by the canonical copy's path. Returns
+    {(field, value): rows filled}."""
+    filled = collections.Counter()
+    for e in expected:
+        rel = e["relpath"].lower()
+        for prefix, field, value in PEOPLE_BY_FOLDER:
+            if rel.startswith(prefix.lower()) and not e[field]:
+                e[field] = value
+                filled[(field, value)] += 1
+    return filled
+
+
 def plan_drive3(args):
     """The drive-3 plan (two passes: the first lists the same-acquisition groups for the pixel check,
     drive3/c_groups.py; the second applies its decisions -- or reports them undecided)."""
@@ -1295,6 +1316,8 @@ def plan_drive3(args):
     expected, contents = contents_to_expected(copies, claim_token, prod, excluded, conflicts)
     n_candidates = len(expected)
     readings_applied, readings_proposed = apply_readings(expected, load_readings())
+    people_filled = apply_people(expected)
+    print(f"people by folder: {dict(people_filled)}", file=sys.stderr)
 
     # ---- R1: a re-save of a production acquisition (same instrument, second and name) -------------
     by_key, by_ts = production_index(args.nas)
@@ -1972,8 +1995,8 @@ EXTRA_CLOSED = """#
 """
 EXTRA_BMJ = """#
 # !! biomaGUNE MJ: the files whose only copy (or whose canonical copy) sits in M. Jesus's own
-# `biomaGUNE MJ` folder. Ryan ordered that folder LAST; run this batch only if the coordinator says his
-# "last" does not hold back its .czi (tasks/drive3_czi_gate.md).
+# `biomaGUNE MJ` folder. Ryan ordered that folder LAST: this batch runs after C01-C04 have all been run and
+# verified (the coordinator, 2026-10-06; tasks/drive3_czi_gate.md G2).
 """
 
 

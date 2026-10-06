@@ -200,6 +200,18 @@ def test_drive3_canonical_and_people():
         check(P.person_fields("D3", r"Microscopio\CELL OBS MARTA\x.czi".split("\\"), "") == ("", ""),
               "drive 3 has no operator folders: `CELL OBS MARTA` gives no operator (names in longer folder names "
               "are flagged, not assigned)")
+        rows = [{"relpath": "Microscopio\\CELL OBS MARTA\\a\\x.czi", "researcher": "", "operator": ""},
+                {"relpath": "Microscopio\\Microscopio- MJesus Sanchez 2023\\b\\y.czi", "researcher": "", "operator": ""},
+                {"relpath": "Microscopio\\Microscopio- MJesus Sanchez 2023\\c\\z.czi", "researcher": "Ana", "operator": ""},
+                {"relpath": "biomaGUNE MJ\\CELL OBS MARTA\\w.czi", "researcher": "", "operator": ""}]
+        filled = P.apply_people(rows)
+        check([(r["researcher"], r["operator"]) for r in rows] == [("", "Marta"), ("MJ", ""), ("Ana", ""), ("", "")]
+              and sum(filled.values()) == 2,
+              "G5 (2026-10-06): `CELL OBS MARTA` -> operator Marta, `Microscopio- MJesus Sanchez 2023` -> researcher "
+              "MJ, by the path from the drive's top; a filled field is never overwritten")
+        P.use_profile(P.DEFAULT_PROFILE)
+        check(P.apply_people([dict(rows[0], operator="")]) == {}, "drives 1+2 have no folder people rule")
+        P.use_profile("drive3_2026-10")
         rel = ("Microscopio\\Microscopio- MJesus Sanchez 2023\\Machos vs Hembras\\Controles Male (Nmx and SuHx)\\"
                "4- Controles Male (Nmx and SuHx)- ki67 and SMA\\230125 M\u00e1s muestras\\ID138-ki67SMA-230125-20x-5.czi")
         n = P.farm_path_len({"original_name": "drive3_MJesus-MFB/" + rel.replace("\\", "/")})
