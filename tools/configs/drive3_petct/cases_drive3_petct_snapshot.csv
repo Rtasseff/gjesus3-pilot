@@ -1,0 +1,101 @@
+original_name,project,project_name,subject,animal_codes,sample_type,researcher_folder,note
+20211019091843_PET_OSEM_0,0619,AE-biomaGUNE-0619,173,173,organism,IAZ_MJ,protocol typed 1019 at the console; the facility DB confirms 0619/173 (not 1019/173) for this scan; subject folder '173 FALTA'; the animal is 173 (header PatientID 173); DICOM console user: irati.
+20211019095155_PET_OSEM_1,0619,AE-biomaGUNE-0619,174,174,organism,IAZ_MJ,DICOM console user: irati.
+20211019101536_CT_ISRA_0,0619,AE-biomaGUNE-0619,174,174,organism,IAZ_MJ,DICOM console user: irati.
+20211019101754_PET_OSEM_0,0619,AE-biomaGUNE-0619,175,175,organism,IAZ_MJ,DICOM console user: irati.
+20211019103128_CT_ISRA_1,0619,AE-biomaGUNE-0619,175,175,organism,IAZ_MJ,DICOM console user: irati.
+20211019103254_PET_OSEM_0,0619,AE-biomaGUNE-0619,176,176,organism,IAZ_MJ,DICOM console user: irati.
+20211019104430_CT_ISRA_0,0619,AE-biomaGUNE-0619,176,176,organism,IAZ_MJ,DICOM console user: irati.
+20211020090156_PET_OSEM_0,0619,AE-biomaGUNE-0619,180,180,organism,IAZ_MJ,DICOM console user: irati.
+20211020091347_CT_ISRA_0,0619,AE-biomaGUNE-0619,180,180,organism,IAZ_MJ,DICOM console user: irati.
+20211020092151_PET_OSEM_0,0619,AE-biomaGUNE-0619,181,181,organism,IAZ_MJ,DICOM console user: irati.
+20211020093340_CT_ISRA_0,0619,AE-biomaGUNE-0619,181,181,organism,IAZ_MJ,DICOM console user: irati.
+20211020094322_PET_OSEM_0,0619,AE-biomaGUNE-0619,182,182,organism,IAZ_MJ,DICOM console user: irati.
+20211020095456_CT_ISRA_0,0619,AE-biomaGUNE-0619,182,182,organism,IAZ_MJ,DICOM console user: irati.
+20211020100200_PET_OSEM_0,0619,AE-biomaGUNE-0619,183,183,organism,IAZ_MJ,DICOM console user: irati.
+20211020101346_CT_ISRA_0,0619,AE-biomaGUNE-0619,183,183,organism,IAZ_MJ,DICOM console user: irati.
+20211020104053_PET_OSEM_1,0619,AE-biomaGUNE-0619,177,177,organism,IAZ_MJ,DICOM console user: irati.
+20211020105304_CT_ISRA_1,0619,AE-biomaGUNE-0619,177,177,organism,IAZ_MJ,DICOM console user: irati.
+20220125090817_PET_OSEM_0,0619,AE-biomaGUNE-0619,187,187,organism,IAZ_MJ,DICOM console user: irati.
+20220125092117_CT_ISRA_0,0619,AE-biomaGUNE-0619,187,187,organism,IAZ_MJ,DICOM console user: irati.
+20220125092810_PET_OSEM_0,0619,AE-biomaGUNE-0619,188,188,organism,IAZ_MJ,DICOM console user: irati.
+20220125094002_CT_ISRA_0,0619,AE-biomaGUNE-0619,188,188,organism,IAZ_MJ,DICOM console user: irati.
+20220125094919_PET_OSEM_0,0619,AE-biomaGUNE-0619,189,189,organism,IAZ_MJ,DICOM console user: irati.
+20220125100237_CT_ISRA_0,0619,AE-biomaGUNE-0619,189,189,organism,IAZ_MJ,DICOM console user: irati.
+20220125101056_PET_OSEM_0,0619,AE-biomaGUNE-0619,190,190,organism,IAZ_MJ,DICOM console user: irati.
+20220125102356_CT_ISRA_0,0619,AE-biomaGUNE-0619,190,190,organism,IAZ_MJ,DICOM console user: irati.
+20220125103337_PET_OSEM_0,0619,AE-biomaGUNE-0619,194,194,organism,IAZ_MJ,DICOM console user: irati.
+20220125104928_CT_ISRA_0,0619,AE-biomaGUNE-0619,194,194,organism,IAZ_MJ,DICOM console user: irati.
+20220125105840_PET_OSEM_0,0619,AE-biomaGUNE-0619,195,195,organism,IAZ_MJ,DICOM console user: irati.
+20220125111031_CT_ISRA_0,0619,AE-biomaGUNE-0619,195,195,organism,IAZ_MJ,DICOM console user: irati.
+20220125111943_PET_OSEM_0,0619,AE-biomaGUNE-0619,196,196,organism,IAZ_MJ,DICOM console user: irati.
+20220125114257_CT_ISRA_0,0619,AE-biomaGUNE-0619,196,196,organism,IAZ_MJ,DICOM console user: irati.
+20220125114704_PET_OSEM_0,0619,AE-biomaGUNE-0619,197,197,organism,IAZ_MJ,DICOM console user: irati.
+20220125115938_CT_ISRA_0,0619,AE-biomaGUNE-0619,197,197,organism,IAZ_MJ,DICOM console user: irati.
+20220217093136_PET_OSEM_1,0320,AE-biomaGUNE-0320,29,29,organism,IAZ_MJ,DICOM PatientID 30 disagrees with the folder's animal 29; registered under the folder's animal (both logged a PET that day); DICOM console user: irati.
+20220217093305_PET_OSEM_0,0320,AE-biomaGUNE-0320,30,30,organism,IAZ_MJ,DICOM console user: irati.
+20220217094346_CT_ISRA_1,0320,AE-biomaGUNE-0320,29,29,organism,IAZ_MJ,DICOM console user: irati.
+20220217095233_CT_ISRA_1,0320,AE-biomaGUNE-0320,30,30,organism,IAZ_MJ,DICOM console user: irati.
+20220217095734_PET_OSEM_0,0320,AE-biomaGUNE-0320,31,31,organism,IAZ_MJ,DICOM console user: irati.
+20220217100145_PET_OSEM_1,0320,AE-biomaGUNE-0320,32,32,organism,IAZ_MJ,DICOM console user: irati.
+20220217100942_CT_ISRA_1,0320,AE-biomaGUNE-0320,31,31,organism,IAZ_MJ,DICOM console user: irati.
+20220217101729_CT_ISRA_1,0320,AE-biomaGUNE-0320,32,32,organism,IAZ_MJ,DICOM console user: irati.
+20220217102446_PET_OSEM_1,0320,AE-biomaGUNE-0320,44,44,organism,IAZ_MJ,DICOM console user: irati.
+20220217102642_PET_OSEM_1,0320,AE-biomaGUNE-0320,45,45,organism,IAZ_MJ,DICOM console user: irati.
+20220217103715_CT_ISRA_1,0320,AE-biomaGUNE-0320,44,44,organism,IAZ_MJ,DICOM console user: irati.
+20220217105157_PET_OSEM_0,0320,AE-biomaGUNE-0320,46,46,organism,IAZ_MJ,DICOM console user: irati.
+20220217105425_PET_OSEM_0,0320,AE-biomaGUNE-0320,47,47,organism,IAZ_MJ,DICOM console user: irati.
+20220217110439_CT_ISRA_0,0320,AE-biomaGUNE-0320,46,46,organism,IAZ_MJ,DICOM console user: irati.
+20220217111227_CT_ISRA_0,0320,AE-biomaGUNE-0320,47,47,organism,IAZ_MJ,DICOM console user: irati.
+20220518091631_PET_OSEM_0,0619,AE-biomaGUNE-0619,201,201,organism,IAZ_MJ,DICOM console user: irati.
+20220518091807_PET_OSEM_0,0619,AE-biomaGUNE-0619,202,202,organism,IAZ_MJ,DICOM console user: irati.
+20220518092814_CT_ISRA_0,0619,AE-biomaGUNE-0619,201,201,organism,IAZ_MJ,DICOM console user: irati.
+20220518093512_CT_ISRA_0,0619,AE-biomaGUNE-0619,202,202,organism,IAZ_MJ,DICOM console user: irati.
+20220518095741_PET_OSEM_0,0619,AE-biomaGUNE-0619,203,203,organism,IAZ_MJ,DICOM console user: irati.
+20220518095943_PET_OSEM_0,0619,AE-biomaGUNE-0619,204,204,organism,IAZ_MJ,DICOM console user: irati.
+20220518100928_CT_ISRA_0,0619,AE-biomaGUNE-0619,203,203,organism,IAZ_MJ,DICOM console user: irati.
+20220518101421_PET_OSEM_0,0619,AE-biomaGUNE-0619,205,205,organism,IAZ_MJ,DICOM console user: irati.
+20220518101752_PET_OSEM_0,0619,AE-biomaGUNE-0619,206,206,organism,IAZ_MJ,DICOM console user: irati.
+20220518101816_CT_ISRA_0,0619,AE-biomaGUNE-0619,204,204,organism,IAZ_MJ,DICOM console user: irati.
+20220518102608_CT_ISRA_0,0619,AE-biomaGUNE-0619,205,205,organism,IAZ_MJ,DICOM console user: irati.
+20220518103448_CT_ISRA_0,0619,AE-biomaGUNE-0619,206,206,organism,IAZ_MJ,DICOM console user: irati.
+20220518123914_PET_OSEM_0,,,phantom_18F_20ml,,phantom,,"NOT an animal: an 18F phantom (20 ml) scanned by the NI platform (DICOM: console user unai, StudyDescription '18f phantom', PatientID '20ml', weight 0.001 kg), filed in animal 201's folder of 0619 BrEt PAH 220518; DICOM console user: unai."
+20220524092714_PET_OSEM_0,0619,AE-biomaGUNE-0619,207,207,organism,IAZ_MJ,DICOM console user: irati.
+20220524093857_CT_ISRA_0,0619,AE-biomaGUNE-0619,207,207,organism,IAZ_MJ,DICOM console user: irati.
+20220524094900_PET_OSEM_0,0619,AE-biomaGUNE-0619,208,208,organism,IAZ_MJ,DICOM console user: irati.
+20220524100023_CT_ISRA_0,0619,AE-biomaGUNE-0619,208,208,organism,IAZ_MJ,DICOM console user: irati.
+20220524100550_PET_OSEM_0,0619,AE-biomaGUNE-0619,209,209,organism,IAZ_MJ,DICOM console user: irati.
+20220524101755_CT_ISRA_0,0619,AE-biomaGUNE-0619,209,209,organism,IAZ_MJ,DICOM console user: irati.
+20220524103047_PET_OSEM_0,0619,AE-biomaGUNE-0619,210,210,organism,IAZ_MJ,DICOM console user: irati.
+20220524104208_CT_ISRA_0,0619,AE-biomaGUNE-0619,210,210,organism,IAZ_MJ,DICOM console user: irati.
+20220524104556_PET_OSEM_0,0619,AE-biomaGUNE-0619,211,211,organism,IAZ_MJ,DICOM console user: irati.
+20220524105718_CT_ISRA_0,0619,AE-biomaGUNE-0619,211,211,organism,IAZ_MJ,DICOM console user: irati.
+20220524105850_PET_OSEM_0,0619,AE-biomaGUNE-0619,212,212,organism,IAZ_MJ,DICOM console user: irati.
+20220524111018_CT_ISRA_0,0619,AE-biomaGUNE-0619,212,212,organism,IAZ_MJ,DICOM console user: irati.
+20220927091903_PET_OSEM_0,1019,AE-biomaGUNE-1019,167,167,organism,IAZ_MJ,DICOM console user: irati.
+20220927093109_CT_ISRA_0,1019,AE-biomaGUNE-1019,167,167,organism,IAZ_MJ,DICOM console user: irati.
+20220927093804_PET_OSEM_0,1019,AE-biomaGUNE-1019,168,168,organism,IAZ_MJ,DICOM console user: irati.
+20220927094947_CT_ISRA_0,1019,AE-biomaGUNE-1019,168,168,organism,IAZ_MJ,DICOM console user: irati.
+20220927095803_PET_OSEM_0,1019,AE-biomaGUNE-1019,169,169,organism,IAZ_MJ,DICOM console user: irati.
+20220927100936_CT_ISRA_0,1019,AE-biomaGUNE-1019,169,169,organism,IAZ_MJ,DICOM console user: irati.
+20220927101909_PET_OSEM_0,1019,AE-biomaGUNE-1019,170,170,organism,IAZ_MJ,DICOM console user: irati.
+20220927103105_CT_ISRA_0,1019,AE-biomaGUNE-1019,170,170,organism,IAZ_MJ,DICOM console user: irati.
+20220927103605_PET_OSEM_0,1019,AE-biomaGUNE-1019,160,160,organism,IAZ_MJ,DICOM console user: irati.
+20220927104747_CT_ISRA_0,1019,AE-biomaGUNE-1019,160,160,organism,IAZ_MJ,DICOM console user: irati.
+20220927110503_PET_OSEM_0,1019,AE-biomaGUNE-1019,161,161,organism,IAZ_MJ,DICOM console user: irati.
+20220927111702_CT_ISRA_0,1019,AE-biomaGUNE-1019,161,161,organism,IAZ_MJ,DICOM console user: irati.
+20220927112545_PET_OSEM_0,1019,AE-biomaGUNE-1019,162,162,organism,IAZ_MJ,DICOM console user: irati.
+20220927113759_CT_ISRA_0,1019,AE-biomaGUNE-1019,162,162,organism,IAZ_MJ,DICOM console user: irati.
+20220927114551_PET_OSEM_0,1019,AE-biomaGUNE-1019,163,163,organism,IAZ_MJ,DICOM console user: irati.
+20220927121050_CT_ISRA_0,1019,AE-biomaGUNE-1019,163,163,organism,IAZ_MJ,DICOM console user: irati.
+20241009140256_CT_ISRA_0,1123,AE-biomaGUNE-1123,23,23,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (23), as the header says (1123_23); DICOM console user: mjesus."
+20241009143154_CT_ISRA_0,1123,AE-biomaGUNE-1123,22,22,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (22), as the header says (1123_22); DICOM console user: mjesus."
+20241009144053_CT_ISRA_0,1123,AE-biomaGUNE-1123,24,24,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (24), as the header says (1123_24); DICOM console user: mjesus."
+20241009151113_CT_ISRA_0,1123,AE-biomaGUNE-1123,25,25,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (25), as the header says (1123_25); DICOM console user: mjesus."
+20241009152056_CT_ISRA_0,1123,AE-biomaGUNE-1123,26,26,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (26), as the header says (1123_26); DICOM console user: mjesus."
+20241009154505_CT_ISRA_0,1123,AE-biomaGUNE-1123,27,27,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (27), as the header says (1123_27); DICOM console user: mjesus."
+20241009155318_CT_ISRA_0,1123,AE-biomaGUNE-1123,28,28,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (28), as the header says (1123_28); DICOM console user: mjesus."
+20241009160903_CT_ISRA_0,1123,AE-biomaGUNE-1123,29,29,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (29), as the header says (1123_29); DICOM console user: mjesus."
+20241009163602_CT_ISRA_0,1123,AE-biomaGUNE-1123,30,30,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (30), as the header says (1123_30); DICOM console user: mjesus."
+20241009164416_CT_ISRA_0,1123,AE-biomaGUNE-1123,31,31,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (31), as the header says (1123_31); DICOM console user: mjesus."
+20241009170854_CT_ISRA_0,1123,AE-biomaGUNE-1123,32,32,organism,MJ,"subject folder 'Gated' is not an animal number; the animal is the folder above it (32), as the header says (1123_32); DICOM console user: mjesus."

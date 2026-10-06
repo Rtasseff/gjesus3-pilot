@@ -211,6 +211,85 @@ def main():
               f"discovered.project is the RECOVERED 0522, not 2302 (got {d6.get('project')!r})")
         check("project" in d6,
               "the project key exists so subject_parse's setdefault cannot override it")
+
+        # --- NO code where the parser looks: walk up for it (drive-3 A1 R4, 2026-10-06) -------
+        # Before the fix the walk-up ran only for a WRONG code, so an acquisition whose subject
+        # folder and parent carry no code was held back although its own path had a valid one:
+        # 100 of the 673 held back in 2026-08, e.g. IAZ_MJ/0619/Dieta cetogenica/174/.
+        print("\nno code in subject/parent -> found higher up (the fallback)")
+        V2 = {"0619", "1123", "1019", "0320"}
+        f1 = nd.analyse("2022/Jesus/MOLECUBES/IAZ_MJ/0619/Dieta cetogenica/174/"
+                        "20211019101536_CT_ISRA_0.dcm", valid_codes=V2)
+        check(f1["project"] == "0619", f"the code two levels up is found (got {f1['project']!r})")
+        check("project-recovered:none->0619" in f1["flags"].split(","),
+              "the recovery is flagged as recovered-from-none, not silent")
+        check(f1["facility_keys"] == "174-AE-biomaGUNE-0619",
+              f"the animal keys use the recovered code (got {f1['facility_keys']!r})")
+        f0 = nd.analyse("2022/Jesus/MOLECUBES/IAZ_MJ/0619/Dieta cetogenica/174/"
+                        "20211019101536_CT_ISRA_0.dcm")
+        check(f0["project"] == "" and "project-recovered" not in f0["flags"],
+              "without the DB code set nothing is recovered (no validation, no walk-up)")
+        f2 = nd.analyse("2024/Jesus/MJ/1123/241009/23/Gated/20241009140256_CT_ISRA_0.dcm",
+                        valid_codes=V2)
+        check(f2["project"] == "1123" and f2["subject_folder"] == "Gated",
+              "past an unparsable subject folder, its animal folder and a date folder to 1123")
+        check(f2["n_animals"] == 0,
+              "the recovered project does not invent an animal: 'Gated' still parses none")
+        # An animal number must never become a protocol, even when it reads like a valid one.
+        f3 = nd.analyse("2022/Jesus/IAZ_MJ/Grupo A/1019/20220101090000_PET_OSEM_0.dcm",
+                        valid_codes=V2)
+        check(f3["project"] == "" and f3["animals"] == "1019",
+              f"the subject folder 1019 is an animal, not a protocol (got {f3['project']!r})")
+        f4 = nd.analyse("2022/Jesus/IAZ_MJ/0619/Grupo A/1019/20220101090000_PET_OSEM_0.dcm",
+                        valid_codes=V2)
+        check(f4["project"] == "0619" and f4["animals"] == "1019",
+              f"the walk starts ABOVE the subject folder (got {f4['project']!r})")
+        # The year, group and researcher levels are never protocols.
+        f5 = nd.analyse("2022/Jesus/1019/Grupo A/12/20220101090000_PET_OSEM_0.dcm",
+                        valid_codes=V2)
+        check(f5["project"] == "", "a researcher folder named like a code is not walked into")
+        f6 = nd.analyse("2022/Jesus/IAZ_MJ/0619/phantom 18F/20220101090000_PET_OSEM_0.dcm",
+                        valid_codes=V2)
+        check(f6["project"] == "" and f6["phantom"] == "yes",
+              "a phantom stays without a project")
+        f7 = nd.analyse("2022/Jesus/IAZ_MJ/0619/Grupo A/12/20220101090000_PET_OSEM_0.dcm",
+                        valid_codes={"1019"})
+        check(f7["project"] == "" and "project-recovered" not in f7["flags"],
+              "no VALID code above the subject -> still held back, nothing invented")
+        f8 = nd.analyse("2023/Jesus/MJ/0522/230217-FDG/16/20230217122714_PET_OSEM_0.dcm",
+                        valid_codes={"0522"})
+        check(f8["project"] == "0522" and "project-recovered:2302->0522" in f8["flags"],
+              "the wrong-code walk-up is unchanged by the fallback")
+
+        # discover(): the released acquisition is listed with the recovered code PUBLISHED, and the
+        # cross-source dedup still skips it once its (timestamp, modality) is registered.
+        src4 = os.path.join(tmp, "snap4")
+        touch(src4, "2022/Jesus/MOLECUBES/IAZ_MJ/0619/Dieta cetogenica/174/"
+                    "20211019101536_CT_ISRA_0.dcm")
+        touch(src4, "2022/Jesus/MOLECUBES/IAZ_MJ/Starget/68Ga/3/20220101090000_CT_ISRA_0.dcm")
+        nd.valid_protocol_codes = lambda conn=None: V2
+        try:
+            m7, idx7, n7 = ni_flat.discover(src4, require_project=True)
+            reg4 = os.path.join(tmp, "registries4", "registry_raw.csv")
+            write_registry(reg4, [{"acq_id": "ACQ-X", "acquisition_datetime": "2021-10-19T10:15:36Z",
+                                   "instrument": "CT"}])
+            m8, _idx8, n8 = ni_flat.discover(src4, registry_path=reg4, require_project=True)
+        finally:
+            nd.valid_protocol_codes = _real
+        check(n7 == 2 and len(m7) == 1, f"1 released, 1 still held back (got {len(m7)} of {n7})")
+        d7 = list(idx7.values())[0]["discovered"]
+        check(d7["project"] == "0619" and "project-recovered:none->0619" in d7["parse_flags"],
+              f"discovered.project is the recovered 0619 (got {d7.get('project')!r})")
+        check(m8 == [] and n8 == 2,
+              "once registered, a re-run skips it on (timestamp, modality): no duplicate")
+
+        # find_subject() is unchanged by the subject_index() refactor (timepoint, frames, dates).
+        s1 = nd.find_subject(["0324", "0324_m59_m60", "4h", "Frames", "3"])
+        check(s1[0] == "0324_m59_m60" and s1[2] == "4h" and s1[1] == "0324",
+              f"subject/series/timepoint as before the refactor (got {s1[:3]})")
+        s2 = nd.find_subject(["pet", "recon_0", "220518"])
+        check(s2[0] == "" and "no-subject-folder" in s2[4] and s2[3] == "220518",
+              "all-noise levels -> no subject folder, the date still recorded")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

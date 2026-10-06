@@ -52,6 +52,14 @@ auto_discover:
   # these acquisitions file themselves under an INVENTED AE code (`2302` is the
   # date folder 230217; `245` and `100` are animal numbers), each becoming a
   # project folder and a subject_id. See tasks/REVIEW_FINDINGS_2026-08-13.md §1.
+  # Since 2026-10-06 the walk-up also runs when the subject folder and its parent
+  # carry NO code (`IAZ_MJ/0619/Dieta cetogenica/174/`), over the levels between
+  # the researcher and subject folders only; flag `project-recovered:none-><code>`
+  # (tasks/drive3_petct_gate.md §1.4). On the 2026-08-12 snapshot this gives a
+  # project to 280 of the 673 held back (100 of them are drive-3 stream N's; 20
+  # stay skipped by the (timestamp, modality) dedup), so a re-run of a batch
+  # config would now ingest the other 160: dry-run first, and check each against
+  # its DICOM header before releasing them (a separate decision).
   validate_projects: true
   subject_parse:                           # subject folder -> project + 1-4 animals
     field: subject                         #   (the SAME grammar the live box uses)

@@ -1,0 +1,46 @@
+# DEDUP PROOF for drive3_petct_drive.yaml (DRY-RUN ONLY, never run for real).
+# The batch config unchanged except `staging_dir`: it points at the drive's 290 reconstructions that
+# production ALREADY holds (byte-identical, from the S:\gnuclear backfill), staged from the same drive folders
+# in the same layout (stage\inprod290\<year>\Jesus\MJ\<drive relpath>). Expected dry-run result against
+# production: 0 cases, "290 acquisition(s) skipped — that scan is already in the registry" (the cross-source
+# dedup on (timestamp, modality)); the case table is never reached. Gate: tasks/drive3_petct_gate.md.
+#
+#   python tools/ingest_raw.py --config tools/configs/drive3_petct/drive3_petct_dedup_proof.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  acquisition_layout: folder
+  copy_strategy: ni_molecubes_flat
+  auto_create_projects: false
+  delete_source_after_ingest: false
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/drive3_streams/petct/stage/inprod290"
+  ni_gnuclear_flat: true
+  researchers: [MJ]
+  require_project: false
+  validate_projects: true
+  subject_parse:
+    field: subject
+  subject_from_db: true
+  case_table:
+    file: cases_drive3_petct_drive.csv
+    key: original_name
+    on_missing: error
+
+registry:
+  instrument:           discovered.modality
+  data_ecosystem:       DICOM
+  instrument_model:     "Molecubes (PET/SPECT/CT)"
+  researcher:           "${discovered.researcher_folder}"
+  data_source:          internal
+  sample_id:            "${discovered.subject}"
+  sample_type:          "${discovered.sample_type}"
+  acquisition_datetime: discovered.acq_datetime_full
+  session_id:           "${discovered.subject}_${discovered.acq_date8}"
+  project_name:         "${discovered.project_name}"
+  notes:                "Historical drive MJesus-MFB (M. Jesus's own drive, WD WX22D623YP29; staged copy, SHA-256 verified against its manifest). Reconstruction ${discovered.ni_algo}_${discovered.ni_recon_idx}. Drive path: ${discovered.drive_relpath}. ${discovered.note}"
+
+link_filename: "${discovered.modality}_${discovered.subject}_${acq_date}_${discovered.acq_datetime_full}_recon${discovered.ni_recon_idx}"
+
+anatomy:
+  is_whole_body: true
