@@ -245,7 +245,8 @@ The genuinely in-flight items (kept tight — everything else is in
       - the 25 files drives 1+2 placed under another project also go into drive 3's;
       - holding for the pig set, the group's 3D Slicer tool and the model outputs.
       - The placement code first has to learn a third drive (`historical_paths.py` and the READMEs know two);
-    - the PET/CT reconstructions not in production (202): stream N, built and dry-run, then Ryan's go;
+    - the PET/CT reconstructions not in production (202): stream N, built and dry-run. **Gate cleared by the coordinator 2026-10-06** (its read-only pre-flight re-run matched exactly; 6 random cases checked against header and DB). **✅ Ryan's go, 2026-10-06:** run by a fresh session (Sonnet, medium) from `gjesus3-dev\drive3-petct\HANDOFF_RUN.md`; the window is open (no other registry writer);
+    - **✅ Ryan's go, 2026-10-06, for stream C's in-place repair of `ACQ-20230707-CELL-001`** (production holds a 0.5 MB preview of `ID187_10x.czi`; drive 3 holds the 360 MB original). Runs after the PET/CT write is verified (one registry writer at a time);
     - the Cell Observer files (5,115, 643 GB): stream C, through the drives' gate (re-saves, same-timestamp groups, claims), then Ryan's go;
     - the descriptions (17, with the drive's wording first), once M1 is answered;
     - **✅ the label-meaning and slice-order evidence went to SegBioMed** (their D4/D5) on 2026-10-06, as REPLY 8 in `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`. Nothing was applied.
