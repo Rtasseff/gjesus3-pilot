@@ -207,7 +207,9 @@ each row's notes (irati 189, mjesus 11, garazi 1, unai 1).
 
 Every dry run ran against `J:\gjesus3-data` (the registry of 27,120 rows, which includes the 86 AxioScan acquisitions MBC
 ingested at 11:03–11:21 today), with the registries fingerprinted (size, mtime, SHA-256) before and after: **byte-identical
-every time.** The coordinator's 10:30 SHA index (which predates those 86) was not used for any dry run or proof.
+every time.** The coordinator's 10:30 SHA index (which predates those 86) was not used for any dry run or proof. The
+validator on production today (read-only, `--no-enrichment`): **27,120 rows, 0 errors, 0 warnings, `pending-claim`
+10,314**, none of the 202 present: the baseline step 0 of §7 expects.
 
 | Config | Total / success / failed | Discovery | Checked against the plan (`petct_13_check_log.py`) |
 |---|---|---|---|
