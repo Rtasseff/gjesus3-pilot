@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Manager — gjesus3</title>
+  <!-- The INGEST GUI's stylesheet, served from /shared/ (see app.py). One
+       stylesheet for both tools, so they look like one system today and fold
+       together cheaply when the RDM server replaces the exes. -->
+  <link rel="stylesheet" href="/shared/style.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='manager.css') }}">
+</head>
+<body>
+  <header>
+    <h1>Project Manager
+      <span class="muted" style="font-size:.55em;font-weight:normal">— your projects on gjesus3</span></h1>
+    <div class="nasbar">
+      <label>RDM System <span class="muted">— the gjesus3 storage your projects live on</span>
+        <input id="nas-root" type="text" value="{{ nas_root }}" size="30"
+               placeholder="\\gjesus3\gjesus3\gjesus3-data">
+      </label>
+      <button id="nas-browse" type="button" class="browse">Browse…</button>
+      <button id="nas-save" type="button">Set</button>
+      <span id="nas-status" class="pill"></span>
+    </div>
+  </header>
+
+  <main class="wrap">
+  <nav class="tabs">
+    <button class="tab active" data-tab="projects" type="button">My projects</button>
+    <button class="tab" data-tab="create" type="button">New project</button>
+    <button class="tab" data-tab="fromraw" type="button">Add data from the RDM System</button>
+    <button class="tab" data-tab="fromlocal" type="button">Add files from my computer</button>
+  </nav>
+
+  <div id="global-error" class="errbox"></div>
+
+  <!-- ======================================================== MY PROJECTS -->
+  <section id="tab-projects" class="tabpane active">
+    <fieldset>
+      <legend>Projects</legend>
+      <div class="row">
+        <label class="grow">Find a project <span class="muted">— by name, id, owner or description</span>
+          <input id="proj-filter" type="text" placeholder="type to filter…">
+        </label>
+        <label class="check"><input id="proj-hide-closed" type="checkbox" checked>
+          Hide closed projects</label>
+        <button id="proj-reload" type="button">Reload</button>
+      </div>
+      <div id="proj-counts" class="summary muted"></div>
+      <div class="table-wrap"><table id="proj-table"></table></div>
+    </fieldset>
+
+    <fieldset id="proj-detail" hidden>
+      <legend>Project details</legend>
+      <div id="proj-banner"></div>
+      <div class="row">
+        <label class="grow">Project id <input id="d-project_id" type="text" readonly></label>
+        <label class="grow">Name <span class="muted">— also the folder name</span>
+          <input id="d-name" type="text" readonly></label>
+      </div>
+      <div class="row">
+        <label class="grow">Started <span class="muted">— first acquisition</span>
+          <input id="d-start_date" type="text" readonly></label>
+        <label class="grow">Last activity <span class="muted">— newest acquisition, not the last edit</span>
+          <input id="d-last_activity" type="text" readonly></label>
+        <label class="grow">Folder <input id="d-folder_location" type="text" readonly></label>
+      </div>
+
+      <p class="note">You can change the four fields below. The dates, the name
+        and the folder are not editable here — <strong>“last activity” means the
+        newest acquisition in the project, not the last time someone edited
+        it</strong>, so editing a description must not move it. Renaming a
+        project touches its folder and every link inside it, so it is a Data
+        Office job for now.</p>
+
+      <div class="row">
+        <label class="grow">Description <input id="e-description" type="text"></label>
+        <label>Owner <input id="e-owner" type="text" size="12"></label>
+        <label>Status
+          <select id="e-status">
+            {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="grow">Notes <input id="e-notes" type="text"></label>
+      </div>
+      <div id="proj-subfolders" class="summary muted"></div>
+      <div class="commit-row safe">
+        <span id="save-state" class="state"></span>
+        <button id="proj-save" type="button" class="go">Save changes</button>
+      </div>
+      <div id="proj-save-msg" class="summary"></div>
+    </fieldset>
+  </section>
+
+  <!-- ========================================================= NEW PROJECT -->
+  <section id="tab-create" class="tabpane">
+    <fieldset>
+      <legend>Create a project</legend>
+      <p class="note">Anyone with access to gjesus3 may create a project — but
+        always through this tool, never by making a folder by hand. That is what
+        keeps the registry, the folder name and the project file consistent with
+        each other.</p>
+      <div class="row">
+        <label class="grow">Project name <span class="muted">— this becomes the folder name, exactly</span>
+          <input id="c-name" type="text" placeholder="e.g. AE-biomaGUNE-1123">
+        </label>
+        <label>Owner <span class="muted">— initials</span>
+          <input id="c-owner" type="text" size="10"></label>
+      </div>
+      <div id="c-name-msg" class="summary"></div>
+      <div class="row">
+        <label class="grow">Description <input id="c-description" type="text"
+          placeholder="one line: what this project is"></label>
+      </div>
+      <div class="row">
+        <label class="grow">Notes <span class="muted">— optional</span>
+          <input id="c-notes" type="text"></label>
+      </div>
+      <div class="note">
+        Created with these folders:
+        <ul>
+          {% for name, desc in subfolders %}<li><code>{{ name }}/</code> — {{ desc }}</li>{% endfor %}
+        </ul>
+      </div>
+      <div class="commit-row safe">
+        <span class="state">Creates a folder and a registry entry.</span>
+        <button id="c-create" type="button" class="go">Create project</button>
+      </div>
+      <div id="c-msg" class="summary"></div>
+    </fieldset>
+  </section>
+
+  <!-- ================================================ ADD DATA FROM /raw/ -->
+  <section id="tab-fromraw" class="tabpane">
+    <fieldset>
+      <legend>1 · Which project?</legend>
+      <div class="row">
+        <label class="grow">Add to project
+          <select id="r-project"></select></label>
+        <label class="grow">Your name <span class="muted">— recorded in the project's provenance</span>
+          <input id="r-creator" type="text"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>2 · Find the acquisitions</legend>
+      <div class="row">
+        <label class="grow">Search <span class="muted">— id, sample, animal, instrument, date, project…</span>
+          <input id="r-q" type="text" placeholder="e.g. m17, MRI, 2026-02, heart"></label>
+        <label>Instrument <select id="r-instrument"><option value="">All</option></select></label>
+        <label>From <input id="r-since" type="date"></label>
+        <label>To <input id="r-until" type="date"></label>
+      </div>
+      <div id="r-counts" class="summary"></div>
+      <div class="table-wrap"><table id="r-table"></table></div>
+      <div class="row">
+        <button id="r-more" type="button" hidden>Show more</button>
+        <span id="r-selcount" class="muted"></span>
+        <button id="r-clearsel" type="button">Clear selection</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3 · Check and add</legend>
+      <p class="note">Adding an acquisition creates a <strong>hard link</strong>
+        in the project's <code>raw_linked/</code> — the file appears in your
+        project and opens normally, but no space is used and the original in
+        <code>/raw/</code> is untouched. You can change the name it gets in your
+        project below.</p>
+      <div class="row">
+        <button id="r-preview" type="button" class="primary">Preview</button>
+        <span id="r-plan-msg" class="muted"></span>
+      </div>
+      <div class="table-wrap"><table id="r-plan"></table></div>
+      <div class="commit-row safe">
+        <span id="r-state" class="state"></span>
+        <button id="r-go" type="button" class="go" disabled>Add to project</button>
+      </div>
+      <div class="log-wrap"><pre id="r-log" hidden></pre></div>
+    </fieldset>
+  </section>
+
+  <!-- =============================================== ADD FILES FROM LOCAL -->
+  <section id="tab-fromlocal" class="tabpane">
+    <fieldset>
+      <legend>1 · Where do the files go?</legend>
+      <div class="row">
+        <label class="grow">Add to project <select id="l-project"></select></label>
+        <label>Into <select id="l-dest">
+          {% for d in dest_choices %}
+          <option value="{{ d }}"{% if d == default_dest %} selected{% endif %}>{{ d or 'the project root' }}</option>
+          {% endfor %}
+        </select></label>
+        <label class="grow">Your name <span class="muted">— recorded in the project's provenance</span>
+          <input id="l-creator" type="text"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>2 · Choose the files</legend>
+      <p class="note">These are <strong>copied</strong> onto gjesus3 — unlike
+        acquisitions from the RDM System, they use real space. Your own copy
+        stays where it is.</p>
+      <div class="row">
+        <button id="l-browse" type="button" class="primary">Choose files…</button>
+        <span id="l-chosen" class="muted">No files chosen.</span>
+        <button id="l-clear" type="button">Clear</button>
+      </div>
+      <div class="table-wrap"><table id="l-plan"></table></div>
+      <div id="l-totals" class="summary"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3 · Copy</legend>
+      <div class="commit-row safe">
+        <span id="l-state" class="state"></span>
+        <button id="l-go" type="button" class="go" disabled>Copy into the project</button>
+      </div>
+      <div class="log-wrap"><pre id="l-log" hidden></pre></div>
+    </fieldset>
+  </section>
+  </main>
+
+  <!-- ---- in-page folder / file browser (shared static/folder_browser.js).
+       Each page owns its own copy of this markup; the ids are the contract. -->
+  <div id="fb-overlay" class="fb-overlay" hidden>
+    <div class="fb-modal">
+      <header class="fb-head">
+        <strong id="fb-title">Select a folder</strong>
+        <button id="fb-close" type="button" class="fb-x" title="Cancel">×</button>
+      </header>
+      <div class="fb-bar">
+        <button id="fb-up" type="button" title="Up one level">↑ Up</button>
+        <input id="fb-path" type="text" class="fb-path" spellcheck="false"
+               placeholder="path — type and press Go, or browse below">
+        <button id="fb-go" type="button">Go</button>
+      </div>
+      <div id="fb-drives" class="fb-drives"></div>
+      <div class="fb-sortbar">
+        <button id="fb-sort" type="button" class="fb-sort">Name <span id="fb-sort-arrow" class="fb-arrow">▲</span></button>
+        <span class="muted">click to reverse — newest first for date-named folders</span>
+      </div>
+      <div id="fb-list" class="fb-list"></div>
+      <div id="fb-error" class="errbox"></div>
+      <footer class="fb-foot">
+        <span class="muted">Click a folder to open it. Files are shown greyed for context — you select the folder, not a file.</span>
+        <span class="fb-foot-actions">
+          <button id="fb-cancel" type="button">Cancel</button>
+          <button id="fb-select" type="button" class="go">Use this folder</button>
+        </span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Completion modal — same component and wording style as the ingest GUI. -->
+  <div id="done-overlay" class="done-overlay" hidden>
+    <div class="done-modal" role="dialog" aria-modal="true" aria-labelledby="done-title">
+      <div class="done-check" aria-hidden="true">✓</div>
+      <h2 id="done-title" class="done-title">Done</h2>
+      <div id="done-body" class="done-body"></div>
+      <div class="done-actions"><button id="done-close" type="button" class="go">Close</button></div>
+    </div>
+  </div>
+
+  <script src="/shared/folder_browser.js"></script>
+  <script src="/shared/completion_modal.js"></script>
+  <script src="{{ url_for('static', filename='manager.js') }}"></script>
+</body>
+</html>

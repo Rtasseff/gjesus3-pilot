@@ -37,6 +37,7 @@ from typing import Optional
 # tools/ on sys.path (see templates.py) so `from ingest import ...` works.
 from . import templates as _templates  # noqa: F401  (ensures sys.path setup)
 from ingest import config, acq_id as acq_id_mod, linker, project_naming, resolver
+from ingest import unparsed as unparsed_mod
 
 
 @dataclass
@@ -62,7 +63,13 @@ class PreviewResult:
     n_skipped: int = 0                                 # = n_already_ingested (back-compat alias)
     n_already_ingested: int = 0                         # dropped by the idempotency dedup
     n_dropped: int = 0                                 # dropped by a PARSE/FILTER/VALIDATE error
-    dropped: list = field(default_factory=list)        # [{"name", "reason"}] for n_dropped
+    dropped: list = field(default_factory=list)        # [{"name", "reason", "unparsed"}] for n_dropped;
+                                                       # "unparsed" is True when the drop belongs to a
+                                                       # target listed in `unparsed` below
+    unparsed: list = field(default_factory=list)       # ONE entry per parse target (MRI: per study
+                                                       # folder) whose name matched no filename_parse
+                                                       # rule: {"target", "target_path", "source", "rule",
+                                                       # "reason", "n_matches", "n_exam_folders"}
     n_new: int = 0                                     # cases that would ingest
     blocking_errors: list = field(default_factory=list)
     warnings: list = field(default_factory=list)       # batch-level warnings
@@ -146,9 +153,11 @@ def preview_batch(cfg, nas_root, count_matches=True):
     # ValueError -> a blocking error. Its per-case skip/warn lines go to stdout
     # via print(); capture them as batch-level warnings.
     buf = io.StringIO()
+    unparsed_records = []
     try:
         with contextlib.redirect_stdout(buf):
-            cases = config.expand_batch(cfg, nas_root=nas_root)
+            cases = config.expand_batch(cfg, nas_root=nas_root,
+                                        unparsed=unparsed_records)
     except ValueError as e:
         result.blocking_errors.append(str(e))
         _drain_stdout(buf, result.warnings)
@@ -163,6 +172,15 @@ def preview_batch(cfg, nas_root, count_matches=True):
     # a parse failure looked like a duplicate). Split them by reason so the UI can
     # say "0 already-ingested, 44 skipped — parse/filter error" and show why.
     already, dropped = _categorize_skips(result.warnings)
+    # A filename-parse failure drops EVERY exam of its study, one SKIP line each.
+    # Group those into one entry per study (from expand_batch's structured record,
+    # not by re-parsing the text) and tag the per-exam drops that belong to one,
+    # so a front-end can show "1 study NOT PARSED (15 exam folders)" instead of
+    # 15 look-alike lines (or, on the MRI page, "housekeeping").
+    result.unparsed = unparsed_mod.public(unparsed_records)
+    unparsed_reasons = {r["reason"] for r in unparsed_records}
+    for d in dropped:
+        d["unparsed"] = d["reason"] in unparsed_reasons
     result.n_already_ingested = already
     result.dropped = dropped
     result.n_dropped = len(dropped)

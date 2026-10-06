@@ -133,7 +133,17 @@ def _resolve_one_db_subject(alias, code, acq_for_age, acq_id, canonical_path,
         return _finalize_subject(res.subject, acq_for_age, "animal-facility-db")
 
     # not_found (db-miss) | unreachable (no-credentials) -> pending.
-    fa_id = animal_db.compose_subject_id(code, alias)
+    # compose_subject_id REFUSES a null/blank alias (it would build the
+    # ambiguous "<n>-AE-biomaGUNE-None"). Honour the non-blocking contract
+    # (§4.7): no id we can trust -> no id at all. A blank facility id is the
+    # honest sentinel — _subject_placeholder already uses "" for an animal we
+    # could not name, and subjects_table.row_from_subject_block drops a block
+    # with no id rather than keying a table row on a broken string.
+    try:
+        fa_id = animal_db.compose_subject_id(code, alias)
+    except ValueError as e:
+        log(f"subject: {e}; writing an empty facility id.", "WARN")
+        fa_id = ""
     reason = res.reason or "db-miss"
     log(f"subject: DB {res.status} ({reason}) for {fa_id}; writing "
         f"source=pending-db and queueing for recovery.", "WARN")

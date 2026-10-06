@@ -98,7 +98,8 @@
 #     convention" section for the convention details.
 #   - `acquisition_layout: folder` — no zip; the acquisition folder is
 #     the unit. Registry's primary_kind = "folder". See 10_TOOLS.md.
-#   - `instrument_model` — set per per-batch config (7T vs 11.7T).
+#   - `instrument_model` — AUTO-DERIVED from ACQ_station metadata (see
+#     registry: block below); not a per-batch manual edit.
 #   - `sample_type: organism` — DRAFT REMBI vocab; in-vivo MRI.
 #   - `sample_id` = `m<animal_num>_<project_code>` ("m17_0424"), aligned
 #     with NI ("m13_0525"); `session_id` = the fuller JRC study id (groups
@@ -123,9 +124,9 @@
 #                                             study folders)
 #   - `ingest.reconstructions`            <-- which pdata/<idx>/ recons
 #                                             to keep (all | int | list)
-#   - `registry.instrument_model`         <-- "Bruker BioSpec 7T" or
-#                                             "Bruker BioSpec 11.7T"
 #   - `registry.notes`                    <-- short batch description
+#   (registry.instrument_model is AUTO-DERIVED from the metadata — see the
+#    registry: block. Override by replacing the value there directly.)
 #
 # What you may want to change per batch (rarely):
 #   - `ingest.delete_source_after_ingest` (default false; opt in only
@@ -289,8 +290,13 @@ auto_discover:
 registry:
   instrument:           MRI
   data_ecosystem:       DICOM
-  # EDIT: which scanner produced this batch.
-  instrument_model:     "Bruker BioSpec <7T|11.7T>"
+  # AUTO-DERIVED — no edit needed. Comes from acqp `ACQ_station` (the literal
+  # Bruker system name, e.g. "Biospec 70/30" -> "Bruker BioSpec 7T"; "Biospec
+  # 117/16" -> "Bruker BioSpec 11.7T"), with the 1H reference frequency as a
+  # fallback. Override only if the metadata is missing/ambiguous: replace the
+  # value here directly (this is a data-office YAML-path config, run via
+  # ingest_raw.py --config, not through mri-ingest, so there is no --model flag).
+  instrument_model:     "${discovered.mri_scanner_model}"
   modalities_in_study:  NA
   # researcher = the person who set up the experiment (the registry person
   # column, RENAMED from `operator` 2026-06-09). REQUIRED. For MRI the researcher

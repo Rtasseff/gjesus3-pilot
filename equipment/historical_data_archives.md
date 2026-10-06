@@ -23,7 +23,7 @@ Three tiers, most→least standardized:
 |---|---|---|---|
 | **Standardized long-term archive** | `gnuclear3` | **NEED ACCESS** (not yet granted) | The intended deep-time standardized store. Get access. |
 | **Intermediate standardized** | `\\cicmgsp02\gnuclear2$` | reachable today | The `.tgz`-per-acquisition archive already used by **archive-mode** ingest (round 8). Layout/parse documented in [`nuclear-imaging/internal_ni_data_handling_workflow_notes.md`](nuclear-imaging/internal_ni_data_handling_workflow_notes.md). MFB group under `…\<year>\Jesus\`. |
-| **Active working space (messy)** | `S:\gnuclear` | reachable today | `S:\gnuclear\<YYYY>\Jesus\<user>\…`, years 2022–2026, **MFB group always under `Jesus\`**. ⚠️ **NOT redundant in practice right now** — it holds **~2,124 distinct PET/CT acquisitions (≈2,000 net-new** vs the 132 loaded), and it is the **only reachable source for them today** (`gnuclear3` access pending; `gnuclear2$` only yielded the 2025/Irene slice). **BUT** its layout is a **flattened analysis workspace** (loose single-recon `.dcm` files + derivatives, **no `recon_N/`**), so neither existing NI pipeline fits — see the full finding in [`nuclear-imaging/gnuclear_active_workspace_layout.md`](nuclear-imaging/gnuclear_active_workspace_layout.md) and the plan in [`tasks/ni_gnuclear_active_space_plan.md`](../tasks/ni_gnuclear_active_space_plan.md). |
+| **Active working space (messy)** | `S:\gnuclear` | ✅ **PARTIALLY INGESTED 2026-08-13** | `S:\gnuclear\<YYYY>\Jesus\<user>\…`, years 2022–2026, **MFB group always under `Jesus\`**. **Not redundant** — it held **2,312 acquisitions** (one per *reconstruction*) against the 132 then loaded. **1,508 are now in true production** (192.0 GB, 14 projects); 131 were already present; **673 are HELD BACK** — no *valid* animal-protocol code appears in their path (those researchers filed by study/tracer name), and an AE code must never be guessed, so they await a `(researcher, series)` → code mapping. A **read-only checksummed snapshot is retained** at `J:\gjesus3-data\staging\ni_gnuclear_20260812\` (2,485 files / 286.3 GB), so ingesting the remainder needs no further network pull — and **`S:\gnuclear` itself was never written to**. Its layout is a flattened analysis workspace (loose `.dcm` at depth 0–8, one reconstruction copied into up to 48 folders, dynamic PET split per frame), so neither existing NI pipeline fit and it got its own fan-in path: `tools/ingest/ni_flat.py` + `molecubes_ni_gnuclear.yaml`. Layout finding: [`nuclear-imaging/gnuclear_active_workspace_layout.md`](nuclear-imaging/gnuclear_active_workspace_layout.md); plan, runbook, and the review that caught 21 fabricated protocol codes before they reached production: [`tasks/ni_gnuclear_active_space_plan.md`](../tasks/ni_gnuclear_active_space_plan.md), [`tasks/ni_gnuclear_production_runbook.md`](../tasks/ni_gnuclear_production_runbook.md), [`tasks/REVIEW_FINDINGS_2026-08-13.md`](../tasks/REVIEW_FINDINGS_2026-08-13.md). |
 
 The live-machine box (`REMIW11` / the Molecubes `…/remiW11/data/` tree) and its sync rules are in
 [`nuclear-imaging/live_machine_data_layout_and_sync_rules.md`](nuclear-imaging/live_machine_data_layout_and_sync_rules.md).
@@ -103,9 +103,18 @@ S:\goptical\GOpticalUsers data\AxioScan
 
 ### Cell Observer (`CELL`) and Confocal LSM 900 (`LSM9`)
 
-**No network historical archives.** These will need to be pulled off the operators' **external
-drives** — planned *after* the microscopy GUI is released (operators do the pull). MFB (Jesus's lab)
-does, however, have plenty of **intermediate / current** data not yet moved to external drives:
+**No network historical archives; the history was ingested from the operators' external drives
+(✅ 2026-09-30 to 2026-10-02).** Two one-copy drives (`drive1_FRIO-X6`, `drive2_MFB-Disco-2`) were staged to
+`D:\projects\gjesus3\staging\` and their `.czi` files ingested into `/raw/` as **8,790 acquisitions**
+(3,849 GB): `CELL` 8,061, `LSM9` 387, `ZWSI` 4 and `XMIC` 338, in 16 batches. Every row's `ingest_config` is
+`tools/configs/drives_2026-09/drives_B<NN>.yaml`, and the per-file provenance (drive, path, archive member,
+SHA-256) is in `tasks/drives_ingest_provenance.csv`. **5,055 of them have a blank project:** their paths
+carried no project claim (4,952) or only a claim that was left blank (103, see
+`tasks/drives_blank_project_list.csv`). The plan, rules and batch log are in
+`tasks/drives_ingest_dryrun_review.md` (§11) and `tasks/drives_microscopy_ingest_runbook.md`. **Not part of
+that ingest:** the loose `.tif` / `.lsm` files, derived exports, and the MRI and PET/CT data the drives also
+hold (see the review's §9). MFB (Jesus's lab) does, however, have plenty of **intermediate / current** data
+not yet moved to external drives:
 
 | Instrument | Current MFB data location |
 |---|---|
@@ -122,6 +131,6 @@ the CELL + LSM 900 operator.)
 
 - **NI `gnuclear3`** — request access (the intended standardized long-term store).
 - **MRI credentials** — set up the SSH key (above) on the sync machine; decide key-vs-password.
-- **Microscopy external-drive pull** — sequenced after the GUI release; capture per-operator drive
-  locations as they surface.
+- **Microscopy external-drive pull** — the two staged drives' `.czi` are ingested (above); capture any
+  further per-operator drive locations as they surface.
 - Add a pointer to this file from `equipment/INDEX.md` once the in-flight migration settles.

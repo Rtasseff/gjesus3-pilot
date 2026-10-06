@@ -68,7 +68,7 @@ def has_entry_for_output(prov_path, output_path):
     return False
 
 
-def append_entry(prov_path, entry):
+def append_entry(prov_path, entry, unique_on=("output_path",)):
     """Append a single row to provenance.csv.
 
     `entry` is a dict keyed by `PROVENANCE_HEADERS`. Missing keys land as
@@ -78,13 +78,26 @@ def append_entry(prov_path, entry):
     Idempotent on `output_path`: if a row with the same `output_path`
     already exists, returns `None` without writing.
 
+    `unique_on` names the fields that make a row "already written". The
+    default, `output_path` alone, is right for a file's creation row. An EVENT
+    on an existing path (retire_acquisition re-pointing or removing a link,
+    2026-10-01) needs a wider key -- e.g. ("output_path", "notes") with a
+    deterministic notes tag -- or it would be swallowed by the path's original
+    creation row. History rows are never edited or deleted either way.
+
     Returns the FILE-ID actually written, or `None` if the call was a
     no-op.
     """
     entry = dict(entry)
     output_path = (entry.get("output_path") or "").strip()
-    if output_path and has_entry_for_output(prov_path, output_path):
-        return None
+    if tuple(unique_on) == ("output_path",):
+        if output_path and has_entry_for_output(prov_path, output_path):
+            return None
+    elif unique_on:
+        want = tuple((entry.get(k) or "").strip() for k in unique_on)
+        if any(tuple((r.get(k) or "").strip() for k in unique_on) == want
+               for r in _read_rows(prov_path)):
+            return None
 
     os.makedirs(os.path.dirname(prov_path), exist_ok=True)
     # Serialize FILE-NNNN allocation (read-max) + append so two ingests linking

@@ -296,6 +296,8 @@ The project folder name is set by the platform / instrument software:
 
 The first `<YYYYMMDD>_<time code>` prefix is the *FTP server-side* timestamp of when the folder was created. The remaining components are duplicated (`_<group and date>_<short sample id>_<short project id>` appears twice) plus a trailing `_1_1` — that's a quirk of how the platform writes the folder name, not a meaningful pattern.
 
+**The `<time code>` is the study start (`HHMMSS`).** It matches the study's `subject` file (`SUBJECT_date`) in every study sampled (92 of 92, 2026-10-05), and all 12,825 production MRI acquisitions with a study folder carry it. Since 2026-10-05 its `HHMM` is the per-study part of the project link name (`discovered.study_time` in `mri_bruker.yaml`), because one animal can have two studies on one day: a repeat session, a `_bis` study, or a time-point series. See [10_TOOLS §2.1.5](../../mfb-rdm-docs/10_TOOLS.md).
+
 Per-component breakdown:
 
 | Component | Meaning | Example |
@@ -520,7 +522,7 @@ These are not deep analysis points, but they are practical features that should 
 7. Whether ParaVision metadata can be reliably extracted programmatically (heart rate, respiration rate, sequence parameters, gating, slice geometry, VENC) to populate an ingest manifest, rather than relying on filenames.
 8. What proportion of users routinely delete `/1` and `/2` reconstructions before exporting, vs. leaving them.
 9. Whether non-cardiac MRI workflows (anatomy, perfusion, diffusion, spectroscopy, etc.) follow a similar pattern or diverge meaningfully.
-10. How long users typically keep data on the instrument server before relying on their own copies, and whether the platform manager has a retention policy on the local machines.
+10. ~~How long users typically keep data on the instrument server before relying on their own copies, and whether the platform manager has a retention policy on the local machines.~~ **PARTIALLY ANSWERED, empirically, 2026-08-21.** The 2026-06-13/14 bulk ingest pulled from `kenia` with **no configured cutoff**, and the earliest acquisition it produced anywhere is **2022-01-10** — a hard floor across all four ingest configs. So in June 2026 the server still held roughly **4.5 years** back. Confirmed independently against `K:\gjesus\MRI\Proyecto 1019`, which splits exactly on that line: all 9 of its 2022 studies are in the registry, all 86 of its 2021 studies are not. **Consequence: internal MRI older than ~2022-01 survives only on researcher shares** — see `tasks/BACKLOG.md`. Whether this is a deliberate policy or a drifting horizon is still unknown, and that is the part worth asking the platform manager.
 11. What credential / access model is acceptable for a script running locally under platform-manager review (read-only? push-only? what target paths on gjesus3?).
 12. Whether the ParaVision 3.6 line has its own server folder structure and FTP target.
 

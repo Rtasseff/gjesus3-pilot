@@ -1,0 +1,71 @@
+# The M. Jesus drive (third historical drive), stream N, batch N-S: the 100 PET/CT reconstructions that the
+# drive holds, production lacks, and the 2026-08-12 S:\gnuclear snapshot already holds byte for byte.
+# Gate document: tasks/drive3_petct_gate.md (the evidence, the dry runs, the rehearsal, the commands).
+#
+# WHY FROM THE SNAPSHOT. These 100 are among the 673 the 2026-08-13 backfill held back: their subject folder
+# and its parent carry no protocol code (`IAZ_MJ/0619/Dieta cetogenica/174/`), and the discovery looked
+# further up the path only for a WRONG code, never for a missing one (drive-3 A1 R4). This branch fixes that
+# fallback (tools/ni_gnuclear_discover.py, `project-recovered:none-><code>`). Ingested through the same
+# discovery from the same snapshot, they get the shape of the 1,508 backfilled acquisitions: researcher =
+# the snapshot's researcher folder, notes = the snapshot path, original_name = the machine key. The drive's
+# copies are byte-identical (all 100 re-hashed against both manifests on 2026-10-06), so nothing is lost by
+# not reading the drive.
+#
+# SCOPE. require_project + the fixed discovery would also release 160 OTHER held-back acquisitions of these
+# researcher folders (and 20 more go to the (timestamp, modality) skip). Releasing them is a separate decision,
+# so the case table selects exactly the 100: `on_missing: skip` drops every acquisition it does not list.
+#
+# PER-ACQUISITION VALUES (cases_drive3_petct_snapshot.csv), decided on the folder, the DICOM header and the
+# facility DB (evidence: D:\projects\gjesus3\drive3_streams\petct\out\plan_202.csv):
+#   - 99 animals: project = the code the fixed discovery finds (0619 57, 1019 16, 0320 15, 1123 11); every
+#     (protocol, animal) is in the facility DB with a procedure within 3 days of the scan;
+#   - the 11 respiratory-gated CTs of 1123 (2024-10-09) sit in `<animal>\Gated\`: subject = the animal
+#     folder, as the header's PatientID says (`1123_23`);
+#   - `173 FALTA`: animal 173 (header PatientID 173); the console typed protocol 1019, the DB confirms 0619;
+#   - folder 29 of CAV1 holds a PET whose header names animal 30: registered under the folder (29), noted;
+#   - 20220518123914_PET_OSEM_0 is NOT an animal: the platform's 18F phantom filed in animal 201's folder.
+#     sample_type phantom, no project, no subject (the stream F precedent for MRI phantoms).
+#
+#   python tools/ingest_raw.py --config tools/configs/drive3_petct/drive3_petct_snapshot.yaml --nas-root J:/gjesus3-data --dry-run
+# ⚠️ VERIFY --nas-root BEFORE EVERY RUN. The production run waits on the coordinator's gate and Ryan's go.
+
+ingest:
+  acquisition_layout: folder
+  copy_strategy: ni_molecubes_flat
+  auto_create_projects: false              # every target project exists (PROJ-0004, -0006, -0007, -0014)
+  delete_source_after_ingest: false        # NEVER delete: the snapshot is the source of record
+
+auto_discover:
+  staging_dir: "J:/gjesus3-data/staging/ni_gnuclear_20260812"     # read-only
+  ni_gnuclear_flat: true
+  researchers: [IAZ_MJ, MJ]
+  require_project: true                    # only acquisitions whose own path carries a valid code
+  validate_projects: true
+  subject_parse:
+    field: subject
+  subject_from_db: true
+  case_table:
+    file: cases_drive3_petct_snapshot.csv
+    key: original_name
+    on_missing: skip                       # the 160 others released by the fix are NOT ingested here
+
+registry:
+  instrument:           discovered.modality
+  data_ecosystem:       DICOM
+  instrument_model:     "Molecubes (PET/SPECT/CT)"
+  researcher:           "${discovered.researcher_folder}"
+  data_source:          internal
+  sample_id:            "${discovered.subject}"
+  sample_type:          "${discovered.sample_type}"
+  acquisition_datetime: discovered.acq_datetime_full
+  session_id:           "${discovered.subject}_${discovered.acq_date8}"
+  project_name:         "${discovered.project_name}"
+  notes:                "Historical NI pull. Read source = S:\\gnuclear (researcher working space), staged snapshot. Reconstruction ${discovered.ni_algo}_${discovered.ni_recon_idx}. Source path: ${discovered.source_relpath}. Held back in 2026-08 (no protocol code where the parser looked); ingested 2026-10 with the M. Jesus drive (stream N), which holds a byte-identical copy. ${discovered.note}"
+
+# operator: DELIBERATELY UNSET, as in the backfill (REVIEW_FINDINGS_2026-08-13 §5.3). The console user the
+# DICOM header records is in the notes.
+
+link_filename: "${discovered.modality}_${discovered.subject}_${acq_date}_${discovered.acq_datetime_full}_recon${discovered.ni_recon_idx}"
+
+anatomy:
+  is_whole_body: true

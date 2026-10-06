@@ -1,0 +1,30 @@
+original_name,reason
+20210128_090809_jrc210128_m50MBmrs_1_1/8,"never acquired: no ACQ_time, no fid, no 2dseq/visu_pars (setup scan)"
+20210128_102542_jrc210128_m53MBmrs_1_1/8,"never acquired: no ACQ_time, no fid, no 2dseq/visu_pars (setup scan)"
+20210129_113034_jrc210129_m57MBmrs_1_1/7,"never acquired: no ACQ_time, no fid, no 2dseq/visu_pars (setup scan)"
+20210129_125823_jrc210129_m56MBmrs_1_1/4,"never acquired: no ACQ_time, no fid, no 2dseq/visu_pars (setup scan)"
+20210222_085824_jrc210222_m55MBmrs_1_1/9,"never acquired: no ACQ_time, no fid, no 2dseq/visu_pars (setup scan)"
+20210222_104227_jrc210222_m58MBmrs_1_1/6,"never acquired: no ACQ_time, no fid, no 2dseq/visu_pars (setup scan)"
+20210301_125535_jrc210301_m57LVmrs_1_1/10,"never acquired: no ACQ_time, no fid, no 2dseq/visu_pars (setup scan)"
+20210302_093848_jrc210302_m56LVmrs_1_1/6,"never acquired: no ACQ_time, no fid, no 2dseq/visu_pars (setup scan)"
+20210128_090809_jrc210128_m50MBmrs_1_1/11,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210128_090809_jrc210128_m50MBmrs_1_1/9,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210128_102542_jrc210128_m53MBmrs_1_1/11,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210128_102542_jrc210128_m53MBmrs_1_1/9,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210129_113034_jrc210129_m57MBmrs_1_1/10,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210129_113034_jrc210129_m57MBmrs_1_1/8,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210129_125823_jrc210129_m56MBmrs_1_1/5,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210129_125823_jrc210129_m56MBmrs_1_1/7,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210222_085824_jrc210222_m55MBmrs_1_1/10,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210222_085824_jrc210222_m55MBmrs_1_1/13,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210222_104227_jrc210222_m58MBmrs_1_1/7,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210222_104227_jrc210222_m58MBmrs_1_1/9,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210301_125535_jrc210301_m57LVmrs_1_1/12,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210301_125535_jrc210301_m57LVmrs_1_1/13,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210301_125535_jrc210301_m57LVmrs_1_1/14,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210301_125535_jrc210301_m57LVmrs_1_1/15,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210302_093848_jrc210302_m56LVmrs_1_1/10,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210302_093848_jrc210302_m56LVmrs_1_1/11,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210302_093848_jrc210302_m56LVmrs_1_1/12,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210302_093848_jrc210302_m56LVmrs_1_1/8,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image
+20210302_093848_jrc210302_m56LVmrs_1_1/9,notregistered:non-image: spectroscopy/calibration method (PRESS); no reconstructed image

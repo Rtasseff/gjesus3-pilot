@@ -1,0 +1,64 @@
+# Historical drives, DICOM stream (stream B), group N03: Peio's 1319 liver PET/CT.
+# Review: tasks/drives_dicom_review.md (group N03). Inventory: _analysis\drives-dicom\inventory.csv.
+#
+# WHAT: 8 Molecubes reconstructions (4 PET OSEM_1 + 4 CT ISRA_0) of animals 29-32 of
+# protocol 1319, scanned 2021-05-14 by irati (DICOM PatientName "irati^/ 1319 / 210514").
+# Source: drive 1 `Former students\Peio\Projects Peio\Hígado\1319\210514\<animal>\`.
+# None is in NI production and none is in the S:\gnuclear snapshot (checked by
+# reconstruction key and by SHA-256). Facility DB: animals 29-32 of 1319 found, each
+# with "PET CUBES-1" on 2021-05-14.
+#
+# HOW: the same fan-in discovery as the S:\gnuclear pull (ni_molecubes_flat), because
+# these are loose machine-named DICOMs exactly like that source. The files are staged
+# by HARD LINK on D: (0 bytes) in the snapshot's own layout
+#     <year>/Jesus/<researcher>/<source sub-path>/<file>.dcm
+# so the shared grammar derives subject 29..32, series 1319, project 1319
+# (verified with ni_gnuclear_discover.analyse against the facility-DB code set).
+# researcher = Peio (whose project folder it is); the scanner operator was irati.
+#
+# PROJECT: AE-biomaGUNE-1319 does not exist yet. Creating it is pre-approved
+# (Ryan, 2026-10-02); auto_create_projects creates it on the first acquisition.
+#
+# DEDUP REHEARSAL: dicom_N03_sibling_dedup.yaml runs the same config against one
+# production CT (ACQ-20230808-CT-001) staged the same way; its dry run must skip it.
+#
+#   python tools/ingest_raw.py --config tools/configs/drives_2026-09/dicom/dicom_N03_1319_petct_peio.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  acquisition_layout: folder
+  copy_strategy: ni_molecubes_flat
+  auto_create_projects: true
+  delete_source_after_ingest: false        # NEVER delete: staged hard links of the drive copy
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/scratch_drives-dicom/stage_N03"
+  ni_gnuclear_flat: true
+  researchers: [Peio]
+  require_project: true
+  validate_projects: true
+  subject_parse:
+    field: subject
+  subject_from_db: true
+
+registry:
+  instrument:           discovered.modality
+  data_ecosystem:       DICOM
+  instrument_model:     "Molecubes (PET/SPECT/CT)"
+  researcher:           "${discovered.researcher_folder}"
+  data_source:          internal
+  sample_id:            "${discovered.subject}"
+  sample_type:          organism
+  acquisition_datetime: discovered.acq_datetime_full
+  session_id:           "${discovered.subject}_${discovered.acq_date8}"
+  project_name:         "AE-biomaGUNE-${discovered.project}"
+  notes:                "Historical drives (drive 1 FRIO-X6), Peio 1319 liver PET/CT; scanner operator irati. Reconstruction ${discovered.ni_algo}_${discovered.ni_recon_idx}. Source path: ${discovered.source_relpath}"
+
+auto_create_project:
+  owner:       "NI-platform"
+  description: "Animal protocol 1319. Created during the historical-drives DICOM ingest (Peio's liver PET/CT, 2021). PROVISIONAL."
+  notes:       "Creation pre-approved by Ryan 2026-10-02. Edit owner via _project.yaml."
+
+link_filename: "${discovered.modality}_${discovered.subject}_${acq_date}_${discovered.acq_datetime_full}_recon${discovered.ni_recon_idx}"
+
+anatomy:
+  is_whole_body: true

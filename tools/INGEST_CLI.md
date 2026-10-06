@@ -1,6 +1,6 @@
 # `ingest_raw.py` — CLI Reference
 
-*Last Updated: 2026-06-26*
+*Last Updated: 2026-10-05*
 
 One-page reference for the raw-data ingest tool. For the master map of every tool in this directory, see [`tools/INDEX.md`](INDEX.md). For the operational ("when do I run this, what do I do next") view, see [`mfb-rdm-docs/11_OPERATIONS.md §3.2`](../mfb-rdm-docs/11_OPERATIONS.md). For the full config-schema specification, see [`mfb-rdm-docs/10_TOOLS.md §2.1`](../mfb-rdm-docs/10_TOOLS.md).
 
@@ -50,6 +50,38 @@ By default a CLI ingest does **not** touch the researcher Finder. The global `re
 | `--nas-unc <unc>` | — | `$GJESUS3_UNC` or `\\GJESUS3\gjesus3` | Legacy `.lnk` porting-seam only — **not used by the current hard-link linker** (hard links use local NAS-volume paths). Retained for backward compatibility; safe to omit. |
 | `--project <name-or-id>` | — | — | Project applied to every row this run — a project **name** or a `PROJ-NNNN` id. Resolved at Step 9.5 and recorded as `project_id`. Overrides any value the YAML sets. |
 | `--delete-source` | — | off | Remove the source file/folder after copy + verify succeed. Parent day folder is never touched. Default OFF for safety; opt in per batch. |
+| `--unparsed-report <file.csv>` | — | off | Batch configs: also write every study folder whose name matched no `filename_parse` rule to this CSV, one row per study folder (see [below](#study-folders-that-match-no-parse-rule-not-parsed)). Written in `--dry-run` too. A plain report at the path you give: keep it out of the NAS `registries\` folder. |
+
+---
+
+## Study folders that match no parse rule (`NOT PARSED`)
+
+*(✅ 2026-10-05, Ryan, STATUS §0 D3.)* When a batch finds a match but the config's `filename_parse` rule (its `regex:`, or its `separator` + `fields`) cannot parse the name, **nothing under that name is ingested**. For MRI the rule runs on the **study folder** (`source: parent_name`), so one study name that does not parse drops every exam in the study. Until 2026-10-05 the only trace was one `[expand_batch] SKIP <exam>: …` line per exam, among thousands. That is how `jrc250526_145_0522` (the `m` was left out at the console) went unnoticed for two months.
+
+The run now says so in three places, `--dry-run` included:
+
+- one `[expand_batch] NOT PARSED: …` line right after discovery, plus a `WARN` with the count;
+- a **NOT PARSED** section in the BATCH SUMMARY, with one line per study folder and its exam-folder count. An exam folder is a folder holding `acqp` and `method`, the same test the ingest itself uses:
+
+  ```
+    NOT PARSED: 4 study folder(s) (10 exam folders) matched no filename_parse rule
+    NOTHING under them was ingested:
+      jl260707_1225_m26   1 exam folder
+      jrc221003_0721_m45  3 exam folders
+      jrc250526_145_0522  4 exam folders + 1 other entry
+      jrc260709_phantom   2 exam folders
+  ```
+
+- with **`--unparsed-report <file.csv>`**, the full list as a CSV, one row per study folder. Its columns: `target` (the study folder name), `n_exam_folders`, `n_matches`, `target_path`, `source`, `rule`, `reason`, `pattern`, `config`, `staging_dir`, `matches` (the dropped `<study>/<exam>` names) and `reported_at`. It is written right after discovery, so it survives a batch that fails later. There is no default location: put it beside your batch notes (for example `D:\projects\gjesus3\<batch>\unparsed.csv`), never in the NAS `registries\` folder.
+
+The operator front-ends show the same list. The MRI page of the ingest GUI names each study folder with its exam count, apart from the harmless housekeeping folders, and `mri-ingest` prints the block last, at the confirm prompt.
+
+**What to do with one.** Nothing is lost: the study simply did not go in. Do **not** loosen the shared regex to make it parse (the standing direction is to report, not guess). Ingest it with a scoped one-off config whose `pattern` names exactly that study, as `tools/configs/mri_0522_m145_irene.yaml` does for `jrc250526_145_0522` and the `tools/configs/mri_july_1125/mri_phantom_*.yaml` configs do for the phantoms. Another group's study (initials such as `jl`) is reported too; gjesus3 has so far left those out of scope.
+
+**What this report does not cover:**
+- a `filter:` miss (a deliberate exclusion), a `path_parse` depth mismatch and a non-scan sibling folder: each keeps its own SKIP line;
+- a name starting with `.`: the glob never returns it at all;
+- a study nested as `<study>\Other data\<exam>`: it is reported, but under the name `Other data` (its `target_path` names the real study).
 
 ---
 
@@ -60,7 +92,7 @@ Every config has up to four top-level blocks (three required + one optional, plu
 | Block | Required? | Purpose |
 |-------|-----------|---------|
 | `ingest:` | Yes | Pipeline control flags. Not registry columns. Keys: `delete_source_after_ingest`, `auto_create_projects`, `acquisition_layout` (`file` \| `archive` \| `folder`; round-6 added — `archive` implemented 2026-06-02 to store the source `.zip`/`.rar` as the primary), `archive_primary_from` (directory of source archives; required with `acquisition_layout: archive`; 2026-06-02), `reconstructions` (`all` \| int \| list; MRI-specific), `copy_strategy` (`mri_paravision_v2` \| `ni_molecubes` \| legacy `paravision_exam`; round-6 v2 added), `auto_regenerate_dicom` (`true` \| `false`, MRI-specific Phase 2 2026-06-01 — see [Dicomifier opt-in](#dicomifier-opt-in-for-no-dicom-mri-exams) below). |
-| `auto_discover:` | Yes | How to find cases inside `staging_dir` and what variables to extract. Supports `filename_parse:` (positional `separator:` + `fields:` OR named-group `regex:`; optional `source: name \| parent_name`) and `path_parse:` (named path levels between staging_dir and the match). Each case's parsed values land in `discovered.<name>`. |
+| `auto_discover:` | Yes | How to find cases inside `staging_dir` and what variables to extract. Supports `filename_parse:` (positional `separator:` + `fields:` OR named-group `regex:`; optional `source: name \| parent_name`), `path_parse:` (named path levels between staging_dir and the match) and `case_table:` (a CSV keyed on `original_name` whose columns become per-file `discovered.<column>` values — [below](#per-file-values-from-a-table--case_table)). Each case's parsed values land in `discovered.<name>`. |
 | `registry:` | Yes | Explicit per-column mapping. Values: literal (`MFB`), bare reference (`discovered.operator`), interpolation (`"${discovered.stain} at ${discovered.czi_objective_mag}x"`), or `NA`. New DRAFT columns since round 6: `session_id` (ISA "study" grouping) and `primary_kind` (auto, set by pipeline). |
 | `auto_create_project:` | Optional | First-time project-creation metadata (owner / description / notes), resolver-evaluated. First-write-wins. |
 | `link_filename:` (top-level string, NEW 2026-05-22) | Optional | Template for the project link name placed under `/projects/<proj>/raw_linked/` (a hard link since 2026-06-02 — used verbatim, no extension). Context = `discovered.*` + resolved registry fields + `${acq_id}` + `${acq_date}`. Per-instrument templates ship recommended defaults. Falls back to `original_name` when unset (backward-compatible with rounds 1-2/4/5). See [10_TOOLS §2.1.5](../mfb-rdm-docs/10_TOOLS.md). |
@@ -82,6 +114,23 @@ registry:
 operator:       discovered.operator              # SIDECAR-ONLY top-level key (the tech) -> "MBC"
 ```
 
+### Per-file values from a table — `case_table:`
+
+For a Data-Office batch where project / researcher / operator / subject were decided **per file** beforehand (the historical-drives ingest, 2026-09-30). Default off.
+
+```yaml
+auto_discover:
+  case_table:
+    file: cases_B03.csv        # relative to this config file; column `original_name` + any others
+    on_missing: error          # error (default) aborts the batch if a file has no row; or skip
+registry:
+  project_name: discovered.drv_project
+  researcher:   discovered.drv_researcher
+operator: discovered.drv_operator
+```
+
+`original_name` is the path relative to `staging_dir`, with forward slashes. A table value beats any filename/path value of the same name; a blank cell stays blank. Full rules: [`10_TOOLS §2.1.3`](../mfb-rdm-docs/10_TOOLS.md).
+
 ### Auto-populated columns (do NOT list in `registry:`)
 
 The pipeline fills these itself: `acq_id`, `registration_datetime`, `primary_kind`, `primary_file_name`, `original_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `ingest_config`.
@@ -91,12 +140,16 @@ The pipeline fills these itself: `acq_id`, `registration_datetime`, `primary_kin
 By default, the project link placed under `/projects/<proj>/raw_linked/` is named after `original_name` (e.g. the `.czi` filename or the collaborator zip name). For systematic-naming environments (internal MRI, future internal NI) where the *source* identifier is a folder path + numeric position, the default would collide when multiple sessions land in the same project (e.g. four animals with the same exam number). Set `link_filename:` at the top level of the YAML to override. (The link is a hard link since 2026-06-02 — the resolved value is the link name verbatim, with no extension; see [10_TOOLS §2.1.1](../mfb-rdm-docs/10_TOOLS.md).)
 
 ```yaml
-# Internal MRI default — unique per (animal, exam, reconstruction):
-link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
-# Resolved example: MRI_jrc_251016_m17_0424_20251016_29_3
+# Internal MRI default — unique per (animal, study, exam, reconstruction):
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.study_time}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
+# Resolved example: MRI_m17_0424_20251016_0838_29_3
 ```
 
+`${discovered.study_time}` (added 2026-10-05) is the study start time, `HHMM`, from the ParaVision study folder's `YYYYMMDD_HHMMSS_` prefix. Without it, two studies of one animal on one day get the same name for every exam number they share. Links made before 2026-10-05 keep the names they were made with.
+
 The resolver context includes every `discovered.*` field (see the per-instrument template header for the full reference card per instrument), every resolved registry field (`${sample_id}`, `${instrument}`, etc.), and the computed `${acq_id}` + `${acq_date}` (YYYYMMDD). Unresolved `${X}` references log a WARN and leave the literal in place — better than silently producing a broken name.
+
+**A link name that is already taken is refused (2026-10-05).** Before anything is copied, the ingest checks the project's `raw_linked/` for the resolved name. If anything is already there (another acquisition's link, any file or folder, or the `.PENDING-LINK.txt` stand-in of a link still queued), that case **fails**: nothing is copied or registered, and the log and batch summary say which name is taken. `--dry-run` runs the same check, and also flags two cases in one batch that would get the same name. The fix is a distinct name (edit `link_filename:`), or, if the case is a re-export of data already ingested, not ingesting it. Earlier, the second acquisition was silently merged into the first one's link folder.
 
 ### Preclinical metadata surface — `subject:` / `condition:` / `anatomy:` (Phase 3)
 
@@ -177,7 +230,7 @@ tools/configs/
 |------------|----------|-------|
 | Zeiss AxioScan 7 (`ZWSI`, `.czi`) | [`tools/templates/instruments/axioscan7.yaml`](templates/instruments/axioscan7.yaml) | MFB filename convention; auto-create projects from filename's `<project>` chunk; default `link_filename: ${instrument}_${original_name}` |
 | Zeiss Cell Observer cells-mode (`CELL`, `.czi`) | [`tools/templates/instruments/cell_observer_cells.yaml`](templates/instruments/cell_observer_cells.yaml) | Path-and-filename parse for live-cell / cell-assay workflows (Ainhize-acquired); default `link_filename: ${instrument}_${original_name}` |
-| Internal MRI / Bruker ParaVision (`MRI`, folder bundle) | [`tools/templates/instruments/mri_bruker.yaml`](templates/instruments/mri_bruker.yaml) | Folder-as-primary layout, `regex:` extract on the messy FTP folder name, `reconstructions:` flag, default `link_filename: MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}` |
+| Internal MRI / Bruker ParaVision (`MRI`, folder bundle) | [`tools/templates/instruments/mri_bruker.yaml`](templates/instruments/mri_bruker.yaml) | Folder-as-primary layout, `regex:` extract on the messy FTP folder name, `reconstructions:` flag, default `link_filename: MRI_${sample_id}_${acq_date}_${discovered.study_time}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}` |
 
 Each template's **header comment block lists every `discovered.*` field** the operator can reference in resolver-evaluated YAML fields — the per-instrument reference card.
 
@@ -238,6 +291,6 @@ Walks the m13 + m17 staged source against the newly-populated `/raw/` and confir
 1. **Run with `--dry-run` first.** It catches most config errors before any NAS write.
 2. **Read the log.** Every line is prefixed with a step number (1–12). The failure point tells you where to look.
 3. **The script is idempotent.** Re-running with the same config will not duplicate rows; previously-ingested acquisitions are skipped with a log line explaining why.
-4. **Don't hand-edit registries.** If a row is wrong, contact the Data Mgmt Lead — corrections need to land cleanly so the audit chain stays intact.
+4. **Don't hand-edit registries.** If a row is wrong, contact the Data Mgmt Lead — corrections need to land cleanly so the audit chain stays intact. A row that should not be there at all (a duplicate registration, a scale-bar copy or thumbnail registered as an acquisition) is **retired** by the Data Office with `tools/retire_acquisition.py`, never deleted by hand ([10_TOOLS §3.9](../mfb-rdm-docs/10_TOOLS.md), procedure in [11_OPERATIONS §5.7](../mfb-rdm-docs/11_OPERATIONS.md)).
 5. **The source is preserved by default.** `--delete-source` is opt-in. If you didn't pass it, your source files are still on the instrument share.
-6. **What an ingest actually touches / reversing one.** For the complete inventory of every file and row a single ingest writes — including the ones that aren't obvious (`registry_subjects.csv`, `pending_subject_metadata.csv`, the project `provenance.csv`, and the hidden `.acq_id_seq.json` ACQ-ID reservation) — and how to reverse each, see the **Side-effect inventory** in [`10_TOOLS §2.1`](../mfb-rdm-docs/10_TOOLS.md#side-effect-inventory-everything-an-ingest-writes-audit-and-reversal-reference). Removing a committed acquisition is a Data-Office manual, backup-first operation (there is no `delete-acquisition` tool).
+6. **What an ingest actually touches / reversing one.** For the complete inventory of every file and row a single ingest writes — including the ones that aren't obvious (`registry_subjects.csv`, `pending_subject_metadata.csv`, the project `provenance.csv`, and the hidden `.acq_id_seq.json` ACQ-ID reservation) — and how to reverse each, see the **Side-effect inventory** in [`10_TOOLS §2.1`](../mfb-rdm-docs/10_TOOLS.md#side-effect-inventory-everything-an-ingest-writes-audit-and-reversal-reference). Removing a committed acquisition is Data-Office-only: a duplicate, a derivative or an orphan `/raw/` folder is retired with `tools/retire_acquisition.py` (dry run by default, backup first, never during an ingest; its row moves to `registries/retired_acquisitions.csv` and the id is never reused). Anything else is still a manual, backup-first operation.

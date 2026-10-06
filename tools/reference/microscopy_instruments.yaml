@@ -1,0 +1,49 @@
+# Which physical Zeiss instrument wrote a .czi, from the file's OWN metadata.
+#
+# Read by tools/drive_staging/catalog.py (drive catalog + production audit) and meant to be
+# reused by the historical-drive ingest. Established 2026-09-29 by testing against production.
+#
+# THE STAND NAME DOES NOT IDENTIFY THE INSTRUMENT. `Information/Instrument/Microscopes/
+# Microscope/@Name` reads `Axio Observer.Z1 / 7` on the Cell Observer AND on the LSM 900 (the
+# LSM 900 is built on an Axio Observer stand), and about 60% of LSM 900 files are widefield
+# camera images. ZEN's `System` field also misleads: it writes "LSM 800" on some LSM 900 files.
+# Cameras (AxioCamMRm3 / Axiocam305c) do not identify it either.
+#
+# What does identify it lives under `Metadata/HardwareSetting`:
+#   * every `Device/@SerialNumber` (non-empty ones), and
+#   * every `StandSpecification/StandCharacteristic/@Key`.
+#
+# Evidence (2026-09-29, read-only):
+#   * 12 production sidecars per instrument all fit: every LSM9 carries serial 03761880 and
+#     key LSM; every ZWSI carries 4661000718; every CELL carries key Inverted and no serial.
+#   * A stratified sample of 379 drive .czi fell into exactly these clusters, plus 9 files with
+#     empty/missing metadata (possibly processed exports).
+#   * The one "LSM 800" file in the drive brief carries 03761880: it is our LSM 900
+#     (drive1: Cell observer\AINHIZE\CONFOCAL LSM 900\ITZIAR_Lipofectamine mCherry\24h\CS_2.czi).
+#
+# Rules are evaluated IN ORDER; the first that fires names the instrument. If more than one
+# entry fires for the same file the catalog flags "fingerprint-conflict". A file that fires none
+# is `unknown` and its fingerprint is tabulated, never guessed.
+#
+# `code` is the gjesus3 instrument code. `EXTERNAL:*` codes are provisional labels for data from
+# instruments that are not ours; the real `X`-code (like `XMRI`) is not assigned yet.
+instruments:
+  - code: LSM9
+    name: ZEISS LSM 900 (confocal, on an Axio Observer stand)
+    serials: ["03761880"]
+    stand_keys_any: [LSM]        # present even on its widefield images. A file with this key but
+                                 # without the serial is reported prominently (LSM-scan check).
+  - code: ZWSI
+    name: ZEISS Axioscan 7 (whole-slide scanner)
+    serials: ["4661000718"]      # stand keys: Pollux, UprightFixedStage; stand name "Axioscan 7"
+  - code: "EXTERNAL:AxioImagerZ2"
+    name: ZEISS Axio Imager.Z2, external (Charite, Berlin?) -- researcher to confirm
+    external: true
+    serials: ["784053"]          # stand key: Upright. 338 files, all under ...\Ferritas\Charite\,
+                                 # acquired 2024-09-27 .. 2024-10-11. Ryan 2026-09-29: enters as
+                                 # external data with its own X-code (not yet named).
+  - code: CELL
+    name: ZEISS Cell Observer (Axio Observer.Z1 / 7, widefield)
+    no_serials: true             # the Cell Observer writes NO device serial
+    stand_keys_exact: [Inverted] # exactly this set
+    stand_name: "Axio Observer.Z1 / 7"

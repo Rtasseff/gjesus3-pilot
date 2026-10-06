@@ -15,12 +15,53 @@ WHAT IT CHECKS
     - acq_id matches ACQ-YYYYMMDD-<CODE>-NNN.
     - required columns non-empty per row: acq_id, registration_datetime,
       data_ecosystem, instrument, canonical_path.
+    - no registry cell (any column) contains unsubstituted template residue:
+      `${...}` / `{{...}}` resolver expressions, or a `<...>` angle-bracket
+      placeholder. ERROR — this is what let a literal "Bruker BioSpec
+      <7T|11.7T>" sit in 10,314 production instrument_model cells through
+      repeated clean validator runs (fixed 2026-08-20; see CHANGELOG).
+    - the operator hold value `pending-claim` (ingest.registry.OPERATOR_HOLD,
+      "awaiting claim"; 06_REGISTRIES §2.3a-bis) is accepted in the `operator`
+      column -- neither an ERROR nor a WARN; the rows are counted and reported
+      as one info line -- and is an ERROR when it is the WHOLE value of any
+      OTHER column (stripped, case-insensitive): the token means one thing
+      only. A note that merely mentions it in running text is documentation,
+      not drift, and is not reported. The template-residue check above is not
+      relaxed for it (the token carries no template syntax, so it passes that
+      check on its own).
     - sample_type, when set, is in the controlled vocab
       {tissue, organism, cells, material, phantom}.
     - canonical_path starts with /raw/ and the acquisition folder exists on
       disk (canonical_path joined to nas_root).
     - project_id, when set and matching PROJ-XXXX, exists in
       registries/registry_projects.csv.
+    - subject_ids carries no null-alias facility id (`<n>-AE-biomaGUNE-None`,
+      or a bare `<n>-AE-biomaGUNE-` with nothing after the stem). ERROR, not
+      WARN: the alias is what makes the id UNIQUE, so a null one is ambiguous
+      — every null-alias protocol collapses onto the same id and the subjects
+      table then merges two different animals into one row.
+
+  retired_acquisitions.csv (the tombstone file; 06_REGISTRIES §2.9) -- only when it exists
+    - header EXACTLY equals ingest.retired.RETIRED_FIELDS.
+    - disposition and bytes_fate are known values (ingest.retired.DISPOSITIONS / BYTES_FATES). ERROR.
+    - a `reidentified` id's superseded_by is the same acquisition under another instrument code
+      (same original_name and acquisition_datetime, a different instrument). ERROR.
+    - no id is both live (registry_raw) and retired. ERROR -- also the signature of a
+      retire run that crashed mid-commit: re-run retire_acquisition.py to finish it.
+    - every superseded_by (blank only for an orphan) names a LIVE acquisition. ERROR.
+    - no curated dataset (registry_datasets.csv + the text files under
+      curated_datasets/) cites a retired id. ERROR.
+    - a retired id's /raw/ folder no longer exists. ERROR -- a retire run that
+      stopped before its bytes step; re-run it.
+    The /raw/ "folder exists" check above only walks LIVE rows, so retired ids
+    are never reported as missing folders; nothing here looks for unregistered
+    /raw/ folders (BACKLOG, "17 orphan acquisition folders").
+
+  registry_subjects.csv
+    - project_alias is never the literal "None"/"null", and never blank for a
+      facility_id that IS a canonical `<n>-AE-biomaGUNE-<NNNN>` id. A blank
+      alias on a NON-canonical id (the DTS24 human subjects, facility ids like
+      "LEONE_1.01" with source=dicom-header) is legitimate and not reported.
 
   Phase 3 enrichment (WARN-level, non-blocking model — 08_METADATA §4.3-4.7)
     For rows whose sample_type is organism or tissue, the sidecar
@@ -52,6 +93,14 @@ if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
 from ingest import registry  # noqa: E402  (after sys.path tweak)
+from ingest import retired  # noqa: E402
+# Aliased: the local variable `project_ids` in check_registry_raw is the SET of
+# known ids, and would shadow the module.
+from ingest import project_ids as proj_id_cell  # noqa: E402
+# Imported for the ONE constant, not for the DB: the subject-id stem must be
+# read from the module that composes the ids, so the detector and the composer
+# can never drift apart. animal_db imports cleanly with no pymysql/credentials.
+from animal_db import PROJECT_CODE_STEM  # noqa: E402
 
 
 def log(msg, level="INFO"):
@@ -82,6 +131,22 @@ SAMPLE_TYPE_VOCAB = {"tissue", "organism", "cells", "material", "phantom"}
 # sample_types that require Phase 3 preclinical enrichment blocks.
 ENRICH_SAMPLE_TYPES = {"organism", "tissue"}
 
+# Canonical facility subject id: <animal_code>-AE-biomaGUNE-<NNNN>. Mirrors
+# animal_db.SUBJECT_ID_RE but is deliberately LOOSER on the alias — it must
+# also match the broken forms we are hunting, which the strict `\w+` version
+# would either reject (empty alias) or silently accept (the literal "None").
+SUBJECT_ID_STEM_RE = re.compile(
+    r"^(?P<animal_code>\d+)-" + re.escape(PROJECT_CODE_STEM) + r"-(?P<alias>.*)$",
+    re.IGNORECASE)
+
+# Alias values that carry no information. "none"/"null" are the SQL-NULL leak:
+# a facility project row with a populated project_code and a NULL projectAlias
+# used to format straight into the id string. See tasks/BACKLOG.md
+# "Facility-DB null project alias" and tasks/SUBJECT_ID_NULL_ALIAS_HANDOFF.md.
+NULL_ALIASES = {"", "none", "null"}
+
+SUBJECTS_REGISTRY = "registry_subjects.csv"
+
 
 # ---- Issue collection ----------------------------------------------------
 
@@ -91,6 +156,9 @@ class Issues:
     def __init__(self):
         self.errors = []
         self.warnings = []
+        # Rows whose `operator` is the hold value. A count for print_report's one
+        # info line -- deliberately NOT a warning (that channel is saturated).
+        self.operator_hold = 0
 
     def error(self, msg, acq_id=None):
         self.errors.append((acq_id, msg))
@@ -152,6 +220,223 @@ def _load_project_ids(registries_dir, issues):
         )
         return None
     return {(r.get("project_id") or "").strip() for r in rows}
+
+
+# ---- Null-alias subject-id checks (ERROR-level) --------------------------
+
+def is_facility_id(subject_id):
+    """True when the id claims to name an animal under an AE-biomaGUNE protocol.
+
+    This is the line between IN scope and OUT: a DTS24 human subject id
+    ("LEONE_1.01", source=dicom-header) has no animal protocol, so a blank
+    alias on it is correct and must never be reported (handoff §7).
+    """
+    return PROJECT_CODE_STEM.lower() in (subject_id or "").lower()
+
+
+def null_alias_of(subject_id):
+    """The broken alias in a facility subject id, else None.
+
+    Returns the offending alias string ("" / "None" / "null") when `subject_id`
+    is a `<animal_code>-AE-biomaGUNE-<alias>` id whose alias carries no
+    information; returns None when the id is fine, or is not a facility id at
+    all.
+    """
+    s = (subject_id or "").strip()
+    m = SUBJECT_ID_STEM_RE.match(s)
+    if m:
+        alias = m.group("alias").strip()
+        return alias if alias.lower() in NULL_ALIASES else None
+
+    # Belt and braces. A malformed id that still ENDS in the broken stem (no
+    # animal code, a stray prefix) fails the grammar above and would slip past
+    # a grammar-only detector — which is precisely how a backfill declares
+    # victory over rows it never touched. Under-report nothing here.
+    low = s.lower()
+    for null in ("none", "null"):
+        if low.endswith(f"-{PROJECT_CODE_STEM.lower()}-{null}"):
+            return s[-len(null):]
+    if low.endswith(f"-{PROJECT_CODE_STEM.lower()}-"):
+        return ""
+    return None
+
+
+def check_subject_ids(cell, label, issues):
+    """ERROR for every null-alias id packed into one registry_raw.subject_ids cell.
+
+    The cell is a `;`-joined 1..N list (NI-LIVE-08); check it id-by-id so a
+    multi-animal scan reports the bad member, not the whole cell.
+    """
+    for part in (cell or "").split(";"):
+        sid = part.strip()
+        if not sid:
+            continue
+        alias = null_alias_of(sid)
+        if alias is not None:
+            issues.error(
+                f"subject_ids carries the null-alias facility id '{sid}' "
+                f"(alias {alias!r}) - ambiguous: every null-alias protocol "
+                f"collapses onto this id", label)
+
+
+# ---- Unsubstituted template-residue checks (ERROR-level) -----------------
+
+# Unsubstituted template syntax left in a registry cell means an `# EDIT:`
+# manual step was described but never performed before a config was run.
+# This is the detection gap that let a literal "Bruker BioSpec <7T|11.7T>"
+# placeholder sit in 10,314 production instrument_model cells through
+# repeated clean validator runs (fixed 2026-08-20; see CHANGELOG). Three
+# forms recognized: `${...}` / `{{...}}` unresolved resolver expressions,
+# and a `<...>` angle-bracket placeholder (e.g. the example above, or
+# "<REQUIRED - set via mri-ingest --operator, or replace here>").
+TEMPLATE_RESIDUE_RE = re.compile(r"\$\{[^}]*\}|\{\{[^}]*\}\}|<[^<>\n]*>")
+
+
+def check_template_residue(row, label, issues):
+    """ERROR for any registry cell that still contains unsubstituted template
+    syntax.
+
+    Deliberately column-agnostic: it does not matter which column broke —
+    that is exactly what let the MRI instrument_model incident above go
+    undetected for as long as it did. Scans every cell in the row rather
+    than special-casing a known-risky column.
+    """
+    for col, value in row.items():
+        val = value or ""
+        if not val:
+            continue
+        m = TEMPLATE_RESIDUE_RE.search(val)
+        if m:
+            issues.error(
+                f"column '{col}' still contains unsubstituted template "
+                f"syntax {m.group()!r} (full value: {val!r})", label)
+
+
+# ---- The `operator` hold value (ERROR outside `operator`) ----------------
+
+def check_operator_hold(row, label, issues):
+    """The hold value `pending-claim` (registry.OPERATOR_HOLD) means ONE thing: this
+    acquisition's operator is not known yet and a claim is open (06_REGISTRIES
+    §2.3a-bis). Blank is the other, final, state: unknown.
+
+    In `operator` it is ACCEPTED -- explicitly, not merely because it happens to
+    carry no template syntax -- and counted in issues.operator_hold for
+    print_report's info line. In any OTHER column it is an ERROR when the WHOLE
+    cell, stripped and compared case-insensitively, is the token: the token used
+    as a value in `researcher`, `notes`, ... is drift, and a token that means one
+    thing only must not be able to drift. A cell that merely MENTIONS it in running
+    text ("claimed by Irene 2026-11; was pending-claim") is documentation, not a
+    defect, and is not reported.
+    """
+    hold = registry.OPERATOR_HOLD
+    for col, value in row.items():
+        # A DictReader row with surplus fields carries a list under the key None.
+        if not isinstance(value, str) or not value:
+            continue
+        if col == "operator":
+            if value == hold:
+                issues.operator_hold += 1
+        elif value.strip().lower() == hold.lower():
+            issues.error(
+                f"column '{col}' holds the operator hold value {hold!r}, which is "
+                f"valid in the 'operator' column only (full value: {value!r})", label)
+
+
+def check_subjects_registry(registries_dir, issues):
+    """ERROR-level scan of registry_subjects.csv for null project aliases.
+
+    Two ways the same defect shows up: the alias column literally reading
+    "None"/"null", and a canonical facility_id whose own alias segment is
+    broken. A blank alias on a NON-canonical facility_id is legitimate (the
+    DTS24 human subjects have no animal protocol) and is NOT reported.
+
+    A missing table is a WARN, mirroring _load_project_ids — the file need not
+    exist on a fresh NAS.
+    """
+    path = os.path.join(registries_dir, SUBJECTS_REGISTRY)
+    header, rows = _read_csv_rows(path)
+    if header is None:
+        issues.warn(
+            f"{SUBJECTS_REGISTRY} not found; subject null-alias checks skipped.")
+        return 0
+
+    for i, row in enumerate(rows, start=2):  # +2: header is line 1
+        fid = (row.get("facility_id") or "").strip()
+        label = fid or f"<{SUBJECTS_REGISTRY} row {i}>"
+        alias = (row.get("project_alias") or "").strip()
+
+        bad_in_id = null_alias_of(fid)
+        if bad_in_id is not None:
+            issues.error(
+                f"{SUBJECTS_REGISTRY}: facility_id '{fid}' has a null project "
+                f"alias ({bad_in_id!r}) - two different animals can share it",
+                label)
+
+        if alias.lower() in ("none", "null"):
+            issues.error(
+                f"{SUBJECTS_REGISTRY}: project_alias is the literal "
+                f"{alias!r}", label)
+        elif not alias and is_facility_id(fid):
+            # Blank alias is only wrong when the id itself claims to be a
+            # facility animal id; blank on LEONE_1.01-style human ids is fine.
+            issues.error(
+                f"{SUBJECTS_REGISTRY}: project_alias is empty for the "
+                f"facility id '{fid}'", label)
+
+    return len(rows)
+
+
+# ---- Retired-acquisition (tombstone) checks (ERROR-level) ----------------
+
+def check_retired(nas_root, registries_dir, live_ids, issues, live_rows=None):
+    """ERROR-level checks of registries/retired_acquisitions.csv against the live registry.
+
+    A no-op when the file does not exist (nothing has ever been retired), so the
+    validator's output on a registry without retirements is unchanged.
+    ``live_rows`` ({acq_id: row}) enables the `reidentified` consistency check.
+    """
+    path = retired.retired_path(registries_dir)
+    if not os.path.exists(path):
+        return 0
+    header, _rows = _read_csv_rows(path)
+    if header != retired.RETIRED_FIELDS:
+        issues.error(f"{retired.RETIRED_FILENAME} header does not match RETIRED_FIELDS: {header}")
+        return 0
+    tombs = retired.read_retired(path)
+    for acq, t in tombs.items():
+        disp = (t.get("disposition") or "").strip()
+        if disp not in retired.DISPOSITIONS:
+            issues.error(f"retired with an unknown disposition {disp!r} (known: {retired.DISPOSITIONS})", acq)
+        if (t.get("bytes_fate") or "").strip() not in retired.BYTES_FATES:
+            issues.error(f"retired with an unknown bytes_fate {t.get('bytes_fate')!r}", acq)
+        if acq in live_ids:
+            issues.error("is both live (registry_raw.csv) and retired "
+                         f"({retired.RETIRED_FILENAME}) -- a retire run stopped mid-commit? "
+                         "re-run retire_acquisition.py to finish it", acq)
+        sup = (t.get("superseded_by") or "").strip()
+        if sup and sup not in live_ids:
+            issues.error(f"retired, superseded_by {sup}, which is not a live acquisition"
+                         + (" (it is retired too)" if sup in tombs else ""), acq)
+        elif not sup and disp != "orphan":
+            issues.error(f"retired as {t.get('disposition')!r} with no superseded_by", acq)
+        elif disp == "reidentified" and live_rows is not None and sup in live_rows:
+            # A re-identified id's superseded_by is the SAME acquisition under another instrument code.
+            old = retired.original_row(t, registry.REGISTRY_FIELDS)
+            new = live_rows[sup]
+            if old and (old.get("original_name") != new.get("original_name")
+                        or old.get("acquisition_datetime") != new.get("acquisition_datetime")
+                        or old.get("instrument") == new.get("instrument")):
+                issues.error(f"re-identified as {sup}, but {sup} is not this acquisition under another "
+                             f"instrument code (original_name / acquisition_datetime / instrument)", acq)
+        old = (t.get("original_canonical_path") or "").strip()
+        if old.startswith("/raw/") and os.path.isdir(_acq_folder_on_disk(nas_root, old)):
+            issues.error(f"retired, but its /raw/ folder still exists ({old}) -- a retire run "
+                         "stopped before deleting it; re-run retire_acquisition.py", acq)
+    if tombs:
+        cites = retired.curated_citations(nas_root)
+        for acq in sorted(set(cites) & set(tombs)):
+            issues.error(f"retired, but cited by curated dataset(s): {'; '.join(cites[acq])}", acq)
+    return len(tombs)
 
 
 # ---- Sidecar enrichment check (Phase 3, WARN-level) ----------------------
@@ -263,14 +548,25 @@ def validate(nas_root, check_enrich=True):
             if not (row.get(col) or "").strip():
                 issues.error(f"required column '{col}' is empty", label)
 
-        # 5. sample_type controlled vocab (blank allowed)
+        # 5. no unsubstituted template residue in any cell (${...} / {{...}}
+        # / <...>) — independent of every other check: it does not need a
+        # resolvable folder or a known column, so it still runs when
+        # --no-enrichment is set.
+        check_template_residue(row, label, issues)
+
+        # 5b. the operator hold value: accepted (and counted) in `operator`, an
+        # ERROR as the whole value of any other column. Registry-cell only, like
+        # step 5.
+        check_operator_hold(row, label, issues)
+
+        # 6. sample_type controlled vocab (blank allowed)
         sample_type = (row.get("sample_type") or "").strip()
         if sample_type and sample_type not in SAMPLE_TYPE_VOCAB:
             issues.error(
                 f"sample_type '{sample_type}' not in controlled vocab "
                 f"{sorted(SAMPLE_TYPE_VOCAB)}", label)
 
-        # 6. canonical_path /raw/-rooted + folder exists on disk
+        # 7. canonical_path /raw/-rooted + folder exists on disk
         canonical = (row.get("canonical_path") or "").strip()
         folder = None
         if canonical:
@@ -286,18 +582,37 @@ def validate(nas_root, check_enrich=True):
                         f"(from canonical_path '{canonical}')", label)
                     folder = None  # don't chase a sidecar we can't reach
 
-        # 7. project_id existence (only PROJ-XXXX form, only if we have a set)
-        proj = (row.get("project_id") or "").strip()
-        if proj and PROJ_ID_RE.match(proj) and project_ids is not None:
-            if proj not in project_ids:
-                issues.error(
-                    f"project_id '{proj}' not found in "
-                    f"registry_projects.csv", label)
+        # 8. project_id existence (only PROJ-XXXX form, only if we have a set).
+        # Since 2026-08-12 no tool writes more than one id (write-once —
+        # 06_REGISTRIES §2.3b), but this stays split-based on purpose: a legacy
+        # or hand-edited `;` cell is then still checked id-by-id. Testing the
+        # whole cell would make PROJ_ID_RE fail on such a value, which SKIPS the
+        # existence check rather than failing it — a dangling id would go
+        # unreported, which is the silent-failure mode this whole area exists
+        # to avoid.
+        for proj in proj_id_cell.split_project_ids(row.get("project_id")):
+            if PROJ_ID_RE.match(proj) and project_ids is not None:
+                if proj not in project_ids:
+                    issues.error(
+                        f"project_id '{proj}' not found in "
+                        f"registry_projects.csv", label)
 
-        # 8. Phase 3 enrichment (WARN) — needs a resolvable folder
+        # 9. subject_ids null-alias detector (ERROR). Independent of the
+        # sidecar walk: it reads the registry cell only, so it still runs when
+        # --no-enrichment is set or the acquisition folder is unreachable.
+        check_subject_ids(row.get("subject_ids"), label, issues)
+
+        # 10. Phase 3 enrichment (WARN) — needs a resolvable folder
         if (check_enrich and sample_type in ENRICH_SAMPLE_TYPES
                 and folder is not None):
             check_enrichment(acq or label, sample_type, folder, issues)
+
+    # 11. registry_subjects.csv null-alias detector (ERROR).
+    check_subjects_registry(registries_dir, issues)
+
+    # 12. the tombstone file (ERROR) -- only when it exists.
+    check_retired(nas_root, registries_dir, set(seen_acq), issues,
+                  live_rows={(r.get("acq_id") or "").strip(): r for r in rows})
 
     return issues, len(rows)
 
@@ -312,6 +627,9 @@ def print_report(issues, n_rows):
     print(f"rows checked: {n_rows}")
     print(f"errors:       {len(issues.errors)}")
     print(f"warnings:     {len(issues.warnings)}")
+    # Informational only: not an error, not a warning (06_REGISTRIES §2.3a-bis).
+    print(f"operator awaiting claim ({registry.OPERATOR_HOLD}): "
+          f"{issues.operator_hold}")
     print()
 
     if issues.errors:

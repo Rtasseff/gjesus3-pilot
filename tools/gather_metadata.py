@@ -31,6 +31,7 @@ from datetime import datetime
 # Make the sibling ingest/ package importable whether run from tools/ or elsewhere.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ingest import registry  # noqa: E402  (REGISTRY_FIELDS is the canonical schema)
+from ingest import project_ids as pids  # noqa: E402  (the ;-separated project cell)
 
 
 def log(msg, level="INFO"):
@@ -94,7 +95,12 @@ def merge_acq(nas_root, row, project_rows):
         log(f"raw sidecar unreadable for {acq}", "WARN")
         return None
 
-    proj_dir = _project_folder(nas_root, project_rows, row.get("project_id", ""))
+    # `project_id` is a `;`-separated list; the study-metadata folder is the
+    # FIRST (original) project's. Passing the raw cell matched nothing and
+    # silently skipped the whole study-metadata merge for a shared acquisition.
+    _row_pids = pids.split_project_ids(row.get("project_id"))
+    proj_dir = _project_folder(nas_root, project_rows,
+                               _row_pids[0] if _row_pids else "")
     if proj_dir:
         meta_dir = os.path.join(proj_dir, "metadata")
         # Per-acq study supplement -> nest under "study" (never clobber raw keys).

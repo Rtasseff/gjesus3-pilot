@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED (core ingest pipeline, hard-link project links, and operator GUI are in true production; a few forward-looking helpers remain 🕗 PLANNED — flagged inline)
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-10-05 (later; branch `feat/mri-unparsed-report`) (**§2.1.3**: ✅ Ryan, STATUS §0 D3: a name that matches no `filename_parse` rule is **reported, not only skipped** — one record per study folder with its exam-folder count (`ingest/unparsed.py`), a NOT PARSED section in the BATCH SUMMARY, `ingest_raw.py --unparsed-report <file.csv>`, and the MRI preview lists the study folders; the bullet that said a regex non-match is "still ingested" is corrected, the code never ingested it. No regex relaxed.) · Prior: 2026-10-05 (Ryan approved "fix code + repair" and confirmed the MRI form) (**§2.1.1 / §2.1.5**: ✅ a project link name that is already taken is **refused, never merged into** — the ingest checks it before the copy (new pre-flight after step 5) and `linker.create_hardlink` raises `LinkCollisionError` instead of filling another acquisition's link folder; the **MRI default `link_filename:` gains the study start time** `${discovered.study_time}` (`HHMM`), so two studies of one animal on one day get distinct names. Existing links keep their names.) · Prior: 2026-10-04 (**§3.9**: ✅ the retire tool v2 design accepted by Ryan; v1 in production use since 2026-10-02) · Prior: 2026-10-02 (later; branch `feat/retire-v2`) (**§3.9** 🔶 retire tool v2: the `equivalent` disposition — a `.czi` re-save retired when its content is identical — and `reidentified` — a mis-coded acquisition re-registered in place under its correct instrument code, the same file hard-linked into the new id's folder. Built, tested, rehearsed on scratch; not used in production.) Prior: 2026-10-02 (**§2.1.3** new default-off `auto_discover.case_table:` — a CSV keyed on `original_name` whose columns become per-case `discovered.<column>` values, so a config can set project / researcher / operator / subject **per file**; built for the historical-drives ingest. New instrument code `XMIC` (external microscope `.czi`) in `ingest/config.py`.) Prior: 2026-10-01 (new **§3.9 `retire_acquisition`** — the Data-Office-only tool that retires an ACQ-ID (duplicate / derivative / orphan) into the tombstone file [06_REGISTRIES §2.9](06_REGISTRIES.md). **§2.1:** the "deliberately no `delete-acquisition` tool" paragraph is amended (intent kept, means changed); the side-effect inventory's *Reverse by* column points at the tool, and gains the two rows it was missing (`pending_dicom_regen.csv`, `pending_links.csv`). **§3.2** `validate_registries` gains four tombstone ERRORs.) Prior: 2026-09-04 (**§5.2** the MRI page's **destination project is token-valued** — "a name I set" is a token field with its own palette, not a text box, so one run can file scans into several projects; the engine was unchanged, only the GUI had withheld it. Preview gains a per-destination breakdown.) Prior: 2026-08-14 (**§3.2** `validate_registries` gains two ERROR-level checks for null-alias facility subject ids — `<n>-AE-biomaGUNE-None` in `registry_raw.subject_ids`, and a `None`/blank `project_alias` in `registry_subjects.csv`. The composer that produced them is fixed in the same pass: `animal_db.compose_subject_id` now refuses a null alias rather than formatting an ambiguous id. Backlog item *"Facility-DB null project alias"*.) Prior: 2026-08-12 (new **§5.3 Project Manager GUI** — the researcher-facing app: update / create a project, add `/raw/` acquisitions as hard links, copy local files in; ✅ deployed to the NAS 2026-08-12. New **§3.1a `backfill_project_subfolders`**. **§3.1** `create_project` now creates the four recommended subfolders and runs its whole read-decide-write under the registry lock.) Prior: 2026-07-20
 
 ---
 
@@ -67,7 +67,7 @@ This document specifies the scripts and tools needed to support the data managem
                       └─────────────────────────────────────────────────────────────┘
 ```
 
-The **registry append is the commit point** — everything before it rolls back cleanly on failure; the hard-link and (opt-in) Finder-refresh steps are post-commit and non-fatal (a failure WARNs, never aborts). See the per-step contract in "Two Ingest Modes", the locking guarantees in the Registry-integrity note, and — for the **complete list of every file and row an ingest writes plus how to reverse each** — the [*Side-effect inventory*](#side-effect-inventory-everything-an-ingest-writes-audit-and-reversal-reference) below.
+The **registry append is the commit point** — everything before it rolls back cleanly on failure; the hard-link and (opt-in) Finder-refresh steps are post-commit and non-fatal (a failure WARNs, never aborts). The link **name** is checked before the copy, not after the commit: a name already taken in the project's `raw_linked/` fails that case with nothing copied or registered (2026-10-05, §2.1.5), so the link step never merges into another acquisition's link. See the per-step contract in "Two Ingest Modes", the locking guarantees in the Registry-integrity note, and — for the **complete list of every file and row an ingest writes plus how to reverse each** — the [*Side-effect inventory*](#side-effect-inventory-everything-an-ingest-writes-audit-and-reversal-reference) below.
 
 **Architecture:**
 ```
@@ -78,6 +78,8 @@ tools/
 │   ├── config.py            # YAML loading + validation; expand_batch (file/dir glob, filename_parse, filter, idempotency); FORMAT_SUMMARIZERS dispatch
 │   ├── resolver.py          # Resolves the YAML registry: block — literal | discovered.<x> | ${...} interp | NA; also validate/resolve condition: / anatomy: / subject: + subject_lookup + to_tristate/to_number coercers (§2.1.6)
 │   ├── enrichment.py        # Phase 3 orchestrator: builds subject/condition/anatomy blocks (non-blocking) for sample_type ∈ {organism,tissue} at Step 8.4 (§2.1.6)
+│   ├── user_tables.py       # Attaches operator-supplied .xlsx/.csv tables as the sidecar's user_provided_metadata block at Step 8.45 (§2.1.7, 08_METADATA §4.9)
+│   ├── dicom_headers.py     # Curated plain-DICOM header extractor, OPT-IN via auto_discover.dicom_headers. Privacy ALLOW-LIST: no raw dump, no PatientName/BirthDate (§2.1.8, 08_METADATA §4.10)
 │   ├── subject_id.py        # Short-code subject parser (m13→13, ID13B→13+organ) + project_alias_from_hint
 │   ├── pending.py           # Deferred-recovery pending list (registries/pending_subject_metadata.csv) read/append/update (§2.1.6, 08_METADATA §4.4.6)
 │   ├── acq_id.py            # ACQ-ID generation (date + inst + seq)
@@ -87,6 +89,7 @@ tools/
 │   ├── dicom_utils.py       # DICOM header extraction (pydicom)
 │   ├── microscopy_utils.py  # Single-file inventory (.czi, .tif) — sibling of dicom_utils
 │   ├── filename_parser.py   # Positional filename → {field: value}
+│   ├── unparsed.py          # The NOT PARSED report: one record per name filename_parse could not parse (MRI: per study folder), its summary wording + CSV (§2.1.3, 2026-10-05)
 │   ├── metadata_sidecar.py  # metadata.json writer (cross-format; discovered + user_supplied)
 │   ├── probe_czi.py         # Standalone read-only .czi metadata probe (utility)
 │   └── linker.py            # Create project hard link (file / folder-of-links) + manifest CSV (see §2.1.1)
@@ -118,7 +121,7 @@ When `ingest_raw.py` is run with `--project <name-or-id>` (or `registry.project_
 /projects/<project_folder>/raw_linked/<link_name>
 ```
 
-…where `<link_name>` is the resolved `link_filename:` (§2.1.5), with **no extension** (the legacy `.lnk` suffix is gone). Links are idempotent — re-running skips any link that already exists.
+…where `<link_name>` is the resolved `link_filename:` (§2.1.5), with **no extension** (the legacy `.lnk` suffix is gone). Links are idempotent — re-running for the same acquisition leaves its complete link as it is, and completes a folder-of-links that holds only some of its own files. **A name held by anything else is refused, never merged into** (✅ 2026-10-05): `linker.create_hardlink` first runs the read-only `linker.inspect_link_target` (identity by `os.path.samefile`, file by file) and raises `LinkCollisionError` — deliberately not an `OSError`, so no caller queues it to `pending_links.csv`. Until then a taken folder name was silently filled with the second acquisition's files, and a taken file name was silently skipped. Stream F found 209 MRI acquisitions without their own link on 2026-10-04; the full audit by file identity on 2026-10-05 (`tools/repair_link_collisions.py`) found **589 with data** (200 MRI, 389 Cell Observer / LSM 900) and 7 polluted link folders ([`tasks/link_collision_fix_review.md`](../tasks/link_collision_fix_review.md)). All were repaired the same day with Ryan's approval: each of the 589 got its own link (MRI under the new name; microscopy as `<INSTR>_<stem>_<YYYYMMDD><ext>`, the drives rule), and the 7 folders were cleared of the names of other acquisitions' files (`repair_link_collisions.py prune-foreign`).
 
 #### File-primary vs folder-primary
 
@@ -230,7 +233,7 @@ auto_discover:
     fields: [cell_line, experiment, magnification, condition, image_num]
 ```
 
-For `HLF_alphasma_10x_CC-miR-29a_1.czi` this populates `discovered.cell_line = "HLF"`, `discovered.experiment = "alphasma"`, etc. Mismatched-chunk-count files are skipped with a WARN.
+For `HLF_alphasma_10x_CC-miR-29a_1.czi` this populates `discovered.cell_line = "HLF"`, `discovered.experiment = "alphasma"`, etc. Mismatched-chunk-count files are skipped (a SKIP line each) and listed in the NOT PARSED report (last bullet of `regex_extract` below).
 
 **`path_parse`** — top-down path levels between `staging_dir` and the file:
 
@@ -245,7 +248,7 @@ auto_discover:
       - experiment
 ```
 
-For a file at `G:/Lab/CellObserver/MBC/Itziar/HLF/alphasma/HLF_alphasma_10x_CC-miR-29a_1.czi`, the three levels (`Itziar`, `HLF`, `alphasma`) become `discovered.researcher`, `discovered.cell_line`, `discovered.experiment`. Mismatched-depth files (too few or too many levels) are skipped with a WARN — same pattern as `filename_parse`.
+For a file at `G:/Lab/CellObserver/MBC/Itziar/HLF/alphasma/HLF_alphasma_10x_CC-miR-29a_1.czi`, the three levels (`Itziar`, `HLF`, `alphasma`) become `discovered.researcher`, `discovered.cell_line`, `discovered.experiment`. Mismatched-depth files (too few or too many levels) are skipped with a SKIP line, as `filename_parse` failures are (but they are not in the NOT PARSED report, below).
 
 Both can be used together; if a value is parsed from both sides (e.g. both filename and path carry `cell_line`), `path_parse` runs first and the filename value **overwrites** it — so `filename_parse` wins on collision. Same-value collisions are silent (redundant but harmless). **Different-value collisions emit a per-key WARN** that names the file, the key, both values, and reminds the operator the filename wins by design — a misfiled-file signal. The cleaner approach when you don't actually want the redundancy is to give parallel chunks distinct names (e.g. `path_cell_line` vs `filename_cell_line`) and let the `registry:` block decide which to record.
 
@@ -266,7 +269,31 @@ For a folder name like `20251016_083822_jrc_251016_m17_0424_jrc_251016_m17_0424_
 - Use `separator` + `fields` when every chunk of the name is meaningful in a stable positional order — works for AxioScan and Cell Observer.
 - Use `regex` when you want to extract a few named values from a name with extra positional noise — works for the MRI FTP folder convention.
 - Mixing is allowed: a `regex:` block runs first; any `discovered.<name>` it sets overrides defaults. Then `separator` + `fields` runs on the same input (if both are present) and applies normal collision rules.
-- WARN on regex non-match (no name groups extracted) — file is still ingested with whatever other discovery sources populate `discovered`.
+- **A name that matches no rule is not ingested, and is reported (✅ 2026-10-05, Ryan, STATUS §0 D3).** When the `regex:` does not match, or the name has too few `separator` chunks, the match is dropped with an `[expand_batch] SKIP <name>: <reason>` line. Every such drop is also grouped by its **parse target** (the name the rule ran on: the study folder under `source: parent_name`) into one record per target, with how many exam folders it held (`acqp` + `method`, the ingest's own exam test) — `tools/ingest/unparsed.py`. Every caller then gets one `[expand_batch] NOT PARSED: <N> study folder(s) (<M> exam folders) …` line; `ingest_raw.py` adds a NOT PARSED section to its BATCH SUMMARY, one line per study folder, and writes the full list with `--unparsed-report <file.csv>` (also in `--dry-run`; never a registry file); the operator GUI's MRI preview and `mri-ingest` list the study folders by name with their exam counts. Not part of this report: a `filter:` miss, a `path_parse` depth mismatch, a non-scan sibling folder (each keeps its own SKIP line), and a leading-dot name, which the glob never returns. A study nested as `<study>/Other data/<exam>` is reported under the name `Other data`. The shared regexes are **not** relaxed to make such names parse: they are reported, then ingested with a scoped config (BACKLOG HIGH 2026-08-21). Operator reference: [`tools/INGEST_CLI.md`](../tools/INGEST_CLI.md#study-folders-that-match-no-parse-rule-not-parsed). *(This bullet used to say a regex non-match WARNs and the file is still ingested. The code never did that: the match was always dropped, with no trace beyond the per-match line.)*
+
+**`case_table`** — per-case override table (new 2026-09-30, default off):
+
+When project, researcher, operator or subject have already been decided **file by file** — on more evidence than a filename can carry — list them in a CSV and let each case pick up its own row. The CSV is keyed on the case's **`original_name`** (the staging-relative path `expand_batch` assigns, with forward slashes); **every other column becomes `discovered.<column>`** for that case, and is then used like any discovered value in `registry:`, the top-level `operator:`, `subject_lookup:` and `link_filename:`.
+
+```yaml
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/staging/_farm/B03"
+  pattern:     "**/*.czi"
+  case_table:
+    file:       cases_B03.csv      # relative -> the config file's directory
+    key:        original_name      # the only key supported
+    on_missing: error              # error (default): a file with no row aborts the batch
+                                   # skip: that file is logged and skipped
+registry:
+  researcher:   discovered.drv_researcher
+  project_name: discovered.drv_project
+operator: discovered.drv_operator
+```
+
+- **Precedence:** the table's value wins over every other discovered source (path levels, filename chunks, embedded metadata). A blank cell resolves to blank, not to an error or a default.
+- **Fail-fast by default:** a file with no row stops the batch before anything is copied (`on_missing: error`), so no file can fall back to a batch-level value by accident. Rows that match no file are reported as a WARN. A duplicate key, an unknown option or a missing `original_name` column is refused at load time.
+- **What it does not do:** it sets `discovered.*` values only. It writes nothing of its own, so the side-effect inventory below is unchanged. The values do land in the sidecar's `discovered` block, which is the record of why the acquisition got them.
+- **First use:** the one-time historical-drives `.czi` ingest (`tools/configs/drives_2026-09/`, generated by `tools/drive_staging/ingest_plan.py`). There, a filename parse could only approximate the per-file claims, and a well-formed but wrong subject id is the costly error (the PROJ-0056 lesson). Implemented in `ingest/config.py` (`load_case_table`); tests: `tools/ingest/test_case_table.py`.
 
 ### 2.1.4 `auto_create_project:` block
 
@@ -298,8 +325,8 @@ Why this exists: round 6 (internal MRI) exposed a real failure mode of the previ
 **Syntax:** top-level field, sibling of `ingest:` / `auto_discover:` / `registry:` / `auto_create_project:`. Value is a string template with `${X}` references.
 
 ```yaml
-# Per-instrument template default for internal MRI:
-link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
+# Per-instrument template default for internal MRI (study time added 2026-10-05):
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.study_time}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"
 
 # Per-instrument template default for microscopy / external:
 link_filename: "${instrument}_${original_name}"
@@ -322,6 +349,8 @@ link_filename: "${instrument}_${original_name}"
 - Trailing `/` in the resolved value is stripped (operator may use it as a visual "this links to a folder" hint; the resolved name is used verbatim as the hard-link name by `linker.create_hardlink` — no extension is appended).
 - `${original_name}` resolves to the **basename** of the registry's `original_name`. This matters when staging is nested (microscopy folders store `original_name` as a staging-relative path like `Itziar/HLF/Colageno/x.czi`); a link name can't contain path separators, so the directory part is dropped (→ `x.czi`). The registry keeps the full `original_name`; only the link-name context is reduced. (Fixes the silent microscopy link-creation failure where the slash-containing name couldn't be written.)
 - No other Windows-unsafe-character sanitisation is applied — the documented `discovered.*` fields don't contain unsafe characters in practice. Add a sanitisation pass later if a real case requires it.
+- **A name already taken is refused (✅ 2026-10-05).** Before the copy (the pre-flight after step 5 of full mode, `ingest_raw._preflight_project_link`), the resolved name is checked against the project's `raw_linked/` (`linker.inspect_link_target`). For a new acquisition, *anything* already at the name is taken: another acquisition's link, any file or folder (even an empty one), or the `<name>.PENDING-LINK.txt` stand-in of a link still queued. The case then **fails with nothing copied or registered** (its reserved ACQ-ID becomes an ordinary gap), and the log and the batch summary name the taken link. `--dry-run` runs the same check and also reports two cases of one batch that resolve to the same name. A name taken in the narrow window after the pre-flight is refused at the link step instead (`LinkCollisionError`): the acquisition stays registered, without a link, and is listed in the batch summary. The comparison is case-insensitive wherever the filesystem is (Windows/SMB).
+- **Every link-making tool follows the same rule**, through the same two functions: `relink_pending`, `relink_projects --create-missing`, `reopen_project`, `relink_mri_regen`, `relink_axioscan_collisions` and the Project Manager's import (`manager/raw_import`, also behind `nonraw_placement apply-raw`) report a taken name as a collision and leave it alone. The retire tool's re-point never merged: it acts only on a link whose files are exactly the retiree's (§3.9).
 
 **Per-instrument defaults (recommended patterns):**
 
@@ -329,10 +358,12 @@ link_filename: "${instrument}_${original_name}"
 |---|---|---|
 | AxioScan 7 (ZWSI) | `${instrument}_${original_name}` | `ZWSI_MFB_MBC_0423_ID13B_WGA_10x.czi` |
 | Cell Observer (CELL) | `${instrument}_${original_name}` | `CELL_HLF_alphasma_10x_CC-miR-29a_1.czi` |
-| Internal MRI (Bruker) | `MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}` | `MRI_jrc_251016_m17_0424_20251016_29_3` |
+| Internal MRI (Bruker) | `MRI_${sample_id}_${acq_date}_${discovered.study_time}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}` | `MRI_m17_0424_20251016_0838_29_3` |
 | Internal NI (future) | `${discovered.modality}_${sample_id}_${acq_date}_${discovered.recon_number}` | `PET_0424_m17_20250612_3` |
 
 See each per-instrument template under `tools/templates/instruments/` for the in-context comment block listing every `discovered.*` field that instrument exposes.
+
+**The MRI study time (✅ 2026-10-05, Ryan: "a per-study part"; the form confirmed the same day).** `${discovered.study_time}` is `HHMM` from the ParaVision study folder's leading `YYYYMMDD_HHMMSS_` (captured by an optional group in the `mri_bruker` template's `filename_parse.regex`; it equals the `subject` file's `SUBJECT_date` wherever both exist). Without it, two studies of one animal on one day (a repeat session, a `_bis` study, a time-point series) got the same name for every exam number they shared. The study time was chosen over the alternatives because it is stable and readable: the ACQ-ID's sequence number is unique but meaningless to a researcher and changes on a re-ingest, and a suffix added only on collision would make a name depend on ingest order. A folder without the timestamp prefix (none in production) gives an empty part (`..._20251016__29_3`); the refusal above still guards it. **The change is forward only:** links created before 2026-10-05 keep their names.
 
 ### 2.1.6 Preclinical-metadata enrichment — `subject:` / `condition:` / `anatomy:` + `subject_from_db` (Phase 3, 2026-06-03)
 
@@ -393,9 +424,71 @@ anatomy:                         # organism only
 
 **Validation vs data.** Structural config errors (unknown keys, wrong types) fail fast at config-load time via `resolver.validate_condition_block` / `validate_anatomy_block` / `validate_subject_block` / `validate_subject_lookup` / `validate_subject_from_db`. Missing or empty *data* never raises — `resolver.resolve_condition_block` / `resolve_anatomy_block` (with the `to_tristate` / `to_number` coercers) emit the sentinels above and the orchestrator WARNs. This is the [§4.7](08_METADATA.md) non-blocking model in code.
 
-**Sidecar nesting.** `metadata_sidecar.build_sidecar` nests the resolved blocks in this key order: `acq_id`, `generated`, `generator`, `user_supplied`, `discovered`, `subject`, `condition`, `anatomy`, `<ecosystem_section>` (e.g. `mri:` / `microscopy:` / `ni:`).
+**Sidecar nesting.** `metadata_sidecar.build_sidecar` nests the resolved blocks in this key order: `acq_id`, `generated`, `generator`, `user_supplied`, `discovered`, `subject`, `condition`, `anatomy`, `user_provided_metadata` (§2.1.7), `<ecosystem_section>` (e.g. `mri:` / `microscopy:` / `ni:` / `dicom:`).
 
 **Worked example:** [`tools/templates/instruments/mri_bruker.yaml`](../tools/templates/instruments/mri_bruker.yaml) ships all three blocks live (with `subject_from_db: true` + `subject_lookup`); `molecubes_ni.yaml` likewise; `axioscan7.yaml` carries `subject` + `condition` only (ex-vivo — no `anatomy`); `cell_observer_cells.yaml` + `lsm900.yaml` carry none (cells); the universal `ingest_template.yaml` carries commented examples.
+
+### 2.1.7 `user_metadata:` block — attach an operator-supplied table (2026-08-12)
+
+> **✅ IMPLEMENTED.** Attaches a collaborator's own spreadsheet (`.xlsx` / `.xlsm` / `.csv`) to each acquisition's `metadata.json` under `user_provided_metadata`. Field contract + the rationale for where the block sits are in [08_METADATA §4.9](08_METADATA.md); this section documents the YAML surface. Implemented in `tools/ingest/user_tables.py`, invoked at **Step 8.45** of full-mode ingest. **Non-blocking** by default, and validated structurally at config-load time.
+
+```yaml
+user_metadata:
+  # One row per acquisition, joined on a key column.
+  - label: dataset_information          # REQUIRED. The sidecar key. NOT the
+                                        # filename — two cohorts shipping the
+                                        # same logical table under different
+                                        # filenames must share one key.
+    file:  "C:/path/dataset_information_HPIC.xlsx"   # REQUIRED
+    sheet: "Foglio1"                    # default: first sheet
+    header_row: 2                       # 1-based; default 1
+    split_descriptions: true            # header cells like
+                                        # `operator "who collected it"` split
+                                        # into name + _source.field_descriptions
+    key_column: "AcquisitionID"         # REQUIRED for orientation: row
+    key_transform: "decimal2"           # applied to the TABLE's key values
+    match: "${discovered.folder_name}"  # REQUIRED; resolver-evaluated
+    match_transform: "first_token"      # applied to the MATCH value
+    skip_columns: ["canonical path"]    # optional; default keeps every column
+    on_missing: warn                    # warn (default) | error | skip
+
+  # A Field/Value table describing the WHOLE batch — same block on every
+  # acquisition in it (e.g. the grant the data was originally collected under).
+  - label: source_project
+    file:  "C:/path/dataset_information_HPIC.xlsx"
+    sheet: "Foglio2"
+    orientation: vertical               # row (default) | vertical
+    header_row: 1
+    field_column: 1                     # 1-based index, or a header name
+    value_column: 3
+    description_column: 2               # optional
+```
+
+**Key transforms** (`key_transform` / `match_transform`) exist because the join key rarely matches verbatim on both sides:
+
+| Transform | Effect | Why it exists |
+|---|---|---|
+| `decimal2` | number `1.1` → `"1.10"` | Excel stores an id like `1.10` as a **number**, so it stringifies to `"1.1"` and silently misses the `LEONE_1.10` case folder. 3 of 42 real LIONS cases depend on this. Text keys pass through untouched. |
+| `first_token` | `"HPIC37 S63090"` → `"HPIC37"` | The case folder carries an accession suffix the table does not. |
+| `strip_prefix:<p>` | `"LEONE_1.01"` → `"1.01"` | The case folder carries a cohort prefix. |
+| `lower` / `upper` / `strip` | — | Ordinary normalization. |
+
+**Failure behaviour.** An unmatched case is the dangerous silent failure (no block, nobody notices until the data is in `/raw/`), so: `on_missing: warn` (default) logs and omits; `on_missing: error` aborts the acquisition. When a sheet holds numeric keys and no `key_transform` is set, the WARN says so explicitly. Duplicate keys keep the first row and record the rest in `_source.duplicate_keys_ignored`. Workbooks are memoized per `(path, sheet, mtime)`, so a 42-case batch reads each sheet once.
+
+**Worked example:** [`tools/configs/dts24_lions_cardiac_mri.yaml`](../tools/configs/dts24_lions_cardiac_mri.yaml) (three tables — two row-joined, one vertical) and `dts24_hpic_cardiac_mri.yaml`.
+
+### 2.1.8 `auto_discover.dicom_headers:` — curated plain-DICOM extraction (2026-08-12)
+
+> **✅ IMPLEMENTED, opt-in (default off).** `tools/ingest/dicom_headers.py` fills the `dicom:` ecosystem section for DICOM sources that are neither ParaVision exams nor Molecubes acquisitions (collaborator batches, general clinical DICOM). Surfaces 13 `discovered.dicom_*` fields — scanner model, field strength, institution, body part, modality set, patient sex / weight / age — that were previously blank, so `registry.instrument_model` and `modalities_in_study` can resolve per case.
+
+```yaml
+auto_discover:
+  dicom_headers: true      # default false — no existing config changes behaviour
+```
+
+Every allow-listed key is always emitted (`""` when the tag is absent), so a strict `${discovered.dicom_*}` reference in the `registry:` block cannot hard-fail on the one case whose header lacks it.
+
+> ⚠️ **This extractor is a privacy allow-list, not a header dump.** It has no `_raw_metadata` bucket, and `PatientName` / `PatientBirthDate` are deliberately never extracted — age is kept, coarsened to whole years. **Adding a tag is a privacy decision.** Read [08_METADATA §4.10](08_METADATA.md) before extending `_SAFE_TAGS`.
 
 ---
 
@@ -406,9 +499,9 @@ anatomy:                         # organism only
 **Full Mode (default) — per acquisition:**
 1. Load + validate config (YAML or interactive)
 2. Analyze source data (DICOM headers: modality, StudyDate, file count, size)
-3. Extract embedded metadata → `metadata.json` sidecar (Step 8.4: for `sample_type ∈ {organism, tissue}`, the enrichment writer nests `subject:` + `condition:` (+ `anatomy:` for organism) blocks — non-blocking, see §2.1.6)
+3. Extract embedded metadata → `metadata.json` sidecar (Step 8.4: for `sample_type ∈ {organism, tissue}`, the enrichment writer nests `subject:` + `condition:` (+ `anatomy:` for organism) blocks — non-blocking, see §2.1.6. Step 8.45: any `user_metadata:` tables are attached as `user_provided_metadata` — see §2.1.7)
 4. Compress DICOM (if applicable) → `.zip` or `.tar.gz` archive
-5. Generate ACQ-ID (read registry for next sequence number)
+5. Generate ACQ-ID (read registry for next sequence number), then the **project-link pre-flight** (2026-10-05): when the project already exists, the resolved link name must be free in its `raw_linked/`, or the case fails here with nothing copied or registered (§2.1.5). Runs in `--dry-run` too.
 6. Create folder: `raw/<ECOSYSTEM>/<YYYY>/<YYYY-MM>/<ACQ-ID>/`
 7. Copy files to destination (archive + metadata.json + README.txt, with progress bar)
 8. Generate `checksums.json` (SHA-256, all files in acquisition folder)
@@ -431,16 +524,20 @@ One acquisition touches all of the following. Everything up to the registry appe
 | 2 | `registries/.acq_id_seq.json` — high-water bumped for the `ACQ-<YYYYMMDD>-<INST>-` prefix (hidden dotfile; skipped by `*.csv` globs) | Step 5 | always | **not auto-freed.** The seq stays reserved even after the row is deleted — **ids are never reused by design** (a removed acq leaves a gap). To fully reset a removed *test* so the id can be reused, delete that prefix key by hand (safe only once the acq is fully purged) |
 | 3 | `registries/registry_raw.csv` — **one row** (this is the **commit point**) | Step 11 | always | remove the `acq_id` row |
 | 4 | `registries/ingest_manifest.csv` — one row (`acq_id, original_name, canonical_path`) | Step 12 | always | remove the `acq_id` row |
-| 5 | `registries/registry_subjects.csv` — one subject row **upserted** (created new, or gap-merged into an existing subject; one row per subject, `last_updated` bumped) | Step 10b | `sample_type ∈ {organism, tissue}` **and** a subject resolves (DB lookup or an operator `subject:` block) | remove the row **only if it was newly created** — a subject shared with other acqs must stay |
+| 5 | `registries/registry_subjects.csv` — one subject row **upserted** (created new, or gap-merged into an existing subject; one row per subject, `last_updated` bumped) | Step 10b | `sample_type ∈ {organism, tissue}` **and** a subject resolves (DB lookup or an operator `subject:` block) **never:** subjects are never deleted ([06 §2.8.3](06_REGISTRIES.md)); a retirement leaves the subject row |
 | 6 | `registries/pending_subject_metadata.csv` — one recovery row (subject `source: pending-db`) | Step 8.4 | **only** on a DB miss / no-credentials | remove the `acq_id` row |
-| 7 | `projects/<name>/raw_linked/<link_filename>` — hard link (a file, or a real folder of per-file hard links for a `.data` primary) | Step 12 | `--project` / `registry.project_name` resolves to an **existing** project | delete the link |
+| 7 | `projects/<name>/raw_linked/<link_filename>` — hard link (a file, or a real folder of per-file hard links for a `.data` primary) | Step 12 | `--project` / `registry.project_name` resolves to an **existing** project, and the name is free (a taken name is refused, never written into — §2.1.5) | delete the link |
 | 8 | `projects/<proj>/provenance.csv` — one `FILE-NNNN` row for the link (`input_refs=<acq_id>`) | Step 12 | as #7 | remove that row |
 | 9 | `projects/<proj>/index.html` — targeted per-project regenerate | Step 14 | opt-in on the CLI (`--refresh-index projects`); **automatic in the operator GUI** | regenerate after removal: `generate_index.py --nas-root … --project <PROJ-ID>` |
+| 11 | `registries/pending_dicom_regen.csv` — one worklist row | Step 8 (folder copy) | **only** an MRI exam ingested with no DICOM where Dicomifier was unavailable (the no-DICOM placeholder) | remove the `acq_id` row |
+| 12 | `registries/pending_links.csv` — one row (+ a `.PENDING-LINK.txt` stand-in in `raw_linked/`) | Step 12 | **only** when `os.link` is unsupported on the ingesting mount (the NI Mac) | remove the `acq_id` row |
 | 10 | **NEW** `projects/<name>/` folder + `_project.yaml` + a `registry_projects.csv` row | Step 9.5 | first ingest only, **and** `registry.project_name` names a **non-existent** project **and** `ingest.auto_create_projects` is on | remove the folder + the `registry_projects` row (a much larger side effect — avoid it by targeting an existing project) |
 
 The **global** `registries/index.html` is **not** written per-ingest — a scheduled job owns it ([`tools/FINDER.md`](../tools/FINDER.md)). `--delete-source` (opt-in, post-commit) removes the *staging source*, not a NAS write.
 
-> **Reversing a committed acquisition** (e.g. a temporary test) is a **Data-Office manual, backup-first** operation — there is deliberately **no `delete-acquisition` tool** (see the "Don't hand-edit registries" rule in [`INGEST_CLI.md`](../tools/INGEST_CLI.md)). Snapshot the touched files off-NAS first, then reverse the rows above that apply, matched by `acq_id` (and the link name), using byte-exact line removal so the other rows are untouched; verify every count returns to baseline. Row #2 (the reservation prefix) is the one step that is optional and a deliberate deviation from the never-reuse rule — reset it only for a full *test* reversion, never for a real acquisition.
+> **Retiring a committed acquisition — amended 2026-10-01 (Ryan).** The intent of the rule below is kept: **no casual deletion**, nothing an operator or researcher can run. The means changed: a byte-identical duplicate, a derivative or an orphan `/raw/` folder is now retired by the **Data-Office-only** [`tools/retire_acquisition.py`](../tools/retire_acquisition.py) (§3.9) — dry run by default, backup first, never inside an ingest's window — which automates rows #1, #3, #4, #6–#9 and #11–#12 of the inventory above and moves the row to the tombstone file ([06_REGISTRIES §2.9](06_REGISTRIES.md)) instead of deleting it. Row #2 is never touched (ids are never reused), nor is row #5 (subjects are never deleted); row #10 (a project the ingest created) is out of scope.
+>
+> **Reversing a committed acquisition by hand** (e.g. a temporary test) is a **Data-Office manual, backup-first** operation — there is deliberately **no `delete-acquisition` tool** (see the "Don't hand-edit registries" rule in [`INGEST_CLI.md`](../tools/INGEST_CLI.md)). Snapshot the touched files off-NAS first, then reverse the rows above that apply, matched by `acq_id` (and the link name), using byte-exact line removal so the other rows are untouched; verify every count returns to baseline. Row #2 (the reservation prefix) is the one step that is optional and a deliberate deviation from the never-reuse rule — reset it only for a full *test* reversion, never for a real acquisition.
 
 **Lightweight Mode (`--lightweight`) — per acquisition:**
 1. Load + validate config (fewer required fields)
@@ -459,11 +556,12 @@ Three required top-level blocks plus one optional. `defaults:` is gone — non-r
 | Block                   | Required? | Purpose |
 |-------------------------|-----------|---------|
 | `ingest:`               | Yes       | Pipeline control flags (`delete_source_after_ingest`, `auto_create_projects`, ...). Not registry columns. |
-| `auto_discover:`        | Yes       | How to discover cases and what variables to extract per case. Each case's discovered fields land in a `discovered` namespace, referenceable below. Supports `filename_parse:` and `path_parse:` (see §2.1.3). |
+| `auto_discover:`        | Yes       | How to discover cases and what variables to extract per case. Each case's discovered fields land in a `discovered` namespace, referenceable below. Supports `filename_parse:`, `path_parse:` and the per-case `case_table:` (see §2.1.3). |
 | `registry:`             | Yes       | Explicit per-column registry mapping. Three value forms: literal text/number, `discovered.<field>` (bare reference), or `"...${discovered.<field>}..."` (interpolation). Use `NA` to leave a column intentionally empty. |
 | `auto_create_project:`  | Optional  | Project-creation metadata used only when `ingest.auto_create_projects: true` and a new project is being created. Resolver-evaluated like `registry:`. First-write-wins (see §2.1.4). |
 | `condition:`            | Optional  | Preclinical disease-state / study-role block (Phase 3). Resolver-evaluated, set-once-per-batch, non-blocking. Written to `metadata.json` for `sample_type ∈ {organism, tissue}`. See §2.1.6 + [08_METADATA §4.5](08_METADATA.md). |
 | `anatomy:`              | Optional  | Anatomical-coverage block (Phase 3, organism-only). Resolver-evaluated, set-once-per-batch, non-blocking. See §2.1.6 + [08_METADATA §4.6](08_METADATA.md). |
+| `user_metadata:`        | Optional  | List of operator-supplied tables (`.xlsx`/`.csv`) to attach per acquisition under the sidecar's `user_provided_metadata` block. Structurally validated at config load; non-blocking at match time. See §2.1.7 + [08_METADATA §4.9](08_METADATA.md). |
 | `subject:`              | Optional  | Subject-metadata override (Phase 3) — supplied only to override the `auto_discover.subject_from_db` lookup or when the animal isn't in the DB. See §2.1.6 + [08_METADATA §4.4](08_METADATA.md). |
 
 `ingest:` flags currently honored:
@@ -632,6 +730,7 @@ python tools/ingest_raw.py --interactive --lightweight             # lightweight
 - Collaborator instrument codes: X-prefix (e.g., `XMRI` for external MRI)
 - Copy verification: SHA-256 source→dest comparison
 - **Idempotent re-runs**: `expand_batch` checks the registry by `(acquisition_date, original_name)` and skips already-ingested files
+- **NOT PARSED report** (2026-10-05): every name the `filename_parse` rule could not parse (for MRI, every study folder) is listed in the BATCH SUMMARY with its exam-folder count, and written to a CSV with `--unparsed-report <file.csv>`, `--dry-run` included (§2.1.3)
 - `--delete-source` flag removes the source file/folder after a successful verify (cross-instrument; default OFF; never touches the parent of `source_path`)
 - Project link creation: hard link (file) or folder-of-hard-links (`<ACQ-ID>.data`) placed in `<project>/raw_linked/` when `--project` is set (same-volume; see §2.1.1)
 - `--dry-run` mode for previewing without changes
@@ -714,15 +813,17 @@ log_activity \
 - Description
 - Owner (initials)
 
-**Actions:**
-1. Validate short name is unique (scan `registry_projects.csv`)
-2. Generate PROJ-ID (`PROJ-NNNN`, next available)
-3. Create folder: `/projects/<name>/` (the name, verbatim — [05_PROJECTS §2a](05_PROJECTS.md))
-4. Write `_project.yaml` from template
-5. Create empty `provenance.csv` with headers
-6. Create `raw_linked/` directory
-7. Append entry to `registries/registry_projects.csv`
+**Actions** — steps 1–7 run inside ONE `locking.registry_lock` hold (see below):
+1. Normalize + validate the name (`ingest/project_naming.py`; spaces → hyphens)
+2. Check the name is free — **case-insensitively** (scan `registry_projects.csv`)
+3. Generate PROJ-ID (`PROJ-NNNN`, next available; ids are never reused)
+4. Create folder: `/projects/<name>/` (the name, verbatim — [05_PROJECTS §2a](05_PROJECTS.md))
+5. Create the recommended subfolders — `raw_linked/`, `working/`, `outputs/`, `metadata/` (one definition, `ingest/project_layout.py`; [05_PROJECTS §3](05_PROJECTS.md))
+6. Write `_project.yaml` from the bundled template (resolved via `ingest/resources.py`, so it works in the frozen exe too)
+7. Create empty `provenance.csv` with headers, and append the row to `registries/registry_projects.csv` (`ingest/projects_registry.py` — header-checked)
 8. Print summary
+
+**Concurrency (2026-08-12).** "Read the registry, pick the next id, check the name is free" and "append the row that claims them" are one critical section — two simultaneous creations would otherwise both mint `PROJ-0053` or both pass the uniqueness check on one name. The folder and `_project.yaml` are written inside the same hold, so a project can never exist in the registry without its folder. `--dry-run` is read-only and takes no lock (its reported id is a snapshot, not a reservation). Callers that already hold the lock pass `_hold_lock=False`; ingest's auto-create site holds neither ingest lock, so it uses the default.
 
 **Usage:**
 ```bash
@@ -733,6 +834,24 @@ python tools/create_project.py \
 
 python tools/create_project.py --interactive
 python tools/create_project.py --name test --description "test" --owner RT --dry-run
+```
+
+**Front-end:** the **Project Manager GUI** (§5.3) is a thin front-end over this function — it does not reimplement any of the above.
+
+### 3.1a `backfill_project_subfolders` — the subfolder convention, retrofitted
+
+**Purpose:** give the projects that predate the convention their `working/`, `outputs/` and `metadata/` folders ([05_PROJECTS §3](05_PROJECTS.md)). As of 2026-08-11, **0 of 49** live project folders had them.
+
+**Location:** `tools/backfill_project_subfolders.py` · **Idempotent** · `--dry-run` first.
+
+Creates only what is missing and touches nothing else. It writes **no provenance rows** — provenance tracks files (07_PROVENANCE), and an empty directory is not one. Two categories are reported rather than "fixed":
+
+- **Registry rows with no folder** are SKIPPED and listed. Eight projects were closed on 2026-07-14/15 and their folders deleted while the rows stayed, so the acquisitions remain findable. Recreating those folders would undo a deliberate close-out.
+- **Project folders with no `_project.yaml`** (five, all predating `create_project.py`) are LISTED, not written. Writing one means inventing an owner and a start date — a Data Office call, not a backfill.
+
+```bash
+python tools/backfill_project_subfolders.py --nas-root J:/gjesus3-data --dry-run
+python tools/backfill_project_subfolders.py --nas-root J:/gjesus3-data
 ```
 
 ### 3.2 `validate_registries`
@@ -746,6 +865,9 @@ python tools/create_project.py --name test --description "test" --owner RT --dry
 - `sample_type`, when set, is in the controlled vocab `{tissue, organism, cells, material, phantom}`.
 - `canonical_path` starts with `/raw/` and the acquisition folder exists on disk.
 - `project_id`, when set and matching `PROJ-XXXX`, exists in `registries/registry_projects.csv`.
+- **`subject_ids` carries no null-alias facility id** — `<animal_code>-AE-biomaGUNE-None` (or `null`, or a bare stem with nothing after it). ERROR rather than WARN because the alias is what makes the id *unique*: every null-alias protocol collapses onto the same id, so two different animals share one subject and the `registry_subjects` upsert merges them into one row. The packed `;` cell is checked id-by-id, so a multi-animal NI scan reports the offending member.
+- **`registry_subjects.csv`** — `project_alias` is never the literal `"None"` / `"null"`, and never blank for a `facility_id` that names an animal protocol. A blank alias on a **non**-facility id is legitimate and is not reported: the DTS24 human subjects (`LEONE_1.01`, `source=dicom-header`) have no animal protocol. Root cause and the repair plan: `tasks/BACKLOG.md` *"Facility-DB null project alias"*.
+- **`retired_acquisitions.csv`** (only when the file exists — [06_REGISTRIES §2.9](06_REGISTRIES.md), added 2026-10-01): its header equals `ingest.retired.RETIRED_FIELDS`; no id is both live and retired (also the signature of a retire run that stopped mid-commit — re-run it); every `superseded_by` is a live acquisition (blank only for an orphan); no curated dataset cites a retired id; no retired id's `/raw/` folder still exists. Live-row checks never see retired ids, so they are not reported as missing folders.
 
 **Phase 3 enrichment checks (WARN-level — never affect exit code):** for `sample_type ∈ {organism, tissue}`, the sidecar must carry a `subject:` + `condition:` block (and `anatomy:` for organism); the explicit "unknown" sentinels (`subject.source == "pending-db"`, `condition.is_control == null`, `anatomy.is_whole_body == null`) are WARNs, legitimate under the non-blocking model ([08_METADATA §4.7](08_METADATA.md)). `--no-enrichment` skips these.
 
@@ -845,6 +967,63 @@ PYTHONPATH=tools python tools/backfill_dicom_regen.py --apply --mark-no-source
 
 Companion tools: `tools/backfill_pending_dicom.py` (enrols pre-2026-06-24 placeholders into the worklist; invariant check = *no DICOM-less acquisition without a worklist row*, `--dry-run` reporting 0-to-add means it holds) · `tools/pull_pending_dicom_sources.py` (stages the pending studies read-only from the platform host) · `tools/relink_mri_regen.py` (rebuilds project hard-links from Windows after a WSL run) · `tools/validate_dicomifier_pixelspacing.py` (standalone re-check).
 
+### 3.9 `retire_acquisition` — retire an ACQ-ID (Data Office only)
+
+> **✅ DECIDED 2026-10-01 (Ryan)** — tombstone file, delete once verified, v1 = duplicate + derivative.
+> **In production use since 2026-10-02:** the 32 duplicate twins, then the 17 orphan folders of 2026-07-10.
+> Each production use is its own dry-run-first, approved operation, after the historical-drives ingest is
+> merged. Procedure: [11_OPERATIONS §5.7](11_OPERATIONS.md). Schema: [06_REGISTRIES §2.9](06_REGISTRIES.md).
+> **✅ v2 DECIDED 2026-10-04** (Ryan accepted the recommended defaults, `tasks/retire_v2_review.md` §2.5):
+> **`equivalent` and `reidentified` built, tested and rehearsed on a scratch copy; 🕗 not yet used in production.**
+
+```
+python tools/retire_acquisition.py --nas-root J:\gjesus3-data --acq-id ACQ-... --reason "..." ^
+    (--duplicate-of ACQ-... | --equivalent-of ACQ-... | --derivative-of ACQ-... --to-project <name>
+     [--subfolder outputs\derived] | --orphan | --reidentify-as <CODE> [--instrument-model "..."]) ^
+    [--execute]
+python tools/retire_acquisition.py --nas-root J:\gjesus3-data --list retire_list.csv [--execute]
+```
+
+The list is a CSV with the columns `acq_id, disposition, target_acq_id, to_project, reason` (optional
+`subfolder`, `dest_name`; for `reidentified`: `new_instrument`, optional `instrument_model`, and no
+`target_acq_id`). **A list is all-or-nothing:** any refusal stops the run before a write. One backup
+per run.
+
+| Disposition | Precondition (refuses otherwise) | What happens to the bytes | Project links to it |
+|---|---|---|---|
+| `duplicate` | the survivor is live; same file set (primary maps to primary); **every file byte-identical by a fresh SHA-256 of both sides** — `checksums.json` is never trusted alone; the survivor's bytes match its own `checksums.json` | deleted, after a re-check right before the delete | re-pointed at the survivor under the same name; removed if the survivor is already linked there |
+| `derivative` | the original is live; the target project exists, its folder exists, it is not `closed` (reopen it first: `reopen_project.py`) | hard-linked into `<project>/<subfolder>/<original name>` (default `outputs\derived`), verified by identity + SHA-256, then removed from `/raw/` | removed from `raw_linked/` (the file now lives in the subfolder) |
+| `orphan` | no registry row; exactly one `/raw/` folder; ≤ 50 MB; no provenance row names it | backed up whole off-NAS, then deleted | none |
+| 🔶 `equivalent` (v2) | both are single-file `.czi`; **not** byte-identical (then use `duplicate`); the metadata XML, every subblock's decoded pixels (position, pixel type, subblock metadata and attachments included) and every attachment's payload identical (`tools/ingest/czi_compare.py`); the survivor's bytes match its own `checksums.json`; nothing else in the retiree's folder | deleted, after a re-check | as `duplicate` |
+| 🔶 `reidentified` (v2) | a single-file `.czi`; the new code is in use in the same ecosystem; **the file's own device fingerprint names the new code** (`tools/reference/microscopy_instruments.yaml`); the primary's fresh SHA-256 is in its `checksums.json`; nothing else in the folder | **kept**: the new folder `…\<new ACQ-ID>\` gets a hard link to the same file; `metadata.json` / `checksums.json` / `README.txt` rewritten byte-exactly except the id and the instrument (`tools/ingest/reidentify.py`); then the old folder is removed | **not touched** (the same file); each gets a provenance event naming the new id; names keep their old prefix |
+
+**Re-identify order:** commit A under the lock (allocate the new id — same date, new code — and append the
+tombstone; the old row stays live) → build the new folder → commit B under the lock (append the new row and
+the carried-over manifest / `pending_*` rows, then remove the old ones byte-exact) → provenance events → the
+old folder removed. The new row is the old row with only `acq_id`, `instrument`, `primary_file_name` and
+`canonical_path` changed. A re-identify is not a re-ingest: the ingest's dedup index is never consulted.
+
+**Always refused:** an id a curated dataset cites (`registry_datasets.csv` and every text file under
+`curated_datasets/`); an id a tombstone names as `superseded_by`; a survivor or original that is itself being
+retired in the same run; any run while `registries/.registry.lock` exists or `registry_raw.csv` changed in the
+last 15 minutes (an ingest may be mid-batch; the tool's own last write does not count).
+
+**Order — a crash anywhere is finished by re-running the same command; a re-run after success is a no-op:**
+plan (read-only, hashes) → backup (registries + `.acq_id_seq.json`, the sidecars, touched `provenance.csv`,
+SHA-256-verified) → derivative placed → **commit under the registry lock** (tombstone first, then the
+`registry_raw`, manifest and `pending_*` rows removed — never a `registry_subjects` row — **byte-exact**: every other byte,
+line ending and quote is kept, and the file is read back) → links → `/raw/` bytes → provenance events
+(appended; written *before* each link action so a resumed run never misreports what it did) → per-project
+`index.html` → self-check + report (`<backup>\RET-…_report.csv` + `.log`).
+
+**Links.** Found through every project's `provenance.csv` (`input_refs`). Identity is the file id
+(`os.path.samefile`, reliable over this SMB share — link counts are not); content is SHA-256. A link a
+researcher already deleted or renamed is reported, never an error (05_PROJECTS §3a). A file at a link path
+whose bytes are not the acquisition's is left alone and reported.
+
+**Side effects outside this tool:** the global Finder page (`registries/index.html`) is rebuilt by the daily
+03:00 job ([11_OPERATIONS §5.6](11_OPERATIONS.md)); until then it still lists the retired id.
+
 ---
 
 ## 4. Implementation Decisions
@@ -936,6 +1115,24 @@ apart from a cross-link + a behaviour-identical refactor.
   name, e.g. `"Biospec 70/30"`→`Bruker BioSpec 7T`, `"117/16"`→`11.7T`; 1H-frequency
   fallback), so there is no operator field — see [09_MODALITIES §1.4](09_MODALITIES.md)
   (`discovered.mri_scanner_model`). `mri-ingest --model` remains a CLI override.
+- **Destination project is token-valued (2026-09-04).** The page offers three choices:
+  *per animal-protocol code* (the template default,
+  `AE-biomaGUNE-${discovered.project_code}`), *a name I set*, or *no project*. "A name I
+  set" is a **token field with its own palette**, not a text box: fixed text sends the whole
+  run to one project, while a `${discovered.*}` chip is resolved **per scan**, so a single
+  run can file scans into several different projects. This matters when an operator pulls a
+  week's work covering more than one protocol — there is no one static project name to type,
+  and the alternative was one run per project or hand-edited YAML. Nothing in the engine
+  changed: `registry.project_name` has always been a token-resolvable user-controllable
+  column (§`registry:` above) and the template's own default is an expression; only the GUI
+  exposed it for the link name and not for the project. Notes: the project palette is
+  deliberately **narrower** than the link-name palette (per-scan fields like exam / recon /
+  sequence are withheld — they would mint one project per scan); preview shows a
+  **per-destination breakdown** with scan counts and flags the projects that would be
+  auto-created; an **empty** custom name is refused rather than silently read as "no
+  project"; and a custom name replaces `auto_create_project.description`, which otherwise
+  states every project it creates came from an animal-protocol code. Remember that
+  protocol → project is a **convention, not a rule** — see [05_PROJECTS](05_PROJECTS.md) §2a.
 - **Guardrails:** the destination NAS is validated **before** a pull (no wasted transfer on
   an unusable NAS); preview warns on link-name collisions (in-batch) and on-NAS overwrite
   targets (`tools/operator/collisions.py`); non-scan ParaVision sibling folders (AdjResult /
@@ -966,6 +1163,75 @@ import — lazy-loaded — and `ftp_mirror.py` is bundled as data). **Build OUTS
 `--mri`) + `docs\{mri,microscopy}_guide.html` (novice HTML guides, also reachable via the
 in-app "? Help" link) + `README.txt`. One exe serves both pages; operators run it from the
 NAS (≈3-5 s self-extract on first launch). Build/deploy reference: `tools/operator/gui/README.md`.
+
+### 5.3 Project Manager GUI — `gjesus3_manager` (DECIDED, shipped 2026-08-12)
+
+The **researcher**-facing counterpart to the operator ingest GUI: a local Flask app
+(`tools/manager/gui/app.py`, port **5001** so it can run alongside the ingest GUI) over the
+same NAS. Four things, one page:
+
+| Pane | What it does |
+|------|--------------|
+| **My projects** | Every row of `registry_projects.csv`; select one to see all nine columns and edit `description` / `owner` / `status` / `notes`. |
+| **New project** | A front-end over `create_project.py` (§3.1) — live name normalization + uniqueness before submit. |
+| **Add data from the RDM System** | Search `/raw/` with the Finder's filters, tick acquisitions, add them to a project as hard links + provenance. |
+| **Add files from my computer** | Browse local/mounted storage, tick FILES, copy them into a chosen subfolder (default `working/`) + provenance. |
+
+It is a **thin front-end**: all logic lives in `tools/manager/` (`projects` · `raw_import` ·
+`local_import` · `acq_search`) and `tools/ingest/`, so the same operations can be scripted
+and will move to the server unchanged.
+
+> **Adding an acquisition to a project does NOT re-register it** (✅ DECIDED 2026-08-12 — [06_REGISTRIES §2.3b](06_REGISTRIES.md)). An acquisition is registered to exactly one project: the one ingest established. An import builds the *filesystem* association — the hard link plus the destination project's `provenance.csv` row — and leaves `registry_raw.project_id` alone. The registry only gains a value where it had none (`project_ids.set_project_id_if_blank`), which in practice is almost never, since ingest resolves or auto-creates a project for every acquisition. The completion modal states this in the researcher's words rather than leaving it to be discovered: *"N of these stay registered to the project they were acquired for."*
+
+**Design decisions:**
+
+- **A separate app and a separate exe (✅ DECIDED 2026-08-11).** Different audience and,
+  decisively, a different release cadence — folding it into `gjesus3_ingest.exe` would make
+  every project-manager tweak force a redeploy of the production ingest exe. **But built for
+  the merge that is coming:** a dedicated RDM server is expected ~Oct 2026, after which the
+  tools are redesigned as one web app and the exes retire. So the goal is *maximum
+  similarity*, not clever integration — the same `style.css`, the same
+  `folder_browser.js`, the same completion modal, the same `/api/*` JSON shape, the same SSE
+  commit stream, the same saved-state mechanism. The shared assets are **served from the
+  ingest GUI's directory** (`/shared/<path>`), not copied.
+- **Importing from raw drives the EXISTING pieces** — `linker.create_hardlink`,
+  `provenance.append_entry`, `registry.update_row`, `pending_links` — rather than a parallel
+  path, so a link added here is indistinguishable from one made at ingest (same inode, same
+  provenance shape, same recovery route). The raw-primary dispatch (`primary_kind` +
+  `primary_file_name`, three branches incl. the legacy MRI layout where
+  `primary_file_name == acq_id`) is carried over verbatim.
+- **Membership, not movement.** Adding an acquisition to a project appends the project id to
+  `registry_raw.project_id` ([06_REGISTRIES §2.3b](06_REGISTRIES.md)); it never removes an
+  earlier association and never touches `/raw/`. One locked pass per batch, not one full
+  registry rewrite per acquisition.
+- **A mount that cannot hard-link does not fail the import.** On `OSError` the acquisition is
+  queued to `registries/pending_links.csv`, a visible `<link>.PENDING-LINK.txt` stand-in is
+  written, the batch continues, and the UI says in plain words that the data **is** registered
+  and that a data-office pass (`tools/relink_pending.py`) completes the links.
+- **Copying from local checks free space before the first byte** and refuses to overwrite an
+  existing destination without an explicit per-file confirm (the 409-style pattern the recipe
+  overwrite flow established). `raw_linked/` is not an allowed destination — it is tool-managed.
+- **Never stamps `last_activity`.** That column means the newest *acquisition*
+  ([06_REGISTRIES §4.2](06_REGISTRIES.md)); an edit must not move it.
+- **A registry row with no folder is a normal state**, not corruption — the GUI shows it,
+  allows the row to be edited, and refuses to import into it.
+
+**Freeze:** `tools/manager/gui/gjesus3_manager.spec` (PyInstaller, one-file, modelled on the
+ingest spec). Build **OUTSIDE OneDrive**. Bundles the shared static assets and
+`tools/templates/project.yaml`; excludes paramiko/numpy/czifile, which it never touches.
+Pinned end-to-end by `tools/test_manager.py` (drives the real app against a scratch NAS).
+
+**Deployed 2026-08-12** to `\\gjesus3\gjesus3\gjesus3-data\tools\` as
+`gjesus3_manager.exe` (13,113,252 bytes, sha256 `d060d566…`) + a `Project Manager.lnk`,
+alongside `gjesus3_ingest.exe` (which the deploy left byte-identical — the point of a
+second exe). `tools\README.txt` on the share covers both apps.
+
+> **When testing, point it at a scratch RDM-System root.** With no saved root of its own
+> the app falls back to the ingest GUI's, so on a machine that already runs the ingest
+> tools its **first launch opens against live production**. That default is deliberate
+> (one less setup step on an operator machine), but it means a "just trying it out"
+> session writes real registry rows — which is exactly what happened during the
+> 2026-08-12 verification (see the CHANGELOG entry and its clean-up).
 
 ---
 

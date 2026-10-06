@@ -190,6 +190,12 @@ tr.has-warn td:first-child { border-left: 3px solid var(--warn); }
 .fb-item.dir { cursor: pointer; }
 .fb-item.dir:hover { background: #eff6ff; }
 .fb-item.file { color: var(--muted); cursor: default; }
+/* File-pick mode (browseFiles): the file rows become tickable instead of
+   greyed context. Used by the Project Manager's "copy from my computer". */
+.fb-item.pick { cursor: pointer; font-weight: 400; }
+.fb-item.pick:hover { background: #eff6ff; }
+.fb-item.pick .fb-fname { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fb-item.pick .fb-fsize { font-size: .78rem; white-space: nowrap; }
 .fb-item .ic { width: 1.1rem; text-align: center; opacity: .8; }
 .fb-empty { padding: .6rem .4rem; color: var(--muted); font-size: .85rem; }
 .fb-foot { display: flex; align-items: center; justify-content: space-between;

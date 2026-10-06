@@ -121,16 +121,25 @@ templates ship a sensible default, so you rarely set it yourself:
 - **Microscopy** default: `${instrument}_${original_name}` (e.g.
   `ZWSI_MFB_MBC_0525_ID26H_WGA_10x.czi`).
 - **MRI** default:
-  `MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`
-  — because the MRI source identifier is a folder path plus a numeric position, a
-  plain filename would collide when several animals share an exam number, so the
-  link name is built to be unique per (animal, exam, reconstruction).
+  `MRI_${sample_id}_${acq_date}_${discovered.study_time}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}`
+  (e.g. `MRI_m17_0424_20251016_0838_29_3`) — because the MRI source identifier is
+  a folder path plus a numeric position, a plain filename would collide when
+  several animals share an exam number, so the link name is built to be unique
+  per (animal, study, exam, reconstruction). The study start time (`0838`) was
+  added on 2026-10-05, so that two studies of one animal on one day no longer
+  share names; links made before then keep their names.
 
 You override it (in the YAML path) only when the default would collide. The
 context you can use is every `discovered.*` field, every resolved registry field
 (`${sample_id}`, `${instrument}`, …), plus `${acq_id}` and `${acq_date}`. Full
 detail in [`INGEST_CLI.md`](INGEST_CLI.md) and
 [`mfb-rdm-docs/10_TOOLS.md §2.1.5`](../mfb-rdm-docs/10_TOOLS.md).
+
+**If the name is already taken, the ingest refuses that scan** (since
+2026-10-05): it copies and registers nothing for it, and says which name is taken.
+The preview shows this before you run. Give the scan a distinct link name, or, if
+it is data that was already ingested, leave it out. (Earlier, the second scan was
+quietly mixed into the first scan's link folder.)
 
 ---
 

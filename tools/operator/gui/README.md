@@ -1,6 +1,6 @@
 # Ingest GUI (`gjesus3_ingest.exe`) — microscopy + MRI
 
-*Last Updated: 2026-08-10*
+*Last Updated: 2026-09-04*
 
 A local Flask web-app that lets an operator run the validated ingest pipeline
 from the browser — no hand-written YAML. It is a **thin front-end** over the
@@ -71,6 +71,32 @@ apart):
   `auto_create_project` via clickable `discovered.*` token chips, each field
   showing a live resolved example (unresolved `${…}` flag red); **Save recipe**
   to `tools/operator/recipes/`.
+- **The MRI page (`/mri`)** has neither — MRI has one locked convention
+  (`mri_bruker`), so there is no recipe or builder. The operator sets who ran the
+  scanner, the destination project, and the project link name.
+  - **Destination project** — a dropdown (per animal-protocol code / a name I set
+    / no project) plus, for "a name I set", a **TokenField with its own palette**
+    (`MRI_PROJECT_PALETTE_KEYS`, passed as `project_palette_keys`). Fixed text
+    sends the run to one project; a `${discovered.*}` chip is resolved **per
+    scan**, so a single run can file scans into several different projects —
+    which is the point: an operator pulling a week off the scanner has no one
+    static project name to type. The engine always supported this (the template's
+    own default is `AE-biomaGUNE-${discovered.project_code}`); before 2026-09-04
+    only the link-name field exposed it.
+    - The palette is deliberately **narrower than the link name's**: a link name
+      wants per-scan *uniqueness*, a project name wants per-scan *grouping*, so
+      the exam / recon / sequence fields (and the resolver extras like
+      `${acq_id}`) are withheld — they would mint one project per scan.
+    - Preview renders a **per-destination breakdown** (`#project-summary`) with a
+      scan count per project and a flag on the ones that would be auto-created;
+      with a token-valued name one run can create several projects, so that list
+      is what makes the run safe to approve.
+    - An **empty** custom name is refused rather than read as "no project" — both
+      resolve to a blank `registry.project_name`, and the config cannot tell them
+      apart. Guarded on both Preview and Ingest.
+    - A custom name also replaces `auto_create_project.description`, which
+      otherwise states every project it creates came from an animal-protocol code.
+  - Regression test: `tools/operator/test_mri_project_name.py`.
 
 ## Run (development — Python, no freeze)
 
@@ -108,8 +134,11 @@ The spec defaults to `ONEFILE = True` — one self-extracting `gjesus3_ingest.ex
 chosen so the data office can drop a single file onto the NAS
 (`...\tools\gjesus3_ingest.exe`) and run it in place. (Set `ONEFILE = False` in
 the spec for the faster-starting one-folder build, where operators copy the whole
-folder locally.) The deployed production exe (NAS, 2026-06-24) is the ~95 MB
-single-file build.
+folder locally.) The deployed production exe is the ~96 MB single-file build;
+it was last rebuilt and redeployed **2026-10-05** (a taken project link name is
+refused, never merged; the MRI link name carries the study time), 96,015,460
+bytes, sha256 `54c641f1…253732`. Previous: 2026-09-04 (token-valued MRI
+destination project), 95,897,468 bytes.
 
 > **⚠️ Build OUTSIDE OneDrive.** This repo lives under a OneDrive-synced folder,
 > and OneDrive locks PyInstaller's build artifacts mid-build (`PermissionError`
@@ -130,8 +159,61 @@ The spec bundles the per-instrument templates to
 `<bundle>/tools/templates/instruments/` and the seed recipes to
 `<bundle>/tools/operator/recipes/` — exactly the `sys._MEIPASS`-aware locations
 the core's `templates.template_path()` and the GUI's `recipes_dir()` look in
-first. Verify the frozen exe by previewing **and** dry-run-ingesting a real
-`.czi` batch (the dry-run exercises `czifile`/`numpy`/`tifffile`).
+first.
+
+### ⚠️ Verify a frozen build with a REAL commit, not a dry run
+
+This page used to say "verify by previewing **and** dry-run-ingesting". **That is
+not sufficient, and demonstrably so:** the 2026-07-17 defect crashed at Step 9
+(README generation) because `README_raw.txt` was not bundled — a dry run writes
+nothing, never reaches Step 9, and would have reported success. The exe had been
+in production for weeks having never completed a single ingest.
+
+Build a throwaway test NAS and do a **real** (non-dry-run) commit through the
+frozen exe:
+
+```sh
+python tools/operator/make_test_nas.py --dest C:\Users\<you>\temp\testnas
+D:/_gjdist/gjesus3_ingest.exe --no-browser --port 5098   # GJESUS3_ROOT=<test nas>
+```
+
+Then confirm, on disk, the things only a real commit produces:
+
+| Check | Why it is on this list |
+|---|---|
+| `ok == total`, zero ERROR lines | the obvious one |
+| a `README` under `/raw/` | the exact 2026-07-17 crash point |
+| one `metadata.json` per acquisition | sidecar writer reached |
+| hard links under `projects/<name>/raw_linked/` | Step 12 reached |
+| auto-created projects carry the right description | `auto_create_project` resolved in-bundle |
+| `subject_ids` populated from the facility DB | DB reachable *through the bundle* |
+| `instrument_model` is a real model, not the template placeholder | the 2026-08-20 defect class |
+| microscopy: a real `.czi` batch | exercises `czifile`/`numpy`/`tifffile` |
+
+The 2026-09-04 rebuild was verified exactly this way (4 MRI acquisitions across
+two auto-created projects, 24 hard links). So was the 2026-10-05 one, which adds a
+**link-collision check**: plant a file under one exam's link name in the test NAS's
+`raw_linked\`. The preview must show it as taken, and the real commit must refuse
+that exam at Step 5.5, with nothing copied, while committing the others. It also
+added a real `.czi` (one small LSM 900 primary) to close the microscopy row. Record:
+`tasks/link_collision_fix_review.md` §12.
+
+### Deploying to the NAS
+
+Operators launch the exe **in place** from `\\gjesus3\gjesus3\gjesus3-data\tools\`,
+so a bad copy there is an outage. The 2026-09-04 deploy procedure:
+
+1. **Back up the live exe first, to a FRESH dated directory** — never reuse a
+   backup directory name (re-running a backup script over an existing one is what
+   destroyed the pre-1019 registry snapshot on 2026-08-21). Note that a backup
+   named for a date holds the build that was replaced *on* that date, i.e. the
+   **previous** one — as of 2026-09-04 the Aug-10 build had never been saved.
+2. Copy to `<target>.new`, hash it, and only then `os.replace()` onto the target —
+   an interrupted copy must never leave a truncated exe where operators click.
+3. SHA-256 the deployed file against the source.
+4. Deploy the matching `static/help/*.html` to `tools\docs\` — there is a
+   standalone copy there as well as the one inside the bundle.
+5. Launch the deployed exe **from the NAS** and confirm it serves the new page.
 
 > **Built & verified 2026-06-11 (Python 3.13, Windows, PyInstaller 6.18).** The
 > freeze runs clean and the frozen exe launches, serves the UI (dry-run ON by

@@ -196,7 +196,7 @@ auto_discover:
   # has dropped the extracted archive folders. Each subfolder = one
   # acquisition (one .tgz worth of content, with the 6-level outer
   # nesting stripped).
-  staging_dir: "D:/projects/Nuke/test_data"
+  staging_dir: "D:/staging/ni_<batch>"
   pattern: "*/"
   filename_parse:
     # Parse the staged folder basename (which equals the archive

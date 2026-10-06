@@ -92,6 +92,11 @@ datas += [
     # MRI remote-pull engine — app.py::_load_ftp_mirror loads it by path from
     # <_MEIPASS>/tools/ftp_mirror.py, so it must be a bundled data file.
     (os.path.join(TOOLS, "ftp_mirror.py"), "tools"),
+    # Shared folder-listing backend for /api/listdir (the counterpart of the
+    # shared static/folder_browser.js). Imported by name from tools/, so it is
+    # in hiddenimports too — bundled here as source for the same reason
+    # ingest_raw.py is.
+    (os.path.join(TOOLS, "filebrowse.py"), "tools"),
 ]
 
 hiddenimports = [
@@ -103,6 +108,8 @@ hiddenimports = [
     "ingest", "ingest_raw",
     # Finder refresh (imported inside the GUI ingest worker, 2026-07-20).
     "generate_index", "find_acq",
+    # Shared folder-listing backend for the in-page browser.
+    "filebrowse",
     # MRI SFTP pull: paramiko is imported LAZILY inside app.py's SFTP endpoints,
     # so static analysis won't see it. Pull it (and its native deps) in by name.
     "paramiko", "cryptography", "bcrypt", "nacl", "cffi",

@@ -20,7 +20,7 @@ from pathlib import Path
 from ingest import (
     config, acq_id, checksum, registry, readme, dicom_utils, linker,
     metadata_sidecar, provenance, resolver, enrichment, locking,
-    subjects_table, project_naming,
+    subjects_table, project_naming, user_tables, unparsed,
 )
 import create_project as create_project_mod
 import animal_db
@@ -147,6 +147,104 @@ def _rollback_uncommitted(dest_dir, log_fn=log):
         log_fn(f"Could not roll back {dest_dir}: {e}", "WARN")
 
 
+def _raw_primary_path(cfg_single, raw_acq_dir, acq_id_str):
+    """The raw primary a project link points at (ingest Step 12's dispatch).
+
+    Folder primary whose `primary_file_name` is an internal bundle
+    (`<ACQ-ID>.data`, NI/MRI v2) -> that bundle; legacy MRI folder layout
+    (`primary_file_name == acq_id`) -> the acquisition folder itself; a single
+    file primary (microscopy `.czi`, collaborator zip/rar) -> that file.
+    """
+    primary = cfg_single.get("primary_file_name", "")
+    primary_kind = cfg_single.get("primary_kind", "")
+    if primary and primary_kind == "folder" and primary != acq_id_str:
+        return os.path.join(raw_acq_dir, primary)
+    if primary and primary_kind == "folder":
+        return raw_acq_dir
+    if primary and not primary.endswith("/"):
+        return os.path.join(raw_acq_dir, primary)
+    return raw_acq_dir
+
+
+def _link_name_for(cfg_single, acq_id_str, acq_date, original_name):
+    """The project link name: the resolved `link_filename:` (operator-controlled
+    top-level YAML field), else `original_name`. This is the name the legacy
+    .lnk used, minus the `.lnk` suffix. A trailing slash is allowed in the
+    template as a "links to a folder" hint and is stripped here."""
+    link_template = cfg_single.get("link_filename") or ""
+    link_name = None
+    if link_template:
+        link_name = resolver.resolve_link_filename(
+            link_template, cfg_single, acq_id_str, acq_date,
+        )
+        if link_name:
+            link_name = link_name.rstrip("/").rstrip("\\")
+    return link_name or original_name
+
+
+def _preflight_project_link(cfg_single, nas_root, acq_id_str, acq_date,
+                            original_name, planned_links=None):
+    """Step 5.5: refuse a taken project link name BEFORE anything is copied.
+
+    A link name that is already taken in the project's `raw_linked/` used to
+    be merged into silently at Step 12, after the commit (stream F,
+    2026-10-04). Checking here, before the copy, lets the case FAIL cleanly:
+    nothing is copied or registered, and the operator gives it a distinct
+    name. It runs in `--dry-run` too, so a preview shows the collision.
+
+    Read-only. Resolves the project the way Step 9.5 will (without creating
+    anything) and the link name the way Step 12 will, and records the plan on
+    `cfg_single["_link_plan"]` so Step 12 links exactly the name checked here.
+    `planned_links` (dry run only) is a dict shared across one batch's cases,
+    so two cases that would take the same name are caught even though a dry
+    run creates neither link.
+
+    Returns ``(ok, message)``; ``message`` is None when there is nothing to
+    report (no project, or an auto-create project that does not exist yet).
+    """
+    project_name = project_naming.normalize_project_name(
+        cfg_single.get("project_name", "")
+    )
+    if not project_name:
+        return True, None
+    projects_registry = os.path.join(nas_root, "registries", "registry_projects.csv")
+    proj_id, canon_name, folder_rel = linker.resolve_project(projects_registry, project_name)
+    probe = dict(cfg_single)
+    probe["project_name"] = canon_name or project_name
+    if proj_id:
+        probe["project_id"] = proj_id
+    link_name = _link_name_for(probe, acq_id_str, acq_date, original_name)
+    cfg_single["_link_plan"] = {
+        "project_id": proj_id or "",
+        "project_name": probe["project_name"],
+        "link_name": link_name,
+    }
+    where = f"{probe['project_name']}/raw_linked/{link_name}"
+
+    if planned_links is not None:
+        # Keyed by the case's source, not its ACQ-ID: a dry run reserves no id,
+        # so two cases of one batch can preview the same ACQ-ID.
+        key = ((proj_id or probe["project_name"]).lower(), link_name.lower())
+        me = cfg_single.get("source_path") or original_name
+        other = planned_links.get(key)
+        if other and other != me:
+            return False, (f"project link {where} is also planned for {other} in this "
+                           f"batch; two acquisitions cannot share one link name")
+        planned_links[key] = me
+
+    if not (proj_id and folder_rel):
+        # Auto-create pending (or the project is unknown): its folder does not
+        # exist yet, so no link in it can be taken.
+        if (cfg_single.get("ingest") or {}).get("auto_create_projects"):
+            return True, f"project link {where} (the project will be created)"
+        return True, f"no project link: project '{project_name}' not found"
+    project_folder_abs = os.path.normpath(os.path.join(nas_root, folder_rel.lstrip("/")))
+    state, _dest, detail = linker.inspect_link_target(project_folder_abs, link_name, None)
+    if state == linker.LINK_TAKEN:
+        return False, f"project link {where} is already taken: {detail}"
+    return True, f"project link {where} (free)"
+
+
 def _normalize_reconstructions(value):
     """Normalise the YAML `reconstructions:` value to a set of index strings
     or None (== keep all).
@@ -198,6 +296,50 @@ def _resolve_archive_primary(cfg_single, ingest_block):
         f"No source archive found for case {case!r} under {src_dir!r} "
         f"(looked for {case}.<{'/'.join(e.lstrip('.') for e in archive_exts)}>)."
     )
+
+
+def copy_ni_flat(members, dest_dir, acq_id_str, log_fn):
+    """Copy one flat-source NI acquisition (`copy_strategy: ni_molecubes_flat`).
+
+    The sibling of `copy_ni_acquisition` for DICOMs staged off the researcher
+    working space, where an acquisition is a GROUP of loose files rather than a
+    `recon_<idx>/` folder. `members` is built by `ingest.ni_flat.discover` and
+    each entry already carries its destination name, so the resulting
+    `<ACQ-ID>.data/` is shaped exactly like the archive/live path's:
+
+        <ACQ-ID>.data/
+          recon0.dcm                (static PET/SPECT, or CT)
+          recon0_frame1.dcm, ...    (dynamic PET, one file per frame)
+          recon0_frameMULTI.dcm     (only when no per-frame files exist)
+
+    Returns {dst_relpath: sha256} for checksums.json. Raises RuntimeError if the
+    plan is empty or a copy fails verification.
+    """
+    data_dirname = f"{acq_id_str}.data"
+    out_dir = os.path.join(dest_dir, data_dirname)
+    os.makedirs(out_dir, exist_ok=True)
+
+    if not members:
+        raise RuntimeError(
+            f"No source DICOMs for {acq_id_str} — refusing to register an empty "
+            f"acquisition."
+        )
+
+    dest_checksums = {}
+    for mem in members:
+        src, dst_base = mem["src"], mem["dst"]
+        dst = os.path.join(out_dir, dst_base)
+        src_hash = checksum.sha256_file(src)
+        _copy_to_nas(src, dst)
+        dst_hash = checksum.sha256_file(dst)
+        if dst_hash != src_hash:
+            raise RuntimeError(
+                f"Verification FAILED for {dst_base} "
+                f"({src_hash[:12]} vs {dst_hash[:12]})"
+            )
+        dest_checksums[os.path.join(data_dirname, dst_base)] = dst_hash
+    log_fn(f"NI flat copy: {len(dest_checksums)} DICOM(s) -> {data_dirname}/")
+    return dest_checksums
 
 
 def copy_ni_acquisition(source_path, dest_dir, acq_id_str, log_fn, recon_idx=None):
@@ -654,7 +796,8 @@ def copy_paravision_exam(source_path, dest_dir, reconstructions, log_fn):
     return checksums
 
 
-def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_source=False):
+def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_source=False,
+                  planned_links=None):
     """Run the ingestion workflow for a single acquisition.
 
     Args:
@@ -667,9 +810,14 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         delete_source: If True (or cfg's delete_source_after_ingest is True),
             remove the source file/folder after a successful verify. The
             parent of source_path is never touched.
+        planned_links: dry run only: a dict shared across one batch's cases
+            (run_batch passes it) so two cases planning the same project link
+            name are reported even though a dry run creates neither link.
 
     Returns:
-        Tuple of (acq_id_str, success_bool).
+        Tuple of (acq_id_str, success_bool). A case refused because its
+        project link name is taken returns success False, with the reason on
+        ``cfg_single["_failure"]``.
     """
     source_path = cfg_single["source_path"]
     original_name = cfg_single.get("original_name") or Path(source_path).name
@@ -857,7 +1005,8 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         # (legacy — to be aligned in the MRI redo round).
         copy_dest = dest_dir
         copy_strategy_preview = (ingest_block.get("copy_strategy") or "").lower()
-        if copy_strategy_preview in ("ni_molecubes", "mri_paravision_v2"):
+        if copy_strategy_preview in ("ni_molecubes", "ni_molecubes_flat",
+                                     "mri_paravision_v2"):
             cfg_single["primary_file_name"] = f"{acq_id_str}.data"
         else:
             cfg_single["primary_file_name"] = acq_id_str
@@ -961,6 +1110,29 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         )
         return acq_id_str, False
 
+    # --- Step 5.5: Project-link pre-flight (2026-10-05) ---
+    # A project link name that is already taken is refused HERE, before the
+    # copy, so the case fails cleanly (nothing copied, nothing registered).
+    # Before this, Step 12 silently merged a second acquisition into the
+    # first one's link folder after the commit. Runs in --dry-run too. The
+    # ACQ-ID reserved above stays reserved (ids are never reused).
+    link_ok, link_msg = _preflight_project_link(
+        cfg_single, nas_root, acq_id_str, acq_date, original_name,
+        planned_links=planned_links if dry_run else None,
+    )
+    if not link_ok:
+        cfg_single["_failure"] = link_msg
+        log(
+            f"Refusing {original_name}: {link_msg}. Nothing was copied or "
+            f"registered. Give this acquisition a distinct link name (the "
+            f"config's link_filename:), or check whether it is a duplicate of "
+            f"the acquisition that already holds the name.",
+            "ERROR",
+        )
+        return acq_id_str, False
+    if link_msg:
+        log(f"  Link:        {link_msg}")
+
     if dry_run:
         log("[DRY RUN] Would create folder and copy files. Skipping.")
         return acq_id_str, True
@@ -984,6 +1156,11 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                     source_path, dest_dir, acq_id_str, log,
                     recon_idx=cfg_single.get("ni_recon_idx"),
                 )
+            elif copy_strategy == "ni_molecubes_flat":
+                dest_checksums = copy_ni_flat(
+                    cfg_single.get("ni_flat_members") or [],
+                    dest_dir, acq_id_str, log,
+                )
             elif copy_strategy == "mri_paravision_v2":
                 reconstructions = ingest_block.get("reconstructions")
                 auto_regenerate_dicom = bool(ingest_block.get("auto_regenerate_dicom", False))
@@ -1006,7 +1183,8 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             else:
                 log(
                     f"Unknown copy_strategy: {copy_strategy!r}. "
-                    f"Valid: 'paravision_exam', 'mri_paravision_v2', 'ni_molecubes'.",
+                    f"Valid: 'paravision_exam', 'mri_paravision_v2', "
+                    f"'ni_molecubes', 'ni_molecubes_flat'.",
                     "ERROR",
                 )
                 _rollback_uncommitted(dest_dir, log)
@@ -1256,6 +1434,22 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         # anatomical_entity straight from subject_block / anatomy_block — passed
         # to build_row at Step 10 — so the stash is no longer needed.)
 
+        # --- Step 8.45: Operator-supplied tables (08_METADATA §4.9) ---
+        # A batch may ship with a collaborator's own spreadsheet carrying
+        # per-case facts the instrument files don't (contributing centre, the
+        # grant the data was originally collected under, per-case caveats).
+        # Non-blocking like the enrichment blocks above: a case with no
+        # matching row WARNs and is omitted rather than failing the ingest,
+        # unless that table declares `on_missing: error`.
+        user_meta_block = user_tables.build_user_metadata(
+            cfg_single.get("user_metadata"),
+            cfg_single.get("discovered") or {},
+            log=log,
+            dry_run=dry_run,
+        )
+        if user_meta_block:
+            log(f"Attached user metadata: {', '.join(user_meta_block)}")
+
         sidecar_dict = metadata_sidecar.build_sidecar(
             acq_id_str,
             cfg_single,
@@ -1265,6 +1459,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             subjects=multi_subjects,
             condition=condition_block,
             anatomy=anatomy_block,
+            user_provided_metadata=user_meta_block,
         )
         sidecar_path = metadata_sidecar.write_sidecar(dest_dir, sidecar_dict)
         cfg_single["extended_metadata_present"] = "Y"
@@ -1463,40 +1658,20 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             raw_acq_dir = os.path.normpath(
                 os.path.join(nas_root, canonical_path.lstrip("/"))
             )
-            # Resolve which raw primary the link points at, based on
-            # primary_kind and whether primary_file_name names something
-            # nested inside the acq folder (NI/MRI v2: <ACQ-ID>.data) or IS
-            # the acq folder itself (legacy MRI folder layout). A folder
-            # primary becomes a real folder of per-file hard links; a file
-            # primary becomes a single hard link (see linker.create_hardlink).
-            primary = cfg_single.get("primary_file_name", "")
+            # Which raw primary the link points at: a folder primary becomes a
+            # real folder of per-file hard links; a file primary a single hard
+            # link (see linker.create_hardlink).
             primary_kind = cfg_single.get("primary_kind", "")
-            if primary and primary_kind == "folder" and primary != acq_id_str:
-                # NI/MRI v2: primary is an internal data bundle (<ACQ-ID>.data).
-                raw_primary_abs = os.path.join(raw_acq_dir, primary)
-            elif primary and primary_kind == "folder":
-                # Legacy MRI folder layout: primary_file_name == acq_id_str.
-                raw_primary_abs = raw_acq_dir
-            elif primary and not primary.endswith("/"):
-                # Single-file primary (microscopy .czi, collaborator zip/rar).
-                raw_primary_abs = os.path.join(raw_acq_dir, primary)
+            raw_primary_abs = _raw_primary_path(cfg_single, raw_acq_dir, acq_id_str)
+            # Link name: the one the Step 5.5 pre-flight checked, when the
+            # project resolved the same way there (it was not auto-created in
+            # between); else resolved now, the same way.
+            plan = cfg_single.get("_link_plan") or {}
+            if (plan.get("link_name") and plan.get("project_id") == project_id
+                    and plan.get("project_name") == cfg_single.get("project_name")):
+                link_name = plan["link_name"]
             else:
-                raw_primary_abs = raw_acq_dir
-            # Link name = resolved `link_filename:` (operator-controlled top-
-            # level YAML field), falling back to original_name. This is the
-            # same name the legacy .lnk used, minus the `.lnk` suffix.
-            link_template = cfg_single.get("link_filename") or ""
-            link_name = None
-            if link_template:
-                link_name = resolver.resolve_link_filename(
-                    link_template, cfg_single, acq_id_str, acq_date,
-                )
-                if link_name:
-                    # Trailing slash allowed in the template as a "links to a
-                    # folder" hint; strip it so the name is filesystem-clean.
-                    link_name = link_name.rstrip("/").rstrip("\\")
-            if not link_name:
-                link_name = original_name
+                link_name = _link_name_for(cfg_single, acq_id_str, acq_date, original_name)
 
             def _queue_pending_link(exc):
                 # Hard links need a hard-link-capable mount. On the NI Mac (SMB)
@@ -1598,6 +1773,19 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                 fid = provenance.append_entry(prov_path, entry)
                 if fid:
                     log(f"Appended provenance entry {fid} to {prov_path}")
+            except linker.LinkCollisionError as e:
+                # The name was free at the Step 5.5 pre-flight and is taken
+                # now (a concurrent writer, or a project created in between).
+                # The acquisition IS committed; only its project link is
+                # missing. NOT queued to pending_links.csv: a relink of a
+                # taken name would only collide again.
+                cfg_single["_link_refused"] = str(e)
+                log(
+                    f"Project link NOT created for {acq_id_str}: {e}. The "
+                    f"acquisition is registered; it needs a distinct link name "
+                    f"(nothing was written into the existing link).",
+                    "ERROR",
+                )
             except OSError as e:
                 log(f"Could not create hard link: {e}", "WARN")
                 _queue_pending_link(e)
@@ -1628,17 +1816,31 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     return acq_id_str, True
 
 
-def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
+def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
+              unparsed_report=None):
     """Run batch ingestion from a batch config.
+
+    `unparsed_report`: optional path. Every parse target (for MRI: every study
+    folder) whose name matched no filename_parse rule is written there as a CSV
+    (ingest/unparsed.py), right after discovery, so it survives a later crash.
+    Written in --dry-run too; it is a plain file at the path given, never a
+    registry. The BATCH SUMMARY lists the same targets either way.
 
     Returns list of (acq_id, success) tuples.
     """
-    cases = config.expand_batch(cfg, nas_root=nas_root)
+    unparsed_records = []
+    cases = config.expand_batch(cfg, nas_root=nas_root, unparsed=unparsed_records)
     # Stamp ingest_config onto every case (set in main()).
     ingest_config_path = cfg.get("_ingest_config_path", "")
     for case in cases:
         case["ingest_config"] = ingest_config_path
     log(f"Batch: {len(cases)} cases discovered")
+    if unparsed_records:
+        log(f"{unparsed.headline(unparsed_records)}; NOTHING under them will be "
+            f"ingested (listed in the BATCH SUMMARY).", "WARN")
+    if unparsed_report:
+        n_rows = unparsed.write_csv(unparsed_records, unparsed_report)
+        log(f"Unparsed report: {n_rows} row(s) -> {unparsed_report}")
 
     # Pre-flight: if any case will hit the animal DB for subject enrichment but
     # credentials are absent, warn ONCE up front — otherwise every subject
@@ -1655,6 +1857,9 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
         )
 
     results = []
+    # Dry run only: the project link names planned so far in this batch, so two
+    # cases that would take one name are reported (a dry run creates neither).
+    planned_links = {} if dry_run else None
     for i, case in enumerate(cases):
         log(f"\n{'='*60}")
         log(f"Case {i+1}/{len(cases)}: {case.get('source_path', '?')}")
@@ -1670,6 +1875,7 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
         acq_id_str, ok = ingest_single(
             case, nas_root,
             dry_run=dry_run, nas_unc=nas_unc, delete_source=delete_source,
+            planned_links=planned_links,
         )
         results.append((acq_id_str, ok))
 
@@ -1686,7 +1892,26 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False):
         print("  Failed cases:")
         for i, (aid, ok) in enumerate(results):
             if not ok:
-                print(f"    Case {i+1}: {cases[i].get('source_path', '?')}")
+                why = cases[i].get("_failure")
+                print(f"    Case {i+1}: {cases[i].get('source_path', '?')}"
+                      + (f"\n      -> {why}" if why else ""))
+    refused = [(aid, c.get("_link_refused")) for (aid, ok), c in zip(results, cases)
+               if ok and c.get("_link_refused")]
+    if refused:
+        print(f"  Registered WITHOUT a project link (name taken): {len(refused)}")
+        for aid, why in refused:
+            print(f"    {aid}: {why}")
+    if unparsed_records:
+        # Not counted in Total/Failed above: these never became cases. Loud on
+        # purpose -- before 2026-10-05 they left only per-exam SKIP lines.
+        print(f"  {unparsed.headline(unparsed_records)}")
+        print("  NOTHING under them was ingested:")
+        for line in unparsed.detail_lines(unparsed_records):
+            print(f"    {line}")
+        if unparsed_report:
+            print(f"  Full list (paths, reasons): {unparsed_report}")
+        else:
+            print("  Full list (paths, reasons): re-run with --unparsed-report <file.csv>")
     print()
     return results
 
@@ -1758,14 +1983,18 @@ def _touched_project_ids(acq_ids, nas_root):
     if not want:
         return []
     from ingest import registry as _registry
+    from ingest import project_ids as _project_ids
     ids, seen = [], set()
     reg_path = os.path.join(nas_root, "registries", "registry_raw.csv")
     for row in _registry.read_registry(reg_path):
         if row.get("acq_id") in want:
-            pid = (row.get("project_id") or "").strip()
-            if pid and pid not in seen:
-                seen.add(pid)
-                ids.append(pid)
+            # `project_id` is a `;`-separated list: refresh EVERY project the
+            # acquisition belongs to. Passing the joined cell straight to
+            # `generate_index --project` matched no project and refreshed none.
+            for pid in _project_ids.split_project_ids(row.get("project_id")):
+                if pid not in seen:
+                    seen.add(pid)
+                    ids.append(pid)
     return ids
 
 
@@ -1831,6 +2060,18 @@ def main():
             "index + every per-project index (the old always-on behaviour)."
         ),
     )
+    parser.add_argument(
+        "--unparsed-report",
+        metavar="CSV",
+        help=(
+            "Batch configs only: also write every parse target (for MRI, every "
+            "study folder) whose name matched no filename_parse rule to this CSV, "
+            "one row per study folder with its exam-folder count, path and "
+            "reason. Written in --dry-run too. It is a plain report at the path "
+            "you give (keep it off the NAS registries/ folder), not a registry. "
+            "The BATCH SUMMARY lists the same study folders either way."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -1878,6 +2119,9 @@ def main():
         log(f"Ingest config: {ingest_config_rel}")
 
     touched_acq_ids = []
+    if args.unparsed_report and args.interactive:
+        log("--unparsed-report is ignored in interactive mode (no discovery, "
+            "so nothing can go unparsed).", "WARN")
     if args.interactive:
         run_interactive(
             nas_root,
@@ -1897,9 +2141,13 @@ def main():
             results = run_batch(
                 cfg, nas_root,
                 dry_run=args.dry_run, nas_unc=nas_unc, delete_source=args.delete_source,
+                unparsed_report=args.unparsed_report,
             )
             touched_acq_ids = [aid for aid, ok in results if ok and aid]
         else:
+            if args.unparsed_report:
+                log("--unparsed-report is ignored for a single-case config (no "
+                    "discovery, so nothing can go unparsed).", "WARN")
             # Single-case config — validate + resolve registry: block.
             cfg["ingest_config"] = ingest_config_rel
             try:

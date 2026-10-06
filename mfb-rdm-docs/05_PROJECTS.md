@@ -1,8 +1,8 @@
 # 05 — Projects Area
 
 **Parent:** [Documentation Index](00_INDEX.md)
-**Status:** 🔶 Draft — except **§2a (Project Reference Model), which is ✅ DECIDED.**
-**Last Updated:** 2026-08-02 (new **§2a Project Reference Model** — the owning section for how a project is referred to: `project_id` + `name`, case-insensitive resolution, **folder == name verbatim**, one construction site. Retires the "project hint" vocabulary and the `proj-` folder prefix; §9 now covers the naming *convention* only. Prior: 2026-06-26.)
+**Status:** 🔶 Draft — except **§2a (Project Reference Model)** and **§3a (Project-folder ownership)**, which are ✅ DECIDED.
+**Last Updated:** 2026-09-30 (new **§4.y — reopening a closed project** with `tools/reopen_project.py`, ✅ DECIDED case by case; new **§2a.7 — `Project-NNNN`**, ✅ DECIDED 2026-09-29: a 4-digit group project id that is not an animal protocol becomes a project named `Project-` + the code as written. Prior: 2026-08-12, new **§3a — project folders are researcher-owned**, ✅ DECIDED: the system creates, populates, documents and teaches, but mandates nothing; researchers may reorganise or delete anything inside their project folder, **including hard links**, so **no system-of-record fact may be derived from a project folder's contents**. `/raw/` + `registries/` are the system of record and are self-sufficient without `/projects/`. Pairs with [06_REGISTRIES §2.3b](06_REGISTRIES.md) — an acquisition is registered to exactly one project. Same day, earlier: **§3** — the recommended subfolders `raw_linked/` · `working/` · `outputs/` · `metadata/` are now created by every tool that makes a project and were backfilled onto the existing ones; the 🕗 note is **narrowed** from "`metadata/` does not exist" to "the directory exists, its *contents* stay deferred". **§7** states which copy is authoritative. **§10** records the ✅ 2026-08-11 decision that anyone with access may create a project — through the system — and names the Project Manager GUI. Prior: 2026-08-02 (new **§2a Project Reference Model** — the owning section for how a project is referred to: `project_id` + `name`, case-insensitive resolution, **folder == name verbatim**, one construction site. Retires the "project hint" vocabulary and the `proj-` folder prefix; §9 now covers the naming *convention* only. Prior: 2026-06-26.)
 
 ---
 
@@ -143,6 +143,15 @@ is **not accepted** (no deprecated alias): it raises the resolver's unknown-key
 error listing the allowed keys, so a stale config fails loudly. Migration record:
 [CHANGELOG.md](../CHANGELOG.md), 2026-08-02.
 
+### 2a.7 `Project-NNNN`: a group project id that is not an animal protocol
+
+> **✅ DECIDED (2026-09-29, Ryan).** When data is filed under a **4-digit project id that is not an animal protocol in the facility DB** (the DB does not hold it, and it is clearly not a typo of one that it does), its project is named **`Project-` + the code as written**, e.g. `Project-0521`. Such a project has **no animal-facility link**: no subject ids resolve through it.
+
+- **Why the prefix.** An animal protocol is named `AE-biomaGUNE-NNNN` (§9). A bare `0521` would be a legal name, but it would read as a protocol and could collide with one later. `Project-` makes the difference visible in the folder list.
+- **Accepted resemblance.** `Project-0521` looks like the machine key `PROJ-0521` (§2a.1). The two are never confused by the system: the name is resolved case-insensitively against `name`, and the literal `PROJ-XXXX` form is matched only as an id (§2a.3). The resemblance to people was accepted as the price of a readable name.
+- **As written.** The code keeps the digits it was filed under. No correction is applied: a typo of a real protocol is an (A) correction to `AE-biomaGUNE-NNNN` instead, decided on DB evidence.
+- **First use:** the historical-drives classification (`tasks/drives_project_codes_findings.md` §3). `Project-0521` was approved on 2026-09-29, with its predecessor number `0720`'s documents folded in. Its folder holds a CEEA application for `AE-biomaGUNE-0521` that the facility DB does not have, so it cannot take the `AE-biomaGUNE-` name. It is created by the session that places the drives' non-raw material.
+
 ---
 
 ## 3. Directory Structure
@@ -161,16 +170,48 @@ error listing the allowed keys, so a stale config fails loudly. Migration record
         │   └── ...                     # (created by ingest_raw.py when a project resolves — see 10_TOOLS §2.1.1;
         │                               #  link filename comes from the per-instrument `link_filename:`
         │                               #  template — see 10_TOOLS §2.1.5)
-        ├── metadata/                   # 🕗 PLANNED/DEFERRED — study-level metadata (researcher-supplied)
-        │   ├── study.json              #   study aim, hypothesis, principal contact
-        │   ├── biosamples.json         #   biosample-level details (strain, age, sex, treatment)
-        │   └── <acq_id>.json           #   optional per-acquisition supplements
+        ├── working/                    # scratch and in-progress analysis
+        ├── outputs/                    # results worth keeping: figures, derived images, reports
+        ├── metadata/                   # study-level metadata — DIRECTORY CREATED; contents 🕗 PLANNED/DEFERRED
+        │   ├── study.json              #   🕗 study aim, hypothesis, principal contact
+        │   ├── biosamples.json         #   🕗 biosample-level details (strain, age, sex, treatment)
+        │   └── <acq_id>.json           #   🕗 optional per-acquisition supplements
         └── ... (researcher-organized analysis output, notes, working files)
 ```
 
-> **🕗 PLANNED/DEFERRED — `metadata/` is not deployed yet.** The study-level metadata layer is the writeable counterpart to the read-only `/raw/<ACQ-ID>/metadata.json` sidecars, but as of the current state it exists on **none** of the live projects — the tools that populate it (Excel → study-metadata importer, `gather_metadata.py`, close-out merge) are all planned (Phase 4). Architecture rationale in [08_METADATA §1](08_METADATA.md); the writer family and their status are in [08_METADATA §1.5a](08_METADATA.md). The file shapes (`study.json`, `biosamples.json`, per-acq supplements) are deferred to the Excel-import tool spec — see [tasks/BACKLOG.md](../tasks/BACKLOG.md). When the layer ships, `metadata/` will be **the only place researchers should edit study-level metadata.**
+**The four subfolders are the recommended convention (2026-08-12).** Every tool that creates a project makes all four (`create_project.py` → `ingest/project_layout.py`, which is the one definition), and [`tools/backfill_project_subfolders.py`](../tools/backfill_project_subfolders.py) added them to the projects that predate the convention. One line each:
+
+| Folder | What belongs in it |
+|---|---|
+| `raw_linked/` | Hard links to raw acquisitions. Tools put them here; **researchers may prune them** — see §3a. |
+| `working/` | Scratch and in-progress analysis. |
+| `outputs/` | Results worth keeping: figures, derived images, reports. |
+| `metadata/` | Study-level metadata. Directory created; **contents still deferred** (below). |
+
+It is a *recommendation made real*, not a rule: nothing fails because a project has extra folders, and no tool deletes what a researcher put there.
+
+> **🕗 PLANNED/DEFERRED — the study-metadata LAYER, not the directory.** Since 2026-08-12 `metadata/` itself **is** created (empty) on every project. What stays deferred is everything that would fill it: the writers (Excel → study-metadata importer, `gather_metadata.py`, close-out merge) and the file shapes (`study.json`, `biosamples.json`, per-acq supplements). As of the current state the layer's *contents* exist on **none** of the live projects. Architecture rationale in [08_METADATA §1](08_METADATA.md); the writer family and their status are in [08_METADATA §1.5a](08_METADATA.md); the file shapes are deferred to the Excel-import tool spec — see [tasks/BACKLOG.md](../tasks/BACKLOG.md). When the layer ships, `metadata/` will be **the only place researchers should edit study-level metadata.**
 
 **`raw_linked/` uses hard links, not Windows shortcuts.** Each entry is a real filesystem hard link to the acquisition's primary entity in `/raw/` — to a researcher it looks and opens exactly like the original file (or folder, via a per-file-hard-linked `.data/`), with no extra disk space consumed and no broken-shortcut failure mode. This superseded the earlier `.lnk` shortcut method (DECIDED + APPLIED 2026-06-02). Mechanism in [10_TOOLS §2.1.1](10_TOOLS.md).
+
+---
+
+## 3a. Who owns a project folder — the boundary that matters
+
+> **✅ DECIDED 2026-08-12 (Data Office).** The contents of `/projects/<proj>/` are **researcher-owned**. The system creates the structure, populates `raw_linked/` and `provenance.csv`, documents and teaches — but **mandates nothing**. Researchers may reorganise, rename, or **delete** anything inside their own project folder, including hard links.
+>
+> **Therefore: no system-of-record fact may be derived from a project folder's contents.** `/raw/` and `registries/` are the system of record, and are self-sufficient without `/projects/`.
+
+**Why this is a design position and not a concession.** Researchers do not work inside the RDM system, and today the system does not offer enough value to make them. They pull data out and analyse it elsewhere; some do not register raw files at all. A system that only stays correct when people comply would be wrong most of the time. So the split is deliberate: **`/raw/` + `registries/` are ours and are enforced; `/projects/` is theirs and is encouraged.** Project folders are a *convenience layer* — real, useful, worth maintaining, and never authoritative. As the system earns more of the group's trust this boundary can move; it should move by agreement, not by a tool quietly assuming compliance.
+
+**What follows from it, concretely:**
+
+- **`raw_linked/` is a convenience shortcut, not an index of project membership.** Researchers routinely prune it — hundreds of acquisitions in one folder is unusable, and deleting links is *allowed*. A missing link destroys nothing: the raw data, its checksums, its sidecar and its registry row are all untouched, and the link can be recreated.
+- **Do not write a validator that treats a missing link or provenance row as an integrity error.** It is not one. (Measured 2026-08-12: of 11,053 links the system recorded creating, 35 had been deleted — small, but the point is that it is *permitted*, so the number is not the argument.)
+- **Do not "repair" a project folder in bulk.** Recreating links a researcher deliberately removed is worse than leaving the gap. Where a project genuinely wants its links rebuilt, that is a conversation with its owner, then `relink_projects.py --create-missing`.
+- **Project-level questions are answered from the project's own `provenance.csv`**, which the system writes — not from the registry, and not from a directory listing.
+
+**The counterpart obligation.** Because the project layer is disposable, anything that must survive has to live in `/raw/` or `/publications/`. That is what §4.x's close-out step is for, and why project deletion is blocked until it runs.
 
 ---
 
@@ -199,6 +240,26 @@ Mechanism (intended; tracked in [tasks/BACKLOG.md](../tasks/BACKLOG.md)):
 4. After both writes verify, the project folder is deleted.
 
 Until this tool exists, projects should not be deleted — pause them indefinitely if needed, and flag the Data Mgmt Lead.
+
+### 4.y Reopening a closed project (2026-09-30)
+
+> **✅ DECIDED (Ryan, 2026-09-30):** a `closed` project is **reopened case by case** when new data for it turns up. *"I probably should not have closed those projects… this may happen a few times."*
+
+**Why it happens.** The 2026-07-14 retention close-out ([CHANGELOG](../CHANGELOG.md)) set 8 projects to `closed` (newest acquisition older than 3 years) and deleted their folders' contents; the registry rows stayed. But **closed projects keep receiving data**: the ingest does not check `status`, so an operator's AxioScan run filed 18 sections into `AE-biomaGUNE-1019` on 2026-09-29, and the historical drives carry more for `0219` and `1019`. The folders came back (an ingest re-creates `raw_linked/` for its own links), while the links removed at close-out did not, and `generate_index.py` skips `closed` projects, so their Finder pages go stale.
+
+**Procedure** — `tools/reopen_project.py`, dry run first:
+
+```
+python tools/reopen_project.py --nas-root "J:\gjesus3-data" --project AE-biomaGUNE-0219 --dry-run
+python tools/reopen_project.py --nas-root "J:\gjesus3-data" --project AE-biomaGUNE-0219 --reason "<why>"
+```
+
+1. The dry run may show only: the project's own `registry_projects.csv` row changing (`status`, `notes`, the dates); links, `_project.yaml`, `provenance.csv` rows and `index.html` added **inside that project's folder**; and **no deletion anywhere**. Anything else: stop.
+2. The run backs up `registry_projects.csv` and the project's `provenance.csv` / `_project.yaml` to a fresh dated off-NAS folder (SHA-256-verified); ensures the subfolder skeleton; restores a missing `_project.yaml` from the close-out backup (else `create_project`'s template); recreates every missing link to the project's registered acquisitions under its original name (from provenance) and gives each a provenance row; then sets `status = active`, appends `Reopened YYYY-MM-DD (<reason>)` to `notes`, recomputes `start_date` / `last_activity` from the acquisition dates, and regenerates the project's `index.html`.
+3. It never deletes or replaces anything. A link name already taken by another file, or wanted by two acquisitions (e.g. two sessions of one animal on one day under the MRI link template), is **reported** and left alone.
+4. Re-running it is a no-op (the project is `active`). If linking fails part-way, the status stays `closed` and a re-run resumes.
+
+Recreating links does not contradict §3a: those links were removed by the **system's** close-out, not by a researcher.
 
 ---
 
@@ -249,6 +310,10 @@ notes: |
   Initial exploratory analysis of IPF biomarker data.
 ```
 
+**Which copy is authoritative — ✅ the registry row.** `description`, `owner`, `status` and `notes` live in **both** `registry_projects.csv` and this file; they are meant to agree. `registry_projects.csv` is the record the tools read (the Finder joins against it, `linker` resolves folders from it); `_project.yaml` is the copy a researcher sees when they open the folder. **Any tool that edits one edits both** — the Project Manager GUI writes the registry row first and then rewrites the matching keys here, preserving this file's comments. If a folder has no `_project.yaml` (five pre-`create_project.py` folders don't) the registry edit still applies and the tool says so. Where the two disagree, the registry row wins.
+
+**Never stamped by an edit: `start_date` and `last_activity`.** Since the 2026-07-14/15 production update these mean **acquisition** dates — the project's first and newest acquisition — not ingest or edit dates. Editing a description must not move `last_activity`; no editing tool may write either field.
+
 **Auto-population at ingest-time creation.** When a project is auto-created by `ingest_raw.py` (with `ingest.auto_create_projects: true`), the ingest config's optional `auto_create_project:` block supplies the initial values for `owner`, `description`, and `notes` — resolver-evaluated, so they can pull from `discovered.<field>` parsed from filenames or paths. See [10_TOOLS §2.1.4](10_TOOLS.md). **First-write-wins:** the block is read only on the project's initial creation; subsequent ingests touching the same project ignore it. The source of truth after creation is this `_project.yaml` file — edit it directly to correct or extend the auto-populated values.
 
 ---
@@ -287,6 +352,7 @@ See [06_REGISTRIES](06_REGISTRIES.md) Section 4 for full schema. Key fields:
 > |--------------------|----------------------------------|--------|
 > | AxioScan 7 (round-4) | `AE-biomaGUNE-NNNN` (animal-project code) | 🔶 Reasonable interim — animal-project codes are durable units |
 > | Cell Observer (round-5 cells-mode) | `${researcher}-${experiment}` (e.g. `itziar-alphasma`) | ⚠️ **Stopgap only** — experiment is not a project |
+> | Group project id that is not an animal protocol | `Project-NNNN` (code as written) | ✅ DECIDED 2026-09-29 — see [§2a.7](#2a7-project-nnnn-a-group-project-id-that-is-not-an-animal-protocol) |
 >
 > **Required next step:** Convene the relevant project-lead users to converge on a real naming convention before the pilot scales out. Only the project-lead users can decide what's meaningful for organizing *their* work; the data office cannot make this call for them. The system's value compounds once a consistent convention is in place — researchers will find their raw data, intermediates, and projects via these names, so the name needs to bear real meaning. Tracked as an open question in [00_INDEX.md](00_INDEX.md).
 
@@ -331,9 +397,15 @@ The PROJ-ID is the machine key stored in `registry_raw.csv`. The folder uses the
 
 ## 10. Tooling
 
+**Who may create a project — ✅ DECIDED 2026-08-11.** **Anyone with access to gjesus3 may create a project — but only through the system.** What is centralised is the *mechanism*, not the *permission*: nobody hand-makes a folder in `projects/`, because creation through a tool is what keeps the registry row, the folder name, the required subfolders and `_project.yaml` consistent with each other. This is a smaller change than it sounds — it was already true in practice, since any operator running an ingest with `auto_create_projects: true` could mint one. The front doors are the **Project Manager GUI** (researchers) and `create_project.py` (data office).
+
+> **🕗 Ownership is typed in, not verified.** An exe on a shared workstation doesn't know who is sitting at it, so `owner` is an ordinary editable field. Owner-on-create and per-project edit rights arrive with the RDM server — tracked in [`tasks/BACKLOG.md`](../tasks/BACKLOG.md) ("Server-era identity"). Keep `owner` editable so that lands without a migration.
+
+**Front-end:** `tools/manager/gui/` — the Project Manager GUI (researcher-facing; also updates a project, and imports data into one). See [10_TOOLS §5.3](10_TOOLS.md).
+
 **Script:** `tools/create_project.py`
 
-Creates a new project folder with required structure and registry entry. See [10_TOOLS](10_TOOLS.md) for full specification.
+Creates a new project folder with the recommended structure (§3) and the registry entry. The whole read-decide-write runs under the registry lock, so two people creating a project at the same moment cannot mint the same `PROJ-NNNN` or both claim one name. See [10_TOOLS](10_TOOLS.md) for full specification.
 
 **Usage:**
 ```bash

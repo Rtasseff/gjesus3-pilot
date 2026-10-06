@@ -1,0 +1,25 @@
+/* manager.css — the few rules the Project Manager needs ON TOP of the ingest
+   GUI's shared style.css (served from /shared/style.css).
+   Deliberately tiny: every shared token, control, table, modal and log style
+   comes from the shared sheet, so the two tools stay one visual system and
+   fold together when the RDM server replaces the exes. Anything general
+   enough for both belongs in the shared sheet, not here. */
+
+/* The manager's tables are pick-lists, so rows are clickable. */
+tr.pick-row { cursor: pointer; }
+tr.pick-row:hover { background: #eff6ff; }
+
+/* Project lists and search results are longer than an ingest batch preview;
+   give them more of the screen than the shared 20rem cap. */
+.tabpane .table-wrap { max-height: 26rem; }
+
+/* Description / original-name columns are long; let them use the room and
+   ellipsize rather than pushing the table sideways. */
+#proj-table td:last-child, #r-table td:last-child { max-width: 22rem; }
+
+/* Inline "Replace it" button in the local-copy plan. */
+#l-plan button.ow { padding: .1rem .5rem; font-size: .78rem; }
+
+/* The help note lists the subfolder convention. */
+.note ul { margin: .35rem 0 0; padding-left: 1.2rem; }
+.note li { margin: .1rem 0; }

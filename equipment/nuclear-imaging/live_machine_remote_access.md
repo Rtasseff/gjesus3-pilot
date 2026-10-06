@@ -1,11 +1,13 @@
 # Internal Nuclear Imaging — **live-machine** remote access (reverse SSH tunnel)
 
-**Status:** 🔶 DRAFT — the workstation half is built and verified; the acquisition-box half is
-prepared but **not yet installed** (installing it needs physical access, which is the scarce thing
-this document exists to conserve).
-**Last updated:** 2026-08-06 — first version. Workstation landing pad verified end to end; the
-LaunchAgent and the operator field card are staged on the NAS awaiting the next access window. The
-box's key is generated **on the box** during that visit — no private key is staged anywhere (§7).
+**Status:** ✅ **IN USE since 2026-10-01** — both halves are installed. The box dials out through its
+LaunchAgent, and the Data Office logs into it from the workstation without a password (§2,
+"Operating the box from here"). Individual sections keep their own markers.
+**Last updated:** 2026-10-01 — box half installed in one visit: the manual tunnel was proven from the
+box first, then replaced by the LaunchAgent, also proven from the box. Afterwards, from the
+workstation, the box's key was hardened and a Data Office key was added to the box. Visit record
+§9; moving the landing pad to Box A without a visit §10. (First version 2026-08-06; the box's key
+was generated **on the box** — no private key was ever staged anywhere, §7.)
 **Companion documents:** [`live_machine_data_layout_and_sync_rules.md`](live_machine_data_layout_and_sync_rules.md)
 (what is *on* the box and how we would sync it) and
 [`internal_ni_data_handling_workflow_notes.md`](internal_ni_data_handling_workflow_notes.md)
@@ -21,15 +23,24 @@ box's key is generated **on the box** during that visit — no private key is st
 
 ## 1. Why this exists
 
-Two pieces of NI work require running commands **on the acquisition box itself**, not on a copy of
-its data:
+NI work that requires running commands **on the acquisition box itself**, not on a copy of its
+data:
 
-- **Gate-0 for live-box sync** ([`tasks/STATUS.md`](../../tasks/STATUS.md)) — confirming `os.link`
-  (hard-link) behaviour on the box's CIFS mount. This is the single remaining gate before the
-  live-machine NI ingest can go live, and it cannot be answered from anywhere else.
+- **Developing and testing the NI live sync on the box** — the sync command researchers will run
+  there (branch `feat/ni-live-hardening`, not yet merged; its on-box merge gates are listed in that
+  branch's `tasks/RESUME_ni_live.md` §4). Before 2026-10-01 every such run cost a physical visit.
 - **Refreshing the evidence base** — `live_machine_data_layout_and_sync_rules.md` rests entirely on
   `S:\gnuclear\2026\Jesus\Ryan\datapath.txt`, a 295,538-line recursive dump of the box's data root
-  captured during a physical visit. Every re-check of that layout currently costs another visit.
+  captured during a physical visit. Until the tunnel, every re-check of that layout cost another visit.
+- **Later: the server pulls NI data itself.** The planned single ingest app on Box A reaches the box
+  through this tunnel, so operators can leave the room as soon as the scan is done (§10;
+  [`tasks/BACKLOG.md`](../../tasks/BACKLOG.md) "Ingest from one place").
+
+**Gate-0 was answered without the tunnel.** This document was first motivated by Gate-0: whether
+`os.link` (hard links) works on the box's SMB mount. The answer is **no**: `os.link` returns `ENOTSUP`,
+proven on the box on 2026-06-25 and again on 2026-08-05. The ingest handles it by deferring those
+links to `registries/pending_links.csv`, which `tools/relink_pending.py` drains from Windows
+(NI-RA-05).
 
 Access to the box is **rare, short, and scheduled around imaging sessions**. Before this, each of
 those questions cost a slot; a failed attempt cost the whole slot and a week's wait. The tunnel
@@ -64,11 +75,28 @@ Two directions over **one** TCP connection:
 2. `-R 2222:localhost:22` makes that session open a listener on **`localhost:2222` inside WSL**.
    Anything connecting there emerges at the box's own `localhost:22`.
 
-To use it from the workstation:
+### Operating the box from here ✅ (since 2026-10-01)
 
 ```powershell
-ssh -p 2222 molecubes@localhost
+wsl -d Ubuntu -- ssh -p 2222 molecubes@localhost     # from PowerShell
+ssh -p 2222 molecubes@localhost                      # from a WSL shell
 ```
+
+| | |
+|---|---|
+| **Login** | No password. The WSL key `~/.ssh/id_ed25519` (comment `rtasseff@gmail.com`) is in the box's `~/.ssh/authorized_keys`. Plain Windows `ssh` also reaches the box (see the loopback mirroring below), but it asks for the Mac's password, because the key lives in WSL. |
+| **The box** | `molecubess-iMac.local`, user `molecubes`, macOS 11.6.5. Host key ED25519 `SHA256:EAfNEV4TsBCUK22crq2CtMdZuZ1OvAw6H02A+2DKZrw`, saved in WSL's `known_hosts` as `[localhost]:2222`. |
+| **Is it up?** | `wsl -d Ubuntu -- bash -c 'nc -w 4 localhost 2222 </dev/null \| head -1'` prints `SSH-2.0-OpenSSH_8.1`. That is the **box's** sshd; WSL's own reports 9.6. On the box, `launchctl list \| grep eus.biomagune` shows the agent with a PID. |
+| **Mounts on the box** (2026-10-01) | `/Volumes/gnuclear` = `//nuclearuser@10.10.1.92/gnuclear` · `/Volumes/gnuclear2$` = `//nuclearuser@cicmgsp02/gnuclear2$` · `/Volumes/gjesus3` = `//rtasseff@GJESUS3._smb._tcp.local/gjesus3` (SMB 3.1.1). Ryan reports that the `gjesus3` mount does not stay up. It is the sync's destination, so that is tracked as a sync prerequisite in [`tasks/STATUS.md`](../../tasks/STATUS.md), not here. |
+
+**The rules of §3 apply to remote work too.** The box is slow and runs live acquisitions. Keep what
+runs over the tunnel light and short, and never write into its acquisition folders.
+
+**Quoting trap when scripting it from Git Bash or PowerShell.** `wsl.exe -- ssh … '<remote
+command>'` re-parses the line inside WSL, so `$(…)` in the "remote" command expands **on the
+workstation**: `$(hostname)` reported `bmg-rtasseff` while the commands around it ran on the box.
+For anything beyond a single plain command, put the ssh call in a script and feed the remote side
+through `ssh … 'bash -s' <<'EOF'`.
 
 ### Why the landing pad is inside WSL
 
@@ -106,8 +134,9 @@ therefore classified by **whether it persists**, and the persistent ones are min
 
 | Action | Persists? | Assessment |
 |---|---|---|
-| Enabling **Remote Login** (macOS SSH) | ✅ survives reboot | The only lasting change, and unavoidable — the tunnel cannot work without it. Record whether it was already on, so it can be restored. |
-| Installing the **SSH key + LaunchAgent** | ✅ survives reboot | Deliberate, so the tunnel reconnects unattended. Removal is two `rm` commands plus one `launchctl` call (§6). |
+| Enabling **Remote Login** (macOS SSH) | ✅ survives reboot | Unavoidable — the tunnel cannot work without it. **It was already on (2026-10-01, NI-RA-02), so nothing changed.** |
+| Installing the **SSH key + LaunchAgent** | ✅ survives reboot | Deliberate, so the tunnel reconnects unattended. **Installed 2026-10-01.** Removal is two `rm` commands plus one `launchctl` call (§6). |
+| A **Data Office key** in the box's `~/.ssh/authorized_keys` | ✅ survives reboot | **Added 2026-10-01**, so the box can be operated from the workstation without a password. One line, comment `rtasseff@gmail.com`; removal in §6. |
 | The `ssh -N` tunnel process | ❌ process-scoped | An idle TCP connection. Negligible CPU and network. |
 | `caffeinate` | ❌ process-scoped | **Not used.** `pmset -g` on the box reports `sleep 0` — it already never idle-sleeps, so the assertion was redundant and was dropped rather than added. |
 
@@ -119,7 +148,7 @@ maintaining its own connection.
 
 ## 4. What is proven, and what is not
 
-Verified from the Data Office workstation on 2026-08-05/06:
+Verified from the Data Office workstation on 2026-08-05/06, and at the box on 2026-10-01:
 
 | Link | State |
 |---|---|
@@ -129,8 +158,9 @@ Verified from the Data Office workstation on 2026-08-05/06:
 | `-R` reverse forwarding through the forwarder | ✅ verified by rehearsal, with WSL standing in for the box |
 | Riding the tunnel back from Windows | ✅ verified (both `wsl -d Ubuntu -- ssh …` and plain `ssh …` forms) |
 | Idle survival (45 s with no traffic) | ✅ verified after the forwarder fix below |
-| **The box actually running the tunnel** | 🕗 **not yet** — needs the next access window |
-| Unattended reconnect via LaunchAgent | 🕗 **not yet** — installed during the same window |
+| **The box actually running the tunnel** | ✅ **2026-10-01** — the manual tunnel was proven from the box (STEP 6c), then replaced by the LaunchAgent |
+| Unattended reconnect via LaunchAgent | ✅ **installed and proven from the box 2026-10-01** (STEP 7d). Not yet seen recovering from a real drop or reboot (NI-RA-01b). |
+| The **hardened** box key carrying the tunnel | 🔶 Restrictions applied 2026-10-01 at 16:03. The live connection authenticated at 15:52, before that, and is unaffected (re-checked after). The first login under the restricted key is the next reconnect. The same option set does carry `-R 2222` for the rehearsal key (acceptance test steps 6–8), and the LaunchAgent runs `ssh -N`, so the forced command never fires. |
 
 ### The failure that cost the first attempt ⚠️ read before debugging
 
@@ -150,6 +180,16 @@ Two lessons worth carrying:
 - **`nc -vz` is not a valid readiness test against this forwarder.** It reports success whenever
   something accepts a socket, including when the far side is dead. Always read a banner:
   `nc -w 3 10.10.2.195 2200 < /dev/null | head -1`.
+- **…but on the box itself that banner read gives false negatives** (found 2026-10-01). At the box
+  it printed nothing on both 2200 and 8000, yet the landing pad was healthy: the acceptance test
+  had passed 9/9 that morning, and `ssh-copy-id` over 2200 succeeded a minute later. A browser
+  pointed at those ports reported an "HTTP/0.9" response. That is the SSH banner, i.e. proof that
+  sshd *was* answering. (Port 8000 is the tunnel's fallback forwarder, not an image server.)
+  **From the box, test with ssh itself:**
+  `ssh -o BatchMode=yes -o ConnectTimeout=5 -p 2200 rtasseff@10.10.2.195 true`.
+  `Permission denied (…)` means a live sshd answered. `Connection reset` is the 2026-08-05 "half up"
+  failure. A refusal or timeout means nothing is listening. The field card still carries the `nc`
+  form (§9).
 
 Both are encoded in the field card and in the WorkstationOps health check, which probes the
 workstation's LAN address (never loopback — `wslrelay.exe` mirrors WSL's sshd onto `127.0.0.1:2200`
@@ -158,6 +198,9 @@ and would report a healthy path when every forwarder is dead).
 ---
 
 ## 5. Operator procedure
+
+**The box half was installed with this procedure on 2026-10-01 (§9).** It is now needed only to
+re-install from scratch. Moving the landing pad to Box A does **not** need it, or a visit (§10).
 
 The authoritative, self-contained field card is **`S:\gnuclear\2026\Jesus\Ryan\tunnel.txt`** — kept
 on the NAS deliberately, because it is reachable from the box when nothing else is. Take that, not
@@ -175,14 +218,19 @@ Shape of the visit:
    The test stands a workstation-local rehearsal key in for the box and checks all nine links,
    including that the key **cannot** obtain a shell or bind an unpermitted port, and that an idle
    tunnel survives (the regression guard for §4's 5-second bug). Exit 0 means safe to travel.
-   Last full run: **9/9 PASS, 2026-08-06**.
+   Last full run: **9/9 PASS, 2026-10-01**, the morning of the install.
+   ⚠️ **While the box is connected, this test cannot reach 9/9.** The box holds `localhost:2222`,
+   so step 6's rehearsal `-R 2222` is refused ("tunnel did not start"). Step 7 then reads the
+   *box's* banner and passes for the wrong reason. Expect 8/9: it is a pre-install test, not a
+   health check of the live tunnel. Use the checks in §2 for that.
 2. **At the box:** confirm the username and Remote Login; read a banner from the workstation
    (**not** `nc -vz`); generate a key **on the box**; push its public half with `ssh-copy-id`.
 3. **Establish the proven tunnel first** (a detached `nohup ssh -N -R`), and verify it.
 4. **Only then attempt the LaunchAgent**, rolling back to step 3 at the first sign of trouble.
 5. **Back at the workstation:** harden the pushed key
    (`WorkstationOps\setup\harden-tunnel-key.sh`), re-confirm, then use it:
-   `ssh -p 2222 molecubes@localhost`.
+   `ssh -p 2222 molecubes@localhost`. Done 2026-10-01, plus a Data Office key for passwordless
+   login (§2).
 
 ### The single-operator constraint ✅ DECIDED — this shapes the whole procedure
 
@@ -228,17 +276,22 @@ changes.
 
 ## 6. Removing it
 
-Leaves no residue beyond the two files and the Remote Login setting:
+Leaves no residue beyond these files, one `authorized_keys` line, and the Remote Login setting. On
+the box:
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
 rm ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
-rm ~/.ssh/id_ed25519_gjesus3_tunnel
+rm ~/.ssh/id_ed25519_molecubes_tunnel ~/.ssh/id_ed25519_molecubes_tunnel.pub
+# then delete the Data Office line (comment rtasseff@gmail.com) from ~/.ssh/authorized_keys
 ```
 
-Then, on the workstation, drop the matching line from WSL's `~/.ssh/authorized_keys` — after which
-the key is dead everywhere even if a copy survives. Turn Remote Login back off only if it was off
-before (§3).
+(Until 2026-10-01 this block named the key `id_ed25519_gjesus3_tunnel`, which never existed. The
+field card and the LaunchAgent both use `id_ed25519_molecubes_tunnel`.)
+
+Then, on the workstation, drop the `molecubes-box` line from WSL's `~/.ssh/authorized_keys` — after
+which the box's key is dead everywhere even if a copy survives. **Leave Remote Login on**: it was
+already on before we arrived (NI-RA-02).
 
 ---
 
@@ -272,7 +325,14 @@ Other posture notes:
   reason the option set above matters: a stolen key yields a port-forward to a sandbox, not a login.
 - Port 2200 is exposed on the institute LAN, with password authentication still enabled for
   interactive use. Restricting callers (`--allow` on the forwarder) is available but not applied —
-  the box is NAT'd, so the useful allow-list entry is its router's egress address (NI-RA-03).
+  the box is NAT'd, so the useful allow-list entry is its router's egress address, **`10.10.3.168`**
+  (NI-RA-03, captured 2026-10-01).
+- **The reverse direction is not restricted, deliberately.** The Data Office key added to the box
+  on 2026-10-01 (WSL `~/.ssh/id_ed25519`, no passphrase) is an ordinary login: whoever can use the
+  WSL account on the workstation can open a shell on the acquisition iMac as `molecubes`. That is
+  its purpose — operating the box from here — and why it is recorded rather than restricted.
+- The box's `authorized_keys` also holds an older RSA key, comment `molecubes@molecubess-iMac.local`.
+  The Data Office did not add it, and left it alone.
 - A second, **workstation-local rehearsal key** (`~/.ssh/id_ed25519_molecubes_tunnel` inside WSL,
   comment `molecubes-tunnel-2026-08-06`) exists deliberately: it lets the full tunnel path be
   re-tested from the workstation alone, without the acquisition box. It carries the same
@@ -285,9 +345,81 @@ Other posture notes:
 
 | ID | Question | Status |
 |----|----------|--------|
-| NI-RA-01 | Does the LaunchAgent work at all? It is **untested** and is the only part of the kit that has never run. The procedure treats it as an optional upgrade behind a proven manual tunnel for exactly this reason. | 🕗 First attempt at the next visit |
-| NI-RA-01b | Does the tunnel survive a full reboot of the box, and does user `molecubes` log in automatically? A LaunchAgent starts at login, not at the login window. | 🕗 Cannot be answered until installed |
-| NI-RA-02 | Was Remote Login already enabled on the box, or did we enable it? | ⚠️ Record during the next visit |
-| NI-RA-03 | What is the box's egress address as seen by the workstation? Needed before any forwarder allow-list. | ⚠️ Capture from `sshd` logs on first real connection |
+| NI-RA-01 | Does the LaunchAgent work at all? It is **untested** and is the only part of the kit that has never run. The procedure treats it as an optional upgrade behind a proven manual tunnel for exactly this reason. | ✅ **YES (2026-10-01).** Installed by STEP 7 after the manual tunnel was proven, then proven itself by STEP 7d (workstation → box through it). Running as the agent's PID, log empty. |
+| NI-RA-01b | Does the tunnel survive a full reboot of the box, and does user `molecubes` log in automatically? A LaunchAgent starts at login, not at the login window. | 🔶 **Half answered.** The box does **not** log in automatically (`autoLoginUser` unset, read 2026-10-01). After a reboot the tunnel stays down until someone logs into `molecubes` — in practice the next operator. A real reboot has not been observed yet (box uptime 20 days on 2026-10-01). |
+| NI-RA-02 | Was Remote Login already enabled on the box, or did we enable it? | ✅ **Already on** (2026-10-01, STEP 2). Nothing was changed. |
+| NI-RA-03 | What is the box's egress address as seen by the workstation? Needed before any forwarder allow-list. | ✅ **`10.10.3.168`** — the remote end of the box's connection to the forwarder, 2026-10-01. Allow-list still not applied (§7). |
 | NI-RA-04 | Should the workstation landing pad auto-start at logon? | ✅ **DONE 2026-08-06.** A `Logon` trigger was added to `WorkstationOps\lib\scheduled-task.ps1` and the op is registered as `WorkstationOps-MolecubesTunnel` (user-scoped, 1-min delay, `ExecutionTimeLimit=PT0S`). Verified by starting the task and running the full acceptance test against it: 9/9. Arriving to find the landing pad down was the one failure with no recovery from inside the restricted room. |
-| NI-RA-05 | Does Gate-0 (`os.link` on the box's CIFS mount) pass once remote access is available? | 🕗 The first real task for this tunnel |
+| NI-RA-05 | Does Gate-0 (`os.link` on the box's CIFS mount) pass once remote access is available? | ✅ **Closed — answered without the tunnel.** `os.link` returns `ENOTSUP` there (proven on the box 2026-06-25 and 2026-08-05); handled by `pending_links.csv` + `relink_pending.py` (§1). |
+
+---
+
+## 9. Install visit — 2026-10-01
+
+Ryan, in the acquisition room, following field card rev4. His step-by-step notes are on the NAS
+next to the card (`S:\gnuclear\2026\Jesus\Ryan\tunnel_notes.txt`, which also records the failed
+2026-08-05 attempt).
+
+| Step | Result |
+|---|---|
+| 1 `whoami` | `molecubes` ✅ |
+| 2 Remote Login | already on ✅ (NI-RA-02) |
+| 3 banner from the workstation | ⚠️ printed **nothing** on 2200 and 8000 — a false negative (§4). Ryan carried on, which was right. |
+| 4 key generated on the box | ✅ `id_ed25519_molecubes_tunnel`, comment `molecubes-box`, `SHA256:AWKNXDQaryGKDthfAxzyq2N88BcBPUmT5/d7QGh55jQ` |
+| 5 `ssh-copy-id` with the WSL password, then key-only login | ✅ returned `bmg-rtasseff` with no password |
+| 6 manual tunnel; 6c ride it back | ✅ after one snag: 6c first failed with `REMOTE HOST IDENTIFICATION HAS CHANGED` for `[localhost]:2222`. It was a **stale** WSL `known_hosts` entry, almost certainly left by the August rehearsal, in which WSL's own sshd stood in for the box on that port (§4). Ryan removed it with `ssh-keygen -R '[localhost]:2222'`, and the re-run printed the box's hostname. |
+| 7 LaunchAgent; 7d ride it back | ✅ |
+| 8 before leaving | ✅ exactly one `ssh -N`, the LaunchAgent's (`… -R 2222:localhost:22 -p 2200 rtasseff@10.10.2.195`) |
+
+**Afterwards, from the workstation, the same day:**
+
+- Box key hardened with `WorkstationOps\setup\harden-tunnel-key.sh` at 16:03. A backup of the
+  previous file is at WSL `~/.ssh/authorized_keys.bak.20261001160305`. Re-checked afterwards: the
+  tunnel still carried the box's banner.
+- Box egress address read from the forwarder's open connection: `10.10.3.168` (NI-RA-03).
+- Data Office key added to the box. Ryan ran `ssh-copy-id -i ~/.ssh/id_ed25519.pub -p 2222
+  molecubes@localhost` in WSL, typing the Mac's password once. Passwordless login was then verified
+  (`molecubess-iMac.local`, `molecubes`, macOS 11.6.5).
+- Read-only checks on the box: the LaunchAgent is loaded with a PID; its log is empty; there is no
+  auto-login (NI-RA-01b); the three SMB mounts are as listed in §2.
+
+**Field card follow-ups for its next revision (rev5).** Not urgent while the box half stays
+installed. Due before the card is next used:
+
+- STEP 3: replace the `nc` banner read with the ssh check from §4.
+- STEP 6c: say that `REMOTE HOST IDENTIFICATION HAS CHANGED` for `[localhost]:2222` is expected
+  after a rehearsal, and give the `ssh-keygen -R` line. Or clear that entry before the trip.
+- REMOVING: add the Data Office line in the box's `authorized_keys` (§6).
+
+---
+
+## 10. Moving the landing pad to Box A (✅ decided 2026-10-01 · procedure 🔶 DRAFT)
+
+**Decision (Ryan, 2026-10-01):** the tunnel moves to Box A with the rest of gjesus3 RDM. This
+settles **B2** in [`tasks/box_a_production_migration_plan.md`](../../tasks/box_a_production_migration_plan.md),
+which asked whether to move it or leave it on this workstation as the documented exception. Box A
+will also host the single ingest web app that pulls NI data through it
+([`tasks/BACKLOG.md`](../../tasks/BACKLOG.md) "Ingest from one place").
+
+**It needs no visit.** B2 assumed that re-pointing the box would cost another physical access slot.
+Now that the tunnel is live, the box can be reconfigured **through the tunnel itself**. The order
+below keeps a working tunnel at every step, so whatever fails, the old tunnel is still up to undo
+it:
+
+1. **Stand up a landing pad on Box A** and prove it from Box A's side, as the acceptance test does
+   here (§5 step 1). Port, where sshd runs, and whether Box A has admin rights are settled then.
+2. **From the box, through the current tunnel, prove that Box A is reachable** on that port, using
+   the ssh check from §4 (not `nc`). The box reaches this workstation through its router; the path
+   to Box A is untested.
+3. **Authorize the box's existing key on Box A.** Copy the `molecubes-box` line from this
+   workstation's WSL `authorized_keys`, restrictions included. No new key on the box; no private
+   key moves.
+4. **Install a second LaunchAgent on the box** (its own label and plist) that dials Box A. Prove it
+   the way STEP 7d does — from Box A, `ssh -p 2222 molecubes@localhost hostname`. That login needs
+   a Box A key in the box's `authorized_keys`: generate it **on Box A** and add its public half
+   through the current tunnel. Do not copy this workstation's private key.
+5. **Only then** unload and remove the agent that dials this workstation, and run
+   `.\ops unschedule molecubes-tunnel` here. Removing an op from the enabled list does not remove
+   its scheduled task (Box A plan §4.1).
+6. **Update this document** (§2's addresses, a §9-style record) **and the field card**, whose FACTS
+   block names this workstation.

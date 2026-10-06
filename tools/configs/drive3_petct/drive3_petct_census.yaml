@@ -1,0 +1,40 @@
+# CENSUS of the drive's Molecubes reconstructions (DRY-RUN ONLY, never run for real: it sets no project).
+# The discovery and dedup of the stream N batches over ALL 492 distinct reconstructions on the drive, staged
+# once each in the snapshot's layout (stage\all492, hard links of new102 + inprod290 + snaponly100), with no
+# case table and no project requirement. Against production it must list exactly the 202 the drive holds and
+# production lacks, and skip the 290 production holds; against the rehearsal root after the rehearsal it must
+# list 0. Gate: tasks/drive3_petct_gate.md.
+#
+#   python tools/ingest_raw.py --config tools/configs/drive3_petct/drive3_petct_census.yaml --nas-root J:/gjesus3-data --dry-run
+#
+# GUARD: `copy_strategy` is deliberately not a real one. A dry run never reaches the copy, so the census is
+# unaffected; a run WITHOUT --dry-run fails every case at the copy step ("Unknown copy_strategy"), before any
+# file is copied or any registry row is written (only ACQ-ID high-water reservations would be spent).
+
+ingest:
+  acquisition_layout: folder
+  copy_strategy: census_only_never_copies
+  auto_create_projects: false
+  delete_source_after_ingest: false
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/drive3_streams/petct/stage/all492"
+  ni_gnuclear_flat: true
+  researchers: [MJ]
+  require_project: false
+  validate_projects: true
+  subject_parse:
+    field: subject
+  subject_from_db: false
+
+registry:
+  instrument:           discovered.modality
+  data_ecosystem:       DICOM
+  instrument_model:     "Molecubes (PET/SPECT/CT)"
+  researcher:           NA
+  data_source:          internal
+  sample_id:            "${discovered.subject}"
+  sample_type:          NA
+  acquisition_datetime: discovered.acq_datetime_full
+  project_name:         NA
+  notes:                "CENSUS ONLY"

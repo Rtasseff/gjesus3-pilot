@@ -42,6 +42,7 @@ import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ingest import linker, provenance, resolver  # noqa: E402
+from ingest import project_ids as pids  # noqa: E402  (the ;-separated project cell)
 
 _CONFIG_CACHE = {}
 
@@ -179,6 +180,10 @@ def relink_project(project_abs, registry, dry_run=False, keep_lnk=False):
                 os.remove(os.path.join(raw_linked, lnk))
                 stats["deleted"] += 1
             print(f"    OK   {lnk}  ->  hard {kind} 'raw_linked/{link_name}'")
+        except linker.LinkCollisionError as e:
+            # Never merged into (2026-10-05); the .lnk is kept.
+            print(f"    COLLISION {lnk}: {e} -- .lnk kept")
+            stats["errors"] += 1
         except Exception as e:  # noqa: BLE001 - report and continue
             print(f"    ERROR {lnk}: {e}")
             stats["errors"] += 1
@@ -206,14 +211,21 @@ def create_missing_project(project_abs, project_id, registry, dry_run=False):
     creates the hard link if absent. Skips rows whose template can't be fully
     resolved from registry fields alone (e.g. names needing `discovered.*` that
     is not stored in the registry) — those rows already have links from ingest.
+
+    A name already holding this acquisition's link is skipped; a name taken by
+    anything else is reported as a COLLISION and left alone (2026-10-05: it
+    used to be skipped silently, which hid the acquisition's missing link).
     """
     raw_linked = os.path.join(project_abs, "raw_linked")
     prov_path = os.path.join(project_abs, "provenance.csv")
-    stats = {"created_file": 0, "created_folder": 0, "skipped": 0, "errors": 0}
+    stats = {"created_file": 0, "created_folder": 0, "skipped": 0, "errors": 0,
+             "collisions": 0}
     linked = already_linked_acqs(prov_path)
 
+    # `project_id` is a `;`-separated list — membership, not equality, or an
+    # acquisition shared with a second project would never get its missing link.
     rows = [r for r in registry.values()
-            if (r.get("project_id") or "").strip() == project_id
+            if pids.has_project_id(r.get("project_id"), project_id)
             and r["acq_id"] not in linked]
     for row in rows:
         acq_id = row["acq_id"]
@@ -234,9 +246,13 @@ def create_missing_project(project_abs, project_id, registry, dry_run=False):
         src = raw_primary_path(NAS_ROOT, row)
         is_folder = os.path.isdir(src)
         kind = "folder" if is_folder else "file"
-        dest = os.path.join(raw_linked, link_name)
-        if os.path.exists(dest):
+        state, dest, detail = linker.inspect_link_target(project_abs, link_name, src)
+        if state == linker.LINK_OWN:
             stats["skipped"] += 1
+            continue
+        if state == linker.LINK_TAKEN:
+            print(f"    COLLISION {acq_id}: 'raw_linked/{link_name}' is taken ({detail}) -- left alone")
+            stats["collisions"] += 1
             continue
         if dry_run:
             print(f"    [dry-run] {acq_id}  ->  NEW hard {kind} 'raw_linked/{link_name}'  (src: {src})")
@@ -265,6 +281,9 @@ def create_missing_project(project_abs, project_id, registry, dry_run=False):
                 "notes": "Auto-generated: link missing after rebuild (original ingest failed link creation)",
             })
             print(f"    NEW  {acq_id}  ->  hard {kind} 'raw_linked/{link_name}'")
+        except linker.LinkCollisionError as e:
+            print(f"    COLLISION {acq_id}: {e} -- left alone")
+            stats["collisions"] += 1
         except Exception as e:  # noqa: BLE001
             print(f"    ERROR {acq_id}: {e}")
             stats["errors"] += 1
@@ -318,7 +337,8 @@ def main(argv=None):
           f"{' (keeping .lnk)' if args.keep_lnk else ''}"
           f"{' +create-missing' if args.create_missing else ''}")
     totals = {"lnk": 0, "file_links": 0, "folder_links": 0, "deleted": 0,
-              "skipped": 0, "errors": 0, "created_file": 0, "created_folder": 0}
+              "skipped": 0, "errors": 0, "created_file": 0, "created_folder": 0,
+              "collisions": 0}
     for name in names:
         project_abs = os.path.join(projects_dir, name)
         print(f"\n== {name} ==")
@@ -341,11 +361,13 @@ def main(argv=None):
                       f"registry_projects.csv (folder not registered or "
                       f"folder_location mismatch) — create-missing skipped "
                       f"for this project.")
-                cm = {"created_file": 0, "created_folder": 0, "skipped": 0, "errors": 0}
-            for k in ("created_file", "created_folder", "skipped", "errors"):
+                cm = {"created_file": 0, "created_folder": 0, "skipped": 0, "errors": 0,
+                      "collisions": 0}
+            for k in ("created_file", "created_folder", "skipped", "errors", "collisions"):
                 totals[k] += cm[k]
             line += (f" | created-missing: {cm['created_file']} file + "
-                     f"{cm['created_folder']} folder ({cm['skipped']} skipped, {cm['errors']} err)")
+                     f"{cm['created_folder']} folder ({cm['skipped']} skipped, "
+                     f"{cm['collisions']} collisions, {cm['errors']} err)")
         for k in ("lnk", "file_links", "folder_links", "deleted", "skipped", "errors"):
             totals[k] += s[k]
         print(line)
@@ -356,9 +378,10 @@ def main(argv=None):
           f"{totals['deleted']} .lnk removed")
     if args.create_missing:
         print(f"       created-missing: {totals['created_file']} file + "
-              f"{totals['created_folder']} folder links")
+              f"{totals['created_folder']} folder links | "
+              f"{totals['collisions']} collisions (name taken, left alone)")
     print(f"       {totals['skipped']} skipped | {totals['errors']} errors")
-    return 1 if totals["errors"] else 0
+    return 1 if totals["errors"] or totals["collisions"] else 0
 
 
 if __name__ == "__main__":

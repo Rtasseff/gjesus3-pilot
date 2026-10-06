@@ -46,6 +46,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from ingest import registry, pending  # noqa: E402
+from ingest import project_ids  # noqa: E402  (the ;-separated project cell)
 
 
 def log(msg, level="INFO"):
@@ -127,13 +128,19 @@ def sample_type_of(md):
 
 
 def load_project_ids(nas_root):
-    """Map acq_id -> project_id from registry_raw.csv (empty dict if absent)."""
+    """Map acq_id -> SET of lower-cased project ids from registry_raw.csv.
+
+    A set, not a string: `project_id` is a `;`-separated list (2026-08-11), so
+    an acquisition shared between two projects belongs to both and a `--project`
+    filter must match either. Comparing the joined cell matched neither.
+    """
     reg_path = os.path.join(nas_root, "registries", "registry_raw.csv")
     ids = {}
     for row in registry.read_registry(reg_path):
         acq = (row.get("acq_id") or "").strip()
         if acq:
-            ids[acq] = (row.get("project_id") or "").strip()
+            ids[acq] = {p.lower() for p in
+                        project_ids.split_project_ids(row.get("project_id"))}
     return ids
 
 
@@ -322,7 +329,7 @@ def main(argv=None):
     scanned_ids = set()
     for acq, _md_path, md in walk_raw(nas_root):
         total += 1
-        if accept is not None and proj_of.get(acq, "").lower() not in accept:
+        if accept is not None and accept.isdisjoint(proj_of.get(acq) or ()):
             continue
         scanned += 1
         scanned_ids.add(acq)
@@ -331,7 +338,7 @@ def main(argv=None):
 
     # Pending list. Apply the same project filter (by acq_id -> project_id).
     for acq, gap_type, detail in collect_pending_gaps(nas_root):
-        if accept is not None and proj_of.get(acq, "").lower() not in accept:
+        if accept is not None and accept.isdisjoint(proj_of.get(acq) or ()):
             continue
         rows.append((acq, gap_type, detail))
 

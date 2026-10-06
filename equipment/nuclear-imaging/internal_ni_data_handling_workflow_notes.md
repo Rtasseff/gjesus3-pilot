@@ -53,7 +53,7 @@ The user / Data Mgmt Lead requested in round 8: ingest "everything available for
 
 **Round-8 pipeline (orchestrated by the operator):**
 
-1. **Extract** with [`tools/extract_ni_archives.py`](../../tools/extract_ni_archives.py) — walks the SMB archive, pulls each `.tgz`, extracts to `D:/projects/Nuke/test_data/<archive_basename>/` with `--strip-components=6` so the staged folder contains the acquisition's files directly (protocol.xml, recon_<idx>/, etc.). Idempotent: skips already-extracted archives via a `.extracted` sentinel.
+1. **Extract** with [`tools/extract_ni_archives.py`](../../tools/extract_ni_archives.py) — walks the SMB archive, pulls each `.tgz`, extracts to local scratch (round 8 used `D:/projects/Nuke/test_data/<archive_basename>/`, since deleted) with `--strip-components=6` so the staged folder contains the acquisition's files directly (protocol.xml, recon_<idx>/, etc.). Idempotent: skips already-extracted archives via a `.extracted` sentinel.
 2. **Ingest** with `tools/ingest_raw.py` using [`tools/configs/ni_jesus_archive_2025_TEST.yaml`](../../tools/configs/ni_jesus_archive_2025_TEST.yaml). The config's `filename_parse.regex:` parses the staged folder basename (= the `.tgz` name without extension) into 7 `discovered.*` fields (user / series_id / acq_date_short / short_project / short_sample / acq_datetime_full / modality). `acquisition_layout: folder` lands each acquisition as a folder-bundle under `/raw/DICOM/<year>/<year-month>/ACQ-<date>-<modality>-NNN/`.
 
 **Scope of round 8 (Jesus's 2025 archive):**

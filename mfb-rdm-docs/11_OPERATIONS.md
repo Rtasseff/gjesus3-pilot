@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ In use (true production)  
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-10-04 (§5.7 — ✅ v2 design accepted by Ryan; retirements in production use since 2026-10-02) · Prior: 2026-10-02 (§5.7 — 🔶 v2: content-equivalent re-saves and re-identifying a mis-coded acquisition; classify before re-identifying) · Prior: 2026-10-01 (new §5.7 — retiring an ACQ-ID)
 
 ---
 
@@ -202,7 +202,7 @@ Read this row alongside Section A. "Where data lives" is the source share you co
 
 ### 3.3 Operator self-service ingest (no-YAML path)
 
-> **Status:** ✅ Built and deployed. Operator front-ends sit over the shared `tools/operator/` core (design + build plan: [`tasks/archive/operator_ingest_tooling_plan.md`](../tasks/archive/operator_ingest_tooling_plan.md)). The microscopy + MRI GUI ships as one frozen Windows executable, **`gjesus3_ingest.exe`**, deployed to the NAS at **`\\GJESUS3\gjesus3\gjesus3-data\tools\`** on **2026-06-24** (see [10_TOOLS §5.2](10_TOOLS.md)). §3.2 above remains the YAML / Data-Office path; this subsection is the simpler **point-at-a-folder** path for operators who do not want to edit YAML. Both run the **same validated pipeline** — the front-ends only build the config in memory and never reimplement ingest.
+> **Status:** ✅ Built and deployed. Operator front-ends sit over the shared `tools/operator/` core (design + build plan: [`tasks/archive/operator_ingest_tooling_plan.md`](../tasks/archive/operator_ingest_tooling_plan.md)). The microscopy + MRI GUI ships as one frozen Windows executable, **`gjesus3_ingest.exe`**, deployed to the NAS at **`\\GJESUS3\gjesus3\gjesus3-data\tools\`** on **2026-06-24**, and rebuilt + redeployed since — most recently **2026-09-04** (the MRI page's token-valued destination project; see [10_TOOLS §5.2](10_TOOLS.md)). §3.2 above remains the YAML / Data-Office path; this subsection is the simpler **point-at-a-folder** path for operators who do not want to edit YAML. Both run the **same validated pipeline** — the front-ends only build the config in memory and never reimplement ingest.
 
 For operators running ingest themselves on the acquisition machines there is now a no-YAML front-end per lane. They all **preview first** (a read-only "what will happen" table — one row per acquisition: ACQ-ID, sample, project, link name, file count) then ask to confirm, and they are idempotent (safe to re-run). The full operator-facing guide is [`tools/operator/README.md`](../tools/operator/README.md).
 
@@ -311,21 +311,45 @@ procedure is how the **RDM team** later fills those placeholders. Tool reference
 **How** (regeneration runs from **WSL** — Dicomifier is Linux/conda; everything else is
 cross-platform):
 
-1. **Stage the sources** (read-only against the platform host; resumable):
-   `PYTHONPATH=tools python tools/pull_pending_dicom_sources.py --dry-run` then `--apply`.
+1. **Make the sources reachable** in the layout the tool expects,
+   `<staging>/PV<version>/<study>/<exam>`.
+   - **Sources on the platform host (`kenia`)** — stage them read-only (resumable):
+     `PYTHONPATH=tools python tools/pull_pending_dicom_sources.py --dry-run` then `--apply`.
+   - **Sources already reachable from this machine** (a researcher share such as `K:`,
+     which WSL mounts at `/mnt/k`) — **do not copy anything.** Build the expected
+     shape out of symlinks; Dicomifier reads straight through them:
+     ```bash
+     S=/tmp/stage_<batch>/PV6.0.1 ; mkdir -p "$S"
+     ln -s "/mnt/k/<...>/<study-folder>" "$S/"
+     ```
+     Verified 2026-08-21 on the Proyecto-1019 backfill — 9 exams across 2 studies,
+     **0 bytes copied**. Confirm `<study>/<exam>/pdata/<idx>/2dseq` exists first: no
+     `2dseq` means the row is `no-source`, not regenerable (step 6).
 2. **Preview the drain** (safe anywhere, writes nothing):
    `PYTHONPATH=tools python tools/backfill_dicom_regen.py`
 3. **Activate the env and pilot one exam** (WSL):
    ```bash
+   # `conda` is NOT on PATH in a non-interactive WSL shell. Source its profile hook
+   # FIRST, or `conda activate` fails with "conda: command not found" -- after which
+   # `dicomifier` is absent and the backfill logs a soft SKIP rather than an error,
+   # so the run looks like it succeeded while regenerating nothing.
+   source ~/miniforge3/etc/profile.d/conda.sh
    conda activate dicomifier-pilot     # env spec: tools/dicomifier-pilot.environment.yml
    PYTHONPATH=tools python tools/backfill_dicom_regen.py --apply --limit 1 \
        --nas-root /mnt/gjesus3/gjesus3-data --staging <staging-root>
    ```
+   **On this production machine (Windows + WSL):** the env is
+   `~/miniforge3/envs/dicomifier-pilot` (Dicomifier 2.5.3, Python 3.12); the NAS
+   `J:` is `/mnt/gjesus3`; the researcher share `K:` is `/mnt/k`.
    Inspect the filled `.data/`, the registry row, and the worklist flip before continuing.
 4. **Drain** (same command without `--limit`), then re-run step 2 — every former `pending`
    row should now be terminal.
 5. **Rebuild project hard-links from Windows** (`os.link` is refused over the CIFS mount
    from WSL): `python tools/relink_mri_regen.py --nas-root J:/gjesus3-data --dry-run`, then live.
+   **Skip this step entirely when the acquisitions carry no project** — a blank
+   `project_id` means no link was ever created, so there is nothing to rebuild.
+   (First exercised 2026-08-21: the 854 Proyecto-1019 acquisitions were
+   deliberately ingested project-less.)
 6. **Record un-regenerable rows** — a **human decision**, never automatic: rows whose staged
    source has no `pdata/<idx>/2dseq` (header-only or fid-only) can never be regenerated;
    after confirming the staged mirror is complete, flip them to the terminal `no-source`
@@ -353,6 +377,56 @@ reporting 0 to add means it holds.
 - Run log: `WorkstationOps\logs\finder-refresh-<date>.log`.
 
 **Not this job.** The **per-project** index is refreshed immediately by the operator GUI on each ingest (targeted `--project`), independent of this schedule — so a just-uploaded scan appears in its project index within seconds without waiting for 03:00. Only the ~19 MB global page depends on this scheduled job.
+
+### 5.7 Retiring an ACQ-ID — duplicates, derivatives, orphans (Data Office)
+
+> **Status:** Procedure written 2026-10-01. **In production use since 2026-10-02** (the 32 duplicate twins,
+> then the 17 orphan folders). Each retirement is a separate, approved operation. Tool: [10_TOOLS §3.9](10_TOOLS.md).
+> Schema: [06_REGISTRIES §2.9](06_REGISTRIES.md).
+
+**Who.** The Data Office only. Never an operator, never a researcher, never by hand-editing a registry.
+
+**When — the window rule.** **Never while any ingest is running** — a GUI ingest, a scripted batch, or a
+multi-batch historical run. A batch ingest checks row counts and validator baselines, and can restore a
+registry backup: a retirement inside its window would either trip its checks or be silently undone. The tool
+refuses while `registries\.registry.lock` exists or `registry_raw.csv` changed in the last 15 minutes, but it
+cannot see an ingest that is *between* batches — **confirm with whoever is running ingests**. Override the
+15-minute check (`--allow-recent-registry-writes`) only after that confirmation.
+
+**v2 (✅ design accepted by Ryan 2026-10-04; not used in production yet):** a `.czi` re-save whose content is
+identical to a live survivor is retired as `equivalent`; a mis-coded acquisition is **re-identified** in place
+under its correct instrument code (`--reidentify-as`; disposition `reidentified`). **Classify first:** a
+re-identified id can never be retired or re-identified again (no chains, 06 §2.9.2), so decide whether a
+file is a duplicate or a derivative *before* re-identifying it, and re-identify only what stays in `/raw/`.
+A re-identify is therefore not undone by the tool; the file's own device fingerprint must name the new code,
+and the dry run shows it.
+
+**Steps.**
+
+1. **Decide the pairs, with evidence.** For duplicates, which id survives (see the proposal in
+   `tasks/retire_acquisition_review.md`); for derivatives, the original and the project; for a re-identify,
+   the new instrument code (`tasks/retire_v2_review.md`). Write them into a list CSV (`acq_id, disposition,
+   target_acq_id, to_project, reason`; a re-identify adds `new_instrument`).
+2. **Dry run** (no `--execute`). Read every line: the hashes it compared, the rows it will remove, each link
+   and what will happen to it (`replace` / `remove` / `absent` / `foreign`). Subject rows are never removed. Any
+   `REFUSED` stops the whole list: fix the cause, don't work around it.
+3. **Get the approval** for exactly that dry run's output.
+4. **Execute** the same command with `--execute`. It takes its own off-NAS backup first
+   (`C:\Users\rtasseff\temp\gjesus3_retire_backup_<run>\`, every copy SHA-256-verified) and writes its
+   report and log there.
+5. **If it stops** (exit 4), re-run the same command. Every step resumes from what is on disk; nothing is
+   done twice. `validate_registries` shows a half-done retirement as an ERROR until it is finished.
+6. **Verify:** re-run the command (it must report `no-op`), run `validate_registries` (no new error class),
+   and regenerate the global Finder page (`python tools\generate_index.py --nas-root J:\gjesus3-data`) or
+   wait for the 03:00 job.
+
+**Exit codes:** 0 done / no-op · 2 refused (nothing written) · 3 backup failed (nothing written) · 4 stopped
+mid-run (re-run to finish) · 5 self-check failed (read the report).
+
+**Restoring a retirement** (not automated): the tombstone row holds the original `registry_raw` record
+verbatim and every other removed row in `other_rows_removed`; the run's backup holds the pre-run registries
+and the sidecars. A deleted duplicate's bytes are the survivor's; a derivative's are at `moved_to`; a
+re-identified acquisition's file is its new id's primary (`moved_to`), never removed.
 
 ---
 

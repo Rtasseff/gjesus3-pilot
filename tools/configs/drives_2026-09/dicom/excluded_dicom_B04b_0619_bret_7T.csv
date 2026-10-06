@@ -1,0 +1,5 @@
+original_name,reason
+20200304_101934_jrc200304_m27_BE_1_1/3,"never acquired: 3 files, no fid, no 2dseq, no DICOM (setup scan); the ingest detector skips it"
+20200304_145036_jrc200304_m32_BE_1_1/5,"never acquired: 3 files, no fid, no 2dseq, no DICOM (setup scan); the ingest detector skips it"
+20200304_101934_jrc200304_m27_BE_1_1/4,"REAL scan with 2dseq + DICOM (15 files) but the drive copy has no acqp; the ingest detector skips it. Only copy. Needs a one-off decision"
+20200304_134107_jrc200304_m31_BE_1_1/4,"REAL scan (long axis LV) with 2dseq + DICOM (7 files) but the drive copy has no acqp; the ingest detector skips it. Only copy. Needs a one-off decision"

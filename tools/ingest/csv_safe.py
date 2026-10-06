@@ -53,3 +53,128 @@ def ensure_trailing_newline(path):
     if last_byte != b"\n":
         with open(path, "ab") as f:
             f.write(b"\n")
+
+
+# ---- Byte-exact record removal (retire_acquisition, 2026-10-01) ------------
+#
+# A registry rewrite through csv.DictWriter re-serializes EVERY row: quoting,
+# line endings and any legacy byte the reader decoded tolerantly can all come
+# back different. Removing a row must not do that. These helpers split a CSV
+# into its raw records (bytes, terminator included) and drop whole records, so
+# every byte that is not part of a removed record is written back unchanged.
+#
+# Splitting works on BYTES: '"' (0x22) and '\n' (0x0A) never occur inside a
+# multi-byte UTF-8 sequence (or in latin-1 text as anything but themselves), so
+# a quote-parity scan is encoding-agnostic. A newline inside a quoted field
+# does not end a record.
+
+
+def split_records(data):
+    """Split CSV bytes into a list of raw records, each keeping its terminator.
+
+    ``b"".join(split_records(data)) == data`` always holds. A final record with
+    no trailing newline is returned as-is.
+    """
+    records = []
+    start = 0
+    in_quote = False
+    i = 0
+    n = len(data)
+    while i < n:
+        c = data[i]
+        if c == 0x22:            # '"' -- "" (an escaped quote) toggles twice
+            in_quote = not in_quote
+        elif c == 0x0A and not in_quote:
+            records.append(data[start:i + 1])
+            start = i + 1
+        i += 1
+    if start < n:
+        records.append(data[start:])
+    return records
+
+
+def record_fields(record):
+    """Parse one raw record (bytes) into its list of field strings.
+
+    Decodes UTF-8 (BOM stripped), falling back to latin-1 -- the same tolerant
+    chain the registry readers use. Used only to READ the key; the bytes that
+    are written back are never re-encoded.
+    """
+    try:
+        text = record.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = record.decode("latin-1")
+    return next(csv.reader([text.rstrip("\r\n")]), [])
+
+
+def record_terminator(path):
+    """The line terminator of a CSV file's header record (b"\\r\\n" or b"\\n"; CRLF if unknown)."""
+    if not os.path.exists(path):
+        return b"\r\n"
+    with open(path, "rb") as f:
+        head = f.read(65536)
+    recs = split_records(head)
+    if recs and recs[0].endswith(b"\r\n"):
+        return b"\r\n"
+    if recs and recs[0].endswith(b"\n"):
+        return b"\n"
+    return b"\r\n"
+
+
+def append_record(path, record):
+    """Append one raw record (bytes) to an existing CSV, byte-exactly (retire tool v2, 2026-10-02).
+
+    The record is written as given; one without a terminator gets the file's own (record_terminator).
+    The trailing-newline guard runs first. The CALLER must hold ``locking.registry_lock`` when the
+    file is a registry.
+    """
+    if not os.path.exists(path):
+        raise RuntimeError(f"{path}: append_record needs an existing file (with its header)")
+    if not record.endswith(b"\n"):
+        record += record_terminator(path)
+    ensure_trailing_newline(path)
+    with open(path, "ab") as f:
+        f.write(record)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def remove_records(path, key_field, keys, dry_run=False):
+    """Remove every record whose ``key_field`` value is in ``keys``, byte-exactly.
+
+    Returns the list of removed records (bytes, terminator included) in file
+    order. The header and every kept record are written back byte-for-byte
+    (BOM, line endings, quoting all as found), through a temp file +
+    ``os.replace`` so a crash can never leave a truncated file. Nothing is
+    written when nothing matches, or when ``dry_run`` is set.
+
+    The CALLER must hold ``locking.registry_lock`` across this call when the
+    file is a registry (it is a read-modify-write).
+
+    Raises RuntimeError if ``key_field`` is not in the header.
+    """
+    keys = {k for k in keys if k}
+    if not keys or not os.path.exists(path):
+        return []
+    with open(path, "rb") as f:
+        data = f.read()
+    records = split_records(data)
+    if not records:
+        return []
+    header = record_fields(records[0])
+    if key_field not in header:
+        raise RuntimeError(f"{path}: no '{key_field}' column in header {header}")
+    col = header.index(key_field)
+    kept, removed = [records[0]], []
+    for rec in records[1:]:
+        fields = record_fields(rec)
+        val = fields[col].strip() if len(fields) > col else ""
+        (removed if val in keys else kept).append(rec)
+    if removed and not dry_run:
+        tmp = f"{path}.tmp.{os.getpid()}"
+        with open(tmp, "wb") as f:
+            f.write(b"".join(kept))
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    return removed

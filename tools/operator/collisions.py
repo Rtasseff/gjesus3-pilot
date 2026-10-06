@@ -20,6 +20,10 @@ overwrites or collisions"). Two checks:
     reused across batches). Re-ingesting the SAME acquisition is deduped upstream
     and is NOT flagged here.
 
+Since 2026-10-05 both are what the ingest itself enforces: a case whose link name
+is taken is refused before anything is copied (ingest_raw Step 5.5), never merged
+into the existing link. These checks show the operator that BEFORE the run.
+
 Both group by the case's ``project_name`` (the project key -- and, since
 2026-08-02, the folder name verbatim), NOT the preview's project string -- two
 distinct auto-create names both previewing as "will auto-create" must not be
@@ -36,7 +40,7 @@ import csv
 import os
 from collections import defaultdict
 
-from ingest import project_naming
+from ingest import linker, project_naming
 
 
 def _norm(s):
@@ -60,7 +64,7 @@ def _acq_of(case):
 def find_link_collisions(cases):
     """Return in-batch link-name collisions.
 
-    Groups the cases by ``(project_name, link_filename)`` -- the project part
+    Groups the cases by ``(project_name, link_filename)`` -- both
     case-insensitively, since one folder serves both spellings -- and returns
     every group with more than one acquisition; those would write the same link
     name into the same project. Cases with no project create no link and are
@@ -77,16 +81,18 @@ def find_link_collisions(cases):
         link = _link_of(c)
         if not project or not link:
             continue  # no project -> no link -> cannot collide
-        key = (project.lower(), link)
-        display.setdefault(key, project)
+        # The link name is case-insensitive too (2026-10-05): on the NAS
+        # `MRI_M12_...` and `MRI_m12_...` are one folder.
+        key = (project.lower(), link.lower())
+        display.setdefault(key, (project, link))
         groups[key].append(_acq_of(c))
 
     collisions = []
     for key, acq_ids in groups.items():
         if len(acq_ids) > 1:
             collisions.append({
-                "project_name": display[key],
-                "link_filename": key[1],
+                "project_name": display[key][0],
+                "link_filename": display[key][1],
                 "acq_ids": sorted(acq_ids),
             })
     collisions.sort(key=lambda d: (d["project_name"].lower(), d["link_filename"]))
@@ -135,18 +141,22 @@ def _project_folder(nas_root, project_name, index):
 
 
 def find_existing_link_targets(cases, nas_root):
-    """Best-effort ON-NAS overwrite check.
+    """Best-effort ON-NAS check: link names this run would find already taken.
 
-    For each case with a project + link name, test whether
-    ``<nas>/<the project's folder>/raw_linked/<link_filename>`` already exists.
-    An existing target for a DIFFERENT acquisition means this run would
-    overwrite / collide with a previously-linked acquisition. A re-ingest of the
+    For each case with a project + link name, asks the engine's own read-only
+    check (`linker.inspect_link_target`, the one ingest Step 5.5 runs before
+    the copy) whether ``<the project's folder>/raw_linked/<link_filename>`` is
+    taken: anything already there, or the ``.PENDING-LINK.txt`` stand-in of a
+    link still queued for another acquisition. Since 2026-10-05 the ingest
+    REFUSES such a case before copying anything (it used to merge the new
+    acquisition into the existing link folder, silently). A re-ingest of the
     SAME acquisition is deduped upstream (it never reaches the linker), so
-    anything surfaced here is a genuine cross-batch name reuse worth a warning.
+    anything surfaced here is a genuine name reuse.
 
     Never raises (a stat error on one path is skipped). Returns a list of::
 
-        {"project_name": ..., "link_filename": ..., "acq_id": ..., "path": ...}
+        {"project_name": ..., "link_filename": ..., "acq_id": ..., "path": ...,
+         "detail": ...}
     """
     out = []
     if not nas_root:
@@ -157,16 +167,19 @@ def find_existing_link_targets(cases, nas_root):
         link = _link_of(c)
         if not project or not link:
             continue
-        target = os.path.join(_project_folder(nas_root, project, index), link)
+        raw_linked = _project_folder(nas_root, project, index)
         try:
-            if os.path.exists(target):
-                out.append({
-                    "project_name": project,
-                    "link_filename": link,
-                    "acq_id": _acq_of(c),
-                    "path": target,
-                })
+            state, target, detail = linker.inspect_link_target(
+                os.path.dirname(raw_linked), link, None)
         except OSError:
             continue
+        if state == linker.LINK_TAKEN:
+            out.append({
+                "project_name": project,
+                "link_filename": link,
+                "acq_id": _acq_of(c),
+                "path": target,
+                "detail": detail,
+            })
     out.sort(key=lambda d: (d["project_name"].lower(), d["link_filename"]))
     return out

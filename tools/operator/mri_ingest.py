@@ -72,6 +72,9 @@ preview = _op.preview
 runner = _op.runner
 env = _op.env
 metadata_prompt = _op.metadata_prompt
+# tools/ is on sys.path now (templates.py appends it), so the pipeline's own
+# modules import by name.
+from ingest import unparsed as unparsed_mod  # noqa: E402
 
 INSTRUMENT_KEY = "MRI"
 
@@ -290,6 +293,17 @@ def print_preview_table(result):
         print("Batch notes / skips:")
         for w in result.warnings:
             print(f"  - {w}")
+
+    # Last, so it is the thing on screen at the confirm prompt: whole study
+    # folders whose NAME matched no naming rule. None of their exams is in the
+    # table above, and before 2026-10-05 they showed only as per-exam lines in
+    # the notes (STATUS §0 D3).
+    if getattr(result, "unparsed", None):
+        print()
+        print(f"!! {unparsed_mod.headline(result.unparsed)}")
+        print("!! NOTHING under them will be ingested. Tell the Data Office:")
+        for line in unparsed_mod.detail_lines(result.unparsed):
+            print(f"   {line}")
 
 
 # ------------------------------------------------------------ build config

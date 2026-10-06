@@ -1,5 +1,6 @@
 """Configuration loading and validation for ingest_raw."""
 
+import csv
 import os
 import re
 import glob as globmod
@@ -16,7 +17,10 @@ from . import (
     paravision_metadata,
     registry,
     resolver,
+    unparsed as unparsed_mod,
+    user_tables,
 )
+from . import dicom_headers as dicom_headers_mod
 
 
 # Maps a data_ecosystem to the summarize_source(path) -> dict callable
@@ -39,7 +43,7 @@ def _is_paravision_exam(path):
     return p.is_dir() and (p / "acqp").is_file() and (p / "method").is_file()
 
 
-def _extract_dicom_embedded(path):
+def _extract_dicom_embedded(path, dicom_headers=False):
     """Embedded-metadata dispatcher for the DICOM ecosystem.
 
     Detects source shape by content and dispatches to the right
@@ -49,8 +53,14 @@ def _extract_dicom_embedded(path):
       - Molecubes NI acquisition folder (`protocol.txt` + `recon_<idx>/`
         present) → `ni_metadata.extract` → section name "ni".
       - Everything else under DICOM (collaborator XMRI zips, future
-        general DICOM) → empty; pure-DICOM-header extraction is queued
-        as deferred work.
+        general DICOM) → `dicom_headers.extract` when the config opts in
+        with `auto_discover.dicom_headers: true`, otherwise empty.
+
+    `dicom_headers` is OFF by default so no existing config changes
+    behaviour. It is a curated allow-list, not a raw header dump — the
+    first data to use it is human clinical MRI, so what it may and may
+    not surface is a privacy decision documented in ingest/dicom_headers.py
+    and 08_METADATA §4.10.
 
     Returns either a 2-tuple `(discovered, section_dict)` or a 3-tuple
     `(discovered, section_dict, section_name)`. The 3-tuple form lets
@@ -69,6 +79,8 @@ def _extract_dicom_embedded(path):
         return paravision_metadata.extract(path)
     if ni_metadata.is_ni_acquisition(path):
         return ni_metadata.extract(path)
+    if dicom_headers:
+        return dicom_headers_mod.extract(path)
     return ({}, {})
 
 
@@ -86,17 +98,25 @@ def get_summarizer(ecosystem):
     return FORMAT_SUMMARIZERS.get(ecosystem)
 
 
-def get_embedded_extractor(ecosystem):
-    """Return the extract_embedded callable for an ecosystem, or None."""
-    return FORMAT_EMBEDDED_EXTRACTORS.get(ecosystem)
+def get_embedded_extractor(ecosystem, disco=None):
+    """Return the extract_embedded callable for an ecosystem, or None.
+
+    `disco` is the `auto_discover:` block. The DICOM dispatcher reads its
+    opt-in `dicom_headers:` flag from there; every other ecosystem ignores it.
+    """
+    fn = FORMAT_EMBEDDED_EXTRACTORS.get(ecosystem)
+    if fn is _extract_dicom_embedded and (disco or {}).get("dicom_headers"):
+        return lambda path: _extract_dicom_embedded(path, dicom_headers=True)
+    return fn
 
 
 # Valid instrument codes (internal + collaborator X-prefix)
 VALID_INSTRUMENTS = {
     # Internal
     "ZWSI", "CELL", "LSM9", "PET", "SPECT", "CT", "MRI",
-    # Collaborator / external (X-prefix)
-    "XMRI", "XCT", "XPET", "XSPECT",
+    # Collaborator / external (X-prefix). XMIC = an external microscope's
+    # .czi (first: the Charité Axio Imager.Z2, 2026-09-30); MICROSCOPY ecosystem.
+    "XMRI", "XCT", "XPET", "XSPECT", "XMIC",
 }
 
 # Map instrument code → data ecosystem
@@ -112,6 +132,7 @@ INSTRUMENT_ECOSYSTEM = {
     "XCT": "DICOM",
     "XPET": "DICOM",
     "XSPECT": "DICOM",
+    "XMIC": "MICROSCOPY",
 }
 
 # Map DICOM Modality tag values → our X-prefix codes
@@ -134,7 +155,69 @@ def load_config(config_path):
         cfg = yaml.safe_load(f)
     if cfg is None:
         raise ValueError(f"Empty config file: {config_path}")
+    # Where relative paths inside the config (auto_discover.case_table.file)
+    # resolve from. Configs built in memory (the operator GUI) have none and
+    # resolve from the CWD.
+    cfg["_config_dir"] = os.path.dirname(os.path.abspath(config_path))
     return cfg
+
+
+CASE_TABLE_KEYS = {"file", "key", "on_missing"}
+
+
+def load_case_table(block, config_dir=None):
+    """Load the optional `auto_discover.case_table:` block -> (rows, on_missing).
+
+    A per-case override table (10_TOOLS §2.1.3): a CSV with one row per
+    acquisition, keyed on the case's `original_name` (the staging-relative path
+    expand_batch assigns, forward slashes). Every other column becomes a
+    `discovered.<column>` value for that case, so a `registry:` / `operator:` /
+    `subject_lookup:` / `link_filename:` expression can set a field PER FILE
+    where the rest of a config sets it per batch. OFF unless the block is given.
+
+    Built for the one-time historical-drives ingest (2026-09-30), where project,
+    researcher, operator and subject id were decided per file beforehand and a
+    filename parse could only approximate them.
+
+        case_table:
+          file: cases_B01.csv      # relative -> the config file's directory
+          key: original_name       # the only key supported
+          on_missing: error        # error (abort the batch) | skip (WARN + skip)
+
+    Returns ({original_name: {column: value}}, on_missing), or (None, None) when
+    the block is absent. Raises ValueError on a malformed block or table.
+    """
+    if not block:
+        return None, None
+    if not isinstance(block, dict):
+        raise ValueError("auto_discover.case_table: must be a mapping")
+    unknown = set(block) - CASE_TABLE_KEYS
+    if unknown:
+        raise ValueError(
+            f"auto_discover.case_table: unknown key(s) {sorted(unknown)}; "
+            f"allowed {sorted(CASE_TABLE_KEYS)}")
+    key = block.get("key", "original_name")
+    if key != "original_name":
+        raise ValueError("auto_discover.case_table.key: only 'original_name' is supported")
+    on_missing = block.get("on_missing", "error")
+    if on_missing not in ("error", "skip"):
+        raise ValueError("auto_discover.case_table.on_missing: 'error' or 'skip'")
+    path = block.get("file") or ""
+    if not path:
+        raise ValueError("auto_discover.case_table.file is required")
+    if not os.path.isabs(path) and config_dir:
+        path = os.path.join(config_dir, path)
+    rows = {}
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        if key not in (reader.fieldnames or []):
+            raise ValueError(f"case_table {path}: no '{key}' column")
+        for r in reader:
+            k = (r.pop(key) or "").replace("\\", "/")
+            if k in rows:
+                raise ValueError(f"case_table {path}: duplicate {key} {k!r}")
+            rows[k] = {c: (v or "") for c, v in r.items()}
+    return rows, on_missing
 
 
 def is_batch_config(cfg):
@@ -179,6 +262,16 @@ def _build_dedupe_index(registry_path):
     (date, original_name) key is sufficient.
     """
     rows = registry.read_registry(registry_path) if registry_path else []
+    # RETIRED acquisitions keep blocking re-ingest (2026-10-01): a duplicate or
+    # derivative the Data Office retired must not come back under a new id when
+    # the same batch is re-run. Their original rows live, verbatim, in
+    # registries/retired_acquisitions.csv (06_REGISTRIES §2.9).
+    if registry_path:
+        from . import retired
+        tombs = retired.read_retired(retired.retired_path(
+            os.path.dirname(os.path.abspath(registry_path))))
+        rows = list(rows) + [retired.original_row(t, registry.REGISTRY_FIELDS)
+                             for t in tombs.values()]
     keys = set()
     for r in rows:
         oname = (r.get("original_name") or "").strip()
@@ -302,12 +395,14 @@ def _apply_operator(case, operator_expr):
 
 
 def _validate_enrichment_blocks(cfg, disco):
-    """Validate the Phase 3 enrichment config and return the raw blocks.
+    """Validate the top-level sidecar metadata blocks and return them raw.
 
-    Reads the top-level `subject:` / `condition:` / `anatomy:` blocks and the
-    `auto_discover.subject_from_db` flag + `auto_discover.subject_lookup` map.
-    Raises ValueError on a structurally invalid config (fail-fast); the field
-    VALUES are resolved non-blockingly later by ingest/enrichment.py.
+    Covers the Phase 3 enrichment config — the `subject:` / `condition:` /
+    `anatomy:` blocks plus the `auto_discover.subject_from_db` flag and
+    `auto_discover.subject_lookup` map — and the `user_metadata:` table list
+    (08_METADATA §4.9). Raises ValueError on a structurally invalid config
+    (fail-fast); the field VALUES are resolved non-blockingly later by
+    ingest/enrichment.py and ingest/user_tables.py.
 
     `disco` is cfg["auto_discover"] (or {} for single-case configs).
     """
@@ -317,6 +412,7 @@ def _validate_enrichment_blocks(cfg, disco):
     anatomy = cfg.get("anatomy")
     subject_from_db = disco.get("subject_from_db")
     subject_lookup = disco.get("subject_lookup")
+    user_metadata = cfg.get("user_metadata")
 
     errors = []
     errors += resolver.validate_subject_block(subject)
@@ -324,6 +420,7 @@ def _validate_enrichment_blocks(cfg, disco):
     errors += resolver.validate_anatomy_block(anatomy)
     errors += resolver.validate_subject_from_db(subject_from_db)
     errors += resolver.validate_subject_lookup(subject_lookup)
+    errors += user_tables.validate_user_metadata_block(user_metadata)
     if errors:
         raise ValueError(
             "Invalid enrichment config:\n  - " + "\n  - ".join(errors)
@@ -334,11 +431,35 @@ def _validate_enrichment_blocks(cfg, disco):
         "anatomy": anatomy,
         "subject_from_db": bool(subject_from_db),
         "subject_lookup": subject_lookup or {},
+        "user_metadata": user_metadata or [],
     }
 
 
-def expand_batch(cfg, nas_root=None):
+def _note_unparsed(groups, rule, pattern, err, parse_target, parse_source,
+                   match_path, is_dir, original_name, config_path, staging_dir):
+    """Record one match dropped by a filename_parse failure under its parse
+    target (ingest/unparsed.py). Called on the failure path only, so a batch
+    that parses pays nothing for it (the exam test is two stats per match)."""
+    unparsed_mod.note(
+        groups, target=parse_target,
+        target_path=(str(Path(match_path).parent)
+                     if parse_source == "parent_name" else match_path),
+        source=parse_source, rule=rule, pattern=pattern, reason=str(err),
+        original_name=original_name,
+        is_exam=bool(is_dir) and _is_paravision_exam(match_path),
+        config=config_path, staging_dir=staging_dir,
+    )
+
+
+def expand_batch(cfg, nas_root=None, unparsed=None):
     """Expand a batch config into a list of validated, registry-resolved cases.
+
+    `unparsed` (optional, a list): when given, one record per parse TARGET whose
+    name matched no `filename_parse` rule is appended to it -- for a ParaVision
+    batch, one per study folder, with how many exam folders it held (see
+    ingest/unparsed.py for the record). The return value is unchanged, so callers
+    that don't pass it behave exactly as before. Every caller also gets one
+    `[expand_batch] NOT PARSED: ...` line on stdout when any target was dropped.
 
     Schema:
 
@@ -395,6 +516,13 @@ def expand_batch(cfg, nas_root=None):
     # one level up, as for Bruker ParaVision exam folders).
     parse_source = parse_cfg.get("source", "name")
 
+    # Parse targets the filename_parse rule could not parse, grouped (one
+    # record per target, e.g. per study folder). Always collected so the
+    # NOT PARSED line below reaches every caller; handed to the caller's
+    # `unparsed` list at the end. See ingest/unparsed.py.
+    unparsed_groups = {}
+    unparsed_config = cfg.get("_ingest_config_path") or ""
+
     # path_parse: free-form named levels between staging_dir and the file.
     # Each level becomes a discovered.<name>. Requires a recursive glob
     # ("**/...") on `pattern` for any non-trivial hierarchy.
@@ -437,13 +565,47 @@ def expand_batch(cfg, nas_root=None):
     )
     existing_keys = _build_dedupe_index(registry_path)
 
+    # Optional per-case override table (default off) -- see load_case_table.
+    case_table, case_table_missing = load_case_table(
+        disco.get("case_table"), cfg.get("_config_dir"))
+    case_table_used = set()
+
     # Discover cases (allow both files and directories).
     # recursive=True is harmless for non-"**" patterns and enables
     # recursive discovery when path_parse expects multiple folder levels.
-    search = os.path.join(staging_dir, pattern)
-    matches = sorted(globmod.glob(search, recursive=True))
-    if not matches:
-        raise ValueError(f"No matches for {search}")
+    #
+    # `ni_gnuclear_flat: true` replaces the glob with a fan-in discovery: the
+    # S:\gnuclear working space has loose DICOMs at a depth of 0-8 levels rather
+    # than one folder per acquisition, so acquisitions are assembled by GROUPING
+    # files on the machine-issued filename. Opt-in, and used by exactly one
+    # template (molecubes_ni_gnuclear.yaml); every other config still globs.
+    ni_flat_index = {}
+    if disco.get("ni_gnuclear_flat"):
+        from . import ni_flat
+        researchers = disco.get("researchers") or None
+        if researchers:
+            researchers = {r.lower() for r in researchers}
+        matches, ni_flat_index, n_files_seen = ni_flat.discover(
+            staging_dir, registry_path=registry_path, researchers=researchers,
+            require_project=bool(disco.get("require_project", True)),
+            # Defaults ON so it cannot be forgotten by omitting a key.
+            validate_projects=bool(disco.get("validate_projects", True)),
+        )
+        # Only a source with NO reconstructed DICOMs at all is an error (wrong
+        # path / empty snapshot). Finding files but selecting none is the
+        # ordinary idempotent re-run and must exit cleanly — raising there made
+        # a successful no-op look like a crash.
+        if not matches and not n_files_seen:
+            raise ValueError(
+                f"No reconstructed NI DICOMs found under {staging_dir} — "
+                f"nothing matched the filename grammar "
+                f"<14digit>_<MODALITY>_<ALGO>_<recon>.dcm. Check the path."
+            )
+    else:
+        search = os.path.join(staging_dir, pattern)
+        matches = sorted(globmod.glob(search, recursive=True))
+        if not matches:
+            raise ValueError(f"No matches for {search}")
 
     cases = []
     for match_path in matches:
@@ -469,6 +631,7 @@ def expand_batch(cfg, nas_root=None):
             "anatomy": enrich_block["anatomy"],
             "subject_from_db": enrich_block["subject_from_db"],
             "subject_lookup": enrich_block["subject_lookup"],
+            "user_metadata": enrich_block["user_metadata"],
         }
         discovered = {}
 
@@ -509,6 +672,19 @@ def expand_batch(cfg, nas_root=None):
         else:
             discovered["folder_name"] = match_basename
 
+        # Fan-in discovery (ni_gnuclear_flat): this match stands for a GROUP of
+        # files, and its identity is the machine-issued acquisition key rather
+        # than a path. Setting original_name to that key makes the existing
+        # (acq_date, original_name) dedup canonical and directory-independent —
+        # which this source badly needs, since one reconstruction is copied into
+        # up to 48 folders and 6 appear under two different year folders.
+        flat = ni_flat_index.get(match_path)
+        if flat:
+            discovered.update(flat["discovered"])
+            case["ni_flat_members"] = flat["members"]
+            case["original_name"] = flat["acq_key"]
+            rel_match = flat["acq_key"]
+
         # Pick the source for filename_parse / regex_extract. `name`
         # uses the match basename (file or folder); `parent_name` uses
         # the parent folder name (useful when the meaningful name is
@@ -525,6 +701,9 @@ def expand_batch(cfg, nas_root=None):
         # collision, since that's the historical behaviour).
         if parse_fields or parse_regex:
             parsed = {}
+            # A parse failure drops this match AND names its target in the
+            # NOT PARSED report (the SKIP line keeps its format: the GUI
+            # preview parses it).
             if parse_regex:
                 try:
                     parsed.update(filename_parser.parse_regex(
@@ -532,6 +711,10 @@ def expand_batch(cfg, nas_root=None):
                     ))
                 except filename_parser.FilenameParseError as e:
                     print(f"[expand_batch] SKIP {match_basename}: {e}")
+                    _note_unparsed(unparsed_groups, "regex", parse_regex, e,
+                                   parse_target, parse_source, match_path,
+                                   is_dir, rel_match, unparsed_config,
+                                   staging_dir)
                     continue
             if parse_fields:
                 try:
@@ -540,6 +723,11 @@ def expand_batch(cfg, nas_root=None):
                     ))
                 except filename_parser.FilenameParseError as e:
                     print(f"[expand_batch] SKIP {match_basename}: {e}")
+                    _note_unparsed(unparsed_groups, "positional",
+                                   f"separator={parse_sep!r} fields={list(parse_fields)}",
+                                   e, parse_target, parse_source, match_path,
+                                   is_dir, rel_match, unparsed_config,
+                                   staging_dir)
                     continue
             # filter
             skip = False
@@ -603,7 +791,7 @@ def expand_batch(cfg, nas_root=None):
         embedded_attempted = False
         embedded_yielded = False
         if embed_metadata and (is_file or is_dir):
-            extractor = get_embedded_extractor(eco_for_extract)
+            extractor = get_embedded_extractor(eco_for_extract, disco)
             if extractor:
                 embedded_attempted = True
                 try:
@@ -650,6 +838,20 @@ def expand_batch(cfg, nas_root=None):
                     discovered["subject_flags"] = ",".join(parsed["flags"])
                 if parsed.get("phantom"):
                     discovered["phantom"] = "yes"
+
+        # case_table: the explicit per-case values win over every discovered
+        # source above (they were decided per file, on more evidence).
+        if case_table is not None:
+            row = case_table.get(case["original_name"])
+            if row is None:
+                msg = (f"{case['original_name']} has no row in "
+                       f"auto_discover.case_table")
+                if case_table_missing == "error":
+                    raise ValueError(msg)
+                print(f"[expand_batch] SKIP {msg}")
+                continue
+            case_table_used.add(case["original_name"])
+            discovered.update(row)
 
         case["discovered"] = discovered
         case["ecosystem_section"] = eco_section
@@ -718,6 +920,25 @@ def expand_batch(cfg, nas_root=None):
 
         cases.append(case)
 
+    if case_table is not None:
+        unused = len(case_table) - len(case_table_used)
+        if unused:
+            print(f"[expand_batch] WARN: {unused} case_table row(s) matched no "
+                  f"file under {staging_dir}")
+
+    # The parse targets dropped above, as one line every caller sees, and as
+    # structured records for the callers that asked for them. (Worded without
+    # "SKIP"/"WARN": drive_staging/ingest_check.py counts those words.)
+    unparsed_records = list(unparsed_groups.values())
+    if unparsed_records:
+        names = sorted(r["target"] for r in unparsed_records)
+        shown = ", ".join(names[:10]) + (
+            f", ... (+{len(names) - 10} more)" if len(names) > 10 else "")
+        print(f"[expand_batch] {unparsed_mod.headline(unparsed_records)} -- "
+              f"nothing under them is ingested: {shown}")
+    if unparsed is not None:
+        unparsed.extend(unparsed_records)
+
     if not cases:
         print(
             f"[expand_batch] No new cases to ingest (matched {len(matches)} paths)."
@@ -773,6 +994,7 @@ def prep_single_case(cfg):
     enrich_block = _validate_enrichment_blocks(cfg, cfg.get("auto_discover"))
     cfg["subject_from_db"] = enrich_block["subject_from_db"]
     cfg["subject_lookup"] = enrich_block["subject_lookup"]
+    cfg["user_metadata"] = enrich_block["user_metadata"]
     cfg.setdefault("discovered", {})
     src = cfg.get("source_path", "")
     if src:
@@ -788,7 +1010,7 @@ def prep_single_case(cfg):
     embed = (cfg.get("auto_discover") or {}).get("embedded_metadata", True)
     eco = (registry_block or {}).get("data_ecosystem", "")
     if embed and src and os.path.exists(src):
-        extractor = get_embedded_extractor(eco)
+        extractor = get_embedded_extractor(eco, cfg.get("auto_discover"))
         if extractor:
             try:
                 result = extractor(src)

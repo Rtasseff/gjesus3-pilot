@@ -15,6 +15,201 @@ When a backlog item becomes a blocker for delivery, promote it to `STATUS.md`.
 
 ---
 
+## 🔺 HIGH (top) — a registry flag for human, privacy-restricted data (2026-10-02)
+
+> **Scope addition (2026-10-04, `LEONE`):** the backfill must also reach `projects\DTS24\working\historical_drives\FRIO-X6\LEONE\`, 7,161 files whose DICOM headers carry full identifiers (`PatientBirthDate` on ~91%).
+> - These are **project-folder files, not acquisitions**, so a registry-level flag will not reach them on its own.
+> - Echo pixels **may carry burned-in identifiers**, even though their headers declare `BurnedInAnnotation = NO`; nobody has checked the pixels.
+
+**Raised by Ryan, 2026-10-02, at the highest priority; to discuss before building.** Human data is
+in the system (DTS24, 75 acquisitions), and more is coming (`LEONE`, from the historical drives).
+There is a species column (`sample_organism` = `Homo sapiens`), but, in Ryan's words, *"since
+there is such a concern about privacy on human data it may be worth its own column, maybe it's
+actually called privacy or something indicating that additional privacy is required, and it's a
+boolean. Not sure, but it seems worthwhile; open to suggestions."*
+
+**The coordinator's suggestions, for the discussion:**
+
+| Option | Column | What it says | Notes |
+|---|---|---|---|
+| 1 | `human_subject` (Y/N) | a **fact** | Derivable from `sample_organism`, but explicit and easy to filter. |
+| 2 | `privacy_restricted` (Y/N) | a **handling flag**: extra privacy care required | What tools act on (export, sharing, Finder display). It covers human data now, and anything else needing care later. The validator would enforce "`Homo sapiens` ⇒ Y". **The coordinator leans this way.** |
+
+- **Touchpoints:**
+  - `06_REGISTRIES` and `REGISTRY_FIELDS`, through `tools/migrate_registry_columns.py`;
+  - the readers of `registry_raw.csv`, already listed in `tasks/retire_acquisition_review.md` §5;
+  - a Finder filter, a validator rule, and the external-data templates and configs;
+  - a backfill: the 75 `DTS24` rows, plus `LEONE` if it is ingested before this lands.
+- It also closes META-12's note that *"the `subject:` block … has no way to say 'this subject is
+  human' other than `species: Homo sapiens`"*.
+- **Backfill, in place, with no re-ingest:** set the flag on the existing human acquisitions, i.e.
+  `DTS24` (both cohorts, 75) and `LEONE`, which is copied first (Ryan, 2026-10-02).
+
+## 🔺 HIGH (top) — record the data processing agreement (DPA) for every external dataset (2026-10-02)
+
+> **Scope addition (2026-10-04):** add `DTS24`'s `working\historical_drives\FRIO-X6\LEONE\` (7,161 project-folder files, not acquisitions) to the backfill, beside the `DTS24` acquisitions and the Charité `XMIC` files.
+
+**Raised by Ryan, 2026-10-02, at the highest priority; to discuss before building.** External data
+should say which **data processing agreement** covers it. Acceptable forms:
+
+- **a reference to a specific document on record** (a number or ID);
+- **a comment describing the arrangement**;
+- **a contact who holds the information**.
+
+**Where, per Ryan:**
+
+- **Not in the registry.**
+- **A metadata field** (in the `metadata.json` sidecar), **applied conditionally to external data**
+  (`data_source` = `collaborator:*` / external).
+- **Also written into the acquisition's `README.txt` in `/raw/`.**
+
+It is useful for every external dataset, and it fits human studies especially well:
+**biomaGUNE collects no human data of its own, so every human acquisition is external and can carry
+a DPA reference.** That gives a validator rule: human ⇒ DPA present.
+
+**Suggested shape, for the discussion:**
+
+- A sidecar block, e.g. `data_agreement: {reference, description, contact}`, set per batch in the
+  ingest config (like `user_provided_metadata`).
+- The ingest **WARNs, or refuses (to decide)**, when `data_source` is external and the block is
+  missing.
+- `README.txt` gains a "Data agreement" section.
+- **Touchpoints:**
+  - `08_METADATA`, which is an integrity mirror with `ingest/metadata_sidecar.py`;
+  - `10_TOOLS` (config);
+  - the README template (`README_raw.txt`, `ingest/readme.py`);
+  - the external-data templates;
+  - `validate_registries`.
+- **Backfill, in place, with no re-ingest:** `DTS24` (75, LIONS/HPIC, human), `LEONE` (copied
+  first, Ryan 2026-10-02) and `XMIC` (338, Charité). Each needs a controlled rewrite of its sidecar
+  and README in `/raw/` (the recovery pattern), plus the agreement details for each cohort from
+  Ryan.
+
+## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
+
+Found by stream F while previewing the first m12 study of 2026-07-10.
+
+**The cause.** `linker.create_hardlink` (folder primary) does `os.makedirs(dest, exist_ok=True)` and links only the files that do not exist yet.
+- So two acquisitions with the same link name (same animal, same day, same exam number and recons) end up sharing one link folder. The second gets none of its own files, or a mix.
+- The standard MRI link name, `MRI_<sample>_<date>_<exam>_<recons>`, has no per-study part.
+
+**It has already happened.** On 44 multi-study animal-days (483 acquisitions), **209 have no link folder of their own: 43.3%, against 2.65% on single-study days.**
+
+| Project | Acquisitions without their own link folder |
+|---|---:|
+| `AE-biomaGUNE-0721` | 153 of 294 |
+| `AE-biomaGUNE-1022` | 53 of 179 |
+| `AE-biomaGUNE-0219` | 3 of 10 |
+
+- `/raw/` and the registry are intact.
+- Provenance cannot show it: it is idempotent on `output_path`.
+
+**Evidence:** `tasks/mri_july_1125_review.md` §2.1; the scripts and their output are in `D:\projects\gjesus3\staging\_analysis\mri-july-1125\`:
+- `audit_link_folders.txt`: the 209 of 483, and the single-study baseline;
+- `collision_A_result.txt` and `collision_B_result.txt`: the reproduction, standard path against scoped config;
+- `audit_link_collisions.txt`: the provenance view, which cannot see it;
+- `scripts\audit_link_folders.py` and `scripts\collision_check.py`.
+
+The streams that ingested on 2026-10-04 checked every planned link name first, and verified each acquisition's link folder strictly afterwards.
+
+- [x] *(✅ Done 2026-10-05, merged `70c5023`. `LinkCollisionError`, not an `OSError`, so it is never queued; ingest Step 5.5 checks before the copy, also in `--dry-run`; every relink caller judges by file id; tests in `tools/test_link_collisions.py`.)* **Code:** `create_hardlink` must refuse (raise) when an existing file in the destination is not the same file (`os.path.samefile`), instead of skipping it. Test it with two acquisitions of one name.
+- [x] *(✅ Done 2026-10-05; the form was confirmed by Ryan: `MRI_<sample>_<date>_<HHMM>_<exam>_<recons>`, applied to new links.)* **Template:** give the MRI `link_filename` a per-study part (the study start time, or the ACQ-ID), so a same-day repeat cannot collide.
+- [x] *(✅ Done 2026-10-05, Ryan approved; `tools/repair_link_collisions.py`, merged `0c49278`.)*
+  - **The audit** (every project, by file id) found 589 acquisitions without their own link (200 MRI, plus 389 Cell Observer and LSM 900 from the June best-guess ingests) and 7 polluted MRI folders.
+  - **Repaired:** 589 links created, and 1,900 foreign names removed from the 7 folders. Each removed file stays reachable through its own acquisition's link.
+  - **The final audit:** MISSING 0, POLLUTED 0, OK 19,070.
+  - **Verified** by the stream and independently by the coordinator. The record is `tasks/link_collision_fix_review.md`.
+- [x] *(✅ Done 2026-10-05.)* **Redeploy the operator GUI exe with the fixed linker** (Ryan's go).
+  - It was built from `main` `0c49278` and smoke-tested on a throwaway NAS, including a real refused collision at Step 5.5.
+  - It is deployed to `J:\gjesus3-data\tools\gjesus3_ingest.exe` (SHA-256 `54c641f1…`). The previous exe is backed up in `C:\Users\rtasseff\temp\gjesus3_exe_backup_20261005_150003\`.
+  - `tools\docs\microscopy_guide.html` was refreshed to the repo version.
+  - The record is the review §12.
+- [ ] Low (optional): rebuild `gjesus3_manager.exe` (the Project Manager) with the new linker. Its raw import already refuses a taken name, so this is for consistency only.
+- [ ] Low: make `provenance.has_entry_for_output` compare `output_path` case-insensitively. The share is case-insensitive, so 16 acquisitions carry a provenance row for a link that was never made; the repair has now made those links.
+- [ ] **Audit and repair (Ryan's decision):** list the affected acquisitions (an inode check of each link folder), then add the missing links under distinct names. Additive only: project folders are researcher-owned (05_PROJECTS §3a).
+- [x] The first m12 study of 2026-07-10 avoided it with a scoped config (a `_study1147` suffix).
+- [x] Stream B's drive batches (2026-10-04) were guarded by `tools/drive_staging/check_link_collisions.py` before writing and `verify_links_strict.py` after. All of B's links are exact.
+
+## 🔺 HIGH — port gjesus3 RDM production onto Box A (2026-09-04)
+
+**The plan is written and awaiting review:
+[`box_a_production_migration_plan.md`](box_a_production_migration_plan.md).** Read that, not
+this stub — it carries the full inventory, the phase-by-phase steps, each phase's
+verification, and the open decisions (B1, B3, B4 — B2 was decided 2026-10-01).
+
+Box A (HP Z2 G1i SFF) arrived 2026-09-03. It becomes the **production** machine for this
+system; this workstation becomes **dev**. All RDM operations move; backups and the two
+image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
+
+**Four things worth knowing without opening the plan:**
+
+- ✅ **B2 decided (Ryan, 2026-10-01): `molecubes-tunnel` moves to Box A.** The NI
+  acquisition Mac's tunnel went live that day, so the Mac can be re-pointed at Box A
+  **through the tunnel itself**, make-before-break, with no visit to the acquisition room.
+  Procedure: [`live_machine_remote_access.md` §10](../equipment/nuclear-imaging/live_machine_remote_access.md).
+
+- ⚠️ **Phase 0.1 is not gated on Box A and should not wait for it.** The 46 Claude
+  memory files (292 KB) sit at `C:\Users\rtasseff\.claude\projects\<slug>\memory\` —
+  **outside OneDrive and not in git, so there is exactly one copy and no backup.** The fix
+  (make that directory its own git working tree, pushed to a private repo) also solves
+  getting the memory onto Box A, because the directory name is keyed to the repo's absolute
+  path and changes when the repo moves.
+- ❌ **Junction is not the answer.** OneDrive silently stops syncing when it meets a
+  reparse point in a synced tree — observed first-hand, and the dev repo is in OneDrive.
+- 🔧 **WorkstationOps needs a gitignored per-instance config** declaring which
+  operations that machine runs. All six op configs are tracked with no override mechanism,
+  and the op sets now genuinely differ per box. Note the trap: dropping an op from the
+  enabled list does **not** unregister an already-scheduled Windows task — that needs an
+  explicit `.\ops unschedule`.
+
+⛔ **Timing:** `image-server\README.md` holds racking/provisioning/migration until after the
+**10 September 2026** leadership meeting. Phase 0 (dev-box only) is the stated exception.
+
+---
+
+## Ingest from one place — one web app on Box A, NI pulled through the tunnel (Ryan, 2026-10-01)
+
+**The goal behind the NI live-sync work.** NI researchers operate the Molecubes scanner
+themselves, and today they spend time in the acquisition room dragging and dropping data
+into place. The Mac-side sync ([`STATUS.md`](STATUS.md) §2) removes the manual copying, but
+someone still has to be at the Mac to run it. Reconstruction can take a long time, so
+collecting the data can mean finding another free slot in that room. **The goal is that they
+leave as soon as the experimental work is done, and never come back for the data.**
+
+**The shape: every ingest comes from one application.** All three transport paths already
+reach the Data Office workstation:
+
+| Instrument family | How the app reaches the data |
+|---|---|
+| Microscopy | the ordinary network drives |
+| MRI | SFTP to the scanner host |
+| NI (Molecubes) | the reverse SSH tunnel ([`live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md)) |
+
+So a first version could run on the workstation today. It cannot serve everyone from there,
+because a reverse tunnel cannot be set up on every user's machine. It belongs on **Box A**,
+which takes over the tunnel (B2, above) and serves **one web app that people behind the
+firewall log into**. The app does the work with the system's own setup and permissions on the
+user's behalf. This is the merge that [`10_TOOLS`](../mfb-rdm-docs/10_TOOLS.md) already
+anticipates for the GUI exes ("redesigned as one web app and the exes retire").
+
+**Order (Ryan):** (1) the NI sync on the Mac — next; (2) the Box A port
+([`box_a_production_migration_plan.md`](box_a_production_migration_plan.md)), tunnel included;
+(3) the app.
+
+**Questions for when it is designed** (❓ EVALUATING — options, not answers):
+
+- **Attribution under a service identity.** Today each operator writes to the NAS with their
+  own SMB account, under the permission model's write-but-not-modify grant
+  ([`03_RAW_STORAGE`](../mfb-rdm-docs/03_RAW_STORAGE.md)). If the server writes on everyone's
+  behalf, the NAS sees one identity. "Who ingested this" then has to come from the app's login,
+  carried into the registry and provenance.
+- **When does the app pull an NI session?** Reconstructions finish late, and a new one lands in a
+  new, higher-numbered `recon_<idx>/`. So "the scan ended" does not mean "the data is complete".
+  The live sync's one-acquisition-per-reconstruction model already absorbs late arrivals; a
+  server-side pull could reuse it, and a scheduled sweep might replace "pull now".
+
+---
+
 ## Operator person/PI metadata (NI + MRI)
 
 Context: 2026-06-09 review of `ni_ingest` / `mri_ingest` output. The **correctness
@@ -172,6 +367,113 @@ what "already ingested" means as new instruments are added.
   & code review follow-through", §3.1 #1) is a different concern — a pre-lock
   snapshot under concurrent ingest. This item is about the *key's* content-stability,
   not locking.
+
+**2026-09-29: this has already happened in production. 32 `.czi` files are registered
+twice.** Found by joining every microscopy acquisition's `checksums.json` on SHA-256
+(read-only), while sizing the historical-drives ingest (STATUS §2).
+
+- **22 AxioScan files ingested twice, both times as `ZWSI`** (rows in `PROJ-0014` and
+  `PROJ-0018`). Every pair is one row from the 2026-06-14 bulk config
+  `axioscan7_mfb_20260614.yaml` and one from the operator recipe `recipes/aua.yaml`,
+  e.g. `ACQ-20260304-ZWSI-001` (`20260304/MFB_AUA_1123_ID12_PR_10x.czi`) and `-023`
+  (`MFB_AUA_1123_ID12_PR_10x.czi`). Same bytes, different staging root, so a different
+  `original_name` and a different key. That is the gap described above, reached by
+  a bulk ingest followed by a normal operator ingest.
+- **10 files registered as both `CELL` (in `PROJ-0039`) and `ZWSI` (in `PROJ-0019`).**
+  The `CELL` side of all 10 belongs to a related defect:
+  **23 production `CELL` rows are AxioScan 7 files by their own metadata**
+  (`instrument_model = Axioscan 7`). All 23 are in `PROJ-0039` from
+  `cellobs_bestguess_claudia.yaml`, and came from a K: `CELL OBSERVER` sub-folder
+  literally named `1022 MANON FIGURAS PB_Axioscan`. The best-guess ingest took the
+  instrument from the folder, not from the file. The instrument code is part of the
+  ACQ-ID, so fixing either defect means retiring ACQ-IDs, which is a deliberate
+  production repair, not a quick edit.
+
+**Update, the same day:** the drives catalog checked every production microscopy sidecar
+against the device fingerprint (`tools/reference/microscopy_instruments.yaml`). It found **2
+more**: `ACQ-20240625-LSM9-001` and `-002` are Cell Observer files (`…\190624\48h\CS_fijadas_cell
+obs_1/2.czi`), ingested as `LSM9` because they sat in the LSM 900 folder of
+`lsm900_bestguess_itziar-lipofectamine-mcherry.yaml`. That makes **25 rows with the wrong
+instrument code** (list: `D:\projects\gjesus3\staging\_analysis\catalog\production_instrument_audit.csv`,
+`agree = N`). All 3,489 other microscopy rows agree.
+
+So "correct for the normal workflow" no longer holds. **Any bulk or historical ingest
+must dedup by checksum before it runs and must not rely on this key.** The external-drive
+microscopy ingest is planned on that basis.
+
+**2026-09-30: SHA-256 is not an acquisition identity either.** The drives-ingest gate found
+**206 planned `.czi` that are re-saved copies of production acquisitions.** Each has the same
+instrument, the same acquisition timestamp to the second and the same filename, and 202 of them the
+same size, but the bytes differ (ZEN rewrites a file when, for example, display settings are
+saved). There were
+also **84 such re-save groups among the drive files themselves.** A SHA-256 dedup lets all of them
+through as "new". The key **(instrument, `.czi` acquisition timestamp, filename)** catches them.
+Applied to production, it finds exactly the 22 known duplicate `ZWSI` pairs plus **1 more
+duplicate, in `LSM9`** (`lsm900_bestguess_irene-transfeccion.yaml`). **Design input for the
+content-anchored key above:** for microscopy, the acquisition timestamp (with the instrument, and
+the file name or the image dimensions) identifies the acquisition. The bytes do not. A timestamp
+shared under *different* names is ZEN's scene splits, stitched copies and region extracts. Those
+are the same acquisition, but not always the same pixels.
+
+- [ ] **Clean up the drives ingest's same-timestamp groups after the run (2026-10-01).** *(2026-10-04: analysed by pixel check, giving 469 derivatives and 350 to stay; the review is `tasks/drives_r4_cleanup_review.md`. **All 4 approved lists are executed** (153; `roi_crops` on 2026-10-05). Left to do:
+  - the 61 derivatives waiting for item 2b;
+  - proposal (c), 255 files, on hold;
+  - the 50 `1321` files on their drive path, which item 2b may regroup;
+  - LOW: the survivors' notes still say "shares its acquisition timestamp with N other files".)*
+  **Ryan's principle, restated 2026-10-01:** the acquisition (or reconstruction) goes in `/raw/`;
+  derivatives and complements go in the project folder; a file stays in raw with a flag only when
+  it is genuinely ambiguous.
+  **Planned:** scale-bar copies and thumbnails/exports are not acquisitions, so they move to the
+  original's project folder and their ACQ-IDs are retired, as gate R3 did for derivatives of earlier
+  production scans. **Needs a per-group pixel check before any decision:** scene splits and stitched
+  copies.
+  **Coordinator's note:** at the gate these were all kept with one uniform "keep and flag" rule,
+  and described as scene splits and stitched copies. That understated the scale-bar copies and
+  thumbnails among them, which were separable before the run.
+  *Original framing follows.* The
+  historical-drives ingest kept every member of its **247 same-timestamp groups (819 files)** in
+  `/raw/` and flagged each one with `drv_acq_group` and `drv_acq_group_n` in the sidecar's
+  `discovered` block (gate rule R4: nothing unique lost).
+  - Many groups turn out to be **one original plus small exports.** For example, `0721-M113-Liver-PB-20X.czi`
+    (2.9 GB) and its `-Original` (3.2 GB) sit alongside five 6–15 MB `…-scale` and `prussian-blue-…-scale`
+    copies. The exports also carry **no project**, while the originals are in `AE-biomaGUNE-0721`.
+  - A uniform pass could keep the original of each group in `/raw/` and move the exports to the
+    project's non-raw material. That is what was done for exports of acquisitions already in
+    production (gate R3).
+  - Before such a pass, a pixel check decides which files are true copies and which are distinct
+    scenes. Doing it is Ryan's call: it is a production repair that retires ACQ-IDs.
+  - **Measured from the frozen plan (2026-10-01):**
+    - 31 files have `scale` in the name (3.4 GB). Scale bars are vector overlays, so the pixels
+      match the original.
+    - About 18 small export-named files are under 5% of their group's original (e.g. `Untitled5`).
+    - About 550 more are scene splits (e.g. one 54-well plate split into per-well files) and
+      stitched copies (~320 GB).
+    - All are flagged except one: **`ID65_PB_lung_20x_scale.czi` (2.9 GB) has no group**, so a
+      clean-up has to list it by name.
+    - Out of `/raw/` already: the gate's R3 derivatives of earlier production scans (22) and the
+      re-saves (R1/R2). `.tif`/`.jpg`/`.png` exports were never in this ingest's scope.
+- [ ] *(2026-10-01: the retire tool is being built on `feat/retire-acquisition`. With it, the
+  duplicates below become a dry-run-first operation, and the 10 `CELL`↔`ZWSI` twins are retired
+  as duplicates of their `ZWSI` side. That also fixes 10 of the 23 mis-coded `CELL` rows.
+  Re-coding the other 15 waits for v2's re-identify.)* Decide how to retire the 32 duplicate registrations and re-code the 25 rows with
+  the wrong instrument (23 `CELL` rows that are AxioScan files, 2 `LSM9` rows that are
+  Cell Observer files). Keep the older ACQ-ID of each pair? Tombstone the other?
+  **2026-10-01 — decided (Ryan):** keep what the project uses; on a tie, the older. Two operations,
+  each dry first, **after the drives ingest is merged**: the 22 `ZWSI` twins
+  (`tasks/retire_lists/2026-10_sha256_twins_zwsi.csv`), then the 10 `CELL` rows (`…_cell.csv`). Per-pair
+  table and commands: `tasks/retire_acquisition_review.md` §6a.
+  **✅ 2026-10-02 — the 32 duplicates are retired in production** (close-out plan Step 3; runs `RET-20261002-115731-642` and `RET-20261002-121520-505`, each after a full dry run that showed every pair byte-identical, and each verified independently). This fixes 10 of the 25 mis-coded rows. **What remains is re-coding the other 15** (13 `CELL` → `ZWSI`, 2 `LSM9` → `CELL`): that is the v2 re-identify item below, being built on `feat/retire-v2` (2026-10-03/04).
+- [x] *(✅ Built, merged and first used 2026-10-04: `ACQ-20250915-LSM9-016` retired as `equivalent` of `-001`, run `RET-20261004-135015-801`.)* **v2 of the retire tool: a "content-equivalent duplicate" mode for `.czi` (2026-10-01).** A
+  duplicate may be retired when the decoded subblocks, the metadata XML and the attachment payloads are
+  all identical, even though the bytes differ (ZEN rewrote the container). Record the evidence in the
+  tombstone. First user: **`ACQ-20250915-LSM9-016`**, a re-save of `-001` that is information-identical
+  but 1 MB smaller (`-001` carries a 472 KB `DELETED` segment from an in-place metadata rewrite).
+  **Ryan: leave the pair until this exists.** Evidence: `tasks/retire_acquisition_review.md` §6b.
+- [x] *(✅ Built, merged and first used 2026-10-04. **✅ 2026-10-04 — the rest is done too (retire v2's first production use):** the 2 `LSM9` rows that are Cell Observer files are re-identified as `ACQ-20240625-CELL-008/-009` (run `RET-20261004-134924-221`; the same files, project links unchanged). The 13 `CELL` rows turned out to be ZEN exports (3 crops and 10 split scenes) of correctly coded AxioScan scans, so they are retired as **derivatives** into `claudia\working\…` (`RET-20261004-135040-313`). **All 25 mis-coded rows and all 32 duplicates are resolved.**)* **v2 of the retire tool: re-identify a mis-coded acquisition** (retire + re-register under the
+  right instrument code, e.g. the remaining 15 mis-coded rows). **It must not be blocked by its own
+  tombstone:** the ingest dedup index deliberately includes retired rows (Ryan, 2026-10-01), so a
+  re-identify has to bypass that for the id it is replacing.
+- [ ] Re-rate this item's priority in the light of the production evidence.
 
 ## Person/role rename — residual cleanup (core done 2026-06-09)
 
@@ -349,18 +651,84 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   deferred to wk of 2026-07-07"**, so it is parked mid-flight and now ~2 weeks stale.
   It needs a decision — land it or consciously park it — not cleanup. Relates to the
   NI live-sync go-live item in `STATUS.md` §2.
-- [ ] **Decide what to do about `contacts.xlsx`.** Tracked, not ignored, and
-  perpetually dirty in the working tree — it has shown up as modified in every session
-  and is deliberately never staged (`CLAUDE.md`: don't stage the binaries). There is a
-  commit on `feat/finder-mvp` literally titled *"chore: commit a stale manual edit to
-  contacts.xlsx"*, so this recurs. Options: `.gitignore` it (+ `git rm --cached`),
-  keep tracking and accept the noise, or move it out of the repo entirely. Right now
-  it is permanent noise in every `git status`, which is how real changes get missed.
+- [x] **`contacts.xlsx` — RESOLVED 2026-09-22: untracked + gitignored** (`1185ed1`,
+  pushed). `git rm --cached` plus `/contacts.xlsx` in `.gitignore`. The file is
+  **untouched on disk** — sha256 `ad773fb2…` identical before and after. It is gone
+  from the tip of `origin/main`, verified from the *public* side rather than just the
+  local ref: `api.github.com/…/contents/contacts.xlsx?ref=main` → 404, with
+  `README.md` → 200 as a control. Also ends the permanent `M contacts.xlsx` noise in
+  every `git status`.
+- [ ] **🔸 Residual — `contacts.xlsx` is still in the repo's HISTORY, and the repo
+  is public.** It entered at the **initial commit** `595b68d` (2026-02-11), so it sits
+  in the tree of all 398 commits and at the tip of every branch and both `backup/*`
+  tags (~10 KB, 3 distinct blob versions). It remains fetchable by direct SHA URL.
+  Ryan saw the full costing on 2026-09-22 and **deliberately deferred the purge** —
+  this is a conscious accept, not an oversight. What it would take:
+  - `pip install git-filter-repo` (not installed), then
+    `--invert-paths --path contacts.xlsx`, then force-push 4 branches + 2 tags.
+  - **Run it in place, NOT on a mirror clone** — `feat/ni-live-hardening` holds
+    commits that are not on origin, so a mirror rewrite would silently drop them.
+  - Disturbs **two live worktrees**, and the two `backup/ni-live-pre-rebase-*` tags
+    are the safety nets for exactly the branch that would then need rebasing.
+  - **Force-pushing does not delete the blob from GitHub.** Unreachable objects stay
+    fetchable by SHA until GitHub Support garbage-collects them on request — without
+    that ticket the rewrite is cosmetic. (0 forks, so no fork network to chase.)
+  - Invalidates **124 commit-SHA citations** (69 in tracked `.md`, 55 in the Claude
+    memory files). Mitigable: filter-repo writes `.git/filter-repo/commit-map`
+    (old→new), so a scripted find-replace can repair them.
+  - **Best window:** after `feat/ni-live-hardening` lands or is consciously parked,
+    and **before** the Box A port clones onto the new machine.
+  - Scope is genuinely this one file: a sweep of the tracked tree for email-shaped
+    strings found only `git@github.com` and a public institutional info address.
 
 ## Misc
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)
   and NI `--user` (override the parsed user), once the person-home above exists.
+- [ ] **🔺 HIGH — ⚠️ `extract_study_date` reads only the first 20 instances and fails
+  SILENTLY into today's date (hit live 2026-08-12).** *Priority set 2026-08-13: this is
+  the highest-priority open item in this file. It has already corrupted production once,
+  it is not instrument-specific — any nested DICOM source can hit it — and it fails
+  **upward** into a successful-looking run, so the next occurrence is as likely to be
+  noticed by luck as by process. LIONS escaped 0-of-42 purely because its layout is
+  flatter than HPIC's.* `dicom_utils.extract_study_date`
+  calls `find_dicom_files(limit=20)` and returns the first `StudyDate` it finds.
+  When the leading instances of a nested DICOM tree carry no `StudyDate`, it
+  returns `None`, and `ingest_raw` falls back to **today** for the ACQ-ID prefix
+  and the registry `acquisition_datetime`. The result is a silently wrong
+  identity: a 2019 exam committed as `ACQ-20260812-…` under
+  `/raw/DICOM/2026/2026-08/`, with a blank `acquisition_datetime`, no
+  `age_at_acquisition`, and the wrong date baked into the project hard-link name.
+  It is only a WARN, so a batch run completes "successfully".
+  **Observed:** 2 of the first 4 DTS24 HPIC cases (whose archives nest one level
+  deeper — `HPIC02/HPIC02/S#####/S00/I##`); 0 of 42 LIONS, whose flatter layout
+  happens to put a dated instance in the first 20. Cleaned up by deleting and
+  re-ingesting the two acquisitions.
+  **Fix options**, in preference order: (a) have the DICOM summarizer defer to
+  `ingest/dicom_headers.py`, which parses more instances and prefers a real image
+  series over presentation-state frames — it recovered a date for 33/33 HPIC
+  cases; (b) raise/remove the `limit=20`; (c) at minimum, make the today-fallback
+  an **ERROR that skips the case** rather than a WARN that commits it — a wrong
+  acquisition date is worse than a deferred one. Note the same 20-instance limit
+  applies to `detect_modality`, which is why the batch log reported
+  `DICOM Mod: PR` (a presentation state) for some cases.
+- [ ] **`dicom_utils.summarize_source` opens every file in the source tree
+  (measured 2026-08-12).** `find_dicom_files` has no limit in the `file_count`
+  path, and for extensionless DICOM it must open each file to check the `DICM`
+  magic at byte 128 — so a collaborator case of ~21,000 instances costs ~21,000
+  opens, plus a second `os.walk` doing `getsize` on each for the total. Measured
+  **29–75 s per case** on local disk; the DTS24 batch of 75 cases is ~880,000
+  file opens and dominates its ingest wall-clock entirely (the actual archive
+  copy is one file per acquisition). Tolerable only because staging is local —
+  the same walk over SMB is the exact "thousands of tiny files" cost that made
+  the original collaborator round painful, and is why
+  `extract_xmri_archives.py` now warns against a NAS `--dest`.
+  The fix is already sketched in a TODO in that function: for
+  `acquisition_layout: archive`, count entries in the produced archive's central
+  directory instead of walking the source. That is both faster and *more*
+  correct — `file_count` is meant to describe the acquisition as stored. Cheap
+  win: `detect_modality` / `extract_study_date` already pass `limit=20`; only
+  the `file_count` call is unbounded.
 
 ## Metadata vocabularies & search (correction pass 2026-06-11)
 
@@ -385,7 +753,1173 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   Prep is already in place: keep the flat registry clean and keep DICOM UIDs
   captured (done) — that's what makes the eventual platform import frictionless.
 
-## Finder — "Select-in-Finder → assemble a project" (2026-06-23)
+## Metadata model — what `user_provided_metadata` is standing in for (2026-08-12)
+
+> Raised by Ryan at the moment the block was designed, and deliberately **not**
+> solved then: DTS24 needed the collaborator tables captured, and over-fitting
+> the schema to one dataset would have been worse than a recorded stand-in.
+> The block that shipped ([08_METADATA §4.9](../mfb-rdm-docs/08_METADATA.md)) is
+> flat and per-acquisition; both items below are cases where that is the wrong
+> shape and we know it. **Priority: medium** — revisit before a second or third
+> dataset makes the stand-in load-bearing.
+
+- [ ] **META-10 — Study-level metadata and the ISA hierarchy (investigation /
+  study / assay).** Study data describes *what is being done*, one level above
+  an acquisition, so copying it into every acquisition's sidecar is duplication
+  with no join. We have already leaned this way twice: the animal-facility
+  `procedures` block ([§4.4.7](../mfb-rdm-docs/08_METADATA.md)) and the
+  `session_id` registry column (already annotated "ISA study grouping" in
+  `resolver.USER_CONTROLLABLE_COLUMNS`). DTS24's `source_project` block —
+  the originating grant, identical on all 42/33 acquisitions of a cohort — is a
+  third. Design question: does gjesus3 adopt an explicit ISA-style layer
+  (investigation → study → assay), and if so does it live in
+  `/projects/<proj>/metadata/` (the study-level location already specified in
+  §1.1 but built on 0 of 52 projects) rather than in the per-acquisition
+  sidecar? Ties to the deferred study-level metadata work and to the
+  metadata-only search DB item above.
+- [ ] **META-11 — A clinical/derived *measurement* is a new data type, not
+  metadata.** DTS24's cardiac hemodynamics (28 columns of pressures, cardiac
+  index, Fick) is currently attached to the MRI acquisition as
+  `user_provided_metadata.hemodynamics`. That is expedient and wrong in
+  principle: it is its **own measurement**, of its **own data type**, related to
+  the MRI only because it came from the **same subject**. The model that
+  captures it properly is subject-linked acquisitions of differing types — which
+  is also what would let a non-imaging assay (bloods, histology scores, clinical
+  scores) enter the system at all. Today `raw/` is organized by imaging
+  ecosystem (MICROSCOPY / DICOM / EM) with no home for a tabular clinical
+  measurement. Design question: a new ecosystem/data-type for non-image
+  measurements, keyed by `subject_ids`, versus keeping such tables as
+  acquisition metadata. **Do not add more measurement tables via `user_metadata:`
+  before deciding** — that is how the stand-in becomes permanent.
+
+## Human-subject data — policy beyond the ingest (2026-08-12)
+
+- [ ] **META-12 — Human/clinical data policy.** DTS24 is the first human data in
+  a system designed end to end for preclinical animal work. The ingest side is
+  settled ([08_METADATA §4.10](../mfb-rdm-docs/08_METADATA.md)): the DICOM
+  extractor is a privacy allow-list, no date of birth is propagated into the
+  sidecars or `registry_subjects.csv`, and human cohorts use an operator
+  `subject:` block with a pseudonymous id so the animal-facility DB is never
+  consulted. **What is NOT settled:** (a) the archived source `.zip`/`.rar`
+  files still contain full DICOM headers with DOB and patient name — should
+  sources be de-identified on ingest, or is "identifiers stay in the immutable
+  archive, never in the searchable layer" the standing rule? (b) access control
+  for human data on the share — the current model is a single `GJesus` group
+  with Read baseline ([permission model](../mfb-rdm-docs/02_INFRASTRUCTURE.md)),
+  which does not distinguish human from animal data; (c) retention, and the
+  legal basis / data-sharing agreement covering reuse of collaborator clinical
+  data for DTS24; (d) whether `subject:`'s animal-facility field names
+  (`facility_animal_id`, `strain`, `cohort_id`) should gain a human-appropriate
+  alias. Also note the `subject:` block schema currently has no way to say
+  "this subject is human" other than `species: Homo sapiens`.
+  - **2026-10-02, Ryan: the legal basis (c) is settled.** Storing collaborator human data at
+    biomaGUNE is **approved under the collaboration agreements with the people who collected it**,
+    and **the institute has no additional policies.** Human data is therefore stored, starting with
+    `LEONE` from the historical drives. The follow-ups are the two 🔺 HIGH items at the top of this
+    file: a human/privacy-restricted registry flag, and a DPA reference on every external dataset.
+    (a), (b) and (d) are not re-decided here; with no additional institute policy, today's practice
+    stands.
+
+## 🔸 MODERATE — closed projects should be MOVED, not deleted: a `projects_closed\` tier and a "close a project" action (Ryan, 2026-09-30)
+
+Ryan's direction, made with the CoS hub over the M. Jesús drive (its `HANDOFF.md` §7.3; STATUS §2):
+
+- A closed project is **moved** to `projects_closed\`, not deleted. Cold storage on a separate device can come later,
+  and compression is an option.
+- Once that tier is settled, the **Project Manager gains a "close a project" action** that moves the folder.
+- Ryan then asks the researchers to **review every project**: who owns it, whether it is closed, and whether it should
+  have been a project at all. That review is also the forum for the open naming convention (05_PROJECTS §9).
+
+**Why it came up:** `AE-biomaGUNE-1519` and `-1121` were closed and their folders deleted, as 05_PROJECTS prescribes,
+and then both had to be reopened when drive material for them arrived (1519 on 2026-10-04; 1121 is pending, STATUS §2).
+
+**The spec contradicts itself today:** 05_PROJECTS §1 calls projects working space that is "closed and deleted", and §4
+ends the lifecycle at `DELETED`; §4.x says that until the tool exists, projects should not be deleted. A moved-not-deleted
+tier resolves it. This is a spec change owned by gjesus3; **Ryan owns the call.** The smallest spec and tool change is
+being written up by the drive-3 assessment (A2, `tasks/drive3_projects_and_placement.md`).
+
+- [ ] Ryan's call on `projects_closed\`.
+- [ ] The spec change (05_PROJECTS §1, §4, §4.x), and the close-out rule in STATUS §1 ("folder deleted").
+- [ ] The Project Manager "close a project" action.
+- [ ] The researchers' review of every project (Ryan).
+
+## 🔸 MEDIUM — reconsider a `status` column for retired acquisitions, instead of the tombstone file (2026-10-01)
+
+**Decided for now (Ryan, 2026-10-01):** a retired ACQ-ID leaves `registry_raw.csv` and is recorded
+in a new `registries/retired_acquisitions.csv` (the tombstone file; tool on branch
+`feat/retire-acquisition`). **Ryan expects this to cause trouble later**, and wants it reconsidered:
+
+> *"The registry really should be the main source of updated truth about the files. This makes it
+> wrong. It's easy to spot and then understand the issue, but then every future thing that
+> believes the registry will need to account for the fact that it could be wrong. Changing a lot
+> of existing stuff is problematic, but we can at least define that set. Anticipating what new
+> things will be built is not possible."*
+
+- **Timing:** reconsider **before expanding to other groups.**
+- **A natural moment** is the CSV-to-database move (see "Metadata database — retire the CSV
+  registries" below). A database makes a `status` column, or a proper acquisition-lifecycle table,
+  cheap, and once the record count outgrows a CSV, this has to be revisited anyway.
+- **Input already being produced:** the `feat/retire-acquisition` session lists every existing
+  reader of `registry_raw.csv`. That is the "definable set" that a status column would have to
+  teach to skip retired rows.
+- **Mitigations in v1:** `resolve_acq_id()` returns the live row *or* the tombstone (with
+  `superseded_by`), and the validator flags a curated dataset that references a retired ID.
+
+## 🔽 LOW — reconsider quarantine-and-purge-later for retired acquisitions (2026-10-01)
+
+**Decided for now (Ryan, 2026-10-01): delete once verified.** A retired *duplicate's* bytes are
+deleted as soon as the surviving acquisition is verified to hold byte-identical content. A retired
+*derivative* moves into its original's project folder. **This item is to reconsider, not to
+build,** the alternative: move retired bytes to a quarantine area (e.g. `raw\_retired\`) and delete
+them only in a separate, explicit purge step. That would make a retirement reversible until the
+purge.
+
+## 🔸 MODERATE — no ingest maintains a project's `start_date` / `last_activity` (2026-10-01)
+
+Since 2026-07-14 these two columns of `registry_projects.csv` **mean acquisition dates**. They were
+backfilled once that day, and **nothing has maintained them since.**
+
+- A project created by an ingest gets its **creation date** for both. For example, `DTS24` reads
+  2026-08-12 though its data spans 2018 to 2025, and `AE-biomaGUNE-0118` reads 2026-09-30 though its
+  slides date from 2022 to 2023.
+- A later ingest into an existing project never moves `last_activity`. `AE-biomaGUNE-0424` reads
+  2026-05-06 but received scans on 2026-09-29; `-1123` reads 2026-06-05 but has acquisitions to
+  2026-07-24.
+
+**Why it matters:** the close-out rule ("newest acquisition older than 3 years") reads these dates.
+Stale dates are how `1019` was closed while it was still receiving data (see "Define what
+`status = closed` actually does").
+
+- [ ] Engine fix: when an ingest registers an acquisition into a project, widen that project's
+  `start_date`/`last_activity` to cover its acquisition date. Do it under the projects-registry lock
+  (`ingest/projects_registry.py`), and never move a date inward.
+- [ ] One-time recompute for every project, backup-first. The logic already exists inside
+  `tools/reopen_project.py` (on `feat/drives-microscopy-ingest`); lift it into a shared function.
+  Run it after the historical-drives ingest, which touches 13 projects.
+
+## 🔸 MODERATE — audit production `.czi` for truncated primaries (2026-10-01)
+
+The drives ingest found that **`ACQ-20251031-CELL-003` is truncated in production**. The file is
+5.1 MB short and its last tile (108 of 108) cannot be read, while the drive copy is complete. Its
+`checksums.json` matches the *truncated* bytes, because the ingest hashed what it copied. So
+`verify_checksums` cannot catch this class. The file came from the 2026-06-15 best-guess ingest,
+which read from `K:\gjesus\Ainhize`, a live share; others may be affected the same way. (The repair
+of this one was approved on 2026-10-01 and is being done on `feat/drives-microscopy-ingest`.)
+
+- [ ] Read-only audit of all ~4,400 production `.czi`, over SMB. For each file, read the header
+  and the subblock directory, and flag any whose last subblock ends beyond the end of the file.
+  This is cheap: a few KB per file.
+- [ ] For each hit, look for a complete copy: `K:` (if still there), the staged drives
+  (`files.csv` by the re-save key), `S:\goptical`. Repair with the in-place pattern: **overwrite the
+  bytes of the existing file** so project hard links keep pointing at it. Then update
+  `checksums.json`, the registry size and `notes`.
+
+## 🔸 MODERATE — the `researcher` name convention is with the group; do NOT normalise until they decide (2026-09-03)
+
+**Status: deliberately parked. This is not a defect to be fixed on sight.**
+
+The `researcher` column currently holds the same person under more than one spelling, split by
+capitalisation:
+
+| Value | Rows | | Value | Rows |
+|---|---|---|---|---|
+| `itziar` | 552 | | `Itziar` | 390 |
+| `Irene` | 402 | | `irene` | 255 |
+| `Marina` | 503 | | `marina` | 17 |
+
+**2,119 acquisitions affected.** The practical consequence is that a Finder search on a name
+returns a subset — e.g. `Itziar` matches 390 of her 942 rows.
+
+**Why it is parked, not fixed.** Ryan put the naming convention to the group at the 2026-09-03
+launch rollout. **They may not choose first-name-only at all** — surname, `first.last`, initials,
+or an institutional username are all live possibilities. Normalising the case now would be work
+thrown away, and worse, it would look like the convention had already been settled by the Data
+Office when it has explicitly been left to the people whose names they are.
+
+- [ ] **Wait for the group's answer.** One decision, then this becomes mechanical.
+- [ ] **Then backfill the whole column in one pass**, not just the case split — whatever convention
+  wins applies to every historical row, so treat the case-collapse and the convention change as a
+  single migration rather than doing the easy half now.
+- [ ] **Then make the tools write it that way**: the GUI operator/researcher fields and the
+  per-instrument templates must emit the chosen form, or the split re-opens on the next ingest.
+  This is the part that makes the backfill stick.
+- [ ] Consider whether the resolver should normalise defensively (case-fold on write) once the
+  convention is known — a convention the tooling cannot enforce will drift again.
+
+**Note:** `researcher` is blank on 12,386 of 16,375 rows, which is the honest state for historical
+data that names no person — that is *not* part of this item and must not be back-filled by guessing.
+This item covers only the ~4,000 rows that *do* carry a name.
+
+## ✅ DONE IN PRODUCTION 2026-09-04 — the MRI GUI can now use metadata labels for the *destination project*, not just the link name (raised 2026-09-03)
+
+> **Closed 2026-09-04.** Built, verified, merged (`4294c02`), and the rebuilt > `gjesus3_ingest.exe` is **deployed to `J:\gjesus3-data\tools\` and confirmed running > from the NAS**. Operators have it now. Kept here rather than deleted because the four > design decisions below are the reasoning a future change would otherwise have to > re-derive.
+
+**Reported by Ryan, 2026-09-03.** On the MRI ingest page (`/mri`) the clickable / draggable
+`${discovered.*}` metadata chips work for **Project link name** but **not** for **Project name** —
+the field that decides *which project the acquisition is associated with*. That field is a plain
+free-text box, so its value is one static string for the whole run.
+
+**Why this is a real limit, not a cosmetic one.** An operator ingesting **several projects in one
+run** has no static project name to type. Today the options are all bad:
+
+| Option | Why it doesn't do |
+|---|---|
+| `auto` mode | hard-codes exactly **one** convention — `AE-biomaGUNE-${discovered.project_code}`. Any other basis (a study code, a different filename chunk, a per-folder code) is unreachable. |
+| `fixed` mode | one name for every scan in the run — wrong the moment the run spans two projects |
+| one run per project | the operator must know the split in advance and hand-partition the pull |
+| edit the YAML | exactly what the GUI exists to avoid |
+
+**Microscopy already does this.** `registry.project_name` is declared `"kind": "token"` in
+`tools/operator/value_fields.py:53`, so the microscopy runner renders it as a token field with the
+`discovered.*` palette — the GUI's own module docstring (`tools/operator/gui/app.py:20`) lists
+"`link_filename` + `project_name` + `auto_create_project` via clickable `discovered.*` token chips"
+as builder behaviour. **The MRI page is the sibling that never got it.**
+
+### The engine already supports this — the gap is UI-only
+
+Checked 2026-09-03; don't re-derive it:
+
+- **The MRI template itself already uses a token here.** `tools/templates/instruments/mri_bruker.yaml:337`
+  ships `project_name: "AE-biomaGUNE-${discovered.project_code}"` — a per-case token expression that
+  resolves at ingest. *That is the feature.* The GUI simply never exposes editing it.
+- **`project_name` is a token-resolvable, user-controllable registry column** —
+  `tools/ingest/resolver.py:83` (`USER_CONTROLLABLE_COLUMNS`).
+- **The preview already resolves it per case and displays it.** `preview.py::_preview_project`
+  replicates Step 9.5 read-only and returns `PROJ-XXXX` / `will auto-create: <name>` /
+  `not found: <name>`; `mri.js` already renders a per-row **Project** column from it.
+- **Collision checking stays correct** — `collisions.py` groups by `(project_name, link_filename)`,
+  so a run spanning several projects is already handled.
+
+**No schema change and no ingest change.** ✅ Nothing here touches a `DECIDED` item — it makes the
+MRI page consistent with the microscopy page and with the template's own existing behaviour.
+
+### What the change is
+
+- [ ] **Replace `#project-name`** (`tools/operator/gui/templates/mri.html:101`, a bare
+  `<input type="text">`) with a `TokenField` + `renderPalette` — both already loaded on that page
+  for the link name (`static/tokenfield.js:104` and `:234`). Give it the same live "e.g. …"
+  resolved example the link field has (`updateLinkExample()` in `static/mri.js`), so the operator
+  sees the real project name before ingesting.
+- [ ] **Keep the OS-safe-name handling.** `static/mri.js:141` converts whitespace → `-` as you type,
+  because a project's name **is** its folder name (05_PROJECTS "folder == name verbatim"). That
+  conversion must apply to the **literal text segments only**, never inside a `${...}` ref.
+- [ ] **Then reconsider the mode selector.** `auto` is just "the template's default expression" and
+  `fixed` is "a literal string" — once the field accepts tokens the two collapse into one editable
+  field, with `none` (no project, no links) staying as its own choice.
+  `app.py::_mri_overrides` (~line 1043) is where the three modes become `registry.project_name`.
+- [ ] **Show every distinct destination project in the preview, with counts, before ingest.** A
+  token-valued project name plus `ingest.auto_create_projects` means one run can mint *several*
+  projects. The per-row column already exists; what is missing is a summary line — e.g.
+  *"3 projects: X (12 scans), Y (4), Z (8) — 1 will be created"* — which is what makes a
+  multi-project run safe to approve.
+- [ ] **Rebuild and redeploy the frozen exe** to `\gjesus3\gjesus3\gjesus3-data\tools\`. A
+  source-only fix changes nothing for operators, and the exe has its own bundling failure mode
+  (`tools/operator/gui/README.md` + `gjesus3_ingest.spec`).
+
+**Test it against the case that motivated it:** one pull whose folders span two or more protocol
+codes, with the project name set to something *other* than the AE convention, and confirm the
+preview sends each scan to its own correct project.
+
+### ✅ Resolution (2026-09-04) — branch `feat/mri-gui-project-tokens`
+
+Everything above is built except the deploy. What landed, and the parts worth knowing before
+touching it again:
+
+- **The field is a `TokenField` with its own palette** (`#project-field` / `#project-palette` in
+  `mri.html`), a live resolved example, and `spacesToHyphens: true` — an option the widget
+  *already carried*, with a comment saying "used by the project-name field". The MRI page was
+  simply never wired to it.
+- **The palette is narrower than the link-name palette, on purpose.** `MRI_PROJECT_PALETTE_KEYS`
+  in `app.py` = `project_code, animal_num, pi_initials, jrc_id, mri_study_name`. Exam / recon /
+  sequence are withheld because they differ per acquisition and would mint **one project per
+  scan**; `${acq_id}` / `${original_name}` likewise; `${project_name}` / `${project_id}` are
+  circular (both are post-Step-9.5). **Do not "helpfully" widen this to match the link palette.**
+- **Preview gained a per-destination breakdown** (`renderProjectSummary`): every project the run
+  would touch, scan counts, a flag on the ones that would be auto-created, and a warning above
+  three new projects. With a token-valued name one run can create several projects — that list
+  is the safety net, and it is the reason the palette can stay permissive rather than locked down.
+- **An empty custom name is now refused** on both Preview and Ingest (`projectError()`). It and
+  "no project" both resolve to a blank `registry.project_name` and the config cannot tell them
+  apart, so an empty box would previously have ingested silently with no links at all.
+- **A custom name rewrites `auto_create_project.description`.** The template's text says the
+  project came from an animal-protocol code; once projects are named some other way that sentence
+  would be written into every project the run creates.
+- **Verified end-to-end**, not just unit-tested: a two-protocol ParaVision batch root (0522 +
+  0599) driven through Flask's test client against a throwaway test NAS. `auto` resolved the
+  existing protocol to a `PROJ-` id and the unknown one to a pending auto-create (both Step-9.5
+  arms); `MFB-${discovered.project_code}` produced **two destinations from one run**, 2 scans
+  each; a three-token expression resolved with nothing left unsubstituted; `none` gave
+  `(no project)` throughout.
+- **Regression test:** `tools/operator/test_mri_project_name.py` (24 checks, self-contained —
+  needs no test NAS or sample tree). Run it before any future edit to this page.
+
+- [x] **Rebuilt and deployed 2026-09-04** (on Ryan's go-ahead). Built off OneDrive to
+  `D:\_gjbuild` / `D:\_gjdist`; the live exe went **95,724,318 → 95,897,468 bytes**, deployed
+  via a `.new` sidecar + atomic replace and SHA-256 verified against the source; the updated
+  `mri_guide.html` went to `tools\docs\` too. The **previous live exe is backed up** at
+  `C:\Users\rtasseff\temp\gjesus3_exe_backup_20260904\` (byte-verified; the two older
+  backups held *pre*-Aug-10 builds, so the Aug-10 build had never been saved).
+  **Verified in-frozen, not just rendered** — see the note below, which corrects the
+  verification instruction that would have missed the 2026-07-17 crash.
+
+## 🔺 HIGH — external collaborator archives are one row per EXAM, not per series (2026-08-14)
+
+> **For the re-shape (2026-10-04):** consider promoting `LEONE`'s `mr_supplements` (case 3.02's 3D QFlow series, plus the raw-data objects) into the matching `DTS24` exams. Also consider the 36 echo exams for `/raw/`, once an external-echo instrument code exists. Ryan's 2026-10-04 ruling placed them in `DTS24`'s project folder as files for now.
+
+The 75 external cardiac-MRI acquisitions in `DTS24` (`XMRI`; LIONS ×42, HPIC ×33) are each
+stored as **one archive standing for a whole exam**. Every internal dataset is separated by
+series. Source: the XNAT-trial write-up at
+`gjesus3-tools/gjesus3_external_archives_reingest_draft.md` (2026-08-14).
+
+**Both halves of that report were verified here before filing:**
+
+- **Internal MRI really is one row per series** — `original_name` is `<exam>/<series>`, and the
+  exam is the `session_id`: **869 sessions → 10,330 rows**, ~12 series each, 866 sessions
+  carrying more than one row. So this is a genuine break with our own convention, not a
+  difference of opinion.
+- **One archive really is a whole exam.** Listing `ACQ-20211022-XMRI-001.zip` (1,080.8 MB) from
+  the NAS: **21,103 entries, 27 `S`-numbered series folders.** The report's totals across the 45
+  readable zips — 928,782 files, 1,800+ series folders, ~41 series per archive — are consistent
+  with that.
+
+**Consequences.** 75 rows stand in for ~2,000 real series; `file_count` means "files inside an
+archive" on these rows and "DICOM files on disk" on every other row in the same column; no one
+can look at a single sequence without unpacking ~1 GB / ~20k files; and the XNAT trial holds all
+75 (`HELD_EXTERNAL`) because archive-per-acquisition maps onto nothing.
+
+**Not urgent, and worth saying why:** the bytes are safe and checksummed, the as-received
+archives are intact provenance, and the XNAT pilot proceeds without them. What it costs is
+retrieval and registry honesty, and that cost grows — every downstream tool has to special-case
+these 75 rows until it is fixed.
+
+- [ ] **Decide the unit.** Match internal MRI: one acquisition per series, grouped by
+  `session_id` = exam. Confirm how reconstructions are treated so external matches internal.
+- [ ] **Drive the split from DICOM headers / `DICOMDIR`, never folder position** — LIONS zips put
+  `S1010/…` at the top level, some HPIC zips nest under patient+study (`HPIC25/S60110/S00/…`).
+  Both carry a Philips `DICOMDIR`.
+- [ ] **Preserve provenance:** keep `data_source collaborator:LIONS/HPIC`, keep the original
+  archives retrievable as the as-received record, and retire the 75 old rows rather than
+  reusing their ACQ-IDs.
+- [ ] **RAR dependency** — 30 archives (the 2018–19 Ingenuity-era ones) need `unrar`/`7z` and
+  have not been opened yet. Uncompressed size is unknown; 54 GB compressed today.
+- [ ] Re-check `extract_study_date` exposure on the re-ingest — the nested HPIC layout is what
+  triggered the wrong-date bug the first time (see the 🔺 HIGH item on it above).
+
+**⚠️ "Unpack" may be the wrong verb — measure before assuming it (2026-08-14).** The registry
+records **409,935 files across the other 15,399 acquisitions**, and **1,546,599 files inside these
+75 archives**. So **79% of every file this system knows about is inside 0.5% of its acquisitions**,
+and unpacking them flat would take `/raw/` from ~410k to ~1.96M on-disk files — a **4.8×
+increase in total file count, all inside one project**. That is a NAS/SMB question at a scale
+nothing else here approaches, not a matter of taste.
+
+What is actually being asked for is that **a series be addressable** and that `file_count` mean
+one thing — which is not the same as loose files on disk. Three options for the discussion, no
+recommendation yet:
+
+1. **Unpack flat** — matches internal convention exactly; 4.8× file count.
+2. **One archive per series** (~2,000 rows, one archive each) — one row per series, honest
+   `file_count`, a series retrievable without touching its 40 neighbours, and file counts stay
+   in the thousands. Still not byte-identical to the internal convention.
+3. **Status quo** — rejected by everything above, but it is the baseline to beat.
+
+**One-off vs durable — be explicit about which is which** (Ryan, 2026-08-14). Most of the *work*
+here is a one-time quirk of how one collaborator handed us data; only part of it is a lasting
+capability, and conflating them produces a "general external importer" generalised from a single
+sample.
+
+- **One-off — the extraction/reordering script for LIONS' and HPIC's two layouts.** Commit it and
+  document what it did, as the record. Do **not** harden it, abstract it, or promote it to
+  `tools/` as reusable infrastructure. The next collaborator's layout is unknowable, and there is
+  no evidence — current or historical — of this recurring.
+- **Durable — the policy.** What an external acquisition *is*, the container rule, provenance,
+  retention, human-subject handling. This is the real deliverable and it belongs in the specs.
+- **Possibly durable — small code.** Header/`DICOMDIR`-driven series splitting and
+  `data_source collaborator:*` handling. **The line: anything that reads DICOM headers can live
+  on; anything that knows where LIONS put `S1010/` cannot.**
+
+**Sequencing note:** this is a large production write over the same registries as the
+`fix/subject-id-null-alias` work. **Do not run the two concurrently** — finish that one first.
+Related: the human-subject policy item above (META-12), which this does not resolve.
+
+**Already answered, do not re-investigate:** the report's item 5 (7 acquisitions with blank
+`subject_ids`) is not an external-data issue at all. They are the 7 no-animal-parsed cases from
+the `S:\gnuclear` NI backfill — Marina ×6 (`Respiratory gated`, `AE-biomaGUNE-1321`) and Itziar
+×1 (`39 copy`, `AE-biomaGUNE-1123`) — where the subject folder held a description instead of an
+animal number and the parser flagged rather than guessed. They belong with the 673 held-back
+acquisitions (**D-G**), and the fix is a subject mapping, not a re-ingest.
+
+## 🔸 MODERATE — pick ONE archive container for stored external archives (2026-08-14)
+
+Production holds **45 `.zip` and 30 `.rar`** primaries for the same data type. `.rar` is
+proprietary and needs extra tooling, which is exactly why the 30 RAR archives above have still
+not been opened.
+
+**Correcting the premise this was raised under:** the ingest does **not** recompress anything.
+`ingest_raw._resolve_archive_primary` locates the **original collaborator archive** and copies it
+verbatim, renamed to `<ACQ-ID>.<ext>` — the config says so in as many words ("one fast SMB
+transfer each, no re-zip step"). The extraction to `D:\projects\gjesus3\xmri_staging\…` was
+local-disk and read-only, purely to read headers (it was found deleted 2026-09-28). So the mixed formats are **inherited from the
+collaborators**, not produced by us, and "pick one" is a new normalisation policy rather than a
+bug fix.
+
+**Therefore this is conditional on the item above, and should not be actioned first.** If we
+unpack and store series as folders, there is no archive primary at all and the question
+disappears. It only stands on its own if we decide to keep archive-as-primary.
+
+- [ ] If archive-as-primary survives: **normalise to `.zip`** on ingest — open format, native
+  `zipfile` support, no external binary — and re-container the 30 existing `.rar` primaries.
+- [ ] Weigh the cost honestly: re-containering ~1 GB / ~20k-file archives **over SMB is
+  genuinely painful**, and it rewrites `/raw/` primaries, so it needs the recovery-tool
+  treatment (backup, checksum re-verification, registry `file_format`/`file_size_mb`/
+  `primary_file_name` updates) rather than a quick loop.
+- [ ] Record the decision in [`08_METADATA`](../mfb-rdm-docs/08_METADATA.md) / the external-data
+  section so the next collaborator drop does not re-litigate it.
+
+## 🕗 HELD until there is pull — three builds, in Ryan's order (2026-10-05)
+
+**Ryan, 2026-10-05 (STATUS §0 D8):** "Held until there is pull. Order: the cardiac MRI segmentation
+pipeline on the image servers first, then MILabs, then the SegBioMed project minted with a first
+fibrosis project."
+
+Nothing here starts until there is pull: a concrete demand from the people who would use it.
+
+1. [ ] **The cardiac MRI segmentation pipeline, on the image servers.**
+2. [ ] **MILabs VECTor onboarding.** See the 🔸 MODERATE item below.
+3. [ ] **The `SegBioMed` project, minted with a first fibrosis project.** See also the 🕗 item
+   "mint the `SegBioMed` project", which has its own trigger (D6).
+
+## 🕗 HELD — mint the `SegBioMed` project and attach its acquisitions (2026-08-21; held 2026-10-05)
+
+**Ryan, 2026-10-05 (STATUS §0 D6):** "Held until SegBioMed starts, after the leadership write-up."
+
+**Trigger:** the SegBioMed project starts, after the leadership write-up. Do nothing before then.
+
+- **What it is:** mint the `SegBioMed` project and attach the **854** project-less 2021
+  acquisitions, plus the 5 Dec-2021 `1019` sessions the datasets cite (SegBioMed memo §G9 / D11).
+- **Why it was not done:** protocol→project is a convention, not a rule, and this is the call that
+  decides where segmentation-supporting imaging lives.
+- **Cost of waiting: none.** ACQ-IDs are the durable identity, and provenance already resolves 100%
+  without a project.
+- Ryan's D8 order puts "the SegBioMed project minted with a first fibrosis project" third, after
+  the cardiac MRI segmentation pipeline and MILabs (the item above).
+
+## 🔸 MODERATE — onboard the MILabs VECTor: an in-service instrument with zero acquisitions in gjesus3 (2026-08-21)
+
+**🕗 HELD until there is pull (Ryan, 2026-10-05, D8).** It is second in Ryan's order: see "held until there is pull" above.
+
+**`registry_raw.csv` contains 0 MILabs acquisitions.** All 1,640 nuclear-imaging rows are
+`Molecubes (PET/SPECT/CT)`. The **MILabs VECTor has never been approached for integration** — no
+instrument code, no ingest path, no metadata extractor, no operator workflow — yet it is in active
+use and generating data now.
+
+Found while reviewing the 2026 lung study for the SegBioMed harvest (see the item below). The
+device identifies itself in a `.parameters` file beside every scan:
+
+```
+# U-SPECT parameter file v4.0
+ScannerID       = "80906"
+SoftwareVersion = "13.91-st"
+ScannerType     = "VECTor/CT"
+[Acquisition]
+SPECT = 0 | CT = 1 | OI = 0 | FLT = 0 | BLT = 0 | Fluoroscopy = 0
+```
+
+**This is the root issue behind the 2026 lung-study gap, not the NIfTI observation** — that is a
+symptom. It is a genuine instrument integration, so expect it to take real time; the SegBioMed
+project has been told to treat their 2026 CT work as blocked on us and to backlog it their end.
+
+What the parameter file already gives us, for free, whenever this is built:
+
+- **`AcqStartTime`** — a real acquisition timestamp written by the scanner (e.g.
+  `"2026-06-08 08:38:52"`). No folder-date parsing needed, unlike the Molecubes path.
+- **Modality flags** — `SPECT`/`CT`/`OI`/`FLT`/`BLT`/`Fluoroscopy` as explicit booleans, which maps
+  directly onto `modalities_in_study`.
+- ⚠️ **`AnimalID` holds the operator's name (`"Itziar"`), not the animal.** The animal number
+  exists only inside the operator-typed `ScanID`. Do **not** wire `AnimalID` to `subject_ids`.
+
+- [ ] Decide the **instrument code(s)**. `00_INDEX` already documents the VECTor as
+  **PET/SPECT/CT/OI**, but only `PET`/`SPECT`/`CT` were ever assigned. **`OI` (optical imaging) has
+  no code at all** and the device produces it (`OI-data\` — DiR fluorescence, Luminescence/Photo
+  NIfTI + TIFF, with CT co-registration).
+- [ ] Decide how **NIfTI-primary sessions** enter the system. `03_RAW_STORAGE` already hedges
+  ".dcm, **possibly .nii (TBC)**" for the DICOM ecosystem — this is the case that settles it.
+- [ ] Write the metadata extractor against `.parameters` / `.log` (both plain text, easy parses).
+- [ ] Per the standing direction: **specify what operators enter; do not build a guesser** for the
+  messy historical layout.
+
+## 🔺 HIGH — a ParaVision study whose folder token deviates is dropped SILENTLY by the ingest (2026-08-21)
+
+**✅ DECIDED 2026-10-05 (Ryan, STATUS §0 D3):** "NOW. Make the ingest report every study folder that matches neither regex (code change on a branch, with tests), then re-scan the historical sources read-only and report the count. Reconcile it with the drives DICOM review §5 as it stands after the weekend."
+
+**Found by ingesting the one session the historical MRI pull missed** (SegBioMed census request
+G1). The cause is not a coverage gap — it is that **the ingest cannot report what it could not
+parse.**
+
+`K:\gjesus\Irene\0522\MRI\Female_Met\20250526_105636_jrc250526_145_0522_1_1` — the operator omitted
+the `m` before the animal number at the console, so the folder token reads `jrc250526_145_0522`.
+The two production regexes are:
+
+| Config family | Requires |
+|---|---|
+| `mri_jrc_animalfirst*.yaml` | `<initials>_?<date>_m<animal>_<proj>` |
+| `mri_jrc_projfirst*.yaml` | `<initials>_?<date>_<proj>_m<animal>` |
+
+**This token matches neither.** The study was globbed, produced no `discovered.*`, and was skipped
+with **no error, no WARN worth reading, and no worklist row** — the ingest exited 0 and the batch
+looked clean. Confirmed downstream: animal 145 of protocol 0522 had PET/CT (2025-05-27) and AxioScan
+histology in the registry but **no MRI at all**, and nobody noticed for two months.
+
+**Why this is HIGH and not cosmetic.** The failure is *silent and unbounded*. We know of exactly one
+instance only because SegBioMed censused a researcher share and diffed it against the registry. The
+kenia bulk pull ingested ~10,330 MRI acquisitions across 925 sessions; **we have no idea how many
+studies it globbed and dropped**, because nothing recorded them. Every other loss mode in this
+system leaves a trace (`pending_dicom_regen.csv`, `pending_subject_metadata.csv`, the
+`no-source` status). This one leaves none.
+
+- [x] *(✅ Done 2026-10-05, merge `188d737`: a NOT PARSED section, `--unparsed-report <csv>`, and the lists in the GUI and `mri-ingest`. The durable `pending_unparsed.csv` queue was not built; it is STATUS §0.4 N5.)* **Make unparsed matches loud.** When `expand_batch` globs a path and `filename_parse` yields
+  no match, it should end up somewhere durable — a skipped-items report per run at minimum, ideally
+  a `pending_unparsed.csv` in the same spirit as the other queues. **This is a code change to
+  `ingest/config.py`** (approved by Ryan, 2026-10-05, D3).
+- [x] *(✅ Done 2026-10-05: `tasks/mri_unparsed_rescan_review.md`. 1,481 study folders / 11,602 exam folders match neither regex; 59 / 451 are MFB data missing from gjesus3. The follow-ups are STATUS §0.4.)* **Then quantify the historical damage**: re-glob the kenia tree (or the staged mirror) with
+  the ingest's own pattern, run each match through both regexes, and count the non-matchers. Until
+  that is done, "the historical MRI pull is complete" is an assumption, not a fact.
+- [ ] Do **not** fix this by relaxing the regex globally. `m?` was used for the single-study G1
+  config (`tools/configs/mri_0522_m145_irene.yaml`, scoped by `pattern` so it cannot misfire), but
+  a global relaxation is exactly the "better guesser" the standing direction rules out. The right
+  answer is to *report* the unparseable, not to *guess* it.
+
+**Related, same root:** `filename_parse.source` supports only `name` and `parent_name`. Irene's
+share nests exams as `<study>/Other data/<exam>`, so `parent_name` reads the literal `"Other data"`
+and the regex never matches — 24 cases became 0. Worked around by staging the study flattened
+(0.70 GB); a `grandparent_name` source would remove the need, but that too is a code change.
+
+**Also same class — a file whose name starts with `.` is never globbed (found 2026-09-30).** Python's
+`glob` does not match leading-dot names, so `expand_batch` never sees such a file: no SKIP line, no
+error. The historical-drives `.czi` dry run caught one
+(`Cell observer\Laura\Cell observer\Interaccion-LS-SPN\.LS-SPN-20x-8.czi`, a real 61 MB acquisition)
+only because it compared the engine's cases with an independent plan, and because the new
+`case_table` reports rows that matched no file. It was excluded from that ingest and listed. Do
+**not** switch `include_hidden` on globally: that would also ingest macOS `._*` AppleDouble files. The
+report-the-unseen fix above covers it too, if the report compares the glob with a plain directory walk.
+
+## 🔺 HIGH — `jrc260224_m39_0525` is probably animal 37, not 39 (2026-08-21)
+
+**19 production acquisitions** (`ACQ-20260224-MRI-020` … `-038`) may carry the wrong subject.
+**Not changed.** Raised by the SegBioMed census (G2), then investigated here.
+
+**✅ DECIDED 2026-10-05 (Ryan, STATUS §0 D2):** "I am emailing Irene today. When her answer arrives: if 37, repair by the recovery-tool pattern in BACKLOG (HIGH, 2026-08-21), 19 sidecars and 19 registry rows, ACQ-IDs kept; if 39, record it and close." So her answer alone decides it; no further decision is needed.
+
+The **animal-facility DB** logs an `MRI 7T` procedure per animal per date. For protocol 0525:
+
+| Date | DB: MRI 7T logged for | Registry has |
+|---|---|---|
+| 2026-02-24 | `31, 32, `**`37`**`, 38, 43, 44` | `31, 32, `**`39`**`, 38, 43, 44` |
+| 2026-02-25 | `33, 34, `**`39`**`, 40, 45, 46` | `33, 34, `**`39`**`, 40, 45, 46` |
+
+**Five of six agree on 02-24; the sole mismatch is this session.** Animal 39's MRI is logged on
+02-25 — where the registry independently *already* has `jrc260225_m39_0525`. So under the DB,
+animal 39 was scanned once (02-25) and the 02-24 session belongs to animal 37, which currently
+holds only 2 PET/CT acquisitions and no MRI.
+
+**Irene's own copy of the same session is named `…m37_0525…`** — she renamed it deliberately.
+
+**The counter-evidence, stated fairly:** the scanner's `mri._raw_metadata.subject.SUBJECT_id` reads
+`jrc260224_m39_0525`. But that field is **typed by the operator at the console**, and the archive
+folder name is derived from it — so the scanner and the archive are **one source, not two**. It is
+also precisely the field that produced the `+21` offset error in the 2026 MILabs lung study.
+
+- [ ] **Ask Irene.** One sentence settles it; every other route is inference. *(Ryan is emailing her, 2026-10-05.)*
+- [ ] **If 37:** repair via the recovery-tool pattern (rebuild the `subject:` block from the DB,
+  keep the ACQ-IDs), as `recover_subject_ids_proj0056.py` did. 19 sidecars + 19 registry rows.
+  **If 39:** record the answer and close this item.
+- [ ] Whatever the answer, **the DB cross-check that found this should be a validator check** — see
+  the plausibility-checks item; "the facility DB logs no procedure for this subject on this
+  acquisition date" would have caught PROJ-0056 *and* this, automatically.
+
+## 🔸 MODERATE — the curated-datasets pilot returned 19 spec gaps (2026-08-21)
+
+**Update 2026-10-06: the M. Jesús drive adds four** (`tasks/drive3_segmentations_cds.md` §6.1): one value set can carry several meanings, so a dataset needs a per-file label schema; there is no field for "revision of" (`Inicial` → `Revision`); `date_created_precision` needs a value for bulk-copy dates; and a flow label is valid on several exams of one slice, which a single `acq_id` per label does not fit. The same drive answers two of SegBioMed's open questions (the 0/1/2 labels are blood pools; DS-SEG-0001's slice order checks out by pixels): evidence for them, applied by nobody here.
+
+The SegBioMed pilot promoted four datasets (`DS-SEG-0001`…`0004`, all four verified here at **100%
+provenance traceability**) and, as asked, reported where `12_CURATED_DATASETS.md` was thin rather
+than inventing conventions. **Consolidated in
+`projects\Imaging\SegBioMed\harvest\DS-SEG_definitions_draft.md` §C/§E/§F.**
+
+**✅ Ruled 2026-10-05 (Ryan, STATUS §0 D4, D5):** "SegBioMed's decisions, not mine. Move both to the SegBioMed memo/backlog and off §0. Apply nothing." Both are with the SegBioMed project now (memo REPLY 7, `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md`). gjesus3 applies nothing until SegBioMed decides.
+
+**Not applied.** Every item changes documented schema. Headline set:
+
+| Gap | Why it bit |
+|---|---|
+| `sample_count` has no unit | one dataset's "sample" is a file, another's is a 15-phase stack — a bare count is not comparable. Proposed `sample_unit` |
+| `label_format` is singular | `DS-SEG-0001` alone holds `.nii.gz` **and** `.mha` |
+| no `file_role` | 772 of `DS-SEG-0002`'s 916 files are auxiliary (stats/transforms/surfaces), not labels |
+| §5.3 filename rule assumes **one ACQ-ID per label** | a cine mask spans a *stack* of 10–12 acquisitions (CDS-04 is live, not future) |
+| no `label_origin` / `review_status` | manual vs predicted vs corrected is the difference between ground truth and model output |
+| no `recon_index` | the 1019 masks were drawn on **recon3**, not recon1 — joining to "the" DICOM gives subtly wrong images |
+| no `spatial_reference` | these masks carry an identity affine; the only honest join is a slice map |
+| `source_acq_ids` too long for one cell | 217 IDs; they wrote `see provenance.csv (N acquisitions)` |
+| verification is yes/no | needs an enum (`direct-ncc`, `inferred-patient-space-rule`, `none`) |
+| no `corrects` cross-reference | `DS-SEG-0004` found and documents a defect in `DS-SEG-0001` v1.0 |
+
+- [ ] **SegBioMed** rules on the schema additions (D4, moved 2026-10-05). Then the datasets are re-emitted against the settled shape.
+- [ ] *(D5: SegBioMed's decision since 2026-10-05; apply nothing.)* **`DS-SEG-0001` v1.1 is prepared and NOT applied** — `harvest\DS-SEG-0001_v1.1_proposed\`
+  (v1.0-vs-v1.1 diff + one-command apply). It corrects a slice-order swap on `jrc211209_m85_1019`
+  found by `DS-SEG-0004`'s pixel evidence. Overwriting an already-promoted dataset is a §7 revision;
+  both agents stopped at that gate. Mask files are unchanged either way; production v1.0 is
+  internally consistent with the defect documented in three places.
+- [x] *(✅ Closed 2026-10-05, Ryan, D9: "The mixed-now, converge-later assumption holds." `12_CURATED_DATASETS` CDS-03 is DECIDED.)* `CDS-03` (label formats) — their recommendation: `.nii.gz` labelmap + JSON sidecar as the
+  working format, DICOM-SEG for interchange, originals kept as the authoritative vendor record.
+  `.voi` → NIfTI is **convertible but not lossless as one file** (overlapping VOIs, contour
+  geometry, reference-grid binding). Mixed-now-converge-later stands.
+
+## 🔺 HIGH — the 2026 NI lung study: 44 animal folders contradict their own contents (2026-08-21, RESOLVED 2026-08-21 pending confirmation)
+
+Found while answering the SegBioMed harvest memo. **Nothing has been ingested** — and it cannot be
+until the MILabs item above is done, so this is no longer urgent, but the analysis must not be lost
+because it will be needed the moment that ingest becomes possible.
+
+**The data.** `S:\gnuclear\2026\Jesus\Itziar\1123\<YYMMDD>\<animal>\` — respiratory-gated lung CT
+with Imalytics functional-volume segmentations, on the **MILabs VECTor**. 11 session dates
+(`260126` → `260629`), **233 animal folders, 2,614 files, ~4.4 GB** (size from the SegBioMed memo;
+not re-measured, to spare daytime SMB). Three cohorts: `204–243`, `256–263`, `271–304`.
+
+**Why the 2026-08-12 historical pull never saw it:** it is NIfTI, not DICOM. The pull **did** scan
+`2026/Jesus` (`_pull.log`: 226 matching DICOMs) — all `Jordi` and `irene`. It matches
+`<YYYYMMDDhhmmss>_<MODALITY>*.dcm`; this study is `CT_1123_<animal>_RespGated_d<NN>_C0.nii` +
+`FunctionalV.nii.gz` / `*.segff`. A structural blind spot, not a missed folder.
+
+### The identity problem, and its resolution
+
+**44 of 233 animal folders disagree with their own file contents about which animal they are** —
+and there is **no single rule that is right**: folder-only is wrong on 44, filename-only on 40.
+This is the PROJ-0056 failure class (ids composed from a *reconstruction* folder resolved cleanly
+to three real animals born two years earlier). Each case was resolved separately:
+
+| Sessions | Conflict | Folders | Correct record | Evidence |
+|---|---|---|---|---|
+| `260126`+`260127` | folder `204–243`, scan names `225–264` — constant **`+21`** | 40 | **the folder** | d10 (`260204`/`260205`) and d21 (`260216`/`260217`) rescans agree folder==name and give exactly `204–243`; `d0 == d10` on folders; and 13 animals with AxioScan histology already in the registry sit in the d21 survivor set but outside the d0 name range |
+| `260205` | folders `236`/`237` **transposed** | 2 | **the scan name** | the session was scanned in strict ascending animal order — **15/15** consecutive pairs ascending by scan name, breaking exactly once by folder, at this pair (10:42:39 = 236, 10:59:27 = 237) |
+| `260317` | folder `259`'s `0h\` names animal `260` | 1 | **the folder** | 0h scans run 258→259→260→261 by scanner clock (09:59 / **10:17** / 11:14 / 11:23), so the 10:17 scan is where 259 belongs; and animal 260's own 0h scan is named `1123_260_0h_DiR`**`r`** — the workaround for a name already taken |
+| `260318` | folder `Ex vivo` holds 3 animals (`256`, `260`, `263`) | 1 | **the scan name** | not an error — a multi-animal ex-vivo session by design; the only place the folder rule fails outright |
+
+**Written up for the researcher conversation** at
+`projects\Imaging\SegBioMed\harvest\1123_2026_scan_identity_review.md` — deliberately framed as
+console naming slips that **the person filing the data already caught in 43 of 44 cases** (the
+folder *is* the correction), not as badly organised data. The study is well organised; that is why
+it was reconstructable at all.
+
+- [ ] **Get Itziar's confirmation** on the four cases before any ingest writes `subject_ids`.
+- [ ] When the ingest is built, set these identities **from the review, once** — do not derive them.
+- [ ] Upside: those animals are already known subjects — `1123` animals `205–301` hold **187
+  AxioScan histology acquisitions** in `PROJ-0014`. The CT would join in-vivo imaging, functional
+  segmentation and histology under one subject id.
+
+## 🔸 MODERATE — internal MRI older than ~2022-01 exists ONLY on researcher shares (2026-08-21)
+
+**Update 2026-10-06: the M. Jesús drive is one of those shares.** It holds 639 Bruker studies; the CoS hub counted 331 of them (188 GB) absent from production on 2026-09-30, most from before 2022. They are being re-measured against today's registry (STATUS §2, assessment A1). Ryan's ruling: a note for him, not an action, except the 28 `0118` hipoxia studies, which go into the new `Proyecto-0118-rats-hipoxia`.
+
+**⚠️ Update 2026-10-05 (D3 re-scan, verified): the scanner's horizon is now 2024-01-05.** The 2022–23 studies were deleted around 2026-08-26, the day PV 6's data folder last changed. Everything gjesus3 pulled in June is safe in `/raw/`. **Not a loss (Ryan, 2026-10-06):** the platform moves the data to its own archive before it clears the acquisition machine, and keeps a deep-storage copy. So what gjesus3 did not pull, such as the 57 MFB study folders of STATUS §0.4 N6, is reachable through the platform manager.
+
+**Cause established for a gap that first showed up as "why isn't `Proyecto 1019` in the registry?"**
+
+The bulk historical MRI ingest (2026-06-13/14; **all 10,330 MRI rows**) read the **scanner host** —
+`kenia.cicbiomagune.int`, `/opt/PV-7.0.0/data/nmr` + `/opt/PV6.0.1/data/nmr` — **not** researcher
+storage. The earliest acquisition it produced is **2022-01-10**, a hard floor across all four
+ingest configs, and **no cutoff was ever configured**. So the floor is not a decision; it is **how
+far back the scanner's own disk still reached in June 2026.**
+
+`K:\gjesus\MRI\Proyecto 1019` splits exactly on that line: all **9** studies from 2022 are in the
+registry, all **86** from 2021 are not. Same instrument, same format — just older than the
+scanner's retention horizon when we pulled.
+
+**This empirically answers open question #10** in
+[`equipment/mri-platform/internal_mri_data_handling_workflow_notes.md`](../equipment/mri-platform/internal_mri_data_handling_workflow_notes.md)
+("how long users keep data on the instrument server"): as of June 2026, back to ~2022-01.
+
+- [ ] **The general consequence, which is bigger than 1019:** any internal MRI older than ~2022-01
+  is recoverable *only* from researcher shares. Nobody has surveyed how much that is.
+- [x] *(Answered 2026-10-06, Ryan: the platform aims to keep 5 years of raw data easily accessible. The acquisition machine is cleared when its disk fills, and now keeps about two years. The data moves to the platform's own archive, with a deep-storage copy.)* Ask the platform manager whether there is an actual retention policy, or whether the horizon
+  simply drifts — that determines whether this recurs.
+
+### The concrete case: `Proyecto 1019` (2021)
+
+`K:\gjesus\MRI\Proyecto 1019` holds **95 ParaVision study folders**; 9 are already ingested (so the
+tree is a **proven** source, not a hypothetical one), leaving **86 folders / 56 sessions from 2021
+— 2021-04-20 → 2021-12-15, 40,811 files, 37.3 GB**, longitudinal across `Mes 2/4/6/8/10` of
+`Procedimiento 2`.
+
+**Why bother:** 135 manual cardiac LV/RV cine masks sit in
+`curated_datasets/_incoming/seg-harvest-2026-08-20/` and **0 of 135 trace to an ACQ-ID**, because
+their 8 source sessions are exactly these un-ingested 2021 ones. All 8 have their raw ParaVision
+study present on `K:`. Ingesting them is what lets `DS-SEG-0001` satisfy
+[`12_CURATED_DATASETS`](../mfb-rdm-docs/12_CURATED_DATASETS.md) §6.2.
+
+**Project assignment — note the correction.** An earlier draft of this item called `PROJ-0006`
+being `closed` the blocker. **It is not.** Protocol → project is a *convention* (our current
+first-best-guess default), not a rule, and operators may change it; adoption has simply been low so
+far. This data does not have to go under `AE-biomaGUNE-1019`. **Decision (Ryan, 2026-08-21): DICOM
+imaging that exists to support segmentation goes to a new `SegBioMed` project**, with the
+associated images gathered there.
+
+- [ ] Needs a go-ahead — this is a production ingest.
+- [ ] Create the `SegBioMed` project rather than reopening `PROJ-0006`.
+- [ ] Verify derived `subject_ids` before trusting them. The ParaVision study name
+  (`jrc211207_m62_1019` = date + animal + protocol) is the instrument's own record and a stronger
+  anchor than a folder name — but the 2026 NI item above is what happens when that assumption is
+  not checked.
+
+## 🔸 MODERATE — curated datasets: CDS-01 decided, the pilot is live work now (2026-08-21)
+
+**✅ CDS-01 DECIDED 2026-08-21 (Ryan): include the curated-datasets area, as a pilot**, triggered by
+the SegBioMed segmentation harvest. Recorded in
+[`12_CURATED_DATASETS`](../mfb-rdm-docs/12_CURATED_DATASETS.md) (status → 🔶 DRAFT, approved for
+pilot deployment; the ❓ EVALUATING banner and the CDS-01 row updated).
+
+Traceability (§6.2) already measured against the two proposed datasets:
+
+| Proposed dataset | §6.2 traceability | Status |
+|---|---|---|
+| `DS-SEG-0002` — 144 PMOD `.voi` + 23 `.voistat` + 360 stats `.xlsx` | **821 distinct ACQ-IDs, 821 of 821 resolve**, 0 rows without an id, 12 projects, PET+CT | ready |
+| `DS-SEG-0001` — 135 cardiac cine masks | **0 of 135** carry an ACQ-ID | sequenced behind the 1019 ingest above |
+
+**The pilot is also the review of the spec.** SegBioMed has been asked to be explicit about what
+one *sample* is, the full label value→structure map, the directory layout and file-naming **rule**
+(not just examples), per-file provenance, creator + tool + version + review, and what is
+deliberately excluded — and to **report gaps in the spec rather than invent a convention** to paper
+over them.
+
+- [ ] Run the §10 deployment steps (`README_START_HERE`, `segmentation/{MICROSCOPY,DICOM}/`
+  scaffolding, initialize `registry_datasets.csv`).
+- [ ] `CDS-02` (who the curators are beyond the Data Management Lead) becomes real as soon as
+  someone outside the Data Office wants to promote something.
+- [ ] `CDS-03` (mandated label formats per ecosystem) — this pilot is the natural place to settle it.
+- [ ] **Candidate (2026-09-30, Ryan): AxioScan lung-lobe ROI extracts.** The drives hold 18
+  `MFB_AUA_1123_ID2xxLu_TM_10x_ROI lobulo N.czi` files in `CELL OBSERVER 2\AINHIZE\AXIOSCAN\AINHIZE-ITZIAR TM\Prueba jpeg\ID2xx\`.
+  They are per-lobe crops of whole-slide scans already in production (`ACQ-20260416-ZWSI-001…-020`,
+  project `AE-biomaGUNE-1123`), and each shares its parent's acquisition timestamp to the second, so
+  the traceability to ACQ-IDs that §6.2 requires is already established. They are **not** ingested
+  into `/raw/`; the drives' non-raw session places them in `1123`'s folder. Ryan asked to **consider
+  starting the curated-dataset process** for them: lobe-level delineations tied to raw ACQ-IDs.
+- [ ] `DS-SEG-0001` provenance `creator` is **unknown** — the folder is `Analisis Unai`, likely a
+  login artifact. *Unai* is a real person here (NI Platform Manager), which makes guessing more
+  tempting and no more correct. **Leave it blank; ask.**
+
+## 🔺 HIGH — the `operator` column carries a template instruction on 10,314 rows (2026-08-20) — (a) and (b) ✅ done 2026-10-05; (c) open
+
+**Found 2026-10-06, for (c):** project `provenance.csv` files copy the acquisition's `operator` into each link row's `creator`. **9,288 rows in 19 MRI projects still carry the old placeholder** (`<REQUIRED - set via mri-ingest --operator, or replace here>`), which (a) did not touch, and the **546 rows written by the 1121 reopen carry `pending-claim`** (`tools/reopen_project.py` line ~282 copies `operator`). The validator does not read project provenance, and project folders are not the system of record (05_PROJECTS §3a), so nothing is wrong in the registry. When (c) runs, give these `creator` cells the claimed name or blank as well. Separately, consider whether a link the system recreates should name the tool or the Data Office as its creator, not the operator.
+
+**✅ DECIDED 2026-10-05 (Ryan, STATUS §0 D1), in three parts:**
+- **(a) NOW:** "Replace the placeholder on the 10,314 MRI operator cells with a hold value meaning "awaiting claim". You choose the token, document it where the blank sentinel is documented, and make the validator accept it; no OK from me needed on the name. Done when the validator passes with 0 errors and only those 10,314 cells changed."
+- **(b) NOW, build only, do not send:** a claim list for Jesús's group, one row per session. Ryan sends it at the pilot re-launch and sets the claim window then.
+- **(c) LATER:** "After the claim window closes, blank whatever is still unclaimed."
+
+Found while repairing the `instrument_model` placeholder the same day (CHANGELOG 2026-08-20).
+**The identical 10,314 rows** carry, in the **`operator`** column, the literal string:
+
+```
+<REQUIRED - set via mri-ingest --operator, or replace here>
+```
+
+Same root cause, same five `tools/configs/mri_jrc_*.yaml` bulk configs, same never-performed
+`# EDIT:` step. It is an instruction to a human sitting in a production person-attribution field,
+and every downstream consumer — the Finder, the XNAT trial, `gjesus3-tools` — reads it as a value.
+
+**Why this one was NOT fixed alongside `instrument_model`.** The model was *recoverable*:
+`acqp.ACQ_station` says `Biospec 70/30` on all 10,314, unanimously. The operator is **not**.
+ParaVision offers only `acqp.ACQ_operator` / `OWNER` = `nmr`, the **shared facility login**, not a
+person. Writing `nmr` here would manufacture a false attribution — the same class of error as the
+PROJ-0056 `rN` misattribution repaired the day before — and it would blend in beside the real
+messy values already in the column (`Jguser`, `jguser`, `MBC`, `AUA`, `irene`, …), making it
+*harder* to spot than the placeholder it replaced. **Do not derive it. It is a Data Office call.**
+
+**Recommended:** set the 10,314 cells to **empty** — the documented "unknown" state, already
+carried by 1,583 other rows — and keep the "needs an operator" signal in a pending queue rather
+than smeared across 10,314 production cells. This is the same reasoning applied to the NI
+`S:\gnuclear` pull, where `operator` was deliberately left blank because it was not recoverable
+from the paths.
+
+*(Resolved 2026-10-05 by (a): the cells hold `pending-claim`, and the validator passes with 0 errors.)* **It blocked the validator until then.** The new `check_template_residue` (shipped 2026-08-20, ERROR-level)
+correctly flags every one, so `validate_registries` currently exits **FAILED with 10,314 errors**
+on production, emitting 10,315 lines. Verified: the check has **zero false positives** — across
+all six registry CSVs it fires on nothing but this column. So the check is right and the data is
+wrong, but until this is settled the validator cannot serve as a gate for anything else.
+
+- [x] *(✅ Decided 2026-10-05, Ryan: a hold value now, a claim list, then blank whatever is unclaimed when the claim window closes.)* **Decide the representation** (recommend: blank). It is the only decision here — the write
+  itself is the same byte-level, delimited, no-BOM/CRLF-preserving edit already done twice.
+- [x] *(✅ Done 2026-10-05: merge `2b891d5`; `tools/repair_operator_hold.py` wrote exactly 10,314 cells, verified by the tool and independently; the validator: exit 0, 0 errors, `operator awaiting claim (pending-claim): 10314`.)* **(a) The hold value `pending-claim`.**
+- [x] *(✅ (b) built 2026-10-05, not sent: `J:\gjesus3-data\projects\_MRI sessions - who ran them (2026-10).xlsx`, 926 sessions in 21 projects. Answers join back by the grey `session key`, the study-folder part of `original_name`.)* **(b) The claim list.**
+- [ ] **(c) LATER, due when the claim window closes** (Ryan sets the window at the pilot re-launch; the date goes here then). Blank whatever is still unclaimed: every `operator` cell still holding the hold value becomes empty. Do nothing before the window closes.
+  - The tool is ready: `tools/repair_operator_hold.py --from pending-claim --to-blank --apply --expect N --backup-dir <new>`.
+  - The claimed names go in at the same time, joined by the claim list's `session key`, the study-folder part of `original_name`.
+  - **The sidecars:** `user_supplied.operator` on these rows still holds the old instruction text, because Ryan's rule for (a) was "only those 10,314 cells". Write each final value (a claimed name, or blank) to the sidecars too, by the recovery-tool pattern, so the column and the sidecar agree again (06 §2.3a-bis).
+  - For MRI, 06 §2.3a-bis says operator == researcher, and `researcher` is blank on all 10,314. Whether a claimed name also fills `researcher` is Ryan's call at (c).
+- [ ] **Collapse repeated identical findings in the validator regardless.** 10,315 lines for one
+  defect class is the saturated-warning-channel item below, reproduced in the error channel — report
+  a class once with a count and a few example rows. A future recurrence on 10k rows would be just
+  as unreadable, whatever is decided about this instance.
+- [ ] `tools/operator/mri_ingest.py` has four stale docstring/`--help` spots (≈ lines 29-32, 78-79,
+  306, 374) still describing the pre-auto-derivation behaviour ("leave the template placeholder"),
+  contradicting its own correct runtime logic. Documentation-only; fix with whichever pass touches
+  this next.
+
+## 🔺 HIGH — the NI subject label has no specified format, so the parser has to guess (2026-08-19)
+
+**Reframed 2026-08-19 (Ryan).** This item first read "add a plausibility gate to the
+derivation". That is building a better guesser. The actual root cause is upstream: **the
+platform fixed the folder *structure* but never specified the *values*,** so the parser was
+written to accept whatever researchers happened to type — and one of the things they type is
+ambiguous.
+
+**What happened** (PROJ-0056, 15 acquisitions, repaired in production 2026-08-19 — see
+[`CHANGELOG.md`](../CHANGELOG.md) and `tools/recover_subject_ids_proj0056.py`): the researcher's
+tree nested a per-reconstruction folder below the animal, and the subject parser read that level
+as the animal, so `r1` → animal `1` → `1-AE-biomaGUNE-0421`.
+
+**The parser was following the spec.** §3A of
+[`equipment/nuclear-imaging/live_machine_data_layout_and_sync_rules.md`](../equipment/nuclear-imaging/live_machine_data_layout_and_sync_rules.md)
+documents the species prefix as `m` (mouse) | **`r` (rat)** | none, with the explicit instruction
+*"the parser MUST NOT require `m`"*. `r` means *rat* to one researcher and *recon* to another;
+no grammar can separate them.
+
+**And the documented safety net cannot catch it.** §3A's rule is *"the facility DB is the
+validator, not the folder"* — resolve the `(project, animal)` pair, accept on a hit, queue on a
+miss. But `(0421, 1)` **hits**: animal 1 of that protocol is a real rat born two years earlier.
+The DB answers *"does this animal exist?"*, never *"was it in the scanner that day?"* **Every
+check we had was an existence check.** That is why this was worse than the `-None` alias bug it
+rhymes with: that one produced a *malformed* id, visible on sight; this one produces a
+**well-formed id for the wrong animal**.
+
+**The direction, decided by Ryan 2026-08-19:** stop inferring intent from free text. We cannot
+change which fields the platform collects, but the **values** in them were never specified and
+we can specify them. A strict format makes `r1` fail to parse instead of resolving to the wrong
+rat — no plausibility engine, no DB cross-check, no guessing.
+
+**Explicitly NOT in scope: the `S:\gnuclear` historical archive.** It was researcher-run with no
+platform policy, rescued on a best-guess basis because the alternative was losing it, and cleaned
+up as far as evidence allows. This item must not become a reason to re-ingest or re-interpret it.
+Where it stays ambiguous, the answer is a human who was there, or nothing.
+
+**Proposal drafted, awaiting Ryan:**
+[`equipment/nuclear-imaging/subject_naming_standard.md`](../equipment/nuclear-imaging/subject_naming_standard.md)
+(❓ EVALUATING). It carries the per-level format, the enforcement point, and 5 open questions —
+the load-bearing one being whether the animal token is digits-only (recommended), `rat230`, or
+always-prefixed.
+
+- [ ] **Ryan: rule on the standard**, starting with the animal-token question. Everything else
+  follows from it.
+- [ ] **Land it with the live-mode NI ingest, not before.** That ingest is still unbuilt
+  (deferred, this file), so the standard ships with it and retrofits nothing — this is the
+  cheapest moment it will ever have.
+- [ ] **Enforce by refusing, not by falling back.** The live ingest already plans an operator
+  dry-run review table; a non-conforming label should stop the batch and name the folder. A
+  lenient fallback re-creates today's behaviour and wastes the whole exercise.
+- [ ] **Reconcile the two documents once ruled.** §3A of the layout doc describes the permissive
+  archive grammar and states as a "hard truth" that *"the animal prefix can't be required"* —
+  true of the archive, not of new data. Mark it historical rather than deleting it; it is the
+  record of what the rescue faced.
+- [ ] Scope check: the `rN` shape is **15 rows, all repaired** (registry-wide `sample_id` scan,
+  2026-08-19). The defect class is what is open, not a backlog of bad rows. Note also that in the
+  **live** layout reconstructions sit *inside* the machine-issued acquisition folder, so this
+  exact collision cannot recur there — the standard targets the ambiguities that do survive
+  (missing protocol code, separator drift, `m`/`r`/bare prefix).
+
+## 🔸 MODERATE — plausibility checks in `validate_registries` (age sanity + facility cross-check) (2026-08-19)
+
+Everything we have today checks that identifiers are **well formed** and that files exist.
+Nothing checks whether an identity is **believable**. Both 2026-08 identity defects would have
+been caught cheaply by two checks that need no image server and no new data source.
+
+**Already demonstrated on the live registry (2026-08-19, ad-hoc):**
+
+- an age-at-acquisition pass over all 12,509 subject/acquisition pairs found **5 acquisitions
+  dated before their subject's date of birth** (see the LOW item below) — one pass, no DB calls,
+  real signal;
+- the PROJ-0056 rows showed as ~120 *weeks* old in a 4-month cohort, which the same pass would
+  have flagged had anyone been running it.
+
+- [ ] **Age sanity (cheap, local).** `acquisition_datetime` vs `subject.date_of_birth`: ERROR on
+  negative, WARN on implausible-for-species. Note the tuning trap found on 2026-08-19 — a naive
+  ">550 days is suspicious" rule flags **1,332 rows**, nearly all of them legitimate 18-month
+  ageing studies in `PROJ-0002` / `PROJ-0006`. Age alone is a weak signal; pair it with the
+  cohort or it will be ignored as noise.
+- [ ] **Facility procedure cross-check (needs the DB, so operator-optional).** Does the animal
+  have *any* logged procedure near the acquisition date? This is the check that actually
+  separates the two PROJ-0056 candidates: animals 230/231/236/237 each have a PET **and** a CT
+  logged on the exact scan date, while animals 1/2/3 have nothing after 2021. Must degrade
+  quietly with no credentials / off-network, like every other DB path.
+- [ ] Keep it **read-only and non-blocking** — a validator finding, never an ingest failure.
+
+## 🔸 MODERATE — 4 PET acquisitions where the DICOM PatientID contradicts the registry (2026-08-19)
+
+Found by the XNAT trial's header sweep (`gjesus3-tools` B10) and **verified here against
+production**. Each of these is registered to one animal while its DICOM header names another:
+
+| Acquisition | Registry | DICOM header | The header's animal is… | Project / researcher |
+|---|---|---|---|---|
+| `ACQ-20221121-PET-006` | 20 | 21 | `PET-007`, the **next** row that day | PROJ-0057 / IAZ_MJ |
+| `ACQ-20241008-PET-002` | 22 | 21 | `PET-001`, the **previous** row | PROJ-0014 / MJ |
+| `ACQ-20250220-PET-005` | 35 | 34 | `PET-004`, the **previous** row | PROJ-0055 / CarlottaS |
+| `ACQ-20260302-PET-014` | m46 | m47 | `PET-015`, the **next** row | PROJ-0001 / irene |
+
+**Every conflict is ±1 from an animal scanned in the adjacent slot of the same session** — a
+neighbour swap inside one session, not a random misattribution. Both candidates are the same
+protocol, same day, same cohort, so the blast radius is two animals' time series, not one.
+
+**Why this cannot be settled from the data, unlike PROJ-0056.** The registry's animal comes from
+the researcher's folder/session naming (`session_id` is literally `21_20241008`); the header's
+comes from what was typed at the console. Two human entries minutes apart, neither independent.
+And the facility DB **cannot** break the tie here the way it did for PROJ-0056, because in all
+four cases *both* candidate animals were genuinely scanned that day — the procedure log has
+date granularity, not time. This one needs a human who was there.
+
+**Also worth carrying:** `acquisition_datetime` on Molecubes rows is parsed from the
+reconstruction folder name (`20241008094816_PET_OSEM_0` → 09:48:16), i.e. **export time, not
+scan time**. Do not read inter-row gaps as a scan clock — the 56-second gap between
+`ACQ-20241008-PET-001` and `-002` is two reconstructions being written, not two scans.
+
+- [ ] **Ask the researchers named above** while the sessions are still in living memory. The
+  question is narrow: *did the console ID lag or lead by one animal in this session?*
+- [ ] **Ask the XNAT trial for evidence only it has** (`gjesus3-tools` B10): `StudyInstanceUID`,
+  `SeriesInstanceUID`, `PatientWeight` and radiopharmaceutical dose/time for each conflict
+  **and its adjacent neighbours**. If weight or dose differs across the pair, demographics were
+  being updated per animal and only the ID lagged — that would settle it without memory.
+- [ ] **Get the denominator.** How many DICOM acquisitions had no parseable `PatientID` at all?
+  Until that is known, "4 conflicts" is a floor, not a count — the check only fires where a
+  header exists *and* disagrees.
+- [ ] Leave the rows untouched until ruled. **Won't-fix is a legitimate close** — but record the
+  ruling (or the decision not to rule) rather than letting it lapse silently.
+- [ ] Consider a console-time norm for NI — PatientID set per animal, fresh study per animal.
+  These four span **four projects, four researchers, 2022→2026**, so this is a standing
+  platform habit, not one bad session. Overlaps the NI live-mode work in this file.
+
+## 🔽 LOW — 5 acquisitions dated 3 days before their subject's date of birth (2026-08-19)
+
+`ACQ-20230807-CT-006` … `-010` (PROJ-0018) carry subjects `73`/`74`/`75`/`76`/`77-AE-biomaGUNE-1321`
+whose `date_of_birth` is **three days after** the acquisition. Found by the ad-hoc age pass
+described in the plausibility item above; not previously known.
+
+Almost certainly a facility-DB date-entry error rather than a gjesus3 defect — the offset is
+uniform, small, and hits five consecutive animals in one protocol, which is what a mistyped
+cohort DOB looks like. Nothing depends on it and nothing is blocked.
+
+- [ ] Confirm against the facility DB, then raise it on the **same external channel** as the
+  null-alias ask below (it is their record to correct, not ours to overwrite).
+- [ ] If the DOB is corrected upstream, re-derive `age_at_acquisition` on those 5 sidecars via
+  `recover_subject_metadata.py` — no re-ingest needed.
+
+## 🔸 MODERATE — the validator's warning channel is saturated and therefore unread (2026-08-19)
+
+A full `validate_registries` run against production reports **0 errors and 18,744 warnings**.
+Measured 2026-08-19 (the first full run in a while — the "0 errors, 0 warnings" claim that had
+been in `STATUS.md` was the `--no-enrichment` run, now corrected there):
+
+| Warning | Count | What it actually means |
+|---|---|---|
+| `condition.is_control is null` | 12,925 | optional field never filled in |
+| `anatomy.is_whole_body is null` | 5,242 | optional field never filled in |
+| `subject.source == 'pending-db'` | 292 | deferred-recovery queue, working as designed |
+| missing `subject:` block | 146 | sidecars predating the Phase 3 enrichment writer |
+| missing `condition:` block | 138 | same |
+
+**97% of the total is two optional fields nobody ever supplied**, emitted once per acquisition
+across 15,474 acquisitions. That is one design choice multiplied by the archive, not 18,167
+problems.
+
+**Why it matters more than the number suggests.** A check that always prints 18,744 warnings is a
+check nobody reads, so the ~580 lines that *are* actionable are invisible. This is the same
+failure shape as the PROJ-0056 misattribution itself: the signal existed somewhere, and nothing
+made it visible. **Filling the 18,167 blanks is not the fix.**
+
+- [ ] Stop emitting a per-acquisition WARN when an optional field holds its documented "unknown"
+  sentinel. Report it **once as coverage** instead — e.g. "`is_control` known on 2,549 of 15,474".
+- [ ] Leave the remaining classes as real warnings; ~580 is a list someone will actually read.
+- [ ] Decide whether `pending-db` (292) belongs in the warning stream at all, given it is a queue
+  with its own drain tool (`recover_subject_metadata.py`) and its own registry.
+- [ ] Re-check the 146 + 138 missing blocks: these are pre-Phase-3 sidecars, so the question is
+  whether to backfill them or accept them as historical.
+
+## 🔽 LOW — what we owe the XNAT trial in reply (gjesus3-tools B10) (2026-08-19)
+
+The identity-conflict report came **inbound to us** from the XNAT image-server trial (it is a
+straight-import consumer, not a system we are asking to change). Three corrections and one
+release are owed back, none urgent, all cheap to send.
+
+- [ ] **Their pattern (b) is not a ruling we owe them — it was our bug and it is fixed.** The 15
+  PROJ-0056 rows are corrected in production (2026-08-19); they can release the hold and
+  re-import. The facility DB already answered it; no researcher adjudication was needed.
+- [ ] **Their hold under-covers, and they should know why.** Production carried **15** rows with
+  that defect; they held **8**. The hold keys on header-vs-registry *disagreement*, so rows whose
+  header did not parse carried the identical bad identity and passed. Their ledger is a
+  disagreement log, not a completeness statement — worth saying so *in* the ledger.
+- [ ] **The "April `0522_13x` sessions registered twice (…0407 and …0408)" is a misread.** Those
+  are distinct longitudinal timepoints — different days, different source folders, different data.
+  Registry-wide there are **zero** duplicate rows (0 duplicate `canonical_path`, 0 duplicate
+  `(original_name, project_id)` across 15,474, checked 2026-08-19). They should not leave a "known
+  duplication" note in the ledger. Their instinct on the multi-animal-bed split was right, though
+  — that *is* a real convention.
+- [ ] **Ask for the two things only they have** (also listed on the 4-PET item above): per-conflict
+  `StudyInstanceUID` / `SeriesInstanceUID` / `PatientWeight` / radiopharmaceutical dose+time for
+  each conflict **and its adjacent neighbours**, and the `PatientID` **coverage** figure — how many
+  DICOM acquisitions had no parseable ID at all. Without the latter, "4 conflicts" is a floor.
+
+## 🔸 OPTIONAL — move (or mirror) `projects/` off the QNAP onto IT-managed `gjesus` (2026-08-20)
+
+**Context.** IT declined to back up the gjesus3 QNAP and instead offered active-project backup on
+their own NAS, `gjesus` (`K:\gjesus` from the Data Office workstation) — the same share the group
+already works on, and the same one that kept running out of space, which is part of why the QNAP
+exists. They have **0.4 TB free today** and say they can grow it. Everything below is assessment;
+nothing is decided and nothing has been built.
+
+### The measurements (2026-08-19/20, live NAS)
+
+| | Value |
+|---|---|
+| `raw/` on disk | **0.747 TB** (registry sum 0.78 TB — two independent methods agree) |
+| `projects/raw_linked/` | **711.8 GB apparent, 0 real bytes**, **343,830 files** |
+| `projects/` everything else (`outputs`, `working`, `metadata`, yaml, index) | **0.02 GB, 153 files** |
+| Acquisitions in >1 project | **0** — so a copy costs exactly 1× raw, no multiplication |
+
+Two consequences. **The projects tree is ~100% derived today** — there is almost no original
+researcher work in it, so moving it moves nothing irreplaceable. And **the cost is file-count
+dominated**: 15,474 acquisitions expand to 343,830 files because folder primaries (`<ACQ-ID>.data`)
+become a folder of per-file links. Over SMB, per-file overhead will dominate any copy job.
+
+### Growth model — why 712 GB is NOT the number to give IT
+
+**The current 712 GB is a snapshot, not a steady state.** The instrument generating ~90% of the
+bytes, **AxioScan 7 (`ZWSI`), only came online 2026-02-05** — so 712 GB represents about *six
+months* of the dominant source, not five years of everything.
+
+Measured annual generation, from **acquisition** dates (not ingest dates):
+
+| Source | GB/yr | Basis / confidence |
+|---|---|---|
+| `ZWSI` AxioScan 7 | **638** | 295.6 GB over 169 days, near-complete coverage. **But 17–112 GB/month — an ~8× spread.** |
+| DICOM (`MRI`+`CT`+`PET`) | **55** | mean of complete years 2023-25 (37) + 18 for the **673 NI acqs held back** pending AE codes |
+| `LSM9` confocal | 5 measured | Known undercount (lives on external drives). Even at **5×** it moves the total <4%. |
+| `CELL` Cell Observer | — | Being replaced by AxioScan; counted there, **not** double-counted |
+| **Total** | **~700 GB/yr** | |
+
+**Assume projects stay open 5 years**, so active project data reaches steady state at 5× the
+annual rate:
+
+> ### `raw_linked/` at steady state: **~3.5 TB floor, ~7 TB ceiling** (2×, per the agreed convention)
+
+**Why the floor is genuinely a floor** — three independent reasons it understates:
+1. Cell Observer and confocal history is largely **not uploaded yet** (external drives).
+2. **673 NI acquisitions** are still held back pending AE protocol codes.
+3. **There has been essentially no researcher adoption yet.** The September onboarding is
+   explicitly designed to increase usage, so past rates understate future ones by design.
+
+**The single biggest weakness:** this estimate is a bet on **one instrument with six months of
+data and 8× month-to-month variance**. If AxioScan usage doubles post-launch, the number doubles.
+It should be revisited after ~6 months of real adoption rather than treated as settled.
+
+### The part that cannot be estimated
+
+`outputs/` / `working/` / `metadata/` hold **0.02 GB across all 57 projects** because nobody is
+using the system yet. There is **no trend to extrapolate** and any number would be invention.
+
+The defensible argument is Ryan's: that content largely **already exists on `gjesus`** and moving
+it into project folders **relocates rather than adds**. **Measured 2026-08-20 — it holds:**
+
+> **`K:\gjesus` = 1,186 GB (1.16 TB) across 404,406 files.**
+> Almost all per-person working folders — Ainhize 375 GB, Marina 103, `MRI` 99, Irene 96,
+> Laura 94, Claudia 71, Susana 69, Aitor 61, Elena 56, Itziar 43, Ermal 18.
+
+Three things follow, and they reframe the IT conversation:
+
+1. **IT already hosts 1.16 TB for this group.** Their 0.4 TB offer is about a third of what they
+   already carry — the offer is inconsistent with the footprint they already support.
+2. **Migration is not new demand.** If project folders become the working home, that ~1.16 TB
+   moves *within* IT's estate rather than adding to it.
+3. **Some of it is duplicate raw and could be retired.** Ainhize's 375 GB is Cell Observer +
+   confocal (the instruments whose gjesus3 total is 226 GB), and `MRI/` is 99 GB across 95,878
+   files. Once data is safely in gjesus3 `raw/` with checksums, those personal copies are
+   candidates for retirement — a **net reduction** on IT's system. **How much overlaps is
+   unmeasured** and must be verified per-folder before anything is deleted.
+
+### What to tell IT
+
+- **0.4 TB does not fit today.** The tree is already 712 GB — the current offer is ~56% of
+  present need, before any growth.
+- Ask for the **5-year steady state with headroom**, or better, a **growth commitment**
+  (~0.7 TB/yr, reviewed) rather than a fixed cap — a fixed cap is what caused deletions before.
+- **A cap on derived data is an annoyance; a cap on `outputs/` is data loss.** That is the line
+  worth holding.
+
+### Code assessment — easier than expected
+
+Three reasons the change is contained:
+
+1. **The location is already data, not code.** `registry_projects.csv:folder_location` stores each
+   project's path and the ingest reads the *stored* value — there is an explicit rule against
+   rebuilding it from the name (05_PROJECTS, "one construction site"). Today it is joined to
+   `nas_root`; the indirection point already exists.
+2. **The mechanism is already decoupled.** `linker.create_hardlink(project_folder_abs, link_name,
+   raw_primary_abs)` takes the destination as an argument — a copy strategy is a sibling function
+   plus a dispatch, not surgery.
+3. **"Linking failed, commit anyway, fix later" already exists and is proven in production.**
+   `pending_links.csv` + `relink_pending.py` were built because macOS-over-SMB returns `ENOTSUP` on
+   `os.link`. Cross-device is the same failure with the same handling.
+
+19 files reference the projects path; roughly half are one-shot historical migration tools. The
+real change is **~8 files** (`ingest_raw`, `ingest/linker`, `manager/raw_import`, `create_project`,
+`manager/projects`, `generate_index`, `ingest/projects_registry`, `relink_pending`) plus one shared
+resolver.
+
+### The recommendation — mirror the derived half, single-home the original half
+
+`raw_linked/` is a **projection** of `registry_raw` + `registry_projects`;
+`relink_projects.py --create-missing` already rebuilds it from those two registries with no
+re-ingest (that is how the 178 missing microscopy links were created). `outputs/` / `working/` /
+`metadata/` are **original** — the only copy of researcher work.
+
+So: **for the derived half, drift is not a thing** — you regenerate, you do not sync, and there is
+no two-master problem. **For the original half, drift is data loss**, so it gets exactly one home.
+
+That makes the dual-location experiment cheap: point a generator at `gjesus`, write copies instead
+of links, run it on a schedule. **Additive — no change to the ingest write path.** If IT caps or
+purges it, nothing is lost, because it is regenerable.
+
+**Incidental DR benefit worth naming:** ~0.75 TB of raw primaries on an IT-managed, IT-backed-up
+device is a second physical copy, against DR being the #1 unmitigated risk in this file. It is not
+real DR — primaries only, no checksums, no sidecars, a mirror not a versioned backup — but it is
+strictly better than one copy and may change how the real DR case is argued.
+
+- [x] **Measure `K:\gjesus`** — done 2026-08-20: **1.16 TB / 404,406 files**, per-person
+  working folders (see above). The relocation argument holds.
+- [ ] **Quantify how much of that 1.16 TB is raw already held in gjesus3** (Ainhize's 375 GB vs
+  the 226 GB of CELL+LSM9; the 99 GB `MRI/` folder). Retiring verified duplicates is a net
+  reduction for IT and the strongest card in the negotiation — but verify per folder against
+  checksums before deleting anything.
+- [ ] **Settle the ACL question BEFORE data lands.** The permission model was applied by hand on
+  `J:\gjesus3-data\` (operators write-but-not-modify on raw, group Modify on projects, grant-only
+  never DENY) and the record notes IT will not create groups for us. On their device the ACLs are
+  theirs. "IT capped us and people deleted data" is partly a permissions story.
+- [ ] Get IT's cap **in writing**, with the growth path, before committing anything.
+- [ ] **Only then** decide: mirror-only (recommended first step), or a real move with a
+  configurable projects root.
+- [ ] Revisit the growth model after ~6 months of post-launch adoption. It rests on one instrument
+  with six months of data.
+- [ ] Do **not** put `outputs/`/`working/` on a capped share until the cap is agreed and the
+  permission model is settled.
+
+## ✅ Finder — "Select-in-Finder → assemble a project" (2026-06-23) — **DONE 2026-08-12, differently**
+
+> **Delivered by the Project Manager GUI** ([`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)),
+> not by the Finder page. This item named its own blocker exactly right — a static page over
+> `file://` cannot touch the filesystem, so this "requires a helper / CLI / back-end beyond
+> the browser page". The Project Manager **is** that back-end: it has a server, so it reads
+> `registry_raw.csv` server-side, offers the same filters (through `find_acq`, the same join
+> engine this item pointed at), takes a tick-list, and creates the links. Its design rule is
+> the one written here — it drives the **existing** `linker.create_hardlink` + the ingest
+> provenance step rather than a parallel path, so the links and provenance rows are identical
+> to ingest-time ones (same inode, same shape). What differs from the sketch below: the
+> selection happens in the tool's own served page rather than in the generated
+> `index.html`, and no selection-manifest hand-off was needed. The original text is kept
+> below for the reasoning.
 
 Context: the registry **Finder** ([`tools/FINDER.md`](../tools/FINDER.md)) today is a
 read-only locator — a generated, self-contained `registries/index.html` a researcher
@@ -425,6 +1959,15 @@ This item explores a **different, possibly better** way to build the project-lev
 it from the **project's own provenance file** instead of the registry. Raised by the data office
 2026-06-23 — **shape still open, discuss before building.**
 
+> **Still open after 2026-08-12, and partly vindicated.** This item predicted precisely the
+> problem the Project Manager had to solve — `project_id` *"stamped once at ingest"* while
+> researchers *"later reorganize / re-home acqs"*. Making `project_id` a semicolon list
+> ([`06_REGISTRIES §2.3b`](../mfb-rdm-docs/06_REGISTRIES.md)) fixes the **recording**: an
+> acquisition can now honestly belong to two projects. This item is about the **view**, and
+> nothing above is superseded. The Project Manager keeps provenance complete and accurate on
+> every import — a row per link, a row per copied file — precisely so it stays the credible
+> source of truth if this lands.
+
 - [ ] **Build the project `index.html` from the project's provenance file, not from `project_id`.**
   At ingest, every raw acquisition hard-linked into a project is recorded in that project's
   **provenance** (see [`07_PROVENANCE`](../mfb-rdm-docs/07_PROVENANCE.md) + the ingest
@@ -452,6 +1995,463 @@ it from the **project's own provenance file** instead of the registry. Raised by
     partial-only; performance (per-project provenance reads vs one registry pass); and whether the
     "select-in-Finder → assemble a project" item above should *write* into this same
     provenance-driven model.
+
+## `metadata.json` sidecars carry platform-dependent line endings (2026-08-16)
+
+🔸 **MODERATE — already live in `/raw/`, not theoretical.** One-line cause in
+[`tools/ingest/metadata_sidecar.py`](../tools/ingest/metadata_sidecar.py) (~line 116):
+
+```python
+with open(path, "w") as f:          # no newline= -> the OS decides
+    json.dump(sidecar_dict, f, indent=2)
+```
+
+Python text mode translates `\n` to the platform terminator, so **a sidecar's line
+endings record which machine ran the ingest, not anything about the data.** Measured
+across the 444 null-alias sidecars on 2026-08-16: **314 LF / 130 CRLF** (0 mixed) —
+LF for the WSL-era bulk ingests, CRLF for the Windows/GUI-era ones, split cleanly by
+instrument (CT 91, PET 23, ZWSI 2 and 14 MRI are CRLF; the other 314 MRI are LF).
+It is reasonable to assume the same split runs across all 15,474.
+
+Nothing is *wrong* — JSON does not care and every reader parses both. The cost is that
+`/raw/` is byte-inconsistent for no reason, which matters for anything that diffs,
+checksums or rewrites a sidecar in place:
+
+- It was found because `recover_subject_metadata._write_sidecar` had the same defect.
+  Running that recovery tool from Windows rewrote **every line** of an LF sidecar (~5%
+  size growth) to change one field — whole-file churn on an artifact `/raw/` calls
+  immutable, and a needless full-file delta for any future backup or fixity diff.
+  **Fixed there 2026-08-16** by detecting and PRESERVING the existing terminator
+  (`_existing_newline`) — deliberately *preserve*, not pin, because the archive is not
+  uniform and pinning either class churns the other. This item is the *writer* half.
+- The same open() also has **no `encoding=`**, so it uses the locale codec. Harmless
+  only because `json.dump` defaults to `ensure_ascii=True`; the day someone passes
+  `ensure_ascii=False`, an accented procedure name becomes cp1252 on Windows and UTF-8
+  in WSL, in a file every reader opens as UTF-8.
+
+- [ ] Pin `newline="\n"` **and** `encoding="utf-8"` in `metadata_sidecar.py` so newly
+  written sidecars are platform-independent from here on.
+- [ ] Decide whether to normalise the ~130-per-444 existing CRLF sidecars. **Probably
+  not**: it is a whole-archive rewrite of immutable files to fix something no reader
+  notices. Recording *why not* is the useful outcome. If it is ever done, it must
+  recompute any `checksums.json` entry covering the sidecar.
+- [ ] Check the other in-place sidecar writers for the same defect before they are
+  next run.
+
+Context: found while building `tools/recover_subject_ids.py`
+([`SUBJECT_ID_NULL_ALIAS_HANDOFF.md`](SUBJECT_ID_NULL_ALIAS_HANDOFF.md)), branch
+`fix/subject-id-null-alias`.
+
+---
+
+## Multi-value cell hygiene in `validate_registries` (2026-08-12)
+
+Small and self-contained — roughly an afternoon inside
+[`tools/validate_registries.py`](../tools/validate_registries.py), not a branch.
+
+- [ ] **Validate the shape of the semicolon-packed columns.** Three columns are
+  `;`-separated lists: **`subject_ids`**, **`modalities_in_study`**, and (legacy /
+  hand-edited only) **`project_id`**. Check for empty segments (`A;;B`), a trailing
+  separator, and duplicates (`A;A`). `ingest/project_ids.py` and `ingest/registry.py`
+  normalize on write, so a violation means a hand edit in Excel — which does happen.
+  The `project_id` *existence* half is already implemented (`validate_registries.py` §7,
+  correctly split-based); this is the hygiene half, generalized to the other two columns.
+
+**Why this is all that's left of a bigger idea.** A larger set of registry↔derived-state
+checks was scoped on 2026-08-12 (branch `feat/registry-consistency-checks`, retired unstarted
+— its handoff is in that branch's history if ever wanted) and most of it was invalidated the
+same day:
+
+- A check comparing the registry against `raw_linked/` + `provenance.csv` coverage was
+  **wrong, not mis-tuned**. Project folders are researcher-owned
+  ([05_PROJECTS §3a](../mfb-rdm-docs/05_PROJECTS.md)) and pruning links is allowed, so a
+  missing link is not an integrity finding. It measured 12,975 associations with 11,036
+  provenance rows — which reads as "1,939 defects" only under a compliance assumption the
+  system never made.
+- A check comparing the registry against each per-project `index.html` was **feasible and
+  clean** (44/44 projects matched exactly; the page embeds its rows as inline JSON, so it
+  parses). But the silent-split bug class that motivated it went away when `project_id`
+  became write-once, so it no longer earns the work. Worth revisiting **if** the metadata
+  database lands and project↔acquisition becomes a real table.
+- A static lint for unguarded `project_id` reads was already marginal — 75 direct reads
+  across 27 files, most of them legitimate, since `project_id` in `registry_projects.csv`
+  and `pending_links.csv` is genuinely single-valued.
+
+## 🔸 MODERATE — 17 orphan acquisition folders in `/raw/`, registered nowhere (2026-08-13)
+
+Noticed during the DTS24 cleanup; **unrelated to DTS24 and left untouched**. Priority set
+2026-08-13.
+
+**What is there.** `raw/DICOM/2026/2026-07/ACQ-20260710-MRI-001` … `-017` — 17 folders on
+disk, **none of them in `registry_raw.csv`**. Characterised 2026-08-13:
+
+| | |
+|---|---|
+| Content | ParaVision MRI, 2026-07-10, animal **m12**, protocol **AE-biomaGUNE-1125**, "recons kept: 1,2" |
+| Sidecars | **17/17** have a full `metadata.json` — subject resolved from the animal-facility DB (species, strain, sex, DOB, derived age), plus `condition` and `anatomy` operator-entered |
+| `checksums.json` | present |
+| `<ACQ-ID>.data/` | **empty** — the no-DICOM placeholder shape |
+| Size | ~0.2 MB each, **~3.4 MB total** — negligible |
+| mtime | all **2026-07-16 11:16**, identical — one batch |
+| ACQ-ID counter | `.acq_id_seq.json` holds `ACQ-20260710-MRI- = 17` — **the ids are reserved** |
+
+**What it means.** This is a **partial-ingest signature**, not a mystery: ids were
+allocated, `/raw/` folders and sidecars were written, and the registry commit never
+landed. The counter says 17 while the registry says 0 — the two disagree, which is the
+tell. It sits squarely in the concurrent-write / partial-failure class the 2026-07-08
+architecture review flagged as HIGH.
+
+**Why moderate rather than urgent.** Nothing is at risk: the ids are reserved so a future
+2026-07-10 MRI ingest starts at `-018` and cannot collide, the space is trivial, and rows
+absent from the registry are invisible to the Finder — no researcher can be misled by
+them. But they are **unaccounted-for data in an immutable area**, and `/raw/` is the one
+place the system promises to be authoritative.
+
+- [x] **Work out what happened** *(2026-10-02: the frozen exe's README crash on 2026-07-16, plus a rollback blocked by the operator's write-not-modify ACL; CHANGELOG 2026-07-17. Established from the pattern; no log survives)*, then either register them or delete them. The mtime
+  (2026-07-16) coincides with the no-DICOM DICOM-regen backfill drain, so start with that
+  session's records and `pending_dicom_regen.csv`. The empty `.data/` says these are the
+  no-DICOM placeholder path.
+- [ ] **Decide the rule, not just this case** *(still open, and now with a second instance: the m6 session's two failed attempts, 2026-10-02)*: should `/raw/` folders without a registry
+  row be (a) reported by `validate_registries` as an ERROR, (b) auto-cleaned by a drain
+  tool, or (c) tolerated? Today nothing looks for them, which is why these sat unnoticed
+  for a month. A **`/raw/`-vs-registry orphan check is the natural companion** to the
+  multi-value hygiene item above, and unlike the checks that were dropped on 2026-08-12 it
+  is a genuine integrity question — `/raw/` is system-owned, so nothing here depends on
+  researcher behaviour (contrast [05_PROJECTS §3a](../mfb-rdm-docs/05_PROJECTS.md)).
+- [x] *(Done 2026-10-02: 17 tombstones, disposition `orphan`; the counter is untouched at 34.)* If they are deleted, **do not release the reserved ids** — retire them, as
+  `PROJ-0054`/`99_test` was on 2026-08-12.
+- [x] *(✅ Done 2026-10-02: the session was re-ingested as `ACQ-20260710-MRI-018…034`, from the scanner's current copy, and the 17 orphan folders were then retired, backed up whole off-NAS; run `RET-20261002-133115-491`; record `tasks/mri_0710_reingest_review.md`.)* **2026-10-01 — decided (Ryan): retire them, after the session is re-ingested.** They are the
+  no-DICOM placeholder shape (empty `.data`, a `checksums.json` with no files, no `README.txt`), created
+  2026-07-16 09:16 UTC by `ingest_raw.py`, which stopped before the registry append (cause not
+  established). Their session **`jrc20260710_m12_1125_bis`** (animal 12, protocol 1125, 17 exams) is
+  **not in gjesus3 under any ID**. Order: (1) a normal MRI ingest of the session from the scanner host —
+  no-DICOM exams go to the DICOM-regen worklist (11_OPERATIONS §5.5), with fresh ids from `-018`;
+  (2) then `retire_acquisition.py --orphan` with `tasks/retire_lists/2026-10_orphans_20260710_MRI.csv`
+  (`tasks/retire_acquisition_review.md` §6c).
+
+## 🔸 MODERATE — 14 MFB animal sessions on the scanner are registered nowhere, including `m6` of 2026-07-06 (2026-10-02)
+
+**What was found.** A read-only reconciliation of `kenia` (`/opt/PV-7.0.0/data/nmr`) against `registry_raw` found **19 unregistered `jrc` studies dated 2026-06-01 or later: 14 animal sessions (232 exam folders) and 5 phantom/QC studies (70)**. Evidence: `tasks/mri_0710_reingest_review.md` §5.1 (the script and the per-study CSV are on D:).
+
+- **The animal sessions:**
+  - protocol **1125**, 9 sessions: m2 and m3 on 2026-07-03; m4, m5, **m6**, m7 and m8 on 07-06; the first m12 study (11:47) and m19 on 07-10;
+  - protocol **1025**, 5 sessions: m25–m28 on 2026-10-01, and m29 on 10-02.
+- **m6 was found first.** Its counter `ACQ-20260706-MRI- = 30` fits two failed attempts of 15 exams, with the same README crash.
+  - It has two NAS pulls, `staging\sftp_20260716_112028` and `_122729`, byte-identical to each other and to the scanner's exam data.
+  - Its dry run gives 15 acquisitions in `PROJ-0021`, with real IDs from `-031`.
+  - The other sessions were never pulled to the NAS.
+- **Since the 2026-06-13/14 bulk load, only m1 (07-03) and the m12 `_bis` session were ingested.** The data is safe on the scanner, which keeps years.
+- **The operators are not established.** ParaVision's `ACQ_operator` is `nmr`, and the facility DB records no operator. For m6, the best-supported answer is `Irene`.
+- These ingests are outside the 2026-10-01 pre-approval, so each needs **Ryan's go**.
+
+- [x] *(Done 2026-10-04: Ryan chose the Data Office, from the scanner; operator `Irene`.)* Decide who ingests them, and how: the Data Office from the scanner, or the operators through the GUI.
+- [ ] **Ask the MRI operators (Irene) to ingest the 5 protocol-1025 sessions of 2026-10-01/02** (m25–m29) through the normal GUI/CLI path. Then check that they are registered.
+- [x] *(Done 2026-10-04: the 9 protocol-1125 sessions, 141 acquisitions. The 5 protocol-1025 sessions of 10-01/02 stay with the operators.)* Ingest the 9 protocol-1125 sessions, and later the 1025 ones, once each operator is known. Each is a normal `mri-ingest`, run from Windows.
+- [x] *(Done 2026-10-04: Ryan said yes; ingested with a blank project, 69 acquisitions.)* Decide whether the 5 phantom/QC studies belong in gjesus3: `jrc260611_SPION`, `jrc_260612_phantom_SPION_RGD`, `jrc260708_phantom`, `jrc260709_phantom` and `jrc260818_Phantom_MnACC`. Their names carry no `m<animal>_<protocol>`, so the ingest regex does not parse them (the silent skip, STATUS §0 D3).
+- [ ] Run the reconciliation again on a schedule. It is read-only: an SFTP listing plus a registry read.
+- [ ] Confirm that other groups' studies on the shared scanner stay out of scope. Since 2026-06-01 there are 362 of them (1,755 exam folders), from `jl`, `pr`, `sp`, `dan`, `fer` and `aka`; none is MFB, and none is in the registry.
+
+## 🔹 LOW — keep `staging\sftp_20260716_110906` until someone decides on the deleted recon `/2` (2026-10-02)
+
+This folder holds the **only copy of `/2`** (`pdata\2` of 12 exams, 72 files) of session `m12_1125_bis`. The researcher deleted it on the scanner on 2026-07-23, and it is not in `/raw/`: the ingest took `/1,3`.
+
+- The workflow notes say auto-generated reconstructions (`/1`, `/2`) are typically discarded, so this is a retention call, not a loss.
+- **Do not delete any `staging\sftp_20260716_*` folder before the m6 session is ingested;** then decide on this one.
+
+## 🔹 LOW — the dry-run preview ignores `.acq_id_seq.json` (2026-10-02)
+
+`tools/operator/preview.py::_preview_acq_id` calls `generate_acq_id`, which reads only the registry and the tombstones.
+
+- So a preview shows `ACQ-20260710-MRI-001…017` where the real run allocates `-018…-034`.
+- That is harmless once known, but misleading when a plan says "IDs from -018".
+- **Fix:** make the preview take `max(registry, reservation) + 1`, as `allocate_acq_id` does, without writing.
+
+## 🔹 LOW — the anatomy rule gets no signal from Dicomifier-regenerated DICOMs (2026-10-02)
+
+This was seen in the rehearsal of the same 17 exams.
+
+- **With the native Bruker DICOMs,** the rule read "4 chamber", "long axis LV" and "Cine_ 4 chamber", and set `anatomy` = `heart` on three exams.
+- **With Dicomifier-regenerated DICOMs,** the per-DICOM headers in the sidecar carried no `SeriesDescription` or `ProtocolName`, so the rule set nothing.
+- **A likely fix:** `acqp` holds `ACQ_scan_name` (e.g. "4 chamber (E3)") for every exam. Adding it to `anatomy_derive.collect_mri_signals` may give the regenerated exams the same hint. This is unverified beyond the rehearsal, so check it on a regenerated production exam first.
+
+## 🔹 LOW — NIfTI folders next to ParaVision studies (2026-10-02)
+
+The researcher's own conversions sit in the study folder: `NIFTI\`, 30 files (32 MB) for `m12_1125_bis` and 26 files (25 MB) for `m6`.
+
+- The MRI path skips them as a non-exam sibling, and they were left on the scanner by decision.
+- If they should live in a project folder, that is a placement call (`working\`).
+
+## 🔸 MODERATE — existing MRI rows that fall outside the 2026-10-04 line (2026-10-04)
+
+Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is registered only with a reconstructed image stored as DICOM. Spectroscopy and calibration exams are not registered, and neither are reconstructions that cannot be converted to DICOM.
+
+**The conflict:** production already holds MRI rows registered as empty placeholders before the line existed. The 2026-07-16 drain of the DICOM-regen worklist (10_TOOLS §3.8) left **365 rows `not-applicable`** (spectroscopy/calibration: STEAM/PRESS/WOBBLE) and **94 `no-source`**. *(99 `no-source` since 2026-10-05: the five header-only G1 exams were flipped on Ryan's ruling, STATUS §0 D7.)*
+
+- [ ] Count them afresh, from `registries/pending_dicom_regen.csv` and from `/raw/` folders with an empty `.data\`.
+- [ ] **Decide (Ryan):**
+  - retire them with the retire tool (which disposition? a new `not-an-image`, or `derivative`?), keeping any recoverable files as other data in the project folder;
+  - or leave them, with the line applying only from 2026-10-04 on.
+- [ ] Live ingest: should the MRI path stop registering spectroscopy and calibration exams at ingest? Today it registers them as `not-applicable` placeholders.
+
+## 🔹 LOW — an exam that produced no data is registered with today's date (2026-10-04)
+
+- **The cause:** an aborted exam has no `visu_pars`, so `mri_acquisition_datetime` is empty and the preview shows today's date (`ACQ-20261004-MRI-…`).
+- **Where it was hit:** stream B, on its B06 setup scans; and again on exam 66 of the 2026-07-08 phantom.
+- **The fix:** `expand_batch` should skip (or stop on) an MRI exam with no reconstructed image, as Ryan's line of 2026-10-04 says (09_MODALITIES).
+- **Today:** both cases are handled by an allow-list case table.
+
+## 🔹 LOW — phantom and QC studies need a scoped config until the regex has a phantom branch (2026-10-04)
+
+- Names without `m<animal>_<protocol>` match neither shared regex (D3).
+- The five `jrc` phantom studies were ingested through `tools/configs/mri_july_1125/mri_phantom_*.yaml`, which take the sample label from ParaVision's `SUBJECT_id`.
+- **A durable fix:** an explicit phantom path in the MRI template.
+- **Decided 2026-10-04:** `phantom` for an imaging test object, `material` for a bare sample of a material under study.
+
+## 🔹 LOW — another group's study lives inside m3's folder on the scanner (2026-10-04)
+
+`20260707_094320_jl260707_1225_m26_…` (13 exams, 358 MB) exists only nested inside `…_m3_1125_…`. It is not MFB data and was not ingested. Someone may want to tell the `jl` group.
+
+## 🔹 LOW — a live WSL write to the share is about 20 times slower than local (2026-10-04)
+
+- The five phantom configs (69 acquisitions, 509 files) took 31 minutes from WSL to `/mnt/gjesus3`, against 84 s on D: scratch: roughly 2 s per small file over the 9p/SMB path.
+- 11_OPERATIONS §5.5 already notes that WSL cannot hard-link there.
+- Plan a window by file count. A native-DICOM study with no project could be written from Windows instead.
+
+## 🔹 LOW — `stage_copy.py` 1.5: four known limits found when it was adopted (2026-10-06)
+
+The adoption's review and test found these (`tools/drive_staging/README.md`; merge `82d4e97`). None affected the three
+drives staged so far. They are tool choices for the Data Office, not decisions for Ryan.
+
+- **A filename that is not valid Unicode** (a lone UTF-16 surrogate, e.g. an emoji cut by the name-length limit) cannot
+  enter the UTF-8 manifest. The bytes are copied, the run ends `errors 1` while `errors.csv` stays empty, and `verify`
+  stops with a traceback after hashing everything. It fails safe (no false PASS). A fix touches the three writers and
+  `load_manifest`, which `catalog.py` and `ingest_plan.py` share.
+- **`copy` exits 0 when files failed.** The README's release check covers it; a non-zero exit would be safer for scripts.
+- **The circuit breaker also counts failures that are not the drive's** (e.g. 25 names in a row the destination cannot
+  hold), and the only override is the `CONSECUTIVE_FAIL_LIMIT` constant.
+- **`$RECYCLE.BIN`, `System Volume Information` and `found.000` at the drive root are skipped with no log line.**
+  Recommendation: keep skipping them, but log each skipped folder with its file count, so a recycle bin with content
+  is noticed before the drive goes back.
+
+## 🔸 MODERATE — after the platform-archive MRI ingest: check the drive-3 MRI against the originals, and re-trace the segmentations (Ryan, 2026-10-06)
+
+Ryan has SSH access to the platform's own archive of older MRI (where the acquisition
+machine's data goes as it fills) and will ingest from it after the M. Jesús drive.
+Two things follow:
+
+- **Check the drive-3 MRI against the originals.** Stream M ingests 3,309 exams from M. Jesús's copies (Ryan's M2:
+  "make a note of them and the fact that we need to check them against the originals"). Its gate lists every study.
+  Compare each with the archive's copy (DICOM bytes, or pixels where re-exported), and record the result. The archive
+  ingest must use the same `original_name` form (`<study>/<exam>`) so that it skips these studies instead of
+  registering them twice.
+- **Re-run the drive-3 segmentation trace** (`tools/drive_staging/drive3/a3_run_all.py`) once the archive's 2019–2021
+  studies are in: today those cohorts trace at 0–7 % only because their MRI is missing. The masks are kept (placed, or in
+  the staged copy until `biomaGUNE MJ` is done) for exactly this.
+
+- [ ] The archive ingest (Ryan's next step).
+- [ ] The drive-3 MRI checked against the originals.
+- [ ] A3's trace re-run; the curated-dataset candidates (CAND-A and others) updated.
+
+## 🔸 MODERATE — the `S:\gnuclear` discovery gives up on a path whose first parse finds no code (2026-10-06)
+
+Found by the drive-3 assessment (A1 R4, `tasks/drive3_raw_coverage.md`). `ni_gnuclear_discover.analyse()` looks further up
+an acquisition's path for a protocol code only when its parser found a **wrong** code, not when it found **none**. **100
+of the 673 acquisitions held back in the 2026-08-13 pull** (snapshot `J:\gjesus3-data\staging\ni_gnuclear_20260812\`)
+carry a valid code (`0619`, `1019`, `0320` or `1123`) in their own snapshot path, and the drive holds them too.
+
+- [ ] Fix the fallback (a branch, with a test); re-run discovery on the snapshot, read-only, and count what else it
+  releases from the 673.
+- [x] *(✅ 2026-10-06, merge `33cfe94`: fixed, and the 100 ingested from the snapshot with the drive's PET/CT.)* The 100 are ingested with the drive's PET/CT (STATUS §2), from whichever copy the fix makes simplest.
+- [ ] **The fix releases 160 more** of the 673 (`1121` 78, `0522` 59, `1019` 16, `1321` 7; 150 DB-confirmed, 10 with no animal parsed; another 20 stay skipped by the timestamp dedup). Each needs the same header check as stream N's before release, then Ryan's go (an ingest). **Until then, never run the `ni_gnuclear_prod_*.yaml` configs for real:** after the fix they would ingest these 160.
+
+## 🔹 LOW — a home for the group's own analysis tools and trained models (2026-10-06)
+
+The M. Jesús drive carries `Otros\PH_analysis_Segmentation_tool`, the group's own 3D Slicer module with trained models
+(2.9 GB), and model outputs (Vicomtech) whose `Reference.txt` names the training animals. None of it belongs to one
+project, and none of it is raw. For now it goes to the drive-3 holding folder (A2 D8, A3 S6).
+
+- [ ] Decide whether in-house tools and models get a home of their own (a code repository for the tool; a dated,
+  read-only folder for model weights), and record which animals trained which model, so that any future benchmark
+  built on a curated dataset (e.g. CAND-A) can exclude them.
+
+## 🔸 MODERATE — the drives' DICOM stream: follow-ups (stream B, 2026-10-04)
+
+- [ ] **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T.
+  - Production is unaffected: the 11.7T rows stream B ingested set `instrument_model` explicitly.
+  - Fix it before any 11.7T ingest relies on auto-derivation.
+- [ ] *(2026-10-06: 2022–23 left the acquisition machine around 2026-08-26 for the platform's own archive (Ryan). A re-pull of the May 2023 `0721` `_biod` sessions would come from there, through the platform manager. The 2024–26 MFB studies still on the scanner are STATUS §0.4 N1.)* 🔺 **Re-pull from kenia the sessions the regex skipped, before the retention horizon passes them.** That means the `0721` `_biod` sessions (May 2023) and any other unparsed study. It depends on STATUS §0 D3(a).
+- [ ] **Ask the `S:\gnuclear` owner about 18 Molecubes `FDK` reconstructions** of Marina's `1321` CTs (Aug 2023). They are in the snapshot but not in production (`drives_dicom_review.md` Q6).
+- [ ] **The DICOM-regen worklist assumes a re-pull from the platform host.** That is false for data from external drives, so convert before ingest, from the staging (`tools/drive_staging/convert_staged_exams.py`).
+- [ ] Low: **about 83 `1519` sessions from 2020 survive only as derivatives.** Check `K:\gjesus\MRI` once, off-peak.
+- [ ] Low: **ask Claudia about B08's `20240424_120501_I01Tdnrn01_1_2`.** Its folder says mouse 01, but its subject file says 02 (Q8).
+- [ ] Low: **the 3 X1 rows use the generic-DICOM shape** (`series/` plus a `dicom` block). Their project link mirrors the whole acquisition folder, sidecar included (§7b).
+
+## 🔺 HIGH — historical drives: the 2b mapping round (Ryan's worksheet) (2026-10-04)
+
+- [ ] **Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv`.** Only the 62 `A` rows matter; a blank row stays in holding.
+  *(2026-10-05: the worksheet was regenerated from the final manifest (290 groups) and shared with Jesus's group as a workbook: `J:\gjesus3-data\projects\_Historical drives - assign to projects (2026-10).xlsx`. It is temporary. When answers come back, join them into the CSV **by `group key`** and follow the runbook.)*
+- [ ] **A session applies it,** following `tasks/drives_nonraw_2b_2c_followup.md`: `remap`, then `apply-raw` (projects on the blank-project raw rows; write-once-if-blank), then `copy --from-holding`. The holding folder is already filled, so D: is not needed.
+- [x] *(✅ Done 2026-10-05, before the erase: it is at `J:\gjesus3-data\staging\historical_drives_records\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.)* **Before the D: staging is erased,** keep the record manifest off D: (runbook §2.6). The current one is `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.
+
+## 🔸 MODERATE — historical drives: holding-folder access, and the held material (2026-10-04)
+
+- [x] *(Decided 2026-10-05, Ryan: no change. The holding folder keeps `staging\`'s permissions.)* **Holding-folder ACL:** `staging\historical_drives_unassigned\` inherits `staging\`, so the `GJesus` group can modify, not only read. Ryan decides whether it should be read-only for the group.
+- [ ] **Aperio `.svs` (15 files, from the Drive zuri TUNEL zips) and TopSpin NMR (671 experiments)** are held: the instruments are not onboarded, and NMR is not imaging. Revisit if either is ever registered.
+- [ ] Low: **`catalog.py` does not open nested archives.** `nonraw_placement.py nested` is the stopgap; fold it in if the catalog is reused for another drive.
+- [ ] Low: **`historical_paths.py` is now the destination rule for all drive material placed on gjesus3** (streams A, C and D). Consider promoting it into `05_PROJECTS`; that is a spec change, so the Data Office decides.
+
+## 🔹 LOW — small follow-ups from the historical drives (2026-10-05)
+
+- [ ] **`AE-biomaGUNE-0118` ("118 LUCIA"): the animal links are held until Lucia confirms.** The 147 files' project was corrected from `118` to `0118` (Ryan approved, 2026-09-29), but their subject/animal links to the facility DB were held. Ask Lucia, or Ainhize, the operator, whether the animal numbers in those files belong to protocol `0118`. If so, set the subject links.
+- [ ] **The CoS hub's historical-drives `HANDOFF.md` (§7.2, §8.6) still uses the microscope stand name to identify the instrument.** That reading is wrong: the device serial identifies it (`tools/reference/microscopy_instruments.yaml`). Correct those two sections when the hub is next touched; it lives outside this repo.
+
+## Metadata database — retire the CSV registries (2026-08-12)
+
+Context: all of this is **metadata** — CSV rows pointing at acquisition data and at more
+metadata. The flat-CSV registry has carried the system a long way and is deliberately
+simple, but 2026-08-12 found its first hard edge: **project↔acquisition is genuinely
+many-to-many, and a CSV column cannot hold it.**
+
+The worked example, for whoever picks this up: a semicolon list was added to
+`registry_raw.project_id` (2026-08-11) and withdrawn a day later
+([06_REGISTRIES §2.3b](../mfb-rdm-docs/06_REGISTRIES.md)). It worked, but it cost eight
+reader sites that each failed **silently** when they forgot to split, in exchange for a
+query nobody runs. The decision was to record **one project per acquisition** — the one it
+was acquired for — and let the *filesystem* carry sharing. That is the right call for a CSV.
+It is the wrong call for a database, which would model the relationship directly and answer
+"every project this acquisition appears in" with no ambiguity and no split-or-fail hazard.
+
+- [ ] **Move the registries to a real schema.** Likely trigger: the dedicated RDM server
+  (~Oct 2026 — see the item below), since a server makes a database practical where a
+  double-clickable CSV on an SMB share does not.
+  - **Model project↔acquisition as its own table** — the case that motivated this item.
+    `ingest/project_ids.py` keeps `add_project_id` / `remove_project_id` (called by no tool)
+    precisely as the tested mechanics for that migration.
+  - Other multi-valued columns become relations too: `subject_ids`, `modalities_in_study`.
+  - **Keep a CSV export.** Researchers open the registry in Excel and the Finder is a
+    self-contained HTML page that needs no server; neither should be lost to gain query power.
+  - Preserve what the CSVs earned the hard way: append-only history, atomic writes, an
+    advisory lock, and a schema that is imported rather than hardcoded (06_REGISTRIES is the
+    contract).
+  - Revisit [05_PROJECTS §3a](../mfb-rdm-docs/05_PROJECTS.md) at the same time: project
+    folders are researcher-owned and non-authoritative *because* the system cannot yet offer
+    enough value to justify demanding compliance. A system that earns more trust may earn a
+    different boundary — but it must move by agreement, not by a tool assuming it.
+
+## 🔹 Per-user access logging: the feasibility study is done; nothing is switched on (2026-10-05)
+
+**Asked by Ryan, 2026-10-05:** can per-user access be logged on the gjesus3 share and the web apps
+(Finder, Project Manager)? The study is [`access_logging_feasibility.md`](access_logging_feasibility.md);
+every claim in it is tagged as documented, from the repo, or inferred.
+
+- **The NAS: yes.** QuLog Center's SMB access log records user, PC, path and action. It covers the
+  whole NAS, cannot be limited to one folder, and slows file transfer slightly. The NAS administrator
+  switches it on; the repo points to institute IT.
+- **The Finder: no.** It is a static HTML file opened over SMB; only the file read is visible.
+  Serving it over HTTP with Windows sign-in would change that.
+- **The Project Manager: not today.** It is a local program per PC that writes provenance rows only.
+  An audit log stamped with the Windows username is about a day's work; the planned server-era app
+  gets identity for free.
+- **Before any of them:** the DPO's sign-off, a retention limit, and notice to staff and their
+  representatives (GDPR Art. 5, 13, 30, 35; LOPDGDD art. 87; Estatuto de los Trabajadores art. 64.5(f)).
+
+- [ ] Ryan's choice, when he wants one. The study lists four options (ask IT read-only questions;
+  open the DPO conversation; fix the purpose; a short NAS trial with a forwarded copy) and makes no
+  choice.
+
+## Server-era identity — logged-in user drives ownership + edit rights (2026-08-11)
+
+Context: a **dedicated RDM server for gjesus3 is expected in ~2 months (≈ Oct 2026)**. All
+the tool code goes live there and the current per-tool `.exe`s are **redesigned as one web
+app** — the ingest front-ends and the Project Manager GUI stop being separate downloads.
+Until then, tools are built to be *as similar as possible* so combining them later is
+cheap (see [`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)).
+
+The single capability the exe era cannot have: **an exe on a shared workstation does not
+know who is sitting at it.** A server does.
+
+- [ ] **Use the logged-in user for project ownership and edit rights.** Once there is a
+  server with real sessions:
+  - **`owner` on create becomes automatic** — stamped from the logged-in user instead of
+    typed by hand. (Today it is free text, and the live registry shows the cost: `jguser`
+    and `Jguser` are the same person recorded two ways, alongside `NMR-platform`,
+    `NI-platform`, `MBC`, `AUA`, `zeiss` — a mix of people, platforms and accounts in one
+    column.) Keep `owner` an ordinary editable field until then, so this needs no
+    migration — just a better default.
+  - **Who may edit which project** becomes checkable: owner (and the Data Office) can edit;
+    others read. Today the Project Manager GUI can only offer *"anyone with access may
+    edit anything"*, which is acceptable for a small trusted group and will not scale.
+  - **Provenance `creator` stops being a prompt.** Every import currently has to *ask* who
+    is doing it (handoff §4.3); with a session it is known. This is the field most likely
+    to be filled in carelessly, so it is the one that benefits most.
+  - Consider whether the same identity should feed the registry `researcher` / `operator`
+    columns at ingest, rather than the config's `operator:` key.
+  - *Depends on:* the server actually landing, and a decision on the auth source (AD /
+    institute SSO / local accounts). Related: the internal-web-serving capability already
+    proven on this workstation, and `02_INFRASTRUCTURE` for where the server sits.
+
+## Project Manager GUI — deferred scope (2026-08-11)
+
+Context: the **Project Manager GUI** (built 2026-08-12; see
+[`10_TOOLS §5.3`](../mfb-rdm-docs/10_TOOLS.md)) gives researchers a front-end to edit
+project fields, create projects, and import data into them. Two capabilities were
+**deliberately left out** of that tool and parked here.
+
+- [ ] **🔽 LOW — Rename a project.** The GUI can edit `description` / `owner` / `status` /
+  `notes`, but **not `name`**, because since 2026-08-02 the project's `name` **is its
+  folder name, verbatim** (see [`05_PROJECTS §2a`](../mfb-rdm-docs/05_PROJECTS.md) —
+  ✅ DECIDED). A rename is therefore not a cell edit; it is a migration touching at least:
+  the folder on the NAS; `registry_projects.csv` (`name` **and** `folder_location`);
+  every `registry_raw.csv` row whose `project_id` points at it (the id is stable, so this
+  may be zero work — confirm); the project's `provenance.csv` (`output_path` values are
+  project-relative, so probably safe — confirm); the per-project `index.html`; and any
+  `.lnk` / documentation referencing the old path. Hard links themselves survive a parent
+  rename (they are directory entries, not paths), so `raw_linked/` should be fine — but
+  that must be **verified on the live SMB share**, not assumed. There is a precedent to
+  copy: `tools/migrate_project_naming.py` renamed 48 folders during the 2026-08-02 cut.
+  *Why low:* renames are rare, the Data Office can do one by hand with that script, and a
+  half-correct self-service rename is far worse than no rename.
+
+- [ ] **🔸 MEDIUM — Define what `status = closed` actually does.** The GUI exposes a status
+  dropdown (`active` / `paused` / `closed` per the
+  [`05_PROJECTS §4`](../mfb-rdm-docs/05_PROJECTS.md) lifecycle), but today setting
+  `closed` **only changes a string in the registry** — nothing else happens. That is a gap
+  with real consequences, because §4.x and §5 already say deletion is **blocked** until
+  close-out preserves study-level metadata into `/raw/`, and §5 is ✅ DECIDED. Open
+  questions, all needing a Data Office answer before anything is built:
+  - Does closing **freeze** the project (read-only ACLs, no further imports), or is it
+    just a label? A student flipping a dropdown should probably not be able to freeze a
+    shared folder.
+  - What does closing do about the **close-out preservation step** (§4.x) — block the
+    status change until it has run, warn, or queue the project for the Data Mgmt Lead?
+    The close-out tool itself does not exist yet.
+  - Is `closed` reversible in the GUI, or one-way once close-out has run?
+  - **Evidence, 2026-09-30.** The 2026-07-14 close-out marked 8 projects `closed`, but closed
+    projects keep receiving data:
+    - an operator ingested **18 new AxioScan sections into `AE-biomaGUNE-1019` on 2026-09-29**
+      through the GUI;
+    - the NI pull added **70 CT to `AE-biomaGUNE-0219` on 2026-08-13**.
+
+    The ingest ignores `status` and simply writes links into the folder. **6 of the 8 closed
+    projects still have folders**, but their older links are gone (`1019`: 58 links for 479
+    acquisitions). Ryan: *"I probably should not have closed those projects… this may happen a few
+    times."* **A reopen tool (`tools/reopen_project.py`) is being built on
+    `feat/drives-microscopy-ingest`** to reopen `0219` and `1019` before the drives ingest. It sets
+    the status back to active, recomputes the dates from the acquisitions, and recreates the missing
+    hard links. **This argues that closing on "newest acquisition older than 3 years" is premature
+    for protocols whose data is still surfacing,** because historical data from drives and shares
+    keeps arriving. `0320` and `1519` (both closed) are next, in the drives' MRI stream.
+    **Decided 2026-09-30 (Ryan): reopen case by case,** when a closed project's data arrives. The
+    other closed projects are not reopened wholesale.
+  - Should closing set a `closed_date` / `outcome`? `_project.yaml` already has both
+    fields (`closed_date`, `outcome`, `promoted_to`); `registry_projects.csv` has
+    **neither** — so recording them means either a projects-registry schema change or
+    accepting that the YAML is the only home.
+  - **Live precedent to respect:** 8 projects are already `closed`, and 3 of them
+    (`PROJ-0003`, `PROJ-0008`, `PROJ-0009`) have had their folders **deleted** — closed
+    with no folder is a normal end state, and any tooling must not treat it as corruption.
+  *Why medium:* the dropdown ships before this is answered, so the gap is live the moment
+  the tool is in researchers' hands.
 
 ## True-production restart — subsystem review (correction pass 2026-06-11)
 
@@ -586,6 +2586,12 @@ no subject by design). Three deferred items:
 
 ## Facility-DB null project alias → `-None` subject ids (2026-06-13)
 
+> **Status 2026-08-17: the gjesus3 side is CLOSED** — ingest hardened, detector shipped,
+> and all 444 production rows repaired (see the ticked boxes). **One box remains open and
+> it is not ours to close:** the facility DB itself still has four projects with a null
+> `projectAlias`. Nothing depends on it any more — it is a data-quality ask, kept here so
+> it is not forgotten.
+
 Found during the MRI ingest: `animal_db.lookup` returns `facility_animal_id =
 "<animal>-AE-biomaGUNE-None"` for **projects whose facility-DB record has a null
 project alias** (animals resolve fine — `status=found`, species/sex correct; only
@@ -601,14 +2607,80 @@ surface during the **no-DICOM regeneration pass** unless fixed first. Ryan is
 emailing the animal facility (2026-06-13) to populate the alias for those 4 project
 records. The gap **recurs for any future ingest** touching null-alias projects.
 
-- [ ] **Harden the ingest:** when the DB returns a project found but with a null
-  alias, fall back to the operator/parse project (`discovered.project_code` via
-  the project name) when composing `facility_animal_id`, instead of emitting `-None`.
-  One-line guard in `animal_db.compose_subject_id` callers / `enrichment.py`.
-- [ ] **Fix the source:** ask the data office to populate the project alias for
-  `1521` / `0619` / `0618` (and audit for other null-alias projects) in the facility DB.
-- [ ] **Detector:** a quick `validate_registries` check for any `subject_ids`
-  containing `-None` (catch future occurrences automatically).
+- [x] **Harden the ingest — DONE 2026-08-14** (branch `fix/subject-id-null-alias`).
+  `animal_db._query_subject` composes from the alias the **caller** asked for when the
+  DB row's `projectAlias` is null, and `compose_subject_id` now **raises** rather than
+  return a plausible-looking `-None` string. `ingest/enrichment.py` catches that refusal
+  and degrades to a blank facility id, so the non-blocking contract
+  ([`08_METADATA §4.7`](../mfb-rdm-docs/08_METADATA.md)) still holds and no ingest can
+  break on it. Pinned by `tools/test_subject_id_null_alias.py`.
+- [ ] **Fix the source — THE ONE OPEN ACTION, and it is external to this repo.** Ask the
+  animal facility to populate `projectAlias` on the four project records that carry a
+  populated `project_code` and a **NULL alias** — **`0219` / `0618` / `0619` / `1521`** —
+  and to audit for any others. (Ryan first emailed them 2026-06-13; it has not happened.
+  `0219` was missing from this list until 2026-08-17 and is the **largest** of the four:
+  330 of the 444 repaired rows.)
+  - **Nothing is blocked on it.** `animal_db` composes from the alias the *caller* asked
+    for, so a null DB alias can no longer produce a bad id, and `validate_registries`
+    would ERROR if one ever reappeared.
+  - **What changes if they do it:** the fallback stops being exercised for these four and
+    the DB becomes self-consistent — useful for anyone querying the facility DB directly,
+    which our code no longer is. **No re-ingest or backfill would be needed.**
+  - **If they decline or it stalls:** close this box as *won't-fix*. That is a legitimate
+    outcome — the code defends itself either way.
+- [x] **Detector — DONE 2026-08-14.** `validate_registries` now reports a null-alias
+  facility id as an **ERROR**, in both `registry_raw.subject_ids` and
+  `registry_subjects.csv` ([`10_TOOLS §3.2`](../mfb-rdm-docs/10_TOOLS.md)). Measured
+  live the same day: **574 ERRORs and nothing else** — 444 acquisition rows + 65 subject
+  rows (×2 findings each), matching the audit below exactly. The 75 blank-alias DTS24
+  human subjects are correctly out of scope.
+- [x] **Back-fill — DONE IN PRODUCTION 2026-08-16.** One-shot `tools/recover_subject_ids.py`:
+  444 sidecars + 444 registry rows repaired, 43 subject rows inserted, the 65 stale `-None`
+  rows dropped → `registry_subjects.csv` 1,146 → **1,124** (25 corrected ids already had
+  rows, so the upsert merged them — the handoff's predicted 1,149 was wrong). All gates
+  passed: `validate_registries` **0 errors**, both sides of the `23-` collision distinct and
+  matching the facility DB, a second `--apply` changing 0 bytes, sidecars byte-identical
+  apart from the repaired field in **both** line-ending classes. Registries backed up
+  off-NAS and verified byte-identical first. Narrative:
+  [`../CHANGELOG.md`](../CHANGELOG.md) 2026-08-16.
+
+### 🔸 MODERATE — re-audited live 2026-08-13, and it has grown
+
+Measured against production: **444 rows in `registry_raw.csv`** carry a `subject_ids` of
+the form `<n>-AE-biomaGUNE-None`, plus **65 rows in `registry_subjects.csv`** with
+`project_alias = 'None'` (the literal string). By project — **exactly the four null-alias
+codes this item already named**, so the defect class is unchanged, only its reach:
+
+| Project | rows | by instrument |
+|---|---:|---|
+| `AE-biomaGUNE-0219` | 330 | MRI 260 · CT 70 |
+| `AE-biomaGUNE-0618` | 67 | MRI 67 |
+| `AE-biomaGUNE-1521` | 45 | PET 23 · CT 21 · MRI 1 |
+| `AE-biomaGUNE-0619` | 2 | ZWSI 2 |
+
+Two things worth reading off that table:
+
+- **The prediction in this item came true.** It warned that `0219` had 0 ingested
+  acquisitions and *"will surface during the no-DICOM regeneration pass unless fixed
+  first."* It was not fixed first, and `0219` is now the largest group at 330.
+- **The 452-row back-fill recorded above no longer holds** — 328 MRI rows carry `-None`
+  today. Either it was undone by the later regeneration/backfill passes or it never
+  covered these rows. Re-measure before re-running rather than trusting the earlier count.
+
+The **`S:\gnuclear` NI backfill (2026-08-13) added 114** of the 444 — `0219` ×70 and
+`1521` ×44, i.e. exactly the two null-alias codes that appear in that source. Not a
+regression from that work: the anchored-`LIKE` fix it shipped changed *which project*
+resolves, not *how the identity is composed*, and the old unanchored form resolved these
+same two codes just as well. This is `animal_db._query_subject` composing
+`facility_animal_id` from `proj["projectAlias"]` when the project was resolved through
+`project_code` — the one field that is null.
+
+**Severity: the row is not wrong, the identifier is malformed.** `project_id` is correct,
+the animal is correctly identified, and species/sex/DOB are right — it is the composed
+subject-id string that is unusable, so this is a cosmetic-but-corrosive defect rather than
+wrong data. It is safe to fix in place with the deferred-recovery pattern
+(`recover_subject_metadata.py`), and the correct value is recoverable without touching the
+DB at all: `project_id` → project name → the `NNNN` after `AE-biomaGUNE-`.
 
 ---
 
@@ -640,7 +2712,7 @@ they simply land as skipped placeholders.
   marked `no-source` — if a ParaVision-reconstruction path is ever built, those
   are its candidate input (they have raw k-space but no `2dseq`).
 
-## MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14)
+## MRI project link-name collisions — same-animal/same-day multi-session (2026-06-14) — ✅ superseded 2026-10-05 by the 🔺 link-collision item (its two `0219` pairs were repaired)
 
 **Priority: LOW (data-safe; near-term MRI template fix).** Found
 during the no-DICOM regen relink (`tools/relink_mri_regen.py`, 2026-06-14): the MRI
@@ -657,7 +2729,8 @@ backfilled exams' studies remain link-less because of exactly this collision —
 `MRI_m23_0219_20220124_3_1` (ACQ-20220124-MRI-003 vs -008); in each pair the
 second acquisition has no project link of its own (the relink correctly skipped
 rather than merged — frame counts matched, so no data was mixed). Fix these two
-when the link-name template fix lands. Same run also found and repaired **510
+when the link-name template fix lands. *(2026-09-30: `tools/reopen_project.py` hit the same
+collisions when it reopened `0219`. It reported 4 and left them alone, as it should.)* Same run also found and repaired **510
 pre-existing empty link shells** the 2026-06-14 relink had left behind.
 
 Measured on the 3,297-acq imaging regen batch: **3,097 distinct names → 144

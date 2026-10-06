@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import find_acq  # noqa: E402
+from ingest import project_ids as pids  # noqa: E402  (the ;-separated project cell)
 
 # The SMB share UNC works on any locked-down machine regardless of drive-letter
 # mapping; override with --link-base if your share is reached differently.
@@ -49,8 +50,18 @@ def _winpath(base, rel):
     return base.rstrip("/\\") + "\\" + rel.strip("/\\").replace("/", "\\")
 
 
-def _payload(records, link_base):
-    """Curated per-record dict embedded in the page (display + search + paths)."""
+def _payload(records, link_base, scope=None):
+    """Curated per-record dict embedded in the page (display + search + paths).
+
+    `scope` (per-project pages only): the `registry_projects.csv` entry for the
+    project this page belongs to — ``{folder, name, owner, desc, status}``. An
+    acquisition can now belong to SEVERAL projects (`project_id` is a `;`-list),
+    so the project-scoped fields have to say WHICH project they mean. On a
+    project page they mean *this* project; on the global index they fall back to
+    the record's first project. The `project` column always shows the whole
+    list — that an acquisition is shared is worth seeing.
+    """
+    scope = scope or {}
     out = []
     for r in records:
         raw = r.get("_raw_path", "")
@@ -68,10 +79,11 @@ def _payload(records, link_base):
             "size": r.get("file_size_mb", ""),
             "sample_type": r.get("sample_type", ""),
             "proj_short": r.get("_project_name", ""),
-            "proj_owner": r.get("_project_owner", ""),
-            "proj_desc": r.get("_project_desc", ""),
+            "proj_owner": scope.get("owner") or r.get("_project_owner", ""),
+            "proj_desc": scope.get("desc") or r.get("_project_desc", ""),
             "path": _winpath(link_base, raw),
-            "proj_path": _winpath(link_base, r.get("_project_folder", "")),
+            "proj_path": _winpath(
+                link_base, scope.get("folder") or r.get("_project_folder", "")),
             "meta_path": _winpath(link_base, raw.rstrip("/") + "/metadata.json") if raw else "",
             "s": r.get("_search", ""),
             # detail-only extras:
@@ -253,8 +265,8 @@ render();
 """
 
 
-def render_html(records, link_base, title):
-    payload = _payload(records, link_base)
+def render_html(records, link_base, title, scope=None):
+    payload = _payload(records, link_base, scope=scope)
     # ensure_ascii=False keeps it compact + readable; escape "</" so a notes value
     # containing "</script>" can't break out of the embedded script block.
     data = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
@@ -273,18 +285,23 @@ def _write(path, html):
     print(f"  wrote {path}  ({len(html)//1024} KB)")
 
 
-def _project_match_keys(rec0, pid):
-    """Lower-cased identifiers that should match a project group: its PROJ-id
-    (the stored project_id value), its name, and its folder basename. Lets a
-    caller pass whichever it has — the resolved PROJ-id, the project's name, or
-    the folder name. Under the folder-==-name rule the last two converge, but
-    both are kept so a pre-migration folder name still matches.
+def _project_match_keys(pinfo, pid):
+    """Lower-cased identifiers that should match a project group: its PROJ-id,
+    its name, and its folder basename. Lets a caller pass whichever it has — the
+    resolved PROJ-id, the project's name, or the folder name. Under the
+    folder-==-name rule the last two converge, but both are kept so a
+    pre-migration folder name still matches.
+
+    Reads the project's OWN registry entry (`pinfo`), not a member record's
+    derived `_project_*` fields: those now carry `;`-joined lists across every
+    project an acquisition belongs to, which would make `--project X` match a
+    group it has nothing to do with.
     """
     keys = {pid.strip().lower()}
-    name = (rec0.get("_project_name") or "").strip().lower()
+    name = (pinfo.get("name") or "").strip().lower()
     if name:
         keys.add(name)
-    folder = (rec0.get("_project_folder") or "").replace("\\", "/").strip().strip("/")
+    folder = (pinfo.get("folder") or "").replace("\\", "/").strip().strip("/")
     if folder:
         base = folder.split("/")[-1].lower()
         keys.add(base)
@@ -293,21 +310,28 @@ def _project_match_keys(rec0, pid):
     return keys
 
 
-def _write_per_project(records, link_base, nas, out, only=None):
+def _write_per_project(records, proj_idx, link_base, nas, out, only=None):
     """Write each project's scoped index.html.
 
     only=None      -> every project (the --per-project sweep).
     only={ids...}  -> ONLY the projects matching those identifiers (targeted
                       mode); the caller does NOT write the global index.
 
-    Groups by the stored project_id (a PROJ-XXXX). Projects with no
-    folder_location, and closed projects (folder deleted at close-out), are
-    skipped. Returns the list of project ids actually written.
+    Groups by EACH stored project id. `project_id` is a `;`-separated list
+    (2026-08-11), so an acquisition in two projects is emitted into BOTH groups.
+    Grouping on the whole cell instead would form a bogus `"PROJ-0001;PROJ-0007"`
+    group and the acquisition would appear in NEITHER project's index — i.e.
+    adding an acquisition to a second project would silently delete it from the
+    index of the project it was already in.
+
+    Projects with no folder_location, and closed projects (folder deleted at
+    close-out), are skipped. Returns the list of project ids actually written.
     """
     by_proj = defaultdict(list)
     for r in records:
-        pid = (r.get("project_id") or "").strip()
-        if pid:
+        for pid in (r.get("_project_ids")
+                    if r.get("_project_ids") is not None
+                    else pids.split_project_ids(r.get("project_id"))):
             by_proj[pid].append(r)
 
     want = {v.strip().lower() for v in only if v and v.strip()} if only is not None else None
@@ -318,26 +342,33 @@ def _write_per_project(records, link_base, nas, out, only=None):
 
     matched, written = set(), []
     for pid, recs in sorted(by_proj.items()):
+        # The project's own registry entry — authoritative for its folder, name
+        # and status. A group whose id isn't in registry_projects.csv at all is
+        # a dangling reference; skip it loudly rather than guessing a path.
+        pinfo = proj_idx.get(pid)
+        if pinfo is None:
+            print(f"  skip {pid}: not in registry_projects.csv")
+            continue
         if want is not None:
-            hit = _project_match_keys(recs[0], pid) & want
+            hit = _project_match_keys(pinfo, pid) & want
             if not hit:
                 continue
             matched |= hit
-        folder = recs[0].get("_project_folder", "")
+        folder = pinfo.get("folder", "")
         if not folder:
             print(f"  skip {pid}: no folder_location in registry_projects.csv")
             continue
         # Closed = retention close-out: the registry row survives (so the
         # acquisitions stay findable in the global index) but the folder is
         # gone. Writing here would resurrect the folder we deliberately deleted.
-        if recs[0].get("_project_status") == "closed":
+        if pinfo.get("status") == "closed":
             print(f"  skip {pid}: status=closed (folder deleted)")
             continue
-        name = recs[0].get("_project_name", "")
+        name = pinfo.get("name", "")
         title = f"gjesus3 Finder — {pid}" + (f" ({name})" if name else "")
         out_path = (os.path.join(out, pid, "index.html") if out
                     else os.path.join(nas, folder.lstrip("/"), "index.html"))
-        _write(out_path, render_html(recs, link_base, title))
+        _write(out_path, render_html(recs, link_base, title, scope=pinfo))
         written.append(pid)
 
     if want is not None:
@@ -364,7 +395,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     nas = os.path.normpath(args.nas_root)
-    records, _ = find_acq.build_records(nas)
+    # proj_idx is no longer discarded: with `project_id` a `;`-list, the
+    # per-project writer resolves each group's folder/name/status from the
+    # project's OWN registry row rather than from a member record.
+    records, proj_idx = find_acq.build_records(nas)
     print(f"Finder: {len(records)} acquisitions (nas={nas}, link_base={args.link_base})")
 
     # Targeted mode: regenerate ONLY the named project(s); skip the global index.
@@ -373,8 +407,8 @@ def main(argv=None):
     # for (or racing on) the full ~18 MB global rebuild. The scheduled job keeps
     # the global index fresh.
     if args.project:
-        written = _write_per_project(records, args.link_base, nas, args.out,
-                                     only=set(args.project))
+        written = _write_per_project(records, proj_idx, args.link_base, nas,
+                                     args.out, only=set(args.project))
         print(f"targeted refresh: wrote {len(written)} project index(es)")
         return 0
 
@@ -385,7 +419,8 @@ def main(argv=None):
 
     # Per-project scoped indexes (all projects).
     if args.per_project:
-        _write_per_project(records, args.link_base, nas, args.out, only=None)
+        _write_per_project(records, proj_idx, args.link_base, nas, args.out,
+                           only=None)
     return 0
 
 

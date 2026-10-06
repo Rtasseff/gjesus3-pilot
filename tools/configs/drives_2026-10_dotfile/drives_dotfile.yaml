@@ -1,0 +1,47 @@
+# Historical microscopy drives -- the one hidden dot-file .czi (close-out plan Step 5 item 2, "one raw
+# one-off"): drive1_FRIO-X6 `Cell observer\Laura\Cell observer\Interaccion-LS-SPN\.LS-SPN-20x-8.czi`,
+# CELL (Axio Observer.Z1 / 7), 61,442,880 bytes, sha256 59060c38...225e, acquired 2024-01-25.
+#
+# HAND-WRITTEN from tools/configs/drives_2026-09/drives_B14.yaml, the batch that ingested its 40
+# siblings in the same folder (CELL-noproject). Same per-file rules (cases_dotfile.csv): no claim ->
+# blank project, researcher `Laura`, operator blank.
+#
+# Why a separate config: the engine's glob skips dot-files, so the main ingest listed it in
+# excluded.csv (reason hidden-dotfile). staging_dir is a one-file HARD-LINK farm on D: (same volume as
+# the staged copy, no bytes copied) in which the file is named LS-SPN-20x-8.czi -- the gap in the
+# folder's LS-SPN-20x-1..13 series. original_name therefore reads `.../LS-SPN-20x-8.czi`; the true
+# drive name is in the notes. The staged copy is never modified. Build the farm with:
+#   python tools/drive_staging/nonraw_placement.py dotfile-farm
+# Record: tasks/drives_nonraw_placement_review.md.
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/scratch_drives-nonraw-placement/farm_dotfile"
+  pattern: "**/*.czi"
+  case_table:
+    file: cases_dotfile.csv
+    on_missing: error
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.drv_subject_alias}"
+    animal_code:   "${discovered.drv_subject_animal}"
+
+registry:
+  instrument:           CELL
+  data_ecosystem:       MICROSCOPY
+  instrument_model:     discovered.czi_microscope_name
+  modalities_in_study:  NA
+  researcher:           discovered.drv_researcher
+  data_source:          internal
+  sample_id:            discovered.drv_sample_id
+  sample_type:          discovered.drv_sample_type
+  acquisition_datetime: discovered.czi_acquisition_datetime
+  project_name:         discovered.drv_project
+  notes:                discovered.drv_notes
+
+operator: discovered.drv_operator
+
+link_filename: "${discovered.drv_link_name}"

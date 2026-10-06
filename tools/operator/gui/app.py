@@ -90,6 +90,9 @@ value_fields = importlib.import_module(f"{core.__name__}.value_fields")
 # offered only discovered.* keys (+ 3 hard-coded builder extras), so those fields
 # were undraggable even though they resolve fine at ingest.
 from ingest import resolver as _resolver  # noqa: E402
+# Shared folder-listing backend (tools/filebrowse.py) — the counterpart of the
+# shared static/folder_browser.js, used by this app and the Project Manager.
+import filebrowse  # noqa: E402
 
 # Fixed ${...} tokens offered as palette chips in BOTH the builder and runner
 # (unioned with each folder's discovered.* keys). Sourced from the resolver so
@@ -141,14 +144,27 @@ MRI_LABEL = "Internal MRI (Bruker ParaVision)"
 _MRI_MODEL_MAP = {"7T": "Bruker BioSpec 7T", "11.7T": "Bruker BioSpec 11.7T"}
 # discovered.* fields offered as link-name palette chips (the scan-name +
 # protocol fields the mri_bruker template exposes), plus resolver-supplied extras.
+# `study_time` (HHMM of the study folder's YYYYMMDD_HHMMSS_ prefix) is the per-study
+# part of the default link name since 2026-10-05: without it two studies of one
+# animal on one day collide (the ingest refuses the second).
 MRI_LINK_PALETTE_KEYS = [
-    "mri_exam_number", "mri_recon_indices", "mri_sequence_name",
+    "mri_exam_number", "mri_recon_indices", "study_time", "mri_sequence_name",
     "animal_num", "project_code", "mri_study_name",
 ]
 # The full fixed resolver-context token set (same as the microscopy palette),
 # so the MRI "Project link name" offers original_name / instrument / … too — not
 # just the four it used to hard-code. Sourced from the resolver (LINK_TOKEN_EXTRAS).
 MRI_LINK_PALETTE_EXTRAS = LINK_TOKEN_EXTRAS
+# discovered.* fields offered as PROJECT-NAME palette chips — deliberately a
+# SUBSET of the link-name palette, and with no resolver extras at all. A link
+# name wants per-scan uniqueness; a project name wants per-scan GROUPING, so the
+# exam / recon / sequence fields are withheld (they differ per acquisition and
+# would mint one project per scan), as are ${acq_id} / ${original_name} for the
+# same reason. ${project_name} / ${project_id} are excluded because they are
+# post-Step-9.5 values — referencing them here would be circular.
+MRI_PROJECT_PALETTE_KEYS = [
+    "project_code", "animal_num", "pi_initials", "jrc_id", "mri_study_name",
+]
 
 # --- MRI remote-pull (SFTP) source ------------------------------------------
 # Pull ParaVision study folders off the acquisition console over SFTP, then
@@ -504,77 +520,21 @@ def api_recipes_dir():
     })
 
 
-# Names that are never an ingest target and only clutter the browser.
-_BROWSE_HIDE = {"system volume information", "$recycle.bin", "$recycle.bin"}
-
-# Cap the entries returned for one folder (a huge data dir would bloat the page).
-_BROWSE_LIMIT = 3000
-
-
-def _list_drives():
-    """Available drive roots (Windows) or '/' (POSIX), for the browser's jump bar."""
-    if os.name == "nt":
-        import string
-        return [f"{c}:\\" for c in string.ascii_uppercase if os.path.exists(f"{c}:\\")]
-    return ["/"]
-
-
 @app.route("/api/listdir", methods=["POST"])
 def api_listdir():
     """List one local folder for the in-page folder browser.
 
-    The tkinter directory chooser shows ONLY folders (so every folder looks
-    empty, which confused operators). Instead we render our own browser: this
-    returns the folder's subfolders AND files (files are shown greyed, for
-    context only), plus the parent + drive list to navigate. Local app, so
-    listing the local filesystem is fine.
-
-    `desc` flips the name order (Z->A). Instrument source folders are named by
-    date (…/AxioScan/20260522), so reverse-name IS newest-first — the same
-    reasoning as the SFTP exam list below. The sort is done HERE, before the
-    _BROWSE_LIMIT cap, so a reversed view of a huge folder shows its true LAST
-    entries; reversing the truncated list in the browser would silently show the
-    wrong end.
+    The listing itself lives in `tools/filebrowse.py` — the backend counterpart
+    of the shared `static/folder_browser.js`, so this app and the Project
+    Manager cannot drift on sort order or the entry cap (the same reason the JS
+    component was unified). See that module for why the sort happens
+    server-side, before the cap.
     """
     data = request.get_json(silent=True) or {}
-    raw = (data.get("path") or "").strip()
-    desc = bool(data.get("desc"))
-    path = os.path.abspath(raw) if raw else os.path.expanduser("~")
-
-    out = {"path": path, "parent": None, "entries": [], "desc": desc,
-           "drives": _list_drives(), "error": None, "truncated": False}
-
-    if not os.path.isdir(path):
-        out["error"] = f"Not a folder: {path}"
-        path = os.path.expanduser("~")
-        out["path"] = path
-
-    parent = os.path.dirname(path)
-    out["parent"] = parent if parent and os.path.normpath(parent) != os.path.normpath(path) else None
-
-    try:
-        entries = []
-        with os.scandir(path) as it:
-            for e in it:
-                if e.name.lower() in _BROWSE_HIDE:
-                    continue
-                try:
-                    is_dir = e.is_dir()
-                except OSError:
-                    is_dir = False
-                entries.append({"name": e.name, "is_dir": is_dir})
-        # Case-insensitive name order (flipped by `desc`), then a STABLE pass
-        # that lifts folders above files — so the grouping never flips, only the
-        # name order does.
-        entries.sort(key=lambda x: x["name"].lower(), reverse=desc)
-        entries.sort(key=lambda x: not x["is_dir"])
-        if len(entries) > _BROWSE_LIMIT:
-            out["truncated"] = True
-            entries = entries[:_BROWSE_LIMIT]
-        out["entries"] = entries
-    except OSError as ex:
-        out["error"] = str(ex)
-    return jsonify(out)
+    return jsonify(filebrowse.list_folder(
+        data.get("path"), desc=bool(data.get("desc")),
+        with_size=bool(data.get("with_size")),
+    ))
 
 
 @app.route("/api/value_fields")
@@ -756,6 +716,7 @@ def api_preview():
         "n_already_ingested": result.n_already_ingested,
         "n_dropped": result.n_dropped,
         "dropped": result.dropped,
+        "unparsed": result.unparsed,
         "blocking_errors": result.blocking_errors,
         "warnings": result.warnings,
         "cases": [_case_to_dict(c) for c in result.cases],
@@ -1073,6 +1034,15 @@ def _dicomifier_status():
         return False, None
 
 
+def _mri_template_project_name():
+    """The MRI template's own `registry.project_name` expression ("" if unset)."""
+    try:
+        tpl = templates.load_template(MRI_KEY)
+    except Exception:  # noqa: BLE001 — a comparison must never break an ingest
+        return ""
+    return ((tpl.get("registry") or {}).get("project_name") or "").strip()
+
+
 def _mri_overrides(data):
     """Assemble the config_builder override dict from the MRI page inputs.
 
@@ -1081,7 +1051,9 @@ def _mri_overrides(data):
       model         -> registry.instrument_model ("7T" / "11.7T")
       project_mode  -> "auto" (template default, per animal-protocol code) |
                        "fixed" (one specific project) | "none" (no project/links)
-      project_name  -> the one project's name, when project_mode == "fixed"
+      project_name  -> the project-name template, when project_mode == "fixed";
+                       fixed text and/or ${discovered.*} refs, resolved PER SCAN
+                       (so one run can file scans into several projects)
       link_filename -> the project-link-name template, when project_mode != "none"
       regenerate    -> bool; False sets ingest.auto_regenerate_dicom: false
     """
@@ -1097,7 +1069,18 @@ def _mri_overrides(data):
     if mode == "none":
         ov["registry.project_name"] = ""              # -> no project, no links
     elif mode == "fixed":
-        ov["registry.project_name"] = (data.get("project_name") or "").strip()
+        name = (data.get("project_name") or "").strip()
+        ov["registry.project_name"] = name
+        # The template's auto-create description states the project came from an
+        # animal-protocol code. Once the operator names projects some other way
+        # that sentence is written into every project it creates, and it is no
+        # longer true — so say what actually happened instead. Only when the
+        # expression really differs from the template's own default.
+        if name and name != _mri_template_project_name():
+            ov["auto_create_project.description"] = (
+                "Auto-created from internal MRI ingest; project name set by the "
+                "operator at ingest. PROVISIONAL project_name — see 05_PROJECTS §9."
+            )
     # mode == "auto": leave the template's AE-biomaGUNE-${discovered.project_code}
     if mode != "none":
         link = (data.get("link_filename") or "").strip()
@@ -1120,6 +1103,7 @@ def mri_index():
         models=sorted(_MRI_MODEL_MAP),
         palette_keys=MRI_LINK_PALETTE_KEYS,
         palette_extras=MRI_LINK_PALETTE_EXTRAS,
+        project_palette_keys=MRI_PROJECT_PALETTE_KEYS,
     )
 
 
@@ -1166,6 +1150,7 @@ def api_mri_preview():
         "n_already_ingested": result.n_already_ingested,
         "n_dropped": result.n_dropped,
         "dropped": result.dropped,
+        "unparsed": result.unparsed,
         "blocking_errors": result.blocking_errors,
         "warnings": result.warnings,
         "cases": cases,

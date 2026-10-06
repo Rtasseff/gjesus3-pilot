@@ -214,6 +214,14 @@ already uses — see the `animal_facility_db_metadata` design / `tools/ingest/en
 
 ### Validated grammar (from real MFB-group subject folders in the snapshot)
 
+> **⚠️ This grammar describes the archive AS IT IS, not what we will ask for going forward.**
+> It is deliberately permissive because the historical data demanded it — and that permissiveness
+> is what allowed the PROJ-0056 misattribution on 2026-08-19: `r` is documented below as a *rat*
+> prefix, but one researcher used `r1`/`r2`/`r3` for *reconstructions*, and no grammar can tell
+> them apart. A strict forward-looking value standard is proposed in
+> [`subject_naming_standard.md`](subject_naming_standard.md) (❓ EVALUATING). **Keep the grammar
+> below as the record of what the rescue faced**; do not treat it as the target state.
+
 ```
 <subject_label> = [<project code> <sep>] <animal-list> [<sep> <timepoint>]   |   phantom<...>
 
@@ -640,6 +648,9 @@ is shared and mostly **already exists**.
 
 ## 9. Related
 
+- [`subject_naming_standard.md`](subject_naming_standard.md) — ❓ **EVALUATING**: the proposed
+  forward-looking *value* format for the hand-typed folder levels described here. This document
+  says what the layout **is**; that one says what we would ask researchers to **type**.
 - [`internal_ni_data_handling_workflow_notes.md`](internal_ni_data_handling_workflow_notes.md) — archive-mode (implemented); the inside-the-acquisition keep/drop rules and the `ni:` sidecar shape this doc reuses.
 - [`nuclear_imaging_platform_description.md`](nuclear_imaging_platform_description.md) — equipment/vendor spec (Molecubes + MILabs VECTor).
 - `tools/templates/instruments/molecubes_ni.yaml` — archive-mode template (the live variant derives from it).

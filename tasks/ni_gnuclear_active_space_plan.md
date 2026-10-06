@@ -1,6 +1,10 @@
 # Plan — ingest historical NI from the **active working space** `S:\gnuclear`
 
-**Status:** PLAN — ✅ Phase 0 (inventory) DONE; **QUEUED FOR EXECUTION AFTER RYAN'S REVIEW.**
+**Status:** **PHASES 0–2 DONE, PHASE 1 BUILT + TESTED, 2026-08-12.** Branch
+`feat/ni-gnuclear-historical` (worktree `gjesus3-dev\ni-gnuclear-historical`, off **`main`
+`5e9ab44`**). D-A/D-B/D-D/D-E/D-F are **decided — see §-2**; only **D-G** (§0.6) is open, and
+it gates just the 655 held-back acquisitions. **Next gate: a scale run into
+`J:\gjesus3-sandbox` (Phase 3) before any production batch.**
 **High priority — we WILL do this in some capacity** (Ryan, 2026-06-25); deferred only so it doesn't
 block the in-flight **documentation refactor** and to allow more review of the details. Do **not** drop
 it. **Created:** 2026-06-25. **Author:** Data Office (Ryan + agent).
@@ -8,6 +12,176 @@ it. **Created:** 2026-06-25. **Author:** Data Office (Ryan + agent).
 **Goal:** fill in *more* historical Nuclear-Imaging data by reading the messy active working space
 `S:\gnuclear` (years → `Jesus\` → user folders), beyond the single `gnuclear2$\2025\Jesus\Irene`
 slice already in production (132 acqs).
+
+---
+
+## ⚠️ SUPERSEDED BY REVIEW, 2026-08-13 — read `REVIEW_FINDINGS_2026-08-13.md` first
+
+Ryan's review found the blocking defect below. **Two figures in this document are now wrong:**
+
+- **The 1,657 / 655 split in §0.6 and the "72% resolved a project code" figure measure PATH
+  PARSING, NOT CORRECTNESS.** They counted how often a 3–4 digit code was *found*, not whether it
+  was a real animal-ethics protocol. **21 of the 25 projects that split would have created in
+  production were fabricated** — `2302` is the date folder `230217`; `245`, `100`, `241` are animal
+  numbers. Each would have become a project folder, registry rows, and `subject_ids` like
+  `r1-AE-biomaGUNE-230`.
+- **That contradicted this plan's own rule** (§0.6 D-G: "an AE code is a regulatory identifier and
+  must not be invented") — 655 acquisitions were held back for exactly the reason 114 others were
+  waved through with a guessed code.
+
+**Fixed 2026-08-13.** Codes are now validated against the animal-facility DB, and a wrong one is
+repaired by walking up whole path segments to the first valid code. **Current true numbers:**
+
+| | |
+|---|---|
+| ingest | **1,508** (1,409 already valid + **99 recovered**) |
+| held back | **673** (658 + **15 rejected** as not real protocols) |
+| already in production | 131 |
+| **new projects created** | **4** — `0324`, `0421`, `1024`, `1122`, all DB-verified (was 25, of which 21 fabricated) |
+
+Independent confirmation: **93 of 93 recovered `(project, animal)` pairs resolve in the facility
+DB.** Batches `211217`, `Kepa` and `Alba` vanish entirely — every one of their acquisitions was
+under a fabricated code.
+
+---
+
+## §-2. WHERE IT ACTUALLY STANDS (2026-08-12 evening) — read this first
+
+**The data is staged and the ingest is built and tested. Nothing has been written to
+production.**
+
+| | |
+|---|---|
+| **Snapshot** | `J:\gjesus3-data\staging\ni_gnuclear_20260812\` — **2,485 files / 286.3 GB**, pulled read-only off `S:\gnuclear`, **0 failures**, per-file sha256 in `_manifest.jsonl`, `--verify` re-read in progress |
+| **Ready to ingest** | **1,508** acquisitions (2,312 total − 131 already in production − **673** held back) — see the ⚠️ below; the 1,526/655 split is SUPERSEDED |
+| **Proven** | full ingest end-to-end on a throwaway NAS: 3 acquisitions incl. a 4-frame dynamic PET → correct `.data/`, registry rows, packed multi-animal `subject_ids`, **live animal-DB hits**, project auto-create, hard links, provenance |
+| **Idempotency** | re-run = 0 cases, exit 0, registry unchanged |
+| **Tests** | `tools/test_ni_flat.py` **20/20**, plus all **19** pre-existing suites green |
+| **✅ PHASE 3 PASSED** | **227/227** (`Itziar`, 2024+2025, 19.9 GB) into `J:\gjesus3-sandbox-ni20260812` — see below |
+| **Not done** | **Phase 4 production, batch by batch — needs Ryan's explicit go-ahead** |
+
+### Phase 3 scale run — PASSED 2026-08-12
+
+Cohort `Itziar` (227 acquisitions, 19.9 GB, project `1123`, spanning 2024 **and** 2025 — so it
+exercises the cross-year case).
+
+| Check | Result |
+|---|---|
+| batch | **227 success / 0 failed / 0 ERROR** |
+| registry | 227 rows, **227 distinct `acq_id`, 227 distinct `original_name`** — no duplicates |
+| on disk | 227 acquisition folders + 227 `.data/`, box-compatible `recon<N>.dcm` naming |
+| checksums | `checksum_present=Y` on all 227 |
+| subjects | 70 rows in `registry_subjects.csv`; **1** acquisition flagged `source=unknown` (its path has no subject folder — flagged, not guessed) |
+| project links | **227 hard links** under `AE-biomaGUNE-1123/raw_linked/` |
+| pending queues | **none created** — every DB lookup and every hard link succeeded |
+| `validate_registries` | **0 errors**, 227 warnings, all the intended `condition.is_control` null sentinel |
+| idempotency | re-run → **0 cases, exit 0, still 227 rows** |
+
+⚠️ **The shared `J:\gjesus3-sandbox` is unusable until migrated.** Its `registry_raw.csv` header
+still carries `project_hint` (renamed to `project_id` on 2026-08-02), so
+`registry.assert_header_compatible` refuses to append. It failed at the *first* case having
+written nothing — the guard working correctly. This run used a clean
+`J:\gjesus3-sandbox-ni20260812\` rather than mutating a sandbox another session may own.
+
+### Decisions taken (Ryan, 2026-08-12: "stop deciding, move it forward")
+
+- **D-A proceed** with `S:\gnuclear`. **D-D** everything under `…\Jesus\` in scope, no allow-list.
+  **D-E** primary DICOM only; derivatives are a later pass.
+- **D-B/D-F → per-recon**, conforming to what `feat/ni-live-hardening` landed. Explicitly **not**
+  an override of that branch: where the shared grammar needed widening (`RAT63`), it was
+  normalised in the new tool instead of editing `ni_live_discover.ANIMAL_RE`.
+- **D-G is the only one left** and it is not blocking — see §0.6.
+
+### The three new pieces
+
+| File | Role |
+|---|---|
+| `tools/pull_ni_gnuclear.py` | read-only, resumable, checksummed staging of the DICOMs |
+| `tools/ni_gnuclear_discover.py` | read-only review table (Phase 2 vetting) |
+| `tools/ingest/ni_flat.py` + `copy_ni_flat` + `molecubes_ni_gnuclear.yaml` | the ingest path |
+
+Surgery in shared code is deliberately tiny and opt-in: ~20 lines in `expand_batch` behind
+`ni_gnuclear_flat`, one `elif` in the copy dispatch. **`_build_dedupe_index` is untouched** — the
+canonical dedup comes from setting `original_name` to the acquisition key — so the merge conflict
+surface against `feat/ni-live-hardening` is close to nil (§-1c).
+
+---
+
+## §-1. UNPARKED 2026-08-12 — read this before §0 (it supersedes "wait for the live branch")
+
+This plan was parked behind `feat/ni-live-hardening`, which has been stuck at its **on-box
+merge gate** for ~5 weeks and is now waiting on summer availability. **We stopped waiting.**
+Four things established on 2026-08-12:
+
+### (a) There was never a technical dependency
+
+The live branch's open gate is **Gate 3, and it is Mac-only**: `registries/pending_links.csv`
+carrying `ENOTSUP` / `darwin` rows, which *can only be produced on the NI Mac* because
+`os.link` fails over its SMB mount. **This pull runs Windows `S:\gnuclear` → `J:\`, where hard
+links are proven** (already noted in the 2026-08-06 update, point 3). Gates 1/2/4 all pass
+locally. Nothing this plan needs is gated on a person returning from vacation.
+
+Everything §1 lists as "reuse, do not rebuild" is **already on `main`**: `ingest_raw.py`'s
+downstream half (registry, packed `subject_ids`, subjects table, project hard-link),
+`ni_live_discover.parse_subject` (the live branch only added `resolve_root` — `parse_subject`
+is untouched), `ingest/locking.py`, `ingest/csv_safe.py`.
+
+### (b) Branch off `main`, NOT off `feat/ni-live-hardening`
+
+`main` had moved **17 commits** past the live branch's last rebase base, and three of them
+matter to a ~2,000-acquisition bulk ingest:
+
+| Commit | Why it matters here |
+|---|---|
+| `83fa170` | **`project_id` became a semicolon-separated list** in the registry |
+| `680b96a` | one project per acquisition; project folders are researcher-owned |
+| `253ac0d` / `be932b9` | the Project Manager GUI merged (new `tools/manager/`) |
+
+Phase 1 must be written against **that** registry schema. Branching off the live branch would
+also have made this work un-mergeable until the box test happens — importing exactly the
+dependency we set out to shed.
+
+**This branch therefore does NOT contain** the live-sync hardening: `--live` mode, the
+per-researcher corrections CSV, `fanout_ni_recons`, `NI_LIVE_RUNBOOK.md`. Do not assume they
+are here. `tasks/RESUME_ni_live.md` is on `feat/ni-live-hardening` only.
+
+### (c) One shared construction site — `tools/ingest/config.py`
+
+Phase 1 item 4 (canonical dedup) edits `_build_dedupe_index` and `expand_batch`.
+`feat/ni-live-hardening` **already** inserted `fanout_ni_recons` immediately after
+`_build_dedupe_index` and edited `expand_batch` in two places. A textual conflict when the
+second of the two branches merges is likely. It is small and resolvable — but **whoever merges
+second owns it**, and neither branch should refactor that file beyond what it needs.
+
+### (d) ⚠️ D-F — a design conflict the plan below does not know about (settle before Phase 1 code)
+
+**§0.5 point 3 and Phase 1 item 1 below say: group all recon `.dcm` of one
+`(timestamp, modality)` into ONE acquisition.** `feat/ni-live-hardening` landed the
+**opposite** for live NI: **one acquisition per reconstruction**
+(`config.fanout_ni_recons`, `original_name = <anchor>/recon_<idx>`, commit `fdc9448`,
+docstring: *"decided 2026-06-25"*). The two decisions were made the same day and never saw
+each other.
+
+**Why this is not cosmetic.** The whole point of the canonical
+`(acquisition_datetime, instrument)` key is that the *same physical scan* read from
+`S:\gnuclear`, from `gnuclear2$`, or from the live box **reconciles to one row**. If live
+fans out to N per-recon rows and this pull emits 1 grouped row, that key collapses N against
+1 — it breaks the exact reconciliation it was built for.
+
+**Recommendation: this pull follows the per-recon model.** The filename's `_0` / `_1` suffix
+(`20240115133604_PET_OSEM_0.dcm`, `..._1.dcm`) **is** the reconstruction index — grouping and
+fanning-out cost the same to write. Then:
+
+- one acquisition per `(timestamp, modality, recon_idx)`, `.data/` holding that one `.dcm`;
+- the canonical dedup key becomes `(acquisition_datetime, instrument, recon_idx)`;
+- **this also resolves D-B** (§6) — the "MVP one-`.dcm`-per-scan shortcut" stops being a
+  shortcut and becomes the wrong shape.
+
+Open question inside D-F: the 132 archive rows already in production were ingested
+*pre-per-recon* — confirm what their `recon_idx` is (probably absent) before relying on the
+3-tuple key to dedup against them. **Verify in Phase 3 against a seeded copy, not in prod.**
+
+---
 
 > ## ⓘ UPDATE 2026-08-06 — what moved underneath this plan (read before resuming)
 > A doc refactor + the NI live-hardening work landed while this was parked. **None of the
@@ -144,6 +318,74 @@ recon files; the distinct-acquisition count above already collapses them.)
      under `Jesus\`. Confirm scope: is everything under `…\Jesus\` in-scope by construction, or do we
      still allow-list? Also loose `.dcm` at the 2023 `Jesus\` root + the 2022 extra `MOLECUBES\` level
      need handling (variable depth — discover by recursive filename match, not fixed depth).
+
+---
+
+## 0.6 PHASE 0 RE-RUN + PHASE 2 RESULTS (2026-08-12) — measured, not estimated
+
+Re-walked the whole share and ran the new review tool over every acquisition. **The answer to
+"can we get this data" is YES.** Numbers below are measured against the live share on
+2026-08-12, and they *confirm* §0.5's headline (2,124 distinct scans) while correcting three
+of its structural claims.
+
+### Volume (final)
+
+| | |
+|---|---|
+| `.dcm` under `<year>/Jesus/` | **2,700** |
+| matching the reconstruction grammar | **2,690** (the 10 rejects are derivatives — `ATTMAP`, `CT_PET_coreg`, `-suv`) |
+| distinct **scans** `(timestamp, modality)` | **2,124** — exactly §0.5's figure, independently reproduced |
+| distinct **acquisitions** `(timestamp, modality, algo, recon_idx)` | **2,312** ← the per-recon unit (D-F) |
+| files to stage after dedup | **2,485** |
+| bytes | **286.3 GB** |
+| already in production | **132 NI rows, 131 of which overlap** — gnuclear is a near-superset |
+
+### Three corrections to §0.5
+
+1. **`recon_N/` folders DO exist here.** §0.5 concluded "zero anchor directories, zero
+   `recon_N/`" from a 2024+2025 sample. 2022–2023 contain 13 box-shaped
+   `<14digit>_<MOD>/recon_N/frame_N/iter_30/` trees (135 files). The flat layout is still
+   overwhelmingly dominant (2,565 of 2,700), and **one rule covers both**: discover by
+   *filename*, not by folder shape.
+2. **The same reconstruction is copied into many folders** — 47 acquisitions appear in more
+   than one directory, one of them in **48**. Keying identity on the directory would have
+   produced ~370 duplicate rows *from this source alone*, before any cross-source concern.
+   Six acquisitions are duplicated across two different **year** folders, so per-year batching
+   cannot dedup independently — identity must be global and directory-independent.
+3. **`frameMULTI` must not be skipped unconditionally.** The box copy always drops those
+   bundles because per-frame DICOMs sit beside them. Here **63 reconstructions have a
+   `frameMULTI` file and nothing else** — a blanket skip would have silently lost that dynamic
+   PET. Rule adopted: drop the bundle only when per-frame siblings exist (9 dropped, 65 kept).
+
+### Phase 2 — how well does the messy tree parse?
+
+`tools/ni_gnuclear_discover.py` (read-only) over all 2,312:
+
+> ⚠️ **The two rows below are SUPERSEDED — they measure path parsing, not correctness.**
+> A "resolved" code was often a date or an animal number. True figures after DB validation:
+> **1,508 ingest / 673 held back / 4 new projects.** See the banner at the top of this file.
+
+| Outcome | Count | Read |
+|---|---|---|
+| ~~project code resolved automatically~~ | ~~1,657 (72%)~~ | **found a 3–4 digit code — 114 of them fabricated** |
+| no project code in the path | **655 (28%)** | needs input — see below |
+| `species-unknown` | 1,802 | **benign** — folder says `15`, not `m15`; the facility DB carries species |
+| `project<-parent` | 1,140 | **benign** — this is the designed recovery path, not a defect |
+| `unparsed` token | 307 | descriptive folder words (`68Ga`, `Gated`, `highres`) |
+| `no-animals` | 167 | no animal number in the subject folder |
+| date disagreement | 13 | genuine typed-date-vs-machine-date mismatches |
+| loose at `<year>/Jesus/` root | 3 | no researcher folder at all |
+
+**The 655 are not malformed.** Those researchers filed by **study/tracer name instead of
+animal-protocol code** — `FDG`, `Starget`, `cancer`, `metalak`, `ionp`, `Flurpiridaz`, `FTHA`,
+`fapi`, `nanoclusters`, `Dieta cetogenica` — across **73 `(researcher, series)` groups**, and
+**75% of them still parse their animal numbers**. One mapping line per group closes it; the top
+12 groups alone cover 55%.
+
+→ **D-G (new, blocks the second half only).** AE protocol codes are **regulatory identifiers
+and must not be invented**, so this needs real values from the researchers or the Data Office.
+Ingest the **1,657** now and hold the 655 pending that table — nothing about ingesting the
+clean set makes the rest harder later, because dedup is on the machine timestamp.
 
 ---
 
@@ -284,7 +526,13 @@ one-acq-many-recons shape. Decide in D-B.
   and ~2,000 acqs is the bulk of the group's history; pursue `gnuclear3` in parallel for the durable copy.
 - **D-B — full grouping vs MVP?** Group all recon `.dcm` of a scan into one acquisition (matches the box;
   recommended) **vs** the MVP one-`.dcm`-per-`(timestamp,modality)` shortcut. Either way the canonical
-  dedup is required.
+  dedup is required. ⚠️ **Largely superseded by D-F** — "matches the box" is no longer true; the box
+  path now fans out one acquisition per reconstruction.
+- **D-F — grouping vs per-recon (NEW 2026-08-12, blocks Phase 1).** `feat/ni-live-hardening`
+  landed **one acquisition per reconstruction** for live NI, contradicting §0.5 pt 3 / Phase 1 pt 1
+  here. Mixed granularity breaks the canonical dedup key that is supposed to reconcile the two
+  sources. *Recommendation: follow per-recon; key on `(acquisition_datetime, instrument, recon_idx)`.*
+  Full reasoning in **§-1(d)**.
 - **D-C — first cohort?** Recommend one clean **net-new** year/user (e.g. `2024\Jesus\Ermal` or
   `2025\Jesus\Claudia`) to prove value without touching the 2025/Irene overlap.
 - **D-D — scope rule?** Everything under `…\Jesus\` in-scope by construction, or keep an allow-list

@@ -1,17 +1,31 @@
 "use strict";
 
-/* folder_browser.js — the in-page folder browser modal, shared by BOTH pages.
+/* folder_browser.js — the in-page folder browser modal, shared by ALL pages.
  *
  * Was copy-pasted into app.js (microscopy) and mri.js; the two copies were
  * near-verbatim and drifting was only a matter of time, so the component lives
- * here once and both pages load it. Each page still owns its own copy of the
- * MARKUP (#fb-overlay … in index.html / mri.html) — same ids on both.
+ * here once and every page loads it — the ingest app's two pages and the
+ * Project Manager. Each page still owns its own copy of the MARKUP
+ * (#fb-overlay … in index.html / mri.html / manager index.html) — same ids on
+ * all of them. Its backend counterpart is tools/filebrowse.py.
+ *
+ * TWO MODES, one component:
  *
  *   browseInto(inputEl, "Select the source folder", (chosenPath) => { … });
+ *     pick a FOLDER. Files are listed greyed, for context only. This is what
+ *     every ingest field uses and its behaviour is unchanged.
+ *
+ *   browseFiles(inputEl, "Choose files to copy", (paths) => { … });
+ *     pick FILES. Files get checkboxes; folders still navigate. The selection
+ *     is a BASKET that survives navigation, so files can be gathered from more
+ *     than one folder in a single trip — which is what someone assembling
+ *     "the files I want in my project" actually does. `inputEl` may be null
+ *     (there is nothing sensible to write into a single text box); the chosen
+ *     paths arrive through the callback.
  *
  * Unlike the OS folder-only dialog (which made every folder look empty), this
- * lists folders AND greyed files for context: click a folder to open it, then
- * "Use this folder". A LOCAL app, so /api/listdir lists the local filesystem.
+ * lists folders AND files. A LOCAL app, so /api/listdir lists the local
+ * filesystem.
  *
  * SORT ORDER. The header strip flips the name order. Instrument source folders
  * are named by date (…\AxioScan\20260522), so Z->A is newest-first — which is
@@ -28,8 +42,9 @@
  * has since gone away falls back to home SILENTLY and is forgotten — a stale
  * memory is not the operator's mistake and must not look like an error.
  *
- * Exposes: window.browseInto. Deliberately declares NOTHING in global scope
- * beyond that — app.js and mri.js already define $, esc, postJSON there.
+ * Exposes: window.browseInto and window.browseFiles. Deliberately declares
+ * NOTHING else in global scope — app.js and mri.js already define $, esc,
+ * postJSON there.
  */
 (function () {
   const q = (sel) => document.querySelector(sel);
@@ -40,11 +55,11 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  async function listdir(path, desc) {
+  async function listdir(path, desc, withSize) {
     const r = await fetch("/api/listdir", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path, desc }),
+      body: JSON.stringify({ path, desc, with_size: !!withSize }),
     });
     let data = null;
     try { data = await r.json(); } catch (e) { /* non-json */ }
@@ -95,30 +110,77 @@
     overlay: q("#fb-overlay"), list: q("#fb-list"), pathInp: q("#fb-path"),
     drives: q("#fb-drives"), err: q("#fb-error"), title: q("#fb-title"),
     sortBtn: q("#fb-sort"), sortArrow: q("#fb-sort-arrow"),
+    selectBtn: q("#fb-select"), hint: q(".fb-foot .muted"),
     target: null, cur: "", parent: null, onPick: null,
     sortDesc: loadSortDesc(),
+    // File-pick mode. `picked` is a Map(path -> {name, size}) that SURVIVES
+    // navigation, so files can be gathered from several folders in one trip.
+    files: false, picked: new Map(),
   };
   if (!fb.overlay) return;   // page without the browser markup — nothing to wire
 
-  function browseInto(input, title, onPick) {
-    if (!input) return;
-    fb.target = input;
+  // The folder-mode wording, captured once so file mode can borrow the footer
+  // and folder mode can always put it back.
+  const FOLDER_LABEL = fb.selectBtn ? fb.selectBtn.textContent : "Use this folder";
+  const FOLDER_HINT = fb.hint ? fb.hint.textContent : "";
+
+  function open_(input, title, onPick, files) {
+    fb.target = input || null;
     fb.onPick = onPick || null;
-    fb.title.textContent = title || "Select a folder";
+    fb.files = !!files;
+    fb.picked = new Map();
+    fb.title.textContent = title || (files ? "Choose files" : "Select a folder");
     fb.err.textContent = "";
     fb.overlay.hidden = false;
+    renderFoot();
     // Where to open. The box's own value wins — it is the most specific thing
-    // the operator has said. Otherwise reopen where this button was last left,
+    // the user has said. Otherwise reopen where this button was last left,
     // which across app restarts saves re-clicking down the same tree every
     // morning. Falling through to "" lets the backend pick the home folder.
-    const own = input.value.trim();
+    const own = input && input.value ? input.value.trim() : "";
     if (own) { fbLoad(own); return; }
     const remembered = loadLastDirs()[targetKey()];
     // `remembered: true` — a folder that has since been moved, renamed or
-    // unmounted must NOT greet the operator with an error; it silently drops
-    // back to the home folder and the stale memory is discarded.
+    // unmounted must NOT greet the user with an error; it silently drops back
+    // to the home folder and the stale memory is discarded.
     if (remembered) fbLoad(remembered, { remembered: true });
     else fbLoad("");
+  }
+
+  function browseInto(input, title, onPick) {
+    if (!input) return;                    // folder mode writes into a box
+    open_(input, title, onPick, false);
+  }
+
+  function browseFiles(input, title, onPick) {
+    open_(input, title || "Choose files", onPick, true);
+  }
+
+  function fmtSize(n) {
+    if (n == null) return "";
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0, v = n;
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return (i === 0 ? v.toFixed(0) : v.toFixed(1)) + " " + u[i];
+  }
+
+  function renderFoot() {
+    if (!fb.selectBtn) return;
+    if (!fb.files) {
+      fb.selectBtn.textContent = FOLDER_LABEL;
+      fb.selectBtn.disabled = false;
+      if (fb.hint) fb.hint.textContent = FOLDER_HINT;
+      return;
+    }
+    const n = fb.picked.size;
+    fb.selectBtn.textContent = n ? `Use these ${n} file${n === 1 ? "" : "s"}`
+                                 : "Use these files";
+    fb.selectBtn.disabled = n === 0;
+    if (fb.hint) {
+      fb.hint.textContent = n
+        ? `${n} file${n === 1 ? "" : "s"} chosen — you can keep browsing; the list is kept.`
+        : "Click a folder to open it. Tick the files you want.";
+    }
   }
 
   function joinPath(base, name) {
@@ -147,7 +209,7 @@
     renderSortHeader();
     let data;
     try {
-      data = await listdir(path, fb.sortDesc);
+      data = await listdir(path, fb.sortDesc, fb.files);
     } catch (e) {
       fb.list.innerHTML = "";
       if (remembered) { forgetDir(key); fbLoad(""); return; }   // stale memory: just go home
@@ -171,6 +233,15 @@
     (data.entries || []).forEach((e) => {
       if (e.is_dir) {
         items.push(`<div class="fb-item dir" data-name="${esc(e.name)}"><span class="ic">📁</span><span>${esc(e.name)}</span></div>`);
+      } else if (fb.files) {
+        // File-pick mode: a tickable row. `checked` is read from the basket so
+        // navigating away and back does not lose what was already chosen.
+        const full = joinPath(fb.cur, e.name);
+        const on = fb.picked.has(full) ? " checked" : "";
+        items.push(`<label class="fb-item pick" data-name="${esc(e.name)}" data-size="${e.size == null ? "" : e.size}">` +
+          `<input type="checkbox"${on}><span class="ic">📄</span>` +
+          `<span class="fb-fname">${esc(e.name)}</span>` +
+          `<span class="fb-fsize muted">${esc(fmtSize(e.size))}</span></label>`);
       } else {
         items.push(`<div class="fb-item file"><span class="ic">📄</span><span>${esc(e.name)}</span></div>`);
       }
@@ -181,6 +252,19 @@
     qa("#fb-list .fb-item.dir").forEach((el) => {
       el.addEventListener("click", () =>
         fbLoad(el.dataset.path || joinPath(fb.cur, el.dataset.name)));
+    });
+    qa("#fb-list .fb-item.pick").forEach((el) => {
+      const box = el.querySelector("input");
+      box.addEventListener("change", () => {
+        const full = joinPath(fb.cur, el.dataset.name);
+        if (box.checked) {
+          fb.picked.set(full, { name: el.dataset.name,
+                                size: el.dataset.size === "" ? null : +el.dataset.size });
+        } else {
+          fb.picked.delete(full);
+        }
+        renderFoot();
+      });
     });
     if (data.error) {
       // A missing folder is answered with the home folder AND an error string.
@@ -194,12 +278,19 @@
     }
   }
 
-  function fbClose() { fb.overlay.hidden = true; fb.target = null; fb.onPick = null; }
+  function fbClose() {
+    fb.overlay.hidden = true;
+    fb.target = null; fb.onPick = null;
+    fb.files = false; fb.picked = new Map();
+    renderFoot();                      // always hand the modal back in folder mode
+  }
 
   function fbSelect() {
-    const chosen = fb.cur, input = fb.target, cb = fb.onPick;
+    const input = fb.target, cb = fb.onPick, files = fb.files;
+    const chosen = files ? Array.from(fb.picked.keys()) : fb.cur;
+    if (files && !chosen.length) return;    // the button is disabled anyway
     fbClose();
-    if (input) {
+    if (input && !files) {
       input.value = chosen;
       input.dispatchEvent(new Event("input"));
       input.dispatchEvent(new Event("change"));
@@ -227,4 +318,5 @@
   renderSortHeader();
 
   window.browseInto = browseInto;
+  window.browseFiles = browseFiles;
 })();
