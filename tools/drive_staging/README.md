@@ -11,8 +11,16 @@ and verified, its `files\` tree is a normal local staging source for
 `ingest_raw.py` / the operator GUI.
 
 *Adopted 2026-09-28 from `D:\projects\gjesus3\staging\_tools\` (`stage_copy` 1.1,
-2026-09-22), where it was written for the historical microscopy drives. The
-files here are byte-identical to that copy.*
+2026-09-22), where it was written for the historical microscopy drives.
+**Updated 2026-10-06 to `stage_copy` 1.5 (2026-09-30)**, the version hardened while
+the third drive was staged (621,969 files, 1,681 GB). That D: staging area was erased
+on 2026-10-05, so **this repo is now the master copy**; the hub's copy on the NAS,
+`J:\gjesus3-data\staging\historical_drives_records\_tools\`, is a record only. The
+three files here equal that record once line endings are normalised (the repo checkout
+is CRLF, the NAS files LF). `stage_copy.py` has SHA-256
+`6dd398c1bcb8522c448787d672ae4da8597169f416fec433e3f29cb671ed8151`; the two `.ps1`
+files are unchanged since 1.1. **Use this copy, not 1.1:** see
+[What changed since 1.1](#what-changed-since-11).*
 
 | File | Admin? | What it does |
 |------|--------|--------------|
@@ -36,11 +44,20 @@ python stage_copy.py verify        D:\...\staging\drive1_<label>   # re-hash <ou
 - **`inventory`** reads metadata only. `summary.txt` says whether the drive fits
   on the destination and estimates the copy time. Run it first.
 - **`copy`** is resumable. Re-running it copies only what is not yet in
-  `manifest.csv` with the same size and mtime. It does **not** retry reads: a
-  failing file goes to `errors.csv` and is skipped, so a weak drive is not
-  hammered. Re-run to retry just those files.
-- **`verify`** needs only the destination. Its last line is `VERIFY PASS` or
-  `VERIFY FAIL`, and any problems are listed in `verify_problems.csv`.
+  `manifest.csv` with the same size and mtime. Each file is read **once**. Files of
+  16 MB and over are copied first, one at a time in tree order; then the smaller
+  files, across 16 workers. A failed read is **tried 3 times** (pauses of 2 s, then
+  4 s), so a transient stall (antivirus, USB bus contention) recovers instead of
+  losing the file. A file that still fails goes to `errors.csv` and is skipped. If
+  **25 files fail in a row** the run stops (`CIRCUIT BREAKER` in the log, exit code 3),
+  so a dying drive is not hammered: check the drive, then re-run the same command.
+  A re-run retries only the files that failed or were not reached. If it stops again
+  at the same files, they are failing for a reason that is not the drive (for example a
+  name the destination cannot hold): read `errors.csv`. The limit is
+  `CONSECUTIVE_FAIL_LIMIT` at the top of `stage_copy.py`.
+- **`verify`** needs only the destination, and hashes it with 16 workers. Its last
+  line is `VERIFY PASS` or `VERIFY FAIL` (exit code 0 or 1), and any problems are
+  listed in `verify_problems.csv`.
 - It keeps Windows awake while it runs (no admin needed).
 
 ## What to know before trusting a staged copy
@@ -54,8 +71,84 @@ python stage_copy.py verify        D:\...\staging\drive1_<label>   # re-hash <ou
 - **`Unreadable entries` in `summary.txt` means the walk could not read
   something** (a folder or a file's metadata). Those entries are never copied.
   Check them in `inventory.csv` (type `E`) before the drive goes back.
+- **`stage_copy.py` only reads the source.** Everything it writes (the copy, the
+  manifest, the logs) goes under the output folder you give it, so give it a folder
+  on a **different** disk, never inside the source: it does not check.
+  `test_stage_copy.py` checks the rest (the source tree is unchanged, and each file
+  is opened once, for reading).
+- **Before the drive goes back, check three things.** `verify` only vouches for
+  files that are in the manifest. A file that could not be read at all is in neither
+  the manifest nor the copy, so `verify` passes without it. (1) The last `copy` run
+  ends `DONE ... errors 0`; `copy` exits 0 even when files failed, so read that line.
+  (2) `copy.log` has no `UNREADABLE ENTRY` lines (folders the walk could not list;
+  they are not counted in `errors`). (3) `verify` ends `VERIFY PASS`. `errors.csv` is
+  a history: re-runs append to it and never remove a row.
+- **Three folders at the root of the drive are skipped silently**, and are not in
+  `inventory.csv`: `System Volume Information`, the Recycle Bin (`$RECYCLE.BIN` or
+  `$Recycle.Bin`) and `found.000`. The same names deeper in the tree are copied. The
+  Recycle Bin can hold files the owner deleted and `found.000` holds fragments that
+  `chkdsk` recovered, so if either is on a drive, look at it by hand before the drive
+  goes back.
+- **A NAS destination works, with one known difference.** The third drive was staged to the
+  NAS share root, outside `gjesus3-data`. The NAS is **not byte-faithful for macOS
+  AppleDouble files** (`._*`). On the third drive, seven `._.DS_Store` files read back
+  different from what was written to `J:` (4,096 bytes written, 368 read: the QNAP
+  folds AppleDouble data into extended attributes). A local disk is faithful: a copy
+  to D: matched the source exactly. So when the destination is the NAS, `verify`
+  reports such files as `CHECKSUM MISMATCH`; that is the tool being strict, and
+  correctly. If you see it, compare those files with the source drive (size and
+  SHA-256) **before the drive is released**. They hold macOS metadata, not file
+  content; the seven carried nothing of research value.
+- **Known limit: a source filename that is not valid Unicode** (a lone UTF-16
+  surrogate, for example an emoji cut in half by the 255-character name limit) cannot
+  be written to the UTF-8 manifest. `copy` copies the bytes but logs a
+  `UnicodeEncodeError`, the file never enters the manifest, the run ends `errors 1`
+  but `errors.csv` stays empty, and `verify` stops with a traceback after it has hashed
+  everything. Found by a test probe while reviewing 1.5; it should be rare. If it
+  happens, do not release the drive: ask the Data Office.
 - `lock_usb.ps1` treats **C: and D:** as the system disks it must never touch.
   On another workstation, check that line first.
+
+## What changed since 1.1
+
+The command line is **unchanged**: the same three modes and arguments, and no new
+options. The tunables are constants at the top of `stage_copy.py`, not options
+(`CHUNK`, `READ_ATTEMPTS`, `RETRY_PAUSE`, `CONSECUTIVE_FAIL_LIMIT`, `COPY_WORKERS`,
+`VERIFY_WORKERS`, `PARALLEL_MAX_BYTES`). What the modes do changed in four steps, each
+forced by something that happened while the third drive was staged (the hub's notes and
+records: 621,969 files, 1,681 GB, 2026-09-29/30):
+
+1. **1 MB reads, 3 attempts, a circuit breaker (1.2).** Reads were 8 MB and a failing
+   file was tried once. Now a transient stall recovers, a bad sector still gives up
+   quickly, and a failing drive stops the run instead of being hammered.
+2. **Two passes over the file list (1.3).** Big files first, one at a time, then the
+   small ones across 16 workers (each file is still read once). The single-threaded
+   copy was projected at about 14 h; this took about 6.9 h of wall clock, a crash and
+   a resume included.
+3. **Nothing one file does can kill the run (1.4).** A macOS `._Icon` + U+F00D file
+   failed to copy; the retry handler logged its name to a cp1252 console; the resulting
+   `UnicodeEncodeError` is not an `OSError`, so it escaped the worker and killed all 16
+   threads at 88 % of the copy. Now both log sinks (the console and the `.log` file)
+   cannot raise, stdout and stderr are forced to UTF-8, and any exception on one file is
+   logged and that file skipped. `errors.csv` rows now carry the error type
+   (`PermissionError: ...`).
+4. **Parallel `verify` (1.5).** 16 workers instead of one: 55 to 103 MB/s on the third
+   drive (4.6 h for the whole drive).
+
+Also new since 1.1: the root skip list above, and exit code 3 from `copy` (the circuit
+breaker). Unchanged: `copy` exits 2 when the destination is too small (checked before any
+file is copied), and `verify` exits 0 on PASS and 1 on FAIL. `catalog.py` and
+`ingest_plan.py` import `CHUNK` and the manifest helpers from `stage_copy.py` (and
+`catalog.py` its `Log`), so they now hash in 1 MB reads (was 8 MB) and `catalog.py`'s log
+is encode-proof too; their tests pass.
+
+Tests (a temporary folder stands in for the drive, so no real drive or NAS is needed;
+Windows only): `python tools/drive_staging/test_stage_copy.py`. It checks that the source
+is only read, each file is opened once, the manifest and every SHA-256, resuming, `verify`
+failing on a corrupted, a missing and a stray file, the retries, the circuit breaker and
+the unprintable filename above, and the command line. It cannot test a real drive: the
+`R:` drive-root argument, USB stalls and bad sectors, `lock_usb.ps1`, SMB or NAS
+destinations, or throughput.
 
 ## Per-file catalog (`catalog.py`)
 
