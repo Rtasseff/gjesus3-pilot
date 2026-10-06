@@ -34,7 +34,8 @@ production. · **Date:** 2026-10-06 · **Branch:** `feat/drive3-mri` (worktree `
 2. **Not registered: 71 exams** (29 spectroscopy, 3 k-space with no reconstruction, 39 never acquired), **45
    reconstructions** that exist as `2dseq` only beside registered DICOM ones, and the **other copies** of m175/m178 (the
    second reconstruction) and of `jrc200305_m34_flow/4`. They are listed for stream P's second batch,
-   `out\for_stream_P.csv` (§8 M-c): 3,773 of those 3,830 files are in no stream's plan today.
+   `out\for_stream_P.csv` (§8 M-c): 3,773 of those 3,830 files are in no stream's plan today. **They are now planned
+   and dry-run as the second placement batch P2 (§12)**, with the pig masks from holding into `CNIC-HEARDS`.
 3. **The identity of every exam was proven against live production, three ways.** (a) None of the 3,309 `original_name`s
    (`<study>/<exam>`, or X1's `<study>__<exam>`) is in the registry today. (b) **The dedup proof:** every exam of the
    drive that production already holds (3,965 in 232 studies), staged and dated exactly as the batches are, was
@@ -62,7 +63,7 @@ production. · **Date:** 2026-10-06 · **Branch:** `feat/drive3-mri` (worktree `
    `CNIC-HEARDS`** as `XMRI`, `collaborator:CNIC`, *Sus scrofa*, no subject id. Every header was read: **no sign of
    human data** (patient name and id are the pig codes). The row unit is settled (§9.2). The masks are placed by stream P's
    2b tool after the project exists (§9.6, planned, not run).
-9. **Suite: 38/38 suites pass** (no shared code changed; this branch adds scripts, configs, case tables and this record).
+9. **Suite: 39/39 suites pass** (on `main` merged in; the one shared-code change is P2's opt-in `keep_despite_name` in `p_plan.py`, with its test).
 
 ---
 
@@ -519,3 +520,101 @@ All under `D:\projects\gjesus3\drive3_streams\mri\`; read-only on `J:` and `K:` 
 | `mri_13_subject_check.py` | every subject id, looked up now | `subject_check.csv` |
 | `mri_15_validate_new.py` | the validator, findings on the new rows apart | `validate_*.txt` |
 | `mri_20_pig_probe.py`, `mri_21_pig_rows.py` | the pig headers; the row staging and case table | `pig_series.csv`, `pig_probe.txt`, `pig_rows.csv`, `pig_not_registered.csv` |
+| `mri_16_p2_lists.py` | P2's input lists for stream P's tool (§12) | `out\p2\p2a_handover.csv`, `p2b_handover.csv`, `p2b_mapping.csv`, `p2b_unmapped_pig.csv` |
+
+---
+
+## 12. The second placement batch, P2 (planned and dry-run; nothing copied)
+
+Asked by the coordinator on 2026-10-06 (§8 M-c, M-d): the raw MRI stream M does not register, the pig folder's 31 loose
+files, and the pig masks from the holding folder into `CNIC-HEARDS`, through **stream P's tool as merged on `main`**
+(`d7ee770`; merged into this branch). Copy-only; the coordinator approves the windows (production plan, "Who may
+approve"). Inputs: `out\p2\` from `mri_16_p2_lists.py`, built from `out\for_stream_P.csv` (3,830 files).
+
+### 12.1 What goes where
+
+| Part | Files | Route | Result of the plan (dry runs) |
+|---|---:|---|---|
+| **P2a** the MRI files | 3,754 | `p_plan.py handover` (stream M) → `nonraw_placement.py copy` / `holding` | **2,919 to place** in `AE-biomaGUNE-0118` (2,393), `-0619` (440), `-1019` (86), 1.83 GB; **56 to holding** (the 2021 `1019` MRS exams, project-less as their image exams, STATUS D6); 602 `already-in-holding` and 33 `duplicate-copy` (bytes already there; not copied); **144 refused, all by design**: 57 already decided by stream P's first batch, 87 `desktop.ini`. Longest path 193 (holding 240), 0 over budget, 0 destinations present. Planned twice: byte-identical manifests |
+| **P2b** the 31 pig files | 31 | `handover` with project `CNIC-HEARDS` | **31 to place** (27 `DICOMDIR`, and the 4 MATLAB files **kept by path**, below), 0.24 GB, longest 197, 0 refused |
+| **P2b** the masks | 1,791 | 2b `remap` (36 group keys → `CNIC-HEARDS`) → `copy --from-holding` | **1,791 to place**, 25.40 GB, longest 208; all 1,791 holding copies checked on `J:` (present, the manifest's size) |
+| left in holding | 165 | — | §12.3 |
+
+- **Left out of P2a on purpose: 45 files** of the divergent m175/m178 copies whose bytes equal DICOM that Part 1 registers;
+  after the write they are in `/raw/`, and raw is never placed. (`/raw/` keeps DICOM only, so the copies' parameter
+  files, `2dseq` and k-space are placed.)
+- **The four MATLAB files named `thumbs.cache` / `folders.cache`:** `handover` refuses those names as junk (A2's rule).
+  **One change to stream P's tool** (`p_plan.py`): a handover row may carry `keep_despite_name=Y` with a reason; it lifts
+  only the junk-NAME rule for that one path (AppleDouble, installers and Office temp files stay refused) and prints
+  `KEPT DESPITE ITS NAME`. Test: `tools/test_drive3_placement.py` `test_handover_keep_despite_name` (kept with a reason;
+  refused without one; AppleDouble refused even when flagged); the file passes ("all passed").
+- **P2b can be dry-run against production only once `CNIC-HEARDS` exists** (`handover` and `remap` refuse a project not
+  in the registry). Its plan above ran against the rehearsal root, where §6 created the project; the holding copies the
+  masks are read from were checked on `J:` directly.
+
+### 12.2 Production commands (copy-only; the window procedure of `drive3_placement_gate.md` §5)
+
+**Order and windows.** P2a writes `provenance.csv` and the index documents of `0118`, `0619`, `1019`, the projects Part 1
+links into: **run it before §7 or after §7 step 3, never during Part 1.** P2b runs **after §7 step 6** (the project exists
+and P01's links are in). PowerShell, from this worktree (or `main` once merged), `$env:PYTHONDONTWRITEBYTECODE=1`,
+`$env:PYTHONPATH='tools'`:
+
+```powershell
+$NAS = 'J:\gjesus3-data'; $NP = 'tools\drive_staging\nonraw_placement.py'; $PV = 'tools\drive_staging\drive3\p_verify.py'
+$PP  = 'tools\drive_staging\drive3\p_plan.py'; $O = 'D:\projects\gjesus3\drive3_streams\mri\out\p2'
+$M1  = 'D:\projects\gjesus3\drive3_streams\placement\manifest_check2_20261006\placement_manifest.csv'
+$M2  = 'D:\projects\gjesus3\drive3_streams\placement\release_M1_20261006\placement_manifest.csv'
+$SCR = "$O\scratch"; $D = Get-Date -Format yyyyMMdd_HHmm
+
+# P2a. 0. Re-plan against today's /raw/ (refuses bytes already in /raw/; expect the counts of 12.1)
+python $PV raw-dedup --manifest $M1 --nas $NAS --write-index "$O\live_raw_index_$D.csv"
+python $PP --nas $NAS handover --manifest $M1 --manifest $M2 --csv "$O\p2a_handover.csv" --stream M --raw-index "$O\live_raw_index_$D.csv" --out "$O\P2a_$D"
+#    expect: "handover (M): 3610 files {'already-in-holding': 602, 'holding': 56, 'place': 2919, 'duplicate-copy': 33}; refused 144"
+#    (57 "already decided in an earlier batch", 87 desktop.ini); exit code 1 because of the refusals, by design.
+#    After Part 1 is written: the 45 left-out files are already absent; any OTHER new refusal "in /raw/" is a STOP.
+$A = "$O\P2a_$D\placement_manifest.csv"
+# 1. per project (AE-biomaGUNE-0118, -0619, -1019): snapshot, dry run, execute, verify
+foreach ($p in 'AE-biomaGUNE-0118','AE-biomaGUNE-0619','AE-biomaGUNE-1019') {
+  python $PV snapshot --manifest $A --nas $NAS --project $p --to "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_P2a_$p"
+  python $NP --out "$O\runs_P2a" --nas $NAS copy --manifest $A --scratch $SCR --project $p            # dry: 2393 / 440 / 86 files
+  python $NP --out "$O\runs_P2a" --nas $NAS copy --manifest $A --scratch $SCR --project $p --execute
+  python $NP --out "$O\runs_P2a" --nas $NAS verify --manifest $A --project $p
+  python $PV verify --manifest $A --nas $NAS --snapshot "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_P2a_$p" --project $p --rehash sample
+}
+# 2. holding (56 files)
+python $PV snapshot --manifest $A --nas $NAS --holding --to "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_P2a_holding"
+python $NP --out "$O\runs_P2a" --nas $NAS holding --manifest $A --scratch $SCR             # dry: 56 files, longest <= 240
+python $NP --out "$O\runs_P2a" --nas $NAS holding --manifest $A --scratch $SCR --execute
+python $PV verify --manifest $A --nas $NAS --snapshot "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_P2a_holding" --holding --rehash sample
+
+# P2b (after §7 step 6). 3. Plan against production now that CNIC-HEARDS exists
+python $PP --nas $NAS handover --manifest $M1 --manifest $M2 --manifest $A --csv "$O\p2b_handover.csv" --stream M --out "$O\P2b_$D"
+#    expect: 4 "KEPT DESPITE ITS NAME" lines; "31 files {'place': 31}; refused 0"
+python $NP --out "$O\P2b_masks_$D" --nas $NAS remap --manifest $M1 --mapping "$O\p2b_mapping.csv"
+#    expect: "36 mapped groups; 1791 holding files re-decided {'place': 1791}; 0 mapped groups matched no holding file"
+$B = "$O\P2b_$D\placement_manifest.csv"; $K = "$O\P2b_masks_$D\placement_manifest.csv"
+# 4. CNIC-HEARDS, window 1: the 31 files
+python $PV snapshot --manifest $B --nas $NAS --project CNIC-HEARDS --to "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_P2b_files"
+python $NP --out "$O\runs_P2b" --nas $NAS copy --manifest $B --scratch $SCR --project CNIC-HEARDS           # dry: 31 files, 0.24 GB
+python $NP --out "$O\runs_P2b" --nas $NAS copy --manifest $B --scratch $SCR --project CNIC-HEARDS --execute
+python $NP --out "$O\runs_P2b" --nas $NAS verify --manifest $B --project CNIC-HEARDS
+python $PV verify --manifest $B --nas $NAS --snapshot "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_P2b_files" --project CNIC-HEARDS --rehash all
+# 5. CNIC-HEARDS, window 2: the masks from holding (a new snapshot: window 1's files are then "before", not extra)
+python $PV snapshot --manifest $K --nas $NAS --project CNIC-HEARDS --to "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_P2b_masks"
+python $NP --out "$O\runs_P2b" --nas $NAS copy --manifest $K --scratch $SCR --project CNIC-HEARDS --from-holding   # dry: 1791 files, 25.40 GB, 0 "NOT there"
+python $NP --out "$O\runs_P2b" --nas $NAS copy --manifest $K --scratch $SCR --project CNIC-HEARDS --from-holding --execute
+python $NP --out "$O\runs_P2b" --nas $NAS verify --manifest $K --project CNIC-HEARDS
+python $PV verify --manifest $K --nas $NAS --snapshot "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_P2b_masks" --project CNIC-HEARDS --rehash sample
+```
+
+**Stop conditions:** a plan count other than 12.1's; a refusal of a new kind; a dry run with destinations already present
+or a path over 240; `--from-holding` reporting any file "NOT there"; any verify not PASS. **Rollback:** copies only; the
+snapshot of each window lists what was there before (`p_verify.py`); the holding copy of the masks stays in holding
+(holding is never trimmed), so the masks exist twice after P2b, as stream P's option B accepted for mapped groups.
+
+### 12.3 Left for the coordinator
+
+| # | Item | Recommendation |
+|---|---|---|
+| **P2-a** | **165 pig files (2.43 GB) stay in holding**: 148 `Split` volumes (`.mhd` + `.raw`) and 17 masks of `HEARDSMRI2444P_1_2000`. Their 2b group key `D3||Otros\Segmentaciones ITK SNAP` (no claim) also holds two mouse London segmentations (`Segmentaciones ratones\…\jrc200708_m53_london_1_1\Segmentation_time11/12_m53.nii.gz`), and a 2b mapping moves whole groups. | Leave them in holding for now (`out\p2\p2b_unmapped_pig.csv` lists them), and say so in `CNIC-HEARDS`'s README. The clean fix is a path-level mapping in `remap` (a small change to stream P's tool, with a test): not built here, by the coordinator's "no new analysis". Mapping the whole group would put the two mouse files into a pig project: not recommended. |
+| **P2-b** | The tool change (`keep_despite_name`) is in stream P's shared tool. | Review with this branch; it is opt-in per row and cannot affect batch 1. |

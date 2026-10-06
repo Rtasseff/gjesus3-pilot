@@ -336,6 +336,48 @@ def test_handover_second_batch():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_handover_keep_despite_name():
+    print("handover: keep_despite_name=Y lifts only the junk-NAME rule, for one path, with a reason")
+    tmp = tempfile.mkdtemp(prefix="p_keepname_")
+    saved = (P.MANIFEST_COPY, P.MANIFEST_NAS, P.claim_roots)
+    try:
+        nas = _nas(tmp, PROJECTS)
+        files = {r"Otros\pigs\S1\DICOM\thumbs.cache": b"MATLAB 5.0 MAT-file, really",
+                 r"Otros\pigs\S2\folders.cache": b"MATLAB 5.0 MAT-file, no reason given",
+                 r"Otros\pigs\S2\._IM_0001": b"AppleDouble",
+                 r"Otros\pigs\S3\desktop.ini": b"[.ShellClassInfo]"}
+        man = os.path.join(tmp, "drive_manifest.csv")
+        with open(man, "w", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["relpath", "size", "mtime", "birthtime", "atime", "mtime_ns", "sha256"])
+            for rel, b in files.items():
+                w.writerow([rel, len(b), "", "", "", "", _sha(b)])
+        _raw(nas, [])
+        P.MANIFEST_COPY = P.MANIFEST_NAS = man
+        P.claim_roots = lambda: (lambda rel, proj: "otros|pigs")
+        b1 = os.path.join(tmp, "b1", "placement_manifest.csv")
+        N.wcsv(b1, N.MANIFEST_FIELDS, [])
+        lst = os.path.join(tmp, "handover.csv")
+        rels = list(files)
+        with open(lst, "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=["relpath", "kind", "project", "reason", "parent_acq_ids", "sha256",
+                                              "keep_despite_name"])
+            w.writeheader()
+            w.writerow({"relpath": rels[0], "kind": "other", "reason": "a MATLAB 5.0 file, not a cache",
+                        "keep_despite_name": "Y"})
+            w.writerow({"relpath": rels[1], "kind": "other", "keep_despite_name": "Y"})          # no reason
+            w.writerow({"relpath": rels[2], "kind": "other", "reason": "x", "keep_despite_name": "Y"})
+            w.writerow({"relpath": rels[3], "kind": "other", "reason": "x"})                      # no flag
+        out = os.path.join(tmp, "b2")
+        rc = P.main(["--nas", nas, "handover", "--manifest", b1, "--csv", lst, "--stream", "M", "--out", out])
+        rows = {r["relpath"] for r in csv.DictReader(open(os.path.join(out, "placement_manifest.csv"), encoding="utf-8", newline=""))}
+        check(rows == {rels[0]}, f"kept: only the flagged, explained junk-NAME file ({sorted(rows)})")
+        check(rc == 1, "the other three are refused (no reason; AppleDouble is not a name rule; no flag)")
+    finally:
+        P.MANIFEST_COPY, P.MANIFEST_NAS, P.claim_roots = saved
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_raw_dedup():
     print("raw-dedup: no copied or held file is an acquisition file in /raw/ (read live, checksums.json or hashed)")
     tmp = tempfile.mkdtemp(prefix="p_rawdedup_")
@@ -477,6 +519,7 @@ if __name__ == "__main__":
     test_n1_pmod_rows()
     test_release()
     test_handover_second_batch()
+    test_handover_keep_despite_name()
     test_raw_dedup()
     test_verify_window()
     test_verify_two_trees()
