@@ -12,8 +12,11 @@ soon as the copy pass ends.
 Rules it follows:
   * never writes to SRC (lock it read-only with lock_usb.ps1 when admin is available; without it,
     Windows still updates last-access times on read, so the originals are recorded first);
-  * no read retries -- a failing file is logged to errors.csv and skipped, so a weak drive is
-    not hammered; re-running `copy` retries only what is not yet in the manifest;
+  * bounded read retries -- 3 attempts per file with a short pause, so transient stalls
+    (antivirus scanning, USB bus contention) recover instead of losing the file, while a
+    genuinely bad sector still gives up quickly; the file is then logged to errors.csv and
+    skipped. CONSECUTIVE_FAIL_LIMIT failures in a row trip a circuit breaker and stop the run,
+    so a dying drive is not hammered; re-running `copy` retries only what is not in the manifest;
   * modification times are restored on files and folders; creation times cannot be set on
     the copy, so both times are recorded in the manifest;
   * files are written as <name>.part and renamed only after a complete read.
@@ -30,11 +33,18 @@ import socket
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter, defaultdict
 
-VERSION = "1.1 (2026-09-22)"
-CHUNK = 8 * 1024 * 1024
-SKIP_AT_ROOT = {"System Volume Information"}
+VERSION = "1.5 (2026-09-30)"
+CHUNK = 1024 * 1024            # 1 MB: smaller reads survive I/O contention better
+READ_ATTEMPTS = 3              # total tries per file before it is logged and skipped
+RETRY_PAUSE = 2.0              # seconds, multiplied by the attempt number
+CONSECUTIVE_FAIL_LIMIT = 25    # circuit breaker: stop rather than hammer a failing drive
+COPY_WORKERS = 16              # parallel workers for small files (SMB latency hiding)
+VERIFY_WORKERS = 16            # verify reads only the staged copy, so it parallelises freely
+PARALLEL_MAX_BYTES = 16 * 1024 * 1024   # bigger files are copied one at a time
+SKIP_AT_ROOT = {"System Volume Information", "$RECYCLE.BIN", "$Recycle.Bin", "found.000"}
 MANIFEST_COLS = ["relpath", "size", "mtime", "birthtime", "atime", "mtime_ns", "sha256"]
 
 
@@ -102,14 +112,35 @@ def keep_awake():
 
 
 class Log:
+    """Logging must never be able to kill a copy.
+
+    Filenames on this data include macOS artefacts with private-use characters (Icon\\r ->
+    U+F00D). Printing one of those to a cp1252 console raises UnicodeEncodeError, and if that
+    happens inside an except: block it escapes the worker and takes the whole run down. It did,
+    once, at 88% of a 1.6 TB copy. So both sinks are encode-proof and any residual failure is
+    swallowed.
+    """
+
     def __init__(self, path):
-        self.f = open(path, "a", encoding="utf-8")
+        self.f = open(path, "a", encoding="utf-8", errors="replace")
+        self.lock = threading.Lock()
 
     def __call__(self, msg):
         line = f"{dt.datetime.now():%Y-%m-%d %H:%M:%S}  {msg}"
-        print(line, flush=True)
-        self.f.write(line + "\n")
-        self.f.flush()
+        with self.lock:
+            try:
+                print(line, flush=True)
+            except Exception:
+                try:
+                    enc = sys.stdout.encoding or "ascii"
+                    print(line.encode(enc, "replace").decode(enc, "replace"), flush=True)
+                except Exception:
+                    pass
+            try:
+                self.f.write(line + "\n")
+                self.f.flush()
+            except Exception:
+                pass
 
 
 # ---------- inventory ----------
@@ -225,6 +256,26 @@ def copy_one(src_path, dst_path):
     return h.hexdigest(), n
 
 
+def copy_one_retrying(src_path, dst_path, log, rel):
+    """copy_one with bounded retries for transient failures.
+
+    Antivirus scanning and USB bus stalls surface as OSError or, under memory pressure,
+    MemoryError; both are worth retrying. A real bad sector fails all attempts quickly.
+    Re-raises the last error once the attempts are spent, so the caller logs and skips.
+    """
+    for attempt in range(1, READ_ATTEMPTS + 1):
+        try:
+            return copy_one(src_path, dst_path)
+        except (OSError, MemoryError) as e:
+            if attempt == READ_ATTEMPTS:
+                raise
+            try:
+                log(f"  retry {attempt}/{READ_ATTEMPTS - 1} on {rel} after {type(e).__name__}: {e}")
+            except Exception:
+                pass
+            time.sleep(RETRY_PAUSE * attempt)
+
+
 def load_manifest(path):
     done = {}
     if os.path.exists(path):
@@ -276,34 +327,88 @@ def copy(src, out):
     ef = open(os.path.join(out, "errors.csv"), "a", newline="", encoding="utf-8")
     ew = csv.writer(ef)
 
+    # Big files are bandwidth-bound and go one at a time, so the drive reads them
+    # sequentially. Small files are dominated by per-file SMB round trips, so they are
+    # copied by a pool: the latency overlaps and the drive still reads in tree order.
+    big = [(r, st) for r, st in todo if st.st_size >= PARALLEL_MAX_BYTES]
+    smalls = [(r, st) for r, st in todo if st.st_size < PARALLEL_MAX_BYTES]
+    log(f"plan: {len(big):,} files >= {PARALLEL_MAX_BYTES // 1024 // 1024} MB sequentially "
+        f"({gb(sum(st.st_size for _, st in big))}), then {len(smalls):,} smaller files "
+        f"across {COPY_WORKERS} workers ({gb(sum(st.st_size for _, st in smalls))})")
+
     t0 = last = time.time()
-    copied = nbytes = nerr = 0
-    for r, st in todo:
+    state = {"copied": 0, "nbytes": 0, "nerr": 0, "run_of_errors": 0, "aborted": False}
+    slock = threading.Lock()
+    wlock = threading.Lock()
+
+    def progress(force=False):
+        nonlocal last
+        now = time.time()
+        if force or now - last >= 60:
+            with slock:
+                nb, cp, ne = state["nbytes"], state["copied"], state["nerr"]
+            rate = nb / (now - t0) if now > t0 else 0
+            eta = (todo_bytes - nb) / rate / 3600 if rate else 0
+            log(f"{gb(nb)} / {gb(todo_bytes)}  {cp:,} files  {rate / 1e6:.0f} MB/s  "
+                f"ETA {eta:.1f} h  errors {ne}")
+            last = now
+
+    def do_one(item):
+        r, st = item
+        if state["aborted"]:
+            return
         sp = longpath(os.path.join(src, r))
         dp = longpath(os.path.join(out, "files", r))
         try:
-            sha, n = copy_one(sp, dp)
+            sha, n = copy_one_retrying(sp, dp, log, r)
             if n != st.st_size:
                 raise OSError(f"size changed during read: expected {st.st_size}, read {n}")
             os.utime(dp, ns=(st.st_atime_ns, st.st_mtime_ns))
-            mw.writerow([r, st.st_size, iso(st.st_mtime_ns), iso(birth_ns(st)), iso(st.st_atime_ns), st.st_mtime_ns, sha])
-            mf.flush()
-            copied += 1
-            nbytes += n
-        except KeyboardInterrupt:
-            log("Interrupted -- re-run the same command to resume")
-            raise
-        except OSError as e:
-            nerr += 1
-            ew.writerow([dt.datetime.now().isoformat(timespec="seconds"), r, st.st_size, str(e)])
-            ef.flush()
-            log(f"ERROR {r}: {e}")
-        now = time.time()
-        if now - last >= 60:
-            rate = nbytes / (now - t0)
-            eta = (todo_bytes - nbytes) / rate / 3600 if rate else 0
-            log(f"{gb(nbytes)} / {gb(todo_bytes)}  {copied:,} files  {rate / 1e6:.0f} MB/s  ETA {eta:.1f} h  errors {nerr}")
-            last = now
+            with wlock:
+                mw.writerow([r, st.st_size, iso(st.st_mtime_ns), iso(birth_ns(st)),
+                             iso(st.st_atime_ns), st.st_mtime_ns, sha])
+                mf.flush()
+            with slock:
+                state["copied"] += 1
+                state["nbytes"] += n
+                state["run_of_errors"] = 0
+        except Exception as e:
+            # Anything at all: a mangled filename, an encoding fault, an SMB refusal. One file
+            # is logged and skipped. KeyboardInterrupt is a BaseException and still propagates.
+            with wlock:
+                try:
+                    ew.writerow([dt.datetime.now().isoformat(timespec="seconds"), r,
+                                 st.st_size, f"{type(e).__name__}: {e}"])
+                    ef.flush()
+                except Exception:
+                    pass
+            log(f"ERROR {r}: {type(e).__name__}: {e}")
+            with slock:
+                state["nerr"] += 1
+                state["run_of_errors"] += 1
+                if state["run_of_errors"] >= CONSECUTIVE_FAIL_LIMIT and not state["aborted"]:
+                    state["aborted"] = True
+                    log(f"CIRCUIT BREAKER: {state['run_of_errors']} files failed in a row after "
+                        f"{READ_ATTEMPTS} attempts each. Stopping so the drive is not hammered. "
+                        f"Check the source drive before re-running; progress is in the manifest.")
+
+    try:
+        for item in big:
+            if state["aborted"]:
+                break
+            do_one(item)
+            progress()
+        if not state["aborted"] and smalls:
+            progress(force=True)
+            with ThreadPoolExecutor(max_workers=COPY_WORKERS) as ex:
+                for _ in ex.map(do_one, smalls):
+                    progress()
+    except KeyboardInterrupt:
+        log("Interrupted -- re-run the same command to resume")
+        raise
+
+    copied, nbytes, nerr = state["copied"], state["nbytes"], state["nerr"]
+    aborted = state["aborted"]
 
     # folder times last, deepest first, so writing files does not disturb them
     for r, st in sorted(dirs, key=lambda d: -d[0].count(os.sep)):
@@ -314,9 +419,12 @@ def copy(src, out):
     mf.close()
     ef.close()
     el = time.time() - t0
-    log(f"DONE: copied {copied:,} files, {gb(nbytes)} in {el / 3600:.2f} h "
+    log(f"{'ABORTED BY CIRCUIT BREAKER' if aborted else 'DONE'}: copied {copied:,} files, "
+        f"{gb(nbytes)} in {el / 3600:.2f} h "
         f"({nbytes / max(el, 1) / 1e6:.0f} MB/s); errors {nerr}"
         + ("  -- see errors.csv, re-run copy to retry them" if nerr else ""))
+    if aborted:
+        sys.exit(3)
 
 
 # ---------- verify ----------
@@ -329,22 +437,39 @@ def verify(out):
     log(f"verify {VERSION}: {len(rows):,} files, {gb(total)}")
     bad = []
     t0 = last = time.time()
-    nbytes = 0
-    for rel, r in rows.items():
+    counters = {"nbytes": 0, "done": 0}
+    clock = threading.Lock()
+
+    def check(item):
+        rel, r = item
         p = longpath(os.path.join(root, rel))
+        got = 0
         try:
             h = hashlib.sha256()
             with open(p, "rb", buffering=0) as f:
                 while b := f.read(CHUNK):
                     h.update(b)
-                    nbytes += len(b)
-            if h.hexdigest() != r["sha256"]:
-                bad.append((rel, "CHECKSUM MISMATCH"))
-        except OSError as e:
-            bad.append((rel, f"UNREADABLE: {e}"))
-        if time.time() - last >= 60:
-            last = time.time()
-            log(f"{gb(nbytes)} / {gb(total)}  {nbytes / (last - t0) / 1e6:.0f} MB/s  problems {len(bad)}")
+                    got += len(b)
+            problem = None if h.hexdigest() == r["sha256"] else "CHECKSUM MISMATCH"
+        except Exception as e:
+            problem = f"UNREADABLE: {type(e).__name__}: {e}"
+        with clock:
+            counters["nbytes"] += got
+            counters["done"] += 1
+            if problem:
+                bad.append((rel, problem))
+        return None
+
+    with ThreadPoolExecutor(max_workers=VERIFY_WORKERS) as ex:
+        for _ in ex.map(check, list(rows.items())):
+            now = time.time()
+            if now - last >= 60:
+                last = now
+                with clock:
+                    nb, dn = counters["nbytes"], counters["done"]
+                log(f"{gb(nb)} / {gb(total)}  {dn:,} files  {nb / (now - t0) / 1e6:.0f} MB/s  "
+                    f"problems {len(bad)}")
+    nbytes = counters["nbytes"]
     on_disk = {k_rel for k, k_rel, _ in walk(root) if k == "F"}
     extra = sorted(on_disk - set(rows))
     with open(os.path.join(out, "verify_problems.csv"), "w", newline="", encoding="utf-8") as f:
@@ -362,6 +487,11 @@ if __name__ == "__main__":
     if len(sys.argv) < 3 or sys.argv[1] not in {"inventory", "copy", "verify"}:
         sys.exit(__doc__)
     mode = sys.argv[1]
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
     keep_awake()
     if mode != "verify" and len(sys.argv) > 2 and sys.argv[2].rstrip("\\/").endswith(":"):
         sys.argv[2] = sys.argv[2].rstrip("\\/") + "\\"  # "R:" alone means R's current dir, not its root
