@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""ingest_verify.py -- after a historical-drives batch has run, prove it landed as planned, and emit
+"""ingest_verify.py -- after a historical-drive batch has run, prove it landed as planned, and emit
 its provenance rows. Read-only against the NAS root it is given.
 
-    python tools/drive_staging/ingest_verify.py --nas-root J:\\gjesus3-data --batch B01 [--batch B02 ...]
+    python tools/drive_staging/ingest_verify.py [--profile P] --nas-root J:\\gjesus3-data --batch B01 [--batch B02 ...]
         [--provenance tasks/drives_ingest_provenance.csv]
 
-For each batch it selects the registry rows whose `ingest_config` is that batch's config and checks,
-against the plan (ingest_plan.py expected.csv):
+The profile (ingest_plan.PROFILES: drives_2026-09 by default, drive3_2026-10 for M. Jesus's drive) names
+the plan folder and the config folder. For each batch it selects the registry rows whose `ingest_config`
+is that batch's config and checks, against the plan (ingest_plan.py expected.csv):
 
   rows       the batch added exactly the expected set of original_names (no fewer, no more, none twice)
   fields     instrument, project_id (-> the planned project), researcher, operator, subject_ids,
@@ -39,7 +40,12 @@ PROV_COLS = ["acq_id", "batch", "drive", "relpath", "archive", "member", "sha256
 
 
 def main():
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--profile", default=P.DEFAULT_PROFILE)
+    known, _ = pre.parse_known_args()
+    P.use_profile(known.profile)
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--profile", default=P.DEFAULT_PROFILE, choices=sorted(P.PROFILES))
     ap.add_argument("--nas-root", required=True)
     ap.add_argument("--batch", action="append", required=True)
     ap.add_argument("--out", default=P.OUT)
@@ -53,7 +59,7 @@ def main():
     rows = list(P.rcsv(os.path.join(nas, "registries", "registry_raw.csv")))
     projects = {r["project_id"]: r for r in P.rcsv(os.path.join(nas, "registries", "registry_projects.csv"))}
     by_name = {r["name"].lower(): r["project_id"] for r in projects.values()}
-    cfgs = {f"{P.CONFIG_DIR_REL}/drives_{b}.yaml": b for b in want}
+    cfgs = {P.config_file(b): b for b in want}
     mine = [r for r in rows if r["ingest_config"] in cfgs]
     fails = collections.OrderedDict((k, []) for k in
                                     ("rows", "fields", "checksum", "sidecar", "link", "registry"))
