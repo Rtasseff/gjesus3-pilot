@@ -196,13 +196,20 @@ def discover(staging_dir, registry_path=None, researchers=None,
               f"protocol code in the path. These need a (researcher, series) -> "
               f"code mapping; run tools/ni_gnuclear_discover.py to list them.")
     # A silent repair is not much better than a silent guess — say how many.
-    n_recovered = sum(1 for e in index.values()
-                      if any(f.startswith("project-recovered")
-                             for f in (e["discovered"]["parse_flags"] or "").split(",")))
+    def _recovered(e, none):
+        return any(f.startswith("project-recovered")
+                   and f.startswith("project-recovered:none->") == none
+                   for f in (e["discovered"]["parse_flags"] or "").split(","))
+    n_recovered = sum(1 for e in index.values() if _recovered(e, none=False))
+    n_found_higher = sum(1 for e in index.values() if _recovered(e, none=True))
     if n_recovered:
         print(f"[ni_flat] {n_recovered} acquisition(s) had a path-derived project "
               f"code that is NOT a real protocol; the real code was recovered from "
               f"higher in the path (see the parse_flags column).")
+    if n_found_higher:
+        print(f"[ni_flat] {n_found_higher} acquisition(s) had NO protocol code in "
+              f"their subject folder or its parent; a valid code was found higher "
+              f"in the path (parse_flags project-recovered:none-><code>).")
     n_files = sum(len(v) for v in by_key.values())
     print(f"[ni_flat] {len(matches)} acquisition(s) discovered from "
           f"{n_files} DICOM file(s).")

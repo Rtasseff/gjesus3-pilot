@@ -1,0 +1,63 @@
+# The M. Jesus drive (third historical drive), stream N, batch N-D: the 102 PET/CT reconstructions that exist
+# nowhere else (not in production, not in the S:\gnuclear snapshot): 0619 2-DG 2021 (64), 0320 2021-06-01
+# (14), 1422 2023 (24). Gate document: tasks/drive3_petct_gate.md.
+#
+# HOW. The same fan-in discovery as the S:\gnuclear backfill (ni_molecubes_flat), as drives 1+2 did for
+# 1319 (dicom_N03_1319_petct_peio.yaml): one acquisition per reconstruction, identity = the machine key
+# (timestamp, modality, algorithm, recon index), so a row from here and a row from the snapshot or the live
+# box reconcile on the same key. The drive copy is staged read-only (J:\_staging_drive3_MJ cannot hold hard
+# links to D:) by COPY to D:, in the snapshot's own layout
+#     stage\new102\<year>\Jesus\MJ\<drive relpath>
+# every file SHA-256-checked against the drive manifest (stage\_STAGED.csv). researcher = MJ: M. Jesus,
+# whose drive and PET folder this is, and production's token for her S:\gnuclear folder (216 rows).
+# Two files were renamed on the drive (`CT.dcm.dcm`, `PET.dcm.dcm` of 0619 animal 160); they are staged
+# under the scanner's name, rebuilt from their header (the case-table note says so).
+#
+# PER-ACQUISITION VALUES (cases_drive3_petct_drive.csv; every row explicit, `on_missing: error`): project
+# = A1's claim, confirmed in the facility DB for all 102 (the animal is in the protocol and logs a procedure
+# within 3 days of the scan). The 24 of 1422 sit under `Proyecto 1422 Metformin`, which the whole-segment
+# grammar does not read as a code, so `require_project` is off here and the table supplies the project.
+#
+#   python tools/ingest_raw.py --config tools/configs/drive3_petct/drive3_petct_drive.yaml --nas-root J:/gjesus3-data --dry-run
+# ⚠️ VERIFY --nas-root BEFORE EVERY RUN. The production run waits on the coordinator's gate and Ryan's go.
+
+ingest:
+  acquisition_layout: folder
+  copy_strategy: ni_molecubes_flat
+  auto_create_projects: false              # every target project exists (PROJ-0004, -0007, -0013)
+  delete_source_after_ingest: false        # NEVER delete
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/drive3_streams/petct/stage/new102"
+  ni_gnuclear_flat: true
+  researchers: [MJ]
+  require_project: false                   # the case table states the project of every acquisition
+  validate_projects: true
+  subject_parse:
+    field: subject
+  subject_from_db: true
+  case_table:
+    file: cases_drive3_petct_drive.csv
+    key: original_name
+    on_missing: error                      # a staged file without a decided row stops the batch
+
+registry:
+  instrument:           discovered.modality
+  data_ecosystem:       DICOM
+  instrument_model:     "Molecubes (PET/SPECT/CT)"
+  researcher:           "${discovered.researcher_folder}"
+  data_source:          internal
+  sample_id:            "${discovered.subject}"
+  sample_type:          "${discovered.sample_type}"
+  acquisition_datetime: discovered.acq_datetime_full
+  session_id:           "${discovered.subject}_${discovered.acq_date8}"
+  project_name:         "${discovered.project_name}"
+  notes:                "Historical drive MJesus-MFB (M. Jesus's own drive, WD WX22D623YP29; staged copy, SHA-256 verified against its manifest). Reconstruction ${discovered.ni_algo}_${discovered.ni_recon_idx}. Drive path: ${discovered.drive_relpath}. ${discovered.note}"
+
+# operator: DELIBERATELY UNSET, as in the backfill and drives 1+2. The console user the DICOM header records
+# is in the notes.
+
+link_filename: "${discovered.modality}_${discovered.subject}_${acq_date}_${discovered.acq_datetime_full}_recon${discovered.ni_recon_idx}"
+
+anatomy:
+  is_whole_body: true
