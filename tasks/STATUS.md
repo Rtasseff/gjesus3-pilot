@@ -689,9 +689,11 @@ The genuinely in-flight items (kept tight — everything else is in
     researcher's sync would run with Full rights on `raw/` rather than an operator's
     write-but-not-modify.
   - ✅ **The branch caught up with `main` on 2026-10-06** (a merge of 303 commits, not a
-    rebase; 7 files conflicted and were resolved by hand). Next: the `gjesus3` mount (it was
-    down again at a 2026-10-06 check), then the on-box gates over the tunnel, under Ryan's
-    rules for working on the Mac (`RESUME_ni_live.md`, top).
+    rebase; 7 files conflicted and were resolved by hand). **The same day, merge gates 1–4
+    passed ON THE MAC** over the tunnel, against a scratch NAS in Ryan's gnuclear folder with
+    synthetic data. Next: the `gjesus3` mount (down at a 2026-10-06 check; no saved
+    credentials; needs the dedicated account Ryan called for in August), then real-data runs,
+    under Ryan's rules for working on the Mac (`RESUME_ni_live.md`, top).
   - **After the sync (Ryan, 2026-10-01): one ingest web app on Box A** for every instrument. It
     pulls NI data through the tunnel, so operators can leave the room when the scan ends. The
     tunnel moves to Box A without a visit (B2 decided). See [`BACKLOG.md`](BACKLOG.md)
