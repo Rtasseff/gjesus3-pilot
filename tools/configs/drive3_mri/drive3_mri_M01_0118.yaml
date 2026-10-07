@@ -1,0 +1,61 @@
+# The M. Jesus drive (third historical drive), stream M, batch M01: protocol 0118 (rats, hypoxia and monocrotaline
+# PAH models), 2019-09 / 2020-06 / 2021-09, 27 studies; all to AE-biomaGUNE-0118 (Ryan, 2026-10-06, M1). m175/m178
+# (Ermal, 2021-09-02): the reconstruction byte-identical to K:\gjesus\MRI\Proyecto 0118 (A1 R2). The facility DB
+# holds a NULL alias for 0118: animal_db composes from the caller's alias, so subject ids are <n>-AE-biomaGUNE-0118,
+# never -None.
+# Gate: tasks/drive3_mri_gate.md. Plan: tasks/drive3_production_plan.md. Assessment: tasks/drive3_raw_coverage.md (A1).
+#
+# SOURCE: the staged drive copy J:\_staging_drive3_MJ\drive3_MJesus_WX22D623YP29\files (read-only), staged by
+# tools/drive_staging/drive3/mri_02_stage.py to a FLAT copy on D: (k-space excluded, every file checked against the
+# drive manifest's SHA-256):
+#     D:/projects/gjesus3/drive3_streams/mri/stage/M01/<study>/<exam>/
+# so original_name = "<study>/<exam>", the shape of every production MRI row: a later ingest of the same exam from the
+# MRI platform's archive is skipped as already registered (the staging_dir trap). Convert-first (Ryan, 2026-10-04):
+# every exam staged here holds DICOM (the scanner's own, or Dicomifier's made on this copy before ingest).
+#
+# PER-EXAM VALUES come from the case table (tools/drive_staging/drive3/mri_04_cases.py), on_missing: error:
+#   drv_acq_datetime = exam visu_pars VisuCreationDate (production's rule), else acqp ACQ_time; never today
+#   drv_model        = Bruker BioSpec 7T (Biospec 70/30) or 11.7T (BIOSPEC 500), set explicitly
+#   drv_alias / drv_animal / drv_sample / drv_session / drv_project / drv_note
+#
+# Dry run (read-only):
+#   python tools/ingest_raw.py --config tools/configs/drive3_mri/drive3_mri_M01_0118.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false             # every target project exists and is active (checked in the gate)
+  acquisition_layout: folder
+  copy_strategy: mri_paravision_v2        # DICOMs only
+  reconstructions: all
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/drive3_streams/mri/stage/M01"
+  pattern: "*/[0-9]*"
+  case_table:
+    file:       cases_M01.csv
+    key:        original_name
+    on_missing: error
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.drv_alias}"
+    animal_code:   "${discovered.drv_animal}"
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     "${discovered.drv_model}"
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "${discovered.drv_sample}"
+  sample_type:          organism
+  session_id:           "${discovered.drv_session}"
+  acquisition_datetime: discovered.drv_acq_datetime
+  project_name:         "${discovered.drv_project}"
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}; recons kept: ${discovered.mri_recon_indices}; ${discovered.drv_note}"
+
+operator: "NA"
+
+# Project link name: the production MRI template (mri_jrc_animalfirst.yaml). Without it the link falls back to
+# original_name, "<study>/<exam>", whose slash would nest folders. Checked unique and free by mri_04_cases.py.
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"

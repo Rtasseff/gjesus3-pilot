@@ -620,7 +620,65 @@ def test_copy():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_from_holding_rendered():
+    print("copy --from-holding: the source is where `holding` put the file (its manifest), not a recomputed path")
+    import historical_paths as H
+    tmp = tempfile.mkdtemp(prefix="nonraw_fromhold_")
+    try:
+        nas = os.path.join(tmp, "nas")
+        os.makedirs(os.path.join(nas, "projects", "P"))
+        base = os.path.join(nas, N.HOLDING_BASE)
+        # (1) drive 3 as `holding --execute` rendered it: display label MJesus-MFB (not drive3_MJesus-MFB) and one
+        #     folder shortened to the 240 budget
+        rel1 = "Otros\\Segmentaciones ITK SNAP\\pigs\\m.nii.gz"
+        new1 = "MJesus-MFB\\Otros\\Segmentacion~738e\\pigs\\m.nii.gz"
+        os.makedirs(os.path.join(base, os.path.dirname(new1)))
+        with open(os.path.join(base, new1), "wb") as f:
+            f.write(b"mask bytes")
+        with open(os.path.join(base, "manifest.csv"), "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=["new_path", "drive", "archive", "original_path", "size", "sha256",
+                                              "claim_id", "shortened", "why", "note"])
+            w.writeheader()
+            w.writerow({"new_path": new1, "drive": "drive3_MJesus-MFB", "original_path": H.original_display("D3", rel1),
+                        "size": "10", "sha256": _sha(b"mask bytes"), "shortened": "Y"})
+        check(not os.path.exists(os.path.join(nas, N.holding_rel("drive3_MJesus-MFB", rel1))),
+              "the recomputed holding_rel path does not exist (the bug of 2026-10-07)")
+        # (2) a key the holding manifest lacks: holding_rel is the fallback, found when it exists ...
+        rel2 = "Otros\\old layout\\x.png"
+        p2 = os.path.join(nas, N.holding_rel("drive3_MJesus-MFB", rel2))
+        os.makedirs(os.path.dirname(p2))
+        with open(p2, "wb") as f:
+            f.write(b"old layout bytes")
+        rel3 = "Otros\\nowhere\\y.png"                                        # ... and NOT there when it does not
+        mk = lambda rel, data: {"drive": "D3", "drive_label": "drive3_MJesus-MFB", "relpath": rel, "archive": "",
+                                "member": "", "sha256": _sha(data), "size": str(len(data)), "class": "other",
+                                "reason": "2b mapping (x | Otros)", "claim_id": "",
+                                "dest_rel": N.dest_rel("P", "MJesus-MFB", rel)}
+        rows = [mk(rel1, b"mask bytes"), mk(rel2, b"old layout bytes"), mk(rel3, b"absent")]
+        absent = N.holding_sources(rows, nas)
+        check(os.path.normcase(rows[0]["_src"]) == os.path.normcase(os.path.join(base, new1)),
+              f"(1) found through the holding manifest's new_path: {rows[0]['_src']}")
+        check(os.path.normcase(rows[1]["_src"]) == os.path.normcase(p2), "(2) a key missing from the manifest falls back to holding_rel")
+        check(absent == 1 and not os.path.exists(rows[2]["_src"]), "(2) ... and is counted NOT there when that path is absent too")
+        ms = N.MemberSource(os.path.join(tmp, "scratch"))
+        try:
+            bad = dict(rows[0], sha256=_sha(b"what the drive manifest says"))
+            try:
+                N.copy_one(bad, nas, ms)
+                check(False, "(3) a holding copy whose bytes differ from the drive manifest must be refused")
+            except RuntimeError:
+                check(not os.path.exists(os.path.join(nas, bad["dest_rel"])), "(3) refused: nothing placed")
+            check(N.copy_one(rows[0], nas, ms) == "copied", "(1) copied from the rendered holding path")
+            check(open(os.path.join(nas, rows[0]["dest_rel"]), "rb").read() == b"mask bytes", "(1) the bytes in place")
+            check(os.path.exists(os.path.join(base, new1)), "the holding copy is left in place")
+        finally:
+            ms.close()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
+    test_from_holding_rendered()
     test_layout()
     test_decide()
     test_roots()

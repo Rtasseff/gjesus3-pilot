@@ -913,6 +913,13 @@ def cmd_handover(args):
             refused.append((rel, "sha256 differs from the drive manifest"))
             continue
         junk = junk_reason(rel)
+        # keep_despite_name=Y: the stream has looked inside and the NAME lies (stream M: four MATLAB 5.0 files
+        # named folders.cache / thumbs.cache, one of 212 MB, in the CNIC pig folder). It lifts only the junk-NAME
+        # rule, for that one path, and needs a reason; AppleDouble, installers and Office temp files stay refused.
+        keep = (h.get("keep_despite_name") or "").strip().upper() == "Y"
+        if junk and keep and rel.split("\\")[-1].lower() in JUNK_NAMES and (h.get("reason") or "").strip():
+            print(f"  KEPT DESPITE ITS NAME {rel}: {(h.get('reason') or '').strip()}")
+            junk = ""
         if junk:
             refused.append((rel, f"junk, never placed ({junk})"))
             continue
