@@ -1526,7 +1526,7 @@ wrong, but until this is settled the validator cannot serve as a gate for anythi
 - [x] *(✅ Decided 2026-10-05, Ryan: a hold value now, a claim list, then blank whatever is unclaimed when the claim window closes.)* **Decide the representation** (recommend: blank). It is the only decision here — the write
   itself is the same byte-level, delimited, no-BOM/CRLF-preserving edit already done twice.
 - [x] *(✅ Done 2026-10-05: merge `2b891d5`; `tools/repair_operator_hold.py` wrote exactly 10,314 cells, verified by the tool and independently; the validator: exit 0, 0 errors, `operator awaiting claim (pending-claim): 10314`.)* **(a) The hold value `pending-claim`.**
-- [x] *(✅ (b) built 2026-10-05, not sent: `J:\gjesus3-data\projects\_MRI sessions - who ran them (2026-10).xlsx`, 926 sessions in 21 projects. Answers join back by the grey `session key`, the study-folder part of `original_name`.)* **(b) The claim list.**
+- [x] *(✅ (b) built 2026-10-05, not sent: `J:\gjesus3-data\projects\_MRI sessions - who ran them.xlsx`, 926 sessions in 21 projects. Answers join back by the grey `session key`, the study-folder part of `original_name`.)* **(b) The claim list.**
 - [ ] **(c) LATER, due when the claim window closes** (Ryan sets the window at the pilot re-launch; the date goes here then). Blank whatever is still unclaimed: every `operator` cell still holding the hold value becomes empty. Do nothing before the window closes.
   - The tool is ready: `tools/repair_operator_hold.py --from pending-claim --to-blank --apply --expect N --backup-dir <new>`.
   - The claimed names go in at the same time, joined by the claim list's `session key`, the study-folder part of `original_name`.
@@ -2267,7 +2267,7 @@ project, and none of it is raw. For now it goes to the drive-3 holding folder (A
 ## 🔺 HIGH — historical drives: the 2b mapping round (Ryan's worksheet) (2026-10-04)
 
 - [ ] **Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv`.** Only the 62 `A` rows matter; a blank row stays in holding.
-  *(2026-10-05: the worksheet was regenerated from the final manifest (290 groups) and shared with Jesus's group as a workbook: `J:\gjesus3-data\projects\_Historical drives - assign to projects (2026-10).xlsx`. It is temporary. When answers come back, join them into the CSV **by `group key`** and follow the runbook.)*
+  *(2026-10-05: the worksheet was regenerated from the final manifest (290 groups) and shared with Jesus's group as a workbook: `J:\gjesus3-data\projects\_Historical data - assign to projects.xlsx`. It is temporary. When answers come back, join them into the CSV **by `group key`** and follow the runbook.)*
 - [ ] **A session applies it,** following `tasks/drives_nonraw_2b_2c_followup.md`: `remap`, then `apply-raw` (projects on the blank-project raw rows; write-once-if-blank), then `copy --from-holding`. The holding folder is already filled, so D: is not needed.
 - [x] *(✅ Done 2026-10-05, before the erase: it is at `J:\gjesus3-data\staging\historical_drives_records\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.)* **Before the D: staging is erased,** keep the record manifest off D: (runbook §2.6). The current one is `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.
 
