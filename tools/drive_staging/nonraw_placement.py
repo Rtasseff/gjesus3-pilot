@@ -1087,6 +1087,33 @@ def load_manifest(path):
     return rd(path)
 
 
+def holding_sources(rows, nas):
+    """copy --from-holding: set r["_src"] on every 2b-mapped row to its copy in the NAS holding folder, and return
+    how many of those paths do not exist.
+
+    The source is WHERE `holding --execute` PUT the file, as the holding folder's own manifest.csv records it
+    (`new_path`, keyed by `original_path` = historical_paths.original_display): the rendered tree uses the drive's
+    display label (drive 3: `MJesus-MFB`, not `drive3_MJesus-MFB`) and shortens folders to the 240 budget
+    (`Segmentacion~738e`), so recomputing the raw path with holding_rel finds nothing (stream M's P2b, 2026-10-07).
+    holding_rel stays as the fallback for a key the manifest lacks. copy_one still re-verifies every byte against
+    the drive manifest's SHA-256, so a wrong match cannot pass silently."""
+    where = {}
+    hm = os.path.join(nas, HOLDING_BASE, "manifest.csv")
+    if os.path.exists(lp(hm)):
+        with open(lp(hm), encoding="utf-8-sig", newline="") as f:
+            for h in csv.DictReader(f):
+                if h.get("new_path"):
+                    where[h["original_path"]] = h["new_path"]
+    absent = 0
+    for r in rows:
+        if r["reason"].startswith("2b mapping"):
+            key = H.original_display(r["drive"], r["relpath"], r["archive"], r["member"])
+            r["_src"] = (os.path.join(nas, HOLDING_BASE, where[key]) if key in where else
+                         os.path.join(nas, holding_rel(r["drive_label"], r["relpath"], r["archive"], r["member"])))
+            absent += not os.path.exists(lp(r["_src"]))
+    return absent
+
+
 def cmd_copy(args):
     projects = load_projects(args.nas)
     # a `closed-project` row is placeable once the LIVE registry says its project is active again
@@ -1109,11 +1136,7 @@ def cmd_copy(args):
         # 2b after the D: staging is gone: a mapped group's files are read from their copy in the NAS
         # holding folder (filled by `holding --execute`). Rows placed earlier from D: are already at
         # their destination and are skipped as identical before any source is opened.
-        absent = 0
-        for r in rows:
-            if r["reason"].startswith("2b mapping"):
-                r["_src"] = os.path.join(args.nas, holding_rel(r["drive_label"], r["relpath"], r["archive"], r["member"]))
-                absent += not os.path.exists(lp(r["_src"]))
+        absent = holding_sources(rows, args.nas)
         print(f"--from-holding: {sum(1 for r in rows if r.get('_src'))} mapped files read from the holding folder; "
               f"{absent} of them are NOT there")
         if absent and args.execute:
