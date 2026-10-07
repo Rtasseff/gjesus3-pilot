@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ In use (true production)  
-**Last Updated:** 2026-10-04 (§5.7 — ✅ v2 design accepted by Ryan; retirements in production use since 2026-10-02) · Prior: 2026-10-02 (§5.7 — 🔶 v2: content-equivalent re-saves and re-identifying a mis-coded acquisition; classify before re-identifying) · Prior: 2026-10-01 (new §5.7 — retiring an ACQ-ID)
+**Last Updated:** 2026-10-07 (§5.5 step 1 — the MRI platform's archive as a read-only source; normal tools never point at it) · Prior: 2026-10-04 (§5.7 — ✅ v2 design accepted by Ryan; retirements in production use since 2026-10-02) · Prior: 2026-10-02 (§5.7 — 🔶 v2: content-equivalent re-saves and re-identifying a mis-coded acquisition; classify before re-identifying) · Prior: 2026-10-01 (new §5.7 — retiring an ACQ-ID)
 
 ---
 
@@ -315,6 +315,15 @@ cross-platform):
    `<staging>/PV<version>/<study>/<exam>`.
    - **Sources on the platform host (`kenia`)** — stage them read-only (resumable):
      `PYTHONPATH=tools python tools/pull_pending_dicom_sources.py --dry-run` then `--apply`.
+   - **Sources that have left `kenia`** (older 7 T studies) are in the **MRI platform's archive**,
+     `mriuser@10.10.3.175:/share/homes/mriuser/backup_7T_olddata_260824`: one `<study>.tar.gz` / `.tar.xz` per
+     study. It is the platform's, and three rules apply (Ryan, 2026-10-07): (1) never write, rename, chmod or
+     delete anything there; (2) one connection, one call at a time, and file contents only outside
+     08:00–18:00 Monday to Friday; (3) **the normal tools never point at it**. `pull_pending_dicom_sources.py`,
+     `ftp_mirror.py`, the GUI and `mri-ingest` keep the scanner's `[mri]` credentials. Only `tools/mri_archive.py`
+     (list, stat, open `rb`; credentials `[mri_archive]`) reaches the archive. 🕗 A download step is not
+     built yet (proposed in `tasks/mri_archive_census.md`); a study extracted locally is then linked into the
+     staging shape as for `K:` below. Details: [`equipment/historical_data_archives.md`](../equipment/historical_data_archives.md).
    - **Sources already reachable from this machine** (a researcher share such as `K:`,
      which WSL mounts at `/mnt/k`) — **do not copy anything.** Build the expected
      shape out of symlinks; Dicomifier reads straight through them:
