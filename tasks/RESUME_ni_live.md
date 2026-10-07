@@ -109,6 +109,10 @@ the 2026-10-06 merge).
      approval. Either (a) a MacMounter `.conf` like the existing ones, mounting
      `//<account>@10.10.1.73/gjesus3` with `mount_smbfs`, which is the platform's own pattern and
      retries forever; or (b) a Login Item, which only re-mounts at login.
+   - **2026-10-07, Ryan:** he is arranging the dedicated account. **Once it exists, he approves
+     one controlled write on the Mac for exactly this:** setting up the MacMounter entry, i.e.
+     one `.conf` in `~/.macmounter/`, the mount folder, and the keychain item. Nothing else is
+     covered.
    - Original note: Ryan reports
    it drops (cause unknown). On 2026-10-01 16:32 it was mounted as
    `//rtasseff@GJESUS3._smb._tcp.local/gjesus3` on `/Volumes/gjesus3` (SMB 3.1.1). Both
@@ -145,6 +149,17 @@ the 2026-10-06 merge).
      - **A corrections file the Mac creates is read-only from Windows.** Its owner is
        `nuclearuser`, and `GJesus` has RX on gnuclear. So researchers edit it **on the Mac**,
        where Excel and Numbers are installed. The runbook says so.
+   - **❓ Open (Ryan, 2026-10-07): should researchers be able to edit their corrections file from
+     other computers?** Options:
+     - A. Keep it on the Mac. They run the sync there anyway, and Excel is installed.
+     - B. Move the corrections files to a gjesus3 folder researchers can edit from Windows. That
+       is a small `resolve_path` change plus one NAS permission, and needs the Mac's gjesus3
+       account.
+     - C. Ask NI/IT for group Modify on gnuclear user folders. Not ours to change.
+     - D. Make corrections a form in the Box A web app, and retire the CSV.
+     - Suggested: A now, D as the destination, and B only if the CLI phase runs long.
+   - **The real-tree `--plan` is approved (Ryan, 2026-10-07).** Run it only in a quiet slot.
+     At 15:04 that day `molecubes_gui` was at 37% CPU, so it was held.
    - Original note: Stage a fresh copy of `tools/` on
    `gnuclear` first (§4). Gate 3 needs the `gjesus3` mount from step 2. A `--go` writes to
    production, so treat each run as a production operation. ✅ **The platform manager (Unai)
