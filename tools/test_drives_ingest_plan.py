@@ -155,6 +155,22 @@ def test_check_3c_decided_exemption():
     check(not ex and len(hits) == 1, "a production row the pixel check never saw is still a hit")
 
 
+def test_check_3d_sibling_exemption():
+    print("test_check_3d_sibling_exemption")
+    sibs = [{"original_name": "d/R785lung.czi"}, {"original_name": "d/R785lungPOL.czi"}]   # the group, all batches
+    c02 = {"acq_id": "ACQ-C02", "original_name": "d/R785lung.czi"}       # an earlier batch of this run
+    known = {"acq_id": "ACQ-OLD", "original_name": "x/old.czi"}          # in production at the pixel check
+    other = {"acq_id": "ACQ-OP", "original_name": "op/R785lung-new.czi"}  # an operator ingest since
+    new, sib = C.split_3d_new_production([c02], set(), sibs)
+    check(not new and [p["acq_id"] for p in sib] == ["ACQ-C02"], "a planned sibling ingested by an earlier batch is not new")
+    new, sib = C.split_3d_new_production([known], {"ACQ-OLD"}, sibs)
+    check(not new and not sib, "a production member the pixel check knew is neither new nor a sibling")
+    new, sib = C.split_3d_new_production([other], set(), sibs)
+    check([p["acq_id"] for p in new] == ["ACQ-OP"] and not sib, "a row from outside the plan is still new (a stop)")
+    new, sib = C.split_3d_new_production([c02, known, other], {"ACQ-OLD"}, sibs)
+    check(len(new) == 1 and len(sib) == 1, "mixed: only the outside row stays new")
+
+
 def test_profiles():
     print("test_profiles")
     try:
@@ -419,6 +435,7 @@ def main():
     test_archive_keys()
     test_check_3c_exemption()
     test_check_3c_decided_exemption()
+    test_check_3d_sibling_exemption()
     test_profiles()
     test_drive3_canonical_and_people()
     test_same_acquisition_actions()

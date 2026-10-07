@@ -83,6 +83,25 @@ def split_3c_hits(e, prod_rows, exp, decided=frozenset()):
     return exempt, hits
 
 
+def split_3d_new_production(prows, dec_prod, sibs):
+    """Check 3d: which production rows sharing a decided group's second are NEW since the pixel check.
+
+    Returns (new, sibling). A production row is not new when the pixel check already knew it as a
+    production member (`dec_prod`, its ACQ-IDs), and it is an expected SIBLING when its original_name is a
+    planned member of the same group (`sibs`, the whole plan's members, every batch): an earlier batch of
+    THIS run ingested it, and the pixel check decided it as a planned member. Everything else is new: an
+    operator ingest, or a row from outside the plan. (The 3d twin of check 3c's exemption; the coordinator,
+    2026-10-07, after C03 stopped on ten such C02 siblings.)
+    """
+    planned_names = {s["original_name"] for s in sibs}
+    new, sibling = [], []
+    for p in prows:
+        if p["acq_id"] in dec_prod:
+            continue
+        (sibling if p["original_name"] in planned_names else new).append(p)
+    return new, sibling
+
+
 def czi_last_subblock_inside(path):
     """(inside?, last end, size): does the .czi's last subblock (any pyramid level) end inside the file?"""
     import czifile
@@ -318,6 +337,7 @@ def main():
     # ---- 3d / 3e drive 3: every same-acquisition group decided; no truncated file; paths fit --------
     if decide:
         c3d, c3e = [], []
+        exempt_3d = []
         plan_by_group = collections.defaultdict(list)
         for e in exp.values():                       # the WHOLE plan: siblings may sit in other batches
             plan_by_group[P.group_id(e["instrument"], e["acquisition_datetime"])].append(e)
@@ -335,17 +355,21 @@ def main():
                 c3d.append(f"in a same-second group with no pixel decision: {e['original_name']}")
                 continue
             # the membership now: the decided group's planned members (kept or not) + production now
-            now_prod = {p["acq_id"] for p in prows}
             dec_prod = {m for m, d in dec.items() if d["role"] == "production"}
-            new_prod = now_prod - dec_prod
+            new_prod, sib_prod = split_3d_new_production(prows, dec_prod, sibs)
+            for p in sib_prod:
+                exempt_3d.append((e["original_name"], p["acq_id"], gid))
             if new_prod:
                 c3d.append(f"production rows added since the pixel check share its second: "
-                           f"{sorted(new_prod)}: {e['original_name']}")
+                           f"{sorted(p['acq_id'] for p in new_prod)}: {e['original_name']}")
             if e.get("same_acq_action") not in (P.ACTION_KEEP, P.ACTION_FLAG):
                 c3d.append(f"planned with action {e.get('same_acq_action')!r}: {e['original_name']}")
             if dec[e["sha256"]].get("complete") != "Y":
                 notes["3d"].append(f"kept although incomplete (flagged): {e['original_name']}")
         checks["3d decided"] = c3d
+        for name, acq, grp in exempt_3d:
+            print(f"INFO 3d exempt (a planned sibling an earlier batch of this run ingested): {name} -> {acq}, group {grp}")
+        print(f"INFO 3d exemptions: {len(exempt_3d)} file-to-production matches", flush=True)
         notes["3d"].append({"groups_decided": len(decided),
                             "planned_rows_in_groups": sum(1 for e in exp_in.values() if e.get("same_acq_group"))})
         n_struct = 0
