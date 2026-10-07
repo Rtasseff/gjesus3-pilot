@@ -131,6 +131,8 @@ operator: discovered.drv_operator
 
 `original_name` is the path relative to `staging_dir`, with forward slashes. A table value beats any filename/path value of the same name; a blank cell stays blank. Full rules: [`10_TOOLS §2.1.3`](../mfb-rdm-docs/10_TOOLS.md).
 
+**Historical internal MRI with no operator at the source** (✅ Ryan, 2026-10-07): set `operator: pending-claim` (the hold value, "awaiting claim"; [`06_REGISTRIES §2.3a-bis`](../mfb-rdm-docs/06_REGISTRIES.md)), not `NA` and never a guess, then list the sessions in the claim workbook with `python tools/claim_workbooks.py claims-append`. External `XMRI` is out of scope.
+
 ### Auto-populated columns (do NOT list in `registry:`)
 
 The pipeline fills these itself: `acq_id`, `registration_datetime`, `primary_kind`, `primary_file_name`, `original_name`, `file_format`, `file_size_mb`, `file_count`, `canonical_path`, `checksum_present`, `extended_metadata_present`, `ingest_config`.
