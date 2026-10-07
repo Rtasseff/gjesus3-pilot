@@ -2252,6 +2252,23 @@ project, and none of it is raw. For now it goes to the drive-3 holding folder (A
   read-only folder for model weights), and record which animals trained which model, so that any future benchmark
   built on a curated dataset (e.g. CAND-A) can exclude them.
 
+## 🔹 LOW — 10 project `_project.yaml` files are not UTF-8 (2026-10-07)
+
+Found while creating `CNIC-HEARDS`: `create_project.py` (and whatever wrote the older ones) writes `_project.yaml` in the
+Windows default encoding, so a description with an accent or an em dash is stored as cp1252. 10 of 65 files are not
+valid UTF-8 (`AE-biomaGUNE-0420`, `-0424`, `-0522`, `-0525`, `-0619`, `-0721`, `-1025`, `-1123`, `-1422`, `CNIC-HEARDS`). The
+registry is not affected (`registry_projects.csv` is UTF-8, checked). A UTF-8 reader of these files fails.
+
+- [ ] Write `_project.yaml` with `encoding="utf-8"` everywhere it is written; convert the 10 (cp1252 → UTF-8, backed up).
+
+## 🔹 LOW — 165 pig files wait in holding for a path-level remap (2026-10-07)
+
+`CNIC-HEARDS` received its masks by a 2b group remap, but one no-claim group (`D3||Otros\Segmentaciones ITK SNAP`) mixes
+165 pig files (148 split volumes, 17 masks of `HEARDSMRI2444P_1_2000`) with two mouse London segmentations, and a 2b
+mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadata\README_CNIC-HEARDS_pig_files_in_holding.txt`.
+
+- [ ] A path-level mapping in `nonraw_placement.py remap` (with a test), then move the 165.
+
 ## 🔸 MODERATE — the drives' DICOM stream: follow-ups (stream B, 2026-10-04)
 
 - [ ] **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T.
