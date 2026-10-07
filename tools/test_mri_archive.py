@@ -85,8 +85,11 @@ class FakeRemoteFile:
     def __init__(self, data):
         self._b = io.BytesIO(data)
         self.closed = False
+        self.on_read = None
 
     def read(self, size=None):
+        if self.on_read is not None:
+            self.on_read()
         return self._b.read() if size is None else self._b.read(size)
 
     def seek(self, off, whence=0):
@@ -105,9 +108,12 @@ class FakeRemoteFile:
 class FakeSFTP:
     """A stand-in SFTP client with the dangerous methods too: none of them may ever be called."""
 
-    def __init__(self, tree=None):
+    def __init__(self, tree=None, files=None, on_read=None):
         self.calls = []
         self.tree = tree or {}
+        self.files = files or {}
+        self.on_read = on_read
+        self.opened = []
 
     def listdir_attr(self, p):
         self.calls.append(("listdir_attr", p))
@@ -119,7 +125,11 @@ class FakeSFTP:
 
     def open(self, p, mode="r"):
         self.calls.append(("open", p, mode))
-        return FakeRemoteFile(b"hello")
+        f = FakeRemoteFile(self.files.get(p, b"hello"))
+        if self.on_read is not None:
+            f.on_read = self.on_read
+        self.opened.append(f)
+        return f
 
     def close(self):
         self.calls.append(("close",))
@@ -376,6 +386,267 @@ with io.open(out, encoding="utf-8") as fh:
     text = fh.read()
 check(n == 5 and text.startswith(",".join(ma.LISTING_FIELDS)) and "a_1_1.tar.gz" in text, "write_listing writes a local csv")
 
+# ----------------------------------------------------------------------------------------------------------
+print("8. fetch: the pull plan's archives to LOCAL disk, verified; after hours only; resumable")
+import csv  # noqa: E402
+import gzip  # noqa: E402
+import hashlib  # noqa: E402
+import lzma  # noqa: E402
+import posixpath  # noqa: E402
+import random  # noqa: E402
+import tarfile  # noqa: E402
+
+THU_0758 = dt.datetime(2026, 10, 8, 7, 58)
+THU_0800 = dt.datetime(2026, 10, 8, 8, 0)
+rnd = random.Random(7)
+
+
+def tarball(compression, members):
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w") as tf:
+        for name_, data_ in members.items():
+            ti = tarfile.TarInfo(name_)
+            ti.size = len(data_)
+            tf.addfile(ti, io.BytesIO(data_))
+    return gzip.compress(raw.getvalue()) if compression == "tar.gz" else lzma.compress(raw.getvalue())
+
+
+Y19, Y22 = R + "/2019_pv6", R + "/2022_pv6"
+TIER = {"A": "A: MFB animal session, new", "A2": "A2: MFB, a second session of an animal production holds that day",
+        "B": "B: MFB phantom/QC, new", "C": "C: stream M originals check (no ingest)",
+        "D": "D: MFB, in production under another folder name (no pull; listed)",
+        "E": "E: MFB-linked, needs a ruling (no pull until ruled)", "X": "X: empty archive (no pull)"}
+# (tier, study, folder, compression, checksum file kind, what is wrong)
+SPECS = [
+    ("C", "20190301_100000_jrc190301_m1_0219_1_1", Y19, "tar.gz", "sha1", ""),
+    ("A", "20190201_100000_jrc190201_m2_0219_1_1", Y19, "tar.gz", "sha1", ""),
+    ("A2", "20220127_141444_jrc220127_m153_post_0618_1_1", Y22, "tar.xz", "", ""),
+    ("B", "20220324_151835_jrc220324_Phantom_AB_1_1", Y22, "tar.gz", "sha256", ""),
+    ("B", "20190105_090000_jrc190105_qa_1_1", Y19, "tar.gz", "sha1", "wrong checksum"),
+    ("B", "20220110_090000_jrc220110_x_1_1", Y22, "tar.gz", "", "corrupt"),
+    ("E", "20190110_090000_sp190110_ABH_1116_1_1", Y19, "tar.gz", "sha1", ""),
+    ("X", "20190111_090000_jrc190111_empty_1_1", Y19, "tar.gz", "sha1", ""),
+    ("D", "20190112_090000_jrc190112_m9_0219_1_1", Y19, "tar.gz", "sha1", ""),
+]
+FILES, TREE, PLAN, BY = {}, {Y19: [], Y22: []}, [], {}
+for code, study, folder, comp, kind, wrong in SPECS:
+    data = tarball(comp, {f"{study}/1/fid": rnd.randbytes(30000), f"{study}/subject": b"##$SUBJECT_id=<m1>\n"})
+    if wrong == "corrupt":
+        data = data[:len(data) // 2] + bytes([data[len(data) // 2] ^ 0xFF]) + data[len(data) // 2 + 1:]
+    path = f"{folder}/{study}.{comp}"
+    FILES[path] = data
+    TREE[folder].append(Attr(f"{study}.{comp}", stat.S_IFREG | 0o666, len(data)))
+    if kind:
+        digest = getattr(hashlib, kind)(data).hexdigest()
+        if wrong == "wrong checksum":
+            digest = "0" * len(digest)
+        side = (f"{digest}  {study}.{comp}\n" if kind == "sha1" else f"{digest}  /mnt/backup/7T/{study}.{comp}\n").encode()
+        FILES[path + "." + kind] = side
+        TREE[folder].append(Attr(f"{study}.{comp}.{kind}", stat.S_IFREG | 0o666, len(side)))
+    PLAN.append({"tier": TIER[code], "study": study, "date": study[:8], "owner": "MFB", "chosen_path": path,
+                 "compression": comp, "size": len(data), "checksum": kind})
+    BY[study] = path
+TREE[Y19].append(Attr("00_LOGFILE_sha1.txt", stat.S_IFREG | 0o666, 100))
+
+ftmp = tempfile.mkdtemp(prefix="test_mri_fetch_")
+plan_csv = os.path.join(ftmp, "pull_plan.csv")
+with io.open(plan_csv, "w", encoding="utf-8", newline="") as fh:
+    w = csv.DictWriter(fh, fieldnames=list(PLAN[0].keys()))
+    w.writeheader()
+    w.writerows(PLAN)
+FAKES = []
+
+
+def new_arc(now_fn, on_read=None):
+    fk_ = FakeSFTP(TREE, FILES, on_read)
+    FAKES.append(fk_)
+    return fk_, ma.ReadOnlyArchive(fk_.listdir_attr, fk_.stat, fk_.open, fk_.close, now=now_fn, sleep=lambda s: None)
+
+
+def opens(fk_):
+    return [c[1] for c in fk_.calls if c[0] == "open"]
+
+
+def files_under(d):
+    return sorted(os.path.relpath(os.path.join(r, f), d) for r, _, fs in os.walk(d) for f in fs)
+
+
+def manifest_of(d):
+    return ma.Manifest(os.path.join(d, ma.MANIFEST_NAME)).latest()
+
+
+QUIET = []
+# -- selection -----------------------------------------------------------------------------------------------
+rows = ma.load_plan(plan_csv)
+pull, skipped = ma.select_plan(rows)
+order = [it["study"][:8] for it in pull]
+check(order == ["20190301", "20190105", "20190201", "20220110", "20220127", "20220324"],
+      f"the pulled tiers (C, A, A2, B) in fetch order: C first, then by date: {order}")
+check(sorted(ma.tier_code(r["tier"]) for r in skipped) == ["D", "E", "X"], "tiers D, E and X are not pulled")
+check(raises(ma.ArchiveError, ma.select_plan, rows + [dict(rows[0], tier="F: something new", study="z")]),
+      "an unknown tier is refused (nothing is guessed)")
+check(raises(ma.OutsideArchiveError, ma.select_plan, [dict(rows[0], chosen_path="/share/homes/mriuser/x/y.tar.gz")]),
+      "a chosen path outside the archive root is refused")
+check(raises(ma.ArchiveError, ma.select_plan, [rows[0], dict(rows[0], study="again")]),
+      "two plan rows for the same archive are refused")
+summ = ma.plan_summary(pull, skipped)
+check(any(s.startswith("  C ") and " 1 archives" in s for s in summ)
+      and any(s.startswith("  B ") and " 3 archives" in s and "none 1, sha1 1, sha256 1" in s for s in summ)
+      and any(s.startswith("not pulled: D 1") and "E 1" in s and "X 1" in s for s in summ),
+      "the summary gives counts, GB and checksum kinds per tier, and the tiers not pulled")
+
+# -- small pieces ------------------------------------------------------------------------------------------------
+check(ma.next_work_start(WED_EVE) == THU_0800 and ma.next_work_start(dt.datetime(2026, 10, 8, 7, 0)) == THU_0800
+      and ma.next_work_start(dt.datetime(2026, 10, 9, 19, 0)) == dt.datetime(2026, 10, 12, 8, 0)
+      and ma.next_work_start(SAT) == dt.datetime(2026, 10, 12, 8, 0),
+      "the deadline is the next 08:00 of a weekday (Wed eve -> Thu; Fri eve and Sat -> Mon)")
+check(ma.parse_stop_at("07:30", WED_EVE) == dt.datetime(2026, 10, 8, 7, 30)
+      and ma.parse_stop_at("23:00", WED_EVE) == dt.datetime(2026, 10, 7, 23, 0)
+      and raises(ma.ArchiveError, ma.parse_stop_at, "7.30", WED_EVE), "--stop-at HH:MM is its next occurrence")
+check(ma.deadline_for(WED_EVE, dt.datetime(2026, 10, 8, 9, 0)) == THU_0800, "--stop-at never extends past 08:00")
+h40, h64 = "ab" * 20, "cd" * 32
+check(ma.parse_digest(f"{h40.upper()}  x.tar.gz\n".encode(), "sha1") == h40
+      and ma.parse_digest(f"{h64}  /some/path/x.tar.gz\n".encode(), "sha256") == h64
+      and ma.parse_digest(f"{h64}  x\n".encode(), "sha1") == "" and ma.parse_digest(b"", "sha1") == "",
+      "checksum files: the first digest of the right length (never part of a longer hex run)")
+check(raises(ma.ArchiveError, ma.check_local_dest, r"\\GJESUS3\gjesus3\pull"), "a network destination is refused")
+xz_good = tarball("tar.xz", {"s/1/fid": b"x" * 5000})
+for label, blob, want in (("a good tar.xz", xz_good, True), ("a truncated tar.xz", xz_good[:-30], False),
+                          ("a file that is not gz or xz", b"PK\x03\x04 not a tarball", False)):
+    p = os.path.join(ftmp, "probe.bin")
+    with io.open(p, "wb") as fh:
+        fh.write(blob)
+    ok_, note_ = ma.verify_tar_listing(p)
+    check(ok_ is want, f"crc+listing on {label}: {'accepted' if want else 'refused'} ({note_})")
+
+# -- the dry run: listing only, in working hours ---------------------------------------------------------------
+fk, a = new_arc(lambda: WED)
+dest = os.path.join(ftmp, "pull")
+res = ma.dry_run(a, pull, skipped, dest, log=QUIET.append)
+check(not opens(fk) and [c[0] for c in fk.calls] == ["listdir_attr", "listdir_attr"],
+      "dry run (Wed 10:00): two folder listings, no file opened")
+check(res["missing"] == 0 and res["size_differs"] == 0 and res["checksum_files_missing"] == 0 and res["left"] == 6,
+      f"dry run: all 6 present, sizes as planned, checksum files present: {res}")
+check(not os.path.exists(dest), "dry run writes nothing locally")
+
+# -- the hours ----------------------------------------------------------------------------------------------------
+fk, a = new_arc(lambda: WED)
+check(raises(ma.WorkingHoursError, ma.fetch, a, pull, dest, now=lambda: WED, log=QUIET.append)
+      and not fk.calls and not os.path.exists(dest), "fetch refuses to start at Wed 10:00; the remote untouched")
+fk, a = new_arc(lambda: THU_0758)
+dest0 = os.path.join(ftmp, "pull0")
+res = ma.fetch(a, pull, dest0, now=lambda: THU_0758, log=QUIET.append)
+check(not opens(fk) and "would not end before Thu 08:00" in res["stop_reason"] and files_under(dest0) == [],
+      f"Thu 07:58: no file is started that cannot end before 08:00 ({res['stop_reason'][:60]}...)")
+fk, a = new_arc(lambda: WED_EVE)
+res = ma.fetch(a, pull, dest0, now=lambda: WED_EVE, max_bytes=1, log=QUIET.append)
+check(not opens(fk) and "--max-gb" in res["stop_reason"] and files_under(dest0) == [], "--max-gb stops before exceeding it")
+c_ = [dt.datetime(2026, 10, 8, 7, 59)]
+fk, a = new_arc(lambda: c_[0])
+f = a.open("2019_pv6/x.tar.gz")
+first = f.read(1)
+c_[0] = THU_0800
+check(first == b"h" and raises(ma.WorkingHoursError, f.read, 1),
+      "a file opened at 07:59 cannot be read from 08:00 (the guard runs on every read)")
+f.close()
+
+# -- a full run in the evening ------------------------------------------------------------------------------------
+fk, a = new_arc(lambda: WED_EVE)
+res = ma.fetch(a, pull, dest, now=lambda: WED_EVE, log=QUIET.append, chunk=4096)
+man = manifest_of(dest)
+st = {posixpath.basename(p).split("_")[0] + "/" + r["method"]: r["status"] for p, r in man.items()}
+check(st == {"20190301/sha1": "verified", "20190201/sha1": "verified", "20220127/crc+listing": "verified",
+             "20220324/sha256": "verified", "20190105/sha1": "bad", "20220110/crc+listing": "bad"},
+      f"verified by .sha1, .sha256 and crc+listing; a SHA-1 mismatch and a corrupt no-checksum archive are bad: {st}")
+check(res["verified"] == 4 and res["bad"] == 2 and res["error"] == 0 and res["stopped"] == 0, f"the run's counts: {res}")
+same = all(io.open(os.path.join(dest, BY[s].split("/")[-2], BY[s].split("/")[-1]), "rb").read() == FILES[BY[s]]
+           for s in BY if s[:8] in ("20190301", "20190201", "20220127", "20220324"))
+check(same, "each verified archive is byte-identical to the remote one, under <dest>\\<year folder>\\<name>")
+lay = files_under(dest)
+check(not any(p.endswith(".part") for p in lay), "no .part is left after a complete run")
+check(os.path.join("2019_pv6", "20190105_090000_jrc190105_qa_1_1.tar.gz.bad") in lay
+      and os.path.join("2019_pv6", "20190105_090000_jrc190105_qa_1_1.tar.gz") not in lay
+      and os.path.join("2022_pv6", "20220110_090000_jrc220110_x_1_1.tar.gz.bad") in lay,
+      "a mismatch is kept as .bad, never renamed to the final name")
+check(os.path.join("2019_pv6", "20190301_100000_jrc190301_m1_0219_1_1.tar.gz.sha1") in lay
+      and os.path.join("2022_pv6", "20220324_151835_jrc220324_Phantom_AB_1_1.tar.gz.sha256") in lay,
+      "the checksum files are fetched too, kept beside the archives")
+rc = man[BY["20190301_100000_jrc190301_m1_0219_1_1"]]
+check(rc["expected_sha1"] == rc["computed_sha1"] == hashlib.sha1(FILES[BY["20190301_100000_jrc190301_m1_0219_1_1"]]).hexdigest()
+      and rc["started"] and rc["ended"] and rc["bytes_per_s"] and rc["size"] == str(len(FILES[BY["20190301_100000_jrc190301_m1_0219_1_1"]])),
+      "the manifest row: path, size, expected and computed SHA-1, method, status, start, end, bytes per second")
+rb = man[BY["20190105_090000_jrc190105_qa_1_1"]]
+check(rb["expected_sha1"] == "0" * 40 and rb["computed_sha1"] != rb["expected_sha1"] and "differs" in rb["note"],
+      "the mismatch is recorded with both digests")
+check("tar members" in man[BY["20220127_141444_jrc220127_m153_post_0618_1_1"]]["note"],
+      "crc+listing records the member count")
+not_pulled = {BY[sp[1]] for sp in SPECS if sp[0] in ("D", "E", "X")}
+check(not (set(opens(fk)) & {p for q in not_pulled for p in (q, q + ".sha1")}), "nothing of tiers D, E or X is opened")
+check([c[0] for c in fk.calls[:2]] == ["listdir_attr", "listdir_attr"] and all(c[2] == "rb" for c in fk.calls if c[0] == "open"),
+      "the run lists the folders once, then opens each file 'rb' only")
+
+# -- resume -------------------------------------------------------------------------------------------------------
+fk, a = new_arc(lambda: WED_EVE)
+res = ma.fetch(a, pull, dest, now=lambda: WED_EVE, log=QUIET.append)
+check(not fk.calls and res["verified"] == 0 and res["bad"] == 0, "a re-run skips the verified and keeps the bad: no remote call")
+fk, a = new_arc(lambda: WED_EVE)
+res = ma.fetch(a, pull, dest, now=lambda: WED_EVE, retry_bad=True, log=QUIET.append)
+check(sorted(p for p in opens(fk) if not p.endswith(".sha1")) == sorted([BY["20190105_090000_jrc190105_qa_1_1"],
+                                                                         BY["20220110_090000_jrc220110_x_1_1"]]),
+      "--retry-bad fetches only the two bad archives again")
+
+# -- stopping mid-file --------------------------------------------------------------------------------------------
+clock = [WED_EVE]
+
+
+def tick():
+    clock[0] += dt.timedelta(minutes=1)
+
+
+fk, a = new_arc(lambda: clock[0], on_read=tick)
+dest3 = os.path.join(ftmp, "pull3")
+res = ma.fetch(a, pull[:1], dest3, now=lambda: clock[0], stop_at=WED_EVE + dt.timedelta(minutes=3), margin_s=0,
+               chunk=1024, log=QUIET.append)
+cpath = BY["20190301_100000_jrc190301_m1_0219_1_1"]
+cpart = os.path.join(dest3, "2019_pv6", cpath.split("/")[-1] + ".part")
+check(res["stopped"] == 1 and "deadline" in res["stop_reason"] and os.path.isfile(cpart)
+      and 0 < os.path.getsize(cpart) < len(FILES[cpath]) and not os.path.exists(cpart[:-5]),
+      f"--stop-at reached mid-file: a clean stop, only a LOCAL .part ({os.path.getsize(cpart) if os.path.isfile(cpart) else '-'} bytes)")
+check(manifest_of(dest3)[cpath]["status"] == "stopped" and all(x.closed for x in fk.opened),
+      "the stop is recorded, and the remote file is closed")
+
+arc_clock = [WED_EVE]
+
+
+def flip():
+    arc_clock[0] = THU_0800
+
+
+fk, a = new_arc(lambda: arc_clock[0], on_read=flip)
+dest4 = os.path.join(ftmp, "pull4")
+a2 = [it for it in pull if it["tier"] == "A2"]
+res = ma.fetch(a, a2, dest4, now=lambda: WED_EVE, chunk=1024, log=QUIET.append)
+a2part = os.path.join(dest4, "2022_pv6", a2[0]["name"] + ".part")
+check(res["stopped"] == 1 and "guard" in res["stop_reason"] and os.path.isfile(a2part)
+      and os.path.getsize(a2part) == 1024 and not os.path.exists(a2part[:-5]),
+      "the working-hours guard tripping mid-file stops cleanly, leaving only a LOCAL .part")
+check(manifest_of(dest4)[a2[0]["path"]]["status"] == "stopped" and all(x.closed for x in fk.opened),
+      "... recorded as stopped, the remote file closed")
+
+fk, a = new_arc(lambda: WED_EVE)
+res = ma.fetch(a, pull[:1], dest3, now=lambda: WED_EVE, log=QUIET.append)
+check(res["verified"] == 1 and not os.path.exists(cpart)
+      and io.open(cpart[:-5], "rb").read() == FILES[cpath], "a re-run restarts the stopped file and verifies it")
+
+# -- nothing remote was written -------------------------------------------------------------------------------------
+check(not any(c[0] == "DANGER" for fk_ in FAKES for c in fk_.calls), f"no forbidden remote call in any fetch test ({len(FAKES)} fakes)")
+check(all(c[2] == "rb" for fk_ in FAKES for c in fk_.calls if c[0] == "open")
+      and {c[0] for fk_ in FAKES for c in fk_.calls} <= {"listdir_attr", "open"},
+      "the remote saw only folder listings and 'rb' opens")
+check(all(p.startswith(("pull", "probe.bin", "pull_plan.csv")) for p in files_under(ftmp)),
+      "everything fetch wrote is under its local --dest")
+
+shutil.rmtree(ftmp, ignore_errors=True)
 shutil.rmtree(tmp, ignore_errors=True)
 print()
 if FAILS:
