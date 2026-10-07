@@ -75,6 +75,20 @@ FileZilla flow in detail. When an exam arrives *without* DICOMs, the ingest rege
 from `2dseq` + JCAMP-DX where Dicomifier is present, and otherwise registers an empty placeholder
 queued for the data-office backfill — see [`11_OPERATIONS.md §5.5`](../../mfb-rdm-docs/11_OPERATIONS.md).
 
+**Older 7 T studies: the platform's own archive (READ-ONLY; added 2026-10-07).** The acquisition machine keeps
+about two years. Older studies are moved to the platform's archive: `mriuser@10.10.3.175`, folder
+`/share/homes/mriuser/backup_7T_olddata_260824` (behind the institute firewall, password protected). It holds one
+`<study>.tar.gz` / `.tar.xz` per ParaVision study, usually with a `.sha1` beside it, in year folders from 2019 to
+2022. The 11.7 T is not there. **The archive is the platform's, and the account can write there**, so three rules
+apply (Ryan, 2026-10-07):
+(1) never write, rename, chmod or delete anything there; all access goes through
+[`tools/mri_archive.py`](../../tools/mri_archive.py), whose wrapper can only list, stat and open for reading;
+(2) one connection, one call at a time, and file contents only outside 08:00–18:00 Monday to Friday;
+(3) the normal tools never point at it. The GUI, `mri-ingest`, `ftp_mirror.py` and `pull_pending_dicom_sources.py`
+keep the scanner's `[mri]` credentials, and only the archive module reads `[mri_archive]`.
+Details and layout: [`../historical_data_archives.md`](../historical_data_archives.md). What is there compared
+with production: [`tasks/mri_archive_census.md`](../../tasks/mri_archive_census.md).
+
 ---
 
 ## Main distinguishing features vs. Axio Scan 7 and Cell Observer
