@@ -91,6 +91,23 @@ So nothing that leaves the scanner is lost. *(Corrected 2026-10-06: the first ve
 
 **Still open for Ryan:** nothing; the `1521`/`0618` reopen was approved and done on 2026-10-06.
 
+### 0.6 The MRI platform's archive: Ryan's rulings of 2026-10-07 (each ✅ DECIDED 2026-10-07, Ryan)
+
+The archive (`mriuser@10.10.3.175:/share/homes/mriuser/backup_7T_olddata_260824`; read-only, **never written**, no
+parallel reads 08:00–18:00 Mon–Fri; normal tools never point at it) was censused by listing only
+([`mri_archive_census.md`](mri_archive_census.md), merge `f3dd43f`). Ryan: *"I am giving you the go and I agree with all
+your recommendations."*
+
+| # | Ruling | Where it stands |
+|---|---|---|
+| Q1 | **Go for the pull**: 780 archives, 219 GB (the 650 new MFB studies and the 130 for the drive-3 originals check), after hours, one connection; the platform manager is told as a courtesy | the download step is being built; first window tonight after 18:00 |
+| Q2 | **The 77 MFB phantoms / QC are ingested**, as July's `jrc` phantoms were | in the ingest build |
+| Q3 | **The 9 studies with other initials on the shared `1116` protocol stay out** for now (as §0.4 N2) | listed, not pulled |
+| Q4 | **The 6 MFB studies whose code is no gjesus3 project are ingested with no project**, and listed in the assign workbook | in the ingest build |
+| Q5 | **`AE-biomaGUNE-0220` is reopened** for its 3 studies of 2022 | at ingest time |
+| Q6 | **The 25 archives with no `.sha1`** are checked by the compression's own checksum plus a full tar listing | in the download step |
+| Q7 | **Ryan asks the platform manager** where July–August 2020, the missing June 2020 days, 2022-01-25, 2023 and the older 11.7 T data are | with Ryan; 41 of drive 3's 7 T studies have no archive copy |
+
 **Where the SegBioMed conversation lives:** the full exchange with the SegBioMed project is appended to
 `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md` (REPLY 7 carries the 2026-10-05
 rulings). Read it if D2's or the SegBioMed items' context is needed.
