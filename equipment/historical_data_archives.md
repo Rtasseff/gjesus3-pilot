@@ -126,6 +126,15 @@ and others are other groups. In all there are 3,048 archives (617.7 GB) holding 
 **Listing (read-only):** `python tools\mri_archive.py list --out <local.csv>` writes one row per entry (path,
 kind, size, modification time) to a local CSV. The census listing took 7 calls and about 2 s.
 
+**Download (after hours only):** `python tools\mri_archive.py fetch --plan <pull_plan.csv> --dest
+D:\projects\gjesus3\mri_archive\pull [--dry-run] [--max-gb N] [--stop-at HH:MM]` fetches the plan's pulled tiers
+(C, A, A2, B: Ryan's rulings of 2026-10-07) to `<dest>\<year folder>\<archive>` on local disk, with the `.sha1` /
+`.sha256` beside each. Each archive is read in chunks into a local `.part`, hashed while reading, and renamed
+only when its checksum matches; a mismatch is kept as `.bad`. Archives with no checksum file are checked by the
+compression's own check plus a full tar listing. `<dest>\fetch_manifest.csv` records every attempt, and a re-run
+skips the verified ones. The run refuses to start in working hours, starts no file it cannot finish before 08:00
+(or `--stop-at`), and stops mid-file at that time, leaving only the local `.part`. `--dry-run` lists only.
+
 ---
 
 ## Microscopy
