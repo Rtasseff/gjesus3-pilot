@@ -158,6 +158,8 @@ the 2026-10-06 merge).
      - C. Ask NI/IT for group Modify on gnuclear user folders. Not ours to change.
      - D. Make corrections a form in the Box A web app, and retire the CSV.
      - Suggested: A now, D as the destination, and B only if the CLI phase runs long.
+     - ✅ **Decided (Ryan, 2026-10-07): A now, D later.** D is logged in `BACKLOG.md` under
+       "Ingest from one place".
    - **The real-tree `--plan` is approved (Ryan, 2026-10-07).** Run it only in a quiet slot.
      At 15:04 that day `molecubes_gui` was at 37% CPU, so it was held.
    - Original note: Stage a fresh copy of `tools/` on

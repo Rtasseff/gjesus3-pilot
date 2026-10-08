@@ -208,6 +208,15 @@ anticipates for the GUI exes ("redesigned as one web app and the exes retire").
   The live sync's one-acquisition-per-reconstruction model already absorbs late arrivals; a
   server-side pull could reuse it, and a scheduled sweep might replace "pull now".
 
+**🕗 Decided for the app (Ryan, 2026-10-07): NI corrections become a form in the app.** It is
+how a researcher fixes a wrong project or mouse id, or adds the tracer, from any computer, and it
+retires the per-researcher corrections CSV. Until then the CSV stays on gnuclear and is **edited
+on the Mac**. A file the Mac creates there is read-only from Windows, because it is owned by
+`nuclearuser` and the group has read-only access. The options considered are in
+`tasks/RESUME_ni_live.md` §0 step 3, on `feat/ni-live-hardening`. The form must keep the
+sync-safety invariant: a correction changes the metadata values, never the session key or
+`original_name`.
+
 ---
 
 ## Operator person/PI metadata (NI + MRI)
