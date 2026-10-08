@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-10-04 — ✅ the line on what is registered for platform data: a reconstructed image stored as DICOM, or not at all (§1 "Two Categories of ‘Raw’ Data"). Prior: 2026-09-30 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `XMIC` code for an external microscope's `.czi` (§1.6, first use the Charité Axio Imager.Z2); `discovered.czi_*` / `discovered.mri_*` field tables re-verified against `tools/ingest/czi_metadata.py` and `tools/ingest/paravision_metadata.py` `EXPOSED_FIELDS` (in sync — 21 CZI + 22 MRI fields); `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
+**Last Updated:** 2026-10-08 — ✅ the existing empty placeholders (§1, the line's open point) are retired (`no-dicom`, Ryan). Prior: 2026-10-04 — ✅ the line on what is registered for platform data: a reconstructed image stored as DICOM, or not at all (§1 "Two Categories of ‘Raw’ Data"). Prior: 2026-09-30 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `XMIC` code for an external microscope's `.czi` (§1.6, first use the Charité Axio Imager.Z2); `discovered.czi_*` / `discovered.mri_*` field tables re-verified against `tools/ingest/czi_metadata.py` and `tools/ingest/paravision_metadata.py` `EXPOSED_FIELDS` (in sync — 21 CZI + 22 MRI fields); `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
 
 ---
 
@@ -41,8 +41,10 @@ The platforms manage and archive their own true raw acquisition data (e.g., PET 
 >   `README` that says why it is not registered.
 > - **Live-scanner exams without exported DICOMs are not affected** while their DICOMs can still be
 >   regenerated from the platform ([11_OPERATIONS §5.5](11_OPERATIONS.md)).
-> - **🔶 Open (BACKLOG):** what to do with the existing empty placeholders that the 2026-07-16 drain
->   marked `not-applicable` (spectroscopy/calibration) or `no-source`.
+> - **✅ Decided 2026-10-08 (Ryan): the existing empty placeholders** that the 2026-07-16 drain marked
+>   `not-applicable` (spectroscopy/calibration) or `no-source` **are retired** (disposition `no-dicom`,
+>   [06_REGISTRIES §2.9](06_REGISTRIES.md)); what their folders hold moves to the project folder as other
+>   data, beside a README. 🕗 Not yet run in production.
 
 ### Cross-modality requirement: subject + condition metadata for preclinical acquisitions
 

@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ In use (true production)  
-**Last Updated:** 2026-10-07 (§5.5 step 1 — the MRI platform's archive as a read-only source; normal tools never point at it) · Prior: 2026-10-04 (§5.7 — ✅ v2 design accepted by Ryan; retirements in production use since 2026-10-02) · Prior: 2026-10-02 (§5.7 — 🔶 v2: content-equivalent re-saves and re-identifying a mis-coded acquisition; classify before re-identifying) · Prior: 2026-10-01 (new §5.7 — retiring an ACQ-ID)
+**Last Updated:** 2026-10-08 (§5.7 — ✅ the `no-dicom` disposition for the empty MRI placeholders, Ryan's ruling; not used in production yet) · Prior: 2026-10-07 (§5.5 step 1 — the MRI platform's archive as a read-only source; normal tools never point at it) · Prior: 2026-10-04 (§5.7 — ✅ v2 design accepted by Ryan; retirements in production use since 2026-10-02) · Prior: 2026-10-02 (§5.7 — 🔶 v2: content-equivalent re-saves and re-identifying a mis-coded acquisition; classify before re-identifying) · Prior: 2026-10-01 (new §5.7 — retiring an ACQ-ID)
 
 ---
 
@@ -410,6 +410,13 @@ file is a duplicate or a derivative *before* re-identifying it, and re-identify 
 A re-identify is therefore not undone by the tool; the file's own device fingerprint must name the new code,
 and the dry run shows it.
 
+**`no-dicom` (✅ Ryan 2026-10-08; not used in production yet):** the empty MRI placeholders registered before
+the 2026-10-04 line (`pending_dicom_regen` `not-applicable` or `no-source`). Build the lists with
+`--build-no-dicom-lists <folder>` (read-only; one list per kind of destination: open project, closed
+project, no project), then follow the steps below for each list. A closed project's items are refused until
+it is reopened (`reopen_project.py`); a placeholder with no project goes to `staging\mri_not_registered\`.
+The exact batch, its commands and checks: `tasks/mri_placeholder_retire_gate.md`.
+
 **Steps.**
 
 1. **Decide the pairs, with evidence.** For duplicates, which id survives (see the proposal in
@@ -435,7 +442,8 @@ mid-run (re-run to finish) · 5 self-check failed (read the report).
 **Restoring a retirement** (not automated): the tombstone row holds the original `registry_raw` record
 verbatim and every other removed row in `other_rows_removed`; the run's backup holds the pre-run registries
 and the sidecars. A deleted duplicate's bytes are the survivor's; a derivative's are at `moved_to`; a
-re-identified acquisition's file is its new id's primary (`moved_to`), never removed.
+re-identified acquisition's file is its new id's primary (`moved_to`), never removed; a `no-dicom`
+placeholder's files are at `moved_to` (a folder), and the backup holds its whole `/raw/` folder.
 
 ---
 
