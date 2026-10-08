@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ✅ DECIDED — core model and `provenance.csv` schema settled and live in true production (auto-logged on every ingest); the optional `log_activity` helper for manual analysis output remains 📋 Planned.  
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-10-08 (§2 writer table: added the NI live sync's derived files, plus the retire tool and the drives' non-raw placement, which already wrote rows). Prior: 2026-06-26
 
 ---
 
@@ -63,6 +63,9 @@ In practice that means each writer calls the shared helper module `tools/ingest/
 |---|---|---|
 | `tools/create_project.py` | At project creation | None (writes the empty `provenance.csv` header) |
 | `tools/ingest_raw.py` (Step 12) | When a project hard link is created | One row per hard link, auto-populated from the ingest context (creator from the operator field, `input_refs` = the ACQ-ID, `parameters_ref` = the YAML config path, `software_version` includes the git short-SHA when available). Idempotent on `output_path` and self-healing if a hard link exists without an entry. |
+| `tools/retire_acquisition.py` (since 2026-10-01) | When an ACQ-ID is retired | One event row per project link it re-points or removes, and for a **derivative** one row for the file it moved into the original's project (default `outputs/derived/`), with `input_refs` = the original's ACQ-ID. Event rows are tagged in `notes`, so they never collide with a path's creation row. |
+| `tools/drive_staging/nonraw_placement.py` (historical drives, 2026-10) | When non-raw files are copied into a project (`working/historical_drives/…`) | One row per placed file, appended once per `output_path`. |
+| `tools/operator/ni_ingest.py --live` via `ingest/ni_derived.py` (since 2026-10-08) | When a **derived file** from the NI box (a CT attenuation map, `recon_<n>/ATTMAP.dcm`) is copied into the scan's project at `outputs/derived/` | One row per file: `input_refs` = the ACQ-IDs of the scan it was derived from, `parameters_ref` = its exact source path on the box, notes `ni-live: derived file (attenuation map), not an acquisition`. It is written only once that scan has a registered reconstruction. |
 | Future: Excel-to-metadata importer | When study metadata is added to `/projects/<proj>/metadata/` | One row per metadata file written |
 | Future: close-out tool | When study metadata is merged into `/raw/` | Entries documenting the merge (plus the corresponding `/publications/` side if promoted) |
 | Future: `log_activity` helper (§7.2) | Manual / scripted analysis output | One row per output the analyst declares |

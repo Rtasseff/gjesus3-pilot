@@ -92,6 +92,13 @@ next sync. You don't have to wait or remember.
 entries on gjesus3. A reconstruction you add later becomes a new entry — it never
 overwrites the old one.
 
+**CT attenuation maps go to your project folder, not to the raw data.** Some CT scans have a
+reconstruction folder holding only `ATTMAP.dcm`, the CT converted for the PET's attenuation
+correction. It is derived from the scan rather than acquired, so the sync copies it into the
+project's `outputs\derived\`. Its name says which scan it came from, e.g.
+`CT_1025_m1_20260522_20260522095612_recon2_ATTMAP.dcm`, and the project's `provenance.csv`
+records the exact raw entries. It is not listed in the table of new acquisitions.
+
 **Project folder links are made later, not now.** The Mac can't create the file links
 gjesus3 uses inside project folders (a macOS-over-network limitation, nothing you did).
 Your data is fully copied, checksummed and registered — only the shortcut into the project

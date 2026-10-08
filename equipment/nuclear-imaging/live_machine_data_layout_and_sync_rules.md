@@ -455,6 +455,11 @@ lean on what already exists (§6) and add only the live-mode discovery + field-d
     production from the August pull.
   - **Verified on the box:** the pull's `_<n>` is the box's `recon_<n>`: `recon_1/` holds
     `…_CT_ISRA_1.dcm`.
+  - **Not every `recon_<n>/` is a reconstruction (2026-10-08).** A CT can carry a recon folder
+    holding only `ATTMAP.dcm`: its PET attenuation map, which is derived from the CT. On `irene`
+    that is 52 of 224 recon folders, all in CT scans and never mixed with a real reconstruction.
+    These get no ACQ-ID. The sync copies each to `<project>/outputs/derived/` with a provenance
+    row naming the scan's ACQ-IDs (Ryan's ruling; see 05_PROJECTS §3 and 07_PROVENANCE).
 
 - **R8 — Don't delete the source.** The live box / platform owns the originals; sync **copies**.
   No `--delete-source` on the live path.

@@ -250,7 +250,21 @@ the 2026-10-06 merge).
        source …)` line, so the preview counts it under "already ingested".
      - **Tests:** `test_ni_flat` covers the three production name shapes; `test_ni_live_e2e`'s
        x-source flow runs the real command. 41/41 suites pass.
-   - ❓ **Open (Ryan, 2026-10-08): CT attenuation maps.** A box `recon_<n>/` can hold only
+   - ✅ **CT attenuation maps: DECIDED and BUILT 2026-10-08 (`ed1ba3c`).** Ryan: "if they are
+     not like the reconstructions then they are not raw; they are new derived files."
+     - **What it does:** a recon folder whose DICOMs are all `ATTMAP*.dcm` never becomes a
+       case. After the commit, `ingest/ni_derived.py` copies it to
+       `<project>/outputs/derived/CT_<subject>_<date>_<ts>_recon<n>_ATTMAP.dcm` (the retire
+       tool's derivative location), SHA-256-verified and never overwriting.
+     - **Provenance:** it appends one row: `input_refs` = the scan's ACQ-IDs, `parameters_ref` =
+       the exact box path.
+     - **It waits** until the scan has a registered reconstruction and its project exists.
+     - **Light on the box:** an already-placed file is checked by size only, with no git call.
+     - **Real tree** (read-only dry run): **95 reconstructions to ingest, 75 already in
+       production (skipped), 52 attenuation maps to copy.**
+     - **Docs:** 05 §3, 07 §2 (writer table), 10_TOOLS, the runbook, the sync rules.
+     - **Tests:** the `derived` flow in `test_ni_live_e2e.py`. 41/41 pass.
+   - (Was open:) **CT attenuation maps.** A box `recon_<n>/` can hold only
      `ATTMAP.dcm`, e.g. `irene/1025/260522/1025_m1/20260522095612_CT/recon_2/`.
      - **What it is:** the CT converted into PET attenuation coefficients on the PET grid, an
        input to the PET reconstruction. That is closer to a derivative than a reconstruction.
