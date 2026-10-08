@@ -863,7 +863,10 @@ def cmd_handover(args):
     live NAS (so it lands inside the folders batch 1 created, never renaming one). -> a NEW manifest.
 
     CSV columns: relpath (required), kind (derivative | notregistered:<no-recon|non-image|conversion-failed>
-    | companion | other), project (blank = holding), reason, parent_acq_ids (derivative), sha256 (optional)."""
+    | companion | other), project (blank = holding), reason, parent_acq_ids (derivative), sha256 (optional);
+    optional class / claim_id / verdict (carried into the manifest, the index and provenance).
+    A row an earlier manifest marks `deferred` (batch 1's biomaGUNE MJ) is NOT already decided: it is the
+    input of the batch that takes it (bmj_plan.py)."""
     stdout_utf8()
     projects = load_projects(args.nas)
     manifest, _sha = verify_drive_manifest(print)
@@ -871,6 +874,8 @@ def cmd_handover(args):
     in_tree = set()   # (project or "(holding)", sha256) already there: an earlier batch, or the NAS index
     for m in args.manifest:
         for r in it(m):
+            if r["decision"] == "deferred":   # left for a later batch (biomaGUNE MJ): that batch's input, not decided
+                continue
             earlier[(r["relpath"], r["member"])] = r["decision"]
             if r["decision"] in ("place", "holding"):
                 in_tree.add((r["project_name"] or "(holding)", r["sha256"]))
@@ -949,8 +954,12 @@ def cmd_handover(args):
             call = f"R3 derivative of {parents} ({(h.get('reason') or 'derivative').strip()}); stream {args.stream} handover"
         else:
             call = f"stream {args.stream} handover ({kind}): {(h.get('reason') or '').strip()}".rstrip(": ")
-        w = {"relpath": rel, "archive": "", "member": "", "size": size, "sha256": sha, "cls": kind.split(":")[0],
-             "top": rel.split("\\")[0], "claim_id": "", "verdict": "", "reading": "", "a2_dec": "", "a2_project": "",
+        # optional columns a stream may carry over from the plan it built (the biomaGUNE MJ batch: A2's class,
+        # the engine's claim and verdict), so the index and provenance read as batch 1's rows do
+        w = {"relpath": rel, "archive": "", "member": "", "size": size, "sha256": sha,
+             "cls": (h.get("class") or "").strip() or kind.split(":")[0],
+             "top": rel.split("\\")[0], "claim_id": (h.get("claim_id") or "").strip(),
+             "verdict": (h.get("verdict") or "").strip(), "reading": "", "a2_dec": "", "a2_project": "",
              "a2_dest": "", "root": "", "project": "", "decision": "", "hold": "", "call": call, "note": "",
              "held_was": "", "why": why, "why_detail": (h.get("reason") or "").strip() if why else ""}
         if proj:
@@ -962,6 +971,10 @@ def cmd_handover(args):
                 w["call"] = call + HELD_SEP + c3
         else:
             w["decision"] = "holding"
+            # a holding row whose reason is exactly one a later 2b round may map ("no claim", "(C) claim":
+            # nonraw_placement.mappable) keeps that reason, as batch 1's holding rows do; the stream goes in note
+            if kind == "other" and (h.get("reason") or "").strip() in NP.MAPPABLE_REASONS:
+                w["call"], w["note"] = (h.get("reason") or "").strip(), f"stream {args.stream} handover"
         load_tree(w["project"] or "(holding)")
         if (w["project"] or "(holding)", sha) in in_tree:
             w["decision"] = "already-placed" if w["project"] else "already-in-holding"
@@ -980,7 +993,8 @@ def cmd_handover(args):
         reason = w["call"]
         rows.append({"row": i, "drive": DRIVE, "drive_label": LABEL, "relpath": w["relpath"], "archive": "",
                      "member": "", "size": w["size"], "sha256": w["sha256"], "class": w["cls"],
-                     "ext": file_ext(w["relpath"].split("\\")[-1]), "flag": "", "claim_id": "", "verdict": "",
+                     "ext": file_ext(w["relpath"].split("\\")[-1]), "flag": "", "claim_id": w["claim_id"],
+                     "verdict": w["verdict"],
                      "researcher": "", "project_name": w["project"],
                      "project_id": prow["project_id"] if prow else "", "project_status": prow["status"] if prow else "",
                      "dest_rel": "", "decision": w["decision"], "reason": reason, "note": w["note"],
