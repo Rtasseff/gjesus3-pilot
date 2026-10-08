@@ -2269,6 +2269,22 @@ mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadat
 
 - [ ] A path-level mapping in `nonraw_placement.py remap` (with a test), then move the 165.
 
+## 🔹 LOW — 106 drive-3 exams hold converted DICOM where the archive has the scanner's own (2026-10-08)
+
+The archive check (`tasks/drive3_mri_archive_check.md`) found six `0619` animals of 2021-03-22 (106 exams) whose production
+DICOM was made by Dicomifier from M. Jesús's copy, while the platform's archive holds the scanner's own DICOM export.
+The pixels are not compared (different reconstructions of the same data).
+
+- [ ] Decide whether to replace the converted DICOM with the scanner's, in place (the recovery pattern; ACQ-IDs kept).
+
+## 🔹 LOW — the assign workbook's append reads drive-3 sources only (2026-10-08)
+
+`tools/claim_workbooks.py assign-append` lists the drive-3 holding files and drive-3 acquisitions with no project. The MRI
+archive ingest adds 118 studies with no project (41 animal studies, 77 phantoms/QC); its build writes them to
+`D:\projects\gjesus3\mri_archive\out\for_assign_workbook.csv`.
+
+- [ ] Let `assign-append` take a generic list of acquisitions, then append the archive's after its ingest.
+
 ## 🔸 MODERATE — the drives' DICOM stream: follow-ups (stream B, 2026-10-04)
 
 - [ ] **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T.

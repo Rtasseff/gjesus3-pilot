@@ -106,7 +106,22 @@ your recommendations."*
 | Q4 | **The 6 MFB studies whose code is no gjesus3 project are ingested with no project**, and listed in the assign workbook | in the ingest build |
 | Q5 | **`AE-biomaGUNE-0220` is reopened** for its 3 studies of 2022 | at ingest time |
 | Q6 | **The 25 archives with no `.sha1`** are checked by the compression's own checksum plus a full tar listing | in the download step |
-| Q7 | **Ryan asks the platform manager** where July–August 2020, the missing June 2020 days, 2022-01-25, 2023 and the older 11.7 T data are | with Ryan; 41 of drive 3's 7 T studies have no archive copy |
+| Q7 | **Ryan asks the platform manager** where July–August 2020, the missing June 2020 days, 2022-01-25, 2023 and the older 11.7 T data are | with Ryan; 41 of drive 3's 7 T studies have no archive copy; also two archive tarballs that are themselves short (`m21_1019`, `m3r7f2_Caff`; their `.sha1` was taken from the short file) |
+
+**Progress (2026-10-08):**
+- **Download:** night 1 verified 552 of 780 archives (175 GB, 0 bad; one connection, 3.6 MB/s, stopped itself at 07:36);
+  the other 228 (≈ 44 GB) run tonight from 18:01.
+- **Drive 3 against these originals** (`feat/mri-archive-ingest`, `tasks/drive3_mri_archive_check.md`): of the 3,309
+  drive-3 exams, 2,346 have a study in the archive and **none differs**: 1,576 byte-identical, 340 pixel-identical
+  re-exports, 63 converted exams whose `2dseq` matches; 367 have a reconstruction on one side only, each explained; 963 are
+  not in the archive (267 from the 11.7 T, 696 on days the archive lacks). M. Jesús's copies are faithful.
+- **The ingest plan:** all 650 new studies assigned to 17 batches (532 into 12 projects, 118 with no project); the 422
+  local so far rehearsed (5,531 exams, 18/18 checks, 0 failed), every operator `pending-claim`. **The coordinator's calls,
+  within the rulings:** projects from facility-DB procedure dates for the 128 code-less studies (the 2026-09-29 DB-date
+  rule, consistent by series); 13 studies keep their claimed project without a subject id (as stream M's M09); the 3 typo
+  suspects stay with no project (Q4); the one image exam the archive adds (`jrc210322_m131_0619/7`) is ingested.
+- **Next:** the last 228 by Fri 07:45, the same scripts over them, the coordinator's gate, then **Ryan's go for the ingest**
+  (a registry write; `0220` is reopened right before its batch).
 
 **Where the SegBioMed conversation lives:** the full exchange with the SegBioMed project is appended to
 `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md` (REPLY 7 carries the 2026-10-05
