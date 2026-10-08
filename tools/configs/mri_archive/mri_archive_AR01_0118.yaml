@@ -1,0 +1,60 @@
+# The MRI platform's archive (stream AR), batch AR01_0118: 31 studies (A 31), 2019-2020; AE-biomaGUNE-0118 31.
+# Gate: tasks/mri_archive_ingest_gate.md. Census: tasks/mri_archive_census.md. Rulings: tasks/STATUS.md 0.5 (Hold), 0.6.
+#
+# SOURCE: the MRI platform's archive (mriuser@10.10.3.175 backup_7T_olddata_260824), pulled to LOCAL disk by
+# tools/mri_archive.py fetch (each tarball SHA-1-verified) and extracted by tools/drive_staging/mri_archive/
+# ar_01_extract.py (k-space excluded; every file hashed) to a FLAT tree on D::
+#     D:/projects/gjesus3/mri_archive/extract/AR01_0118/<study>/<exam>/
+# so original_name = "<study>/<exam>", the shape of every production MRI row (the staging_dir trap), dated by
+# VisuCreationDate as production: an exam already registered (e.g. from the M. Jesus drive) is skipped, never
+# registered twice. Convert-first (Ryan, 2026-10-04): every exam in the case table holds DICOM (the scanner's own, or
+# Dicomifier's, made in this extract tree before ingest). Exams NOT in the case table (spectroscopy, no reconstruction,
+# never acquired, failed conversion) are skipped by name (on_missing: skip) and listed for a placement batch.
+#
+# PER-EXAM VALUES come from the case table (ar_07_cases.py):
+#   drv_acq_datetime = exam visu_pars VisuCreationDate (production's rule), else acqp ACQ_time; never today
+#   drv_model        = Bruker BioSpec 7T (Biospec 70/30), set explicitly
+#   drv_alias / drv_animal / drv_sample / drv_sample_type / drv_session / drv_project / drv_hhmm / drv_note
+# operator = pending-claim: historical internal MRI, listed in the claim workbook (STATUS 0.5, Ryan 2026-10-07).
+#
+# Dry run (read-only):
+#   python tools/ingest_raw.py --config tools/configs/mri_archive/mri_archive_AR01_0118.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false             # every target project exists (0220 is reopened first, Q5)
+  acquisition_layout: folder
+  copy_strategy: mri_paravision_v2        # DICOMs only
+  reconstructions: all
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/mri_archive/extract/AR01_0118"
+  pattern: "*/[0-9]*"
+  case_table:
+    file:       cases_AR01_0118.csv
+    key:        original_name
+    on_missing: skip                      # the exams not registered (listed in out/not_registered*.csv)
+  subject_from_db: true
+  subject_lookup:
+    project_alias: "${discovered.drv_alias}"
+    animal_code:   "${discovered.drv_animal}"
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     "${discovered.drv_model}"
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "${discovered.drv_sample}"
+  sample_type:          "${discovered.drv_sample_type}"
+  session_id:           "${discovered.drv_session}"
+  acquisition_datetime: discovered.drv_acq_datetime
+  project_name:         "${discovered.drv_project}"
+  notes:                "Internal MRI ${discovered.mri_sequence_name} exam ${discovered.mri_exam_number}; recons kept: ${discovered.mri_recon_indices}; ${discovered.drv_note}"
+
+operator: "pending-claim"
+
+# Project link name: the MRI convention of 2026-10-05, MRI_<sample>_<YYYYMMDD>_<HHMM>_<exam>_<recons> (HHMM = the study
+# start), so two sessions of one animal on one day never collide. Checked unique and free by ar_07_cases.py.
+link_filename: "MRI_${sample_id}_${acq_date}_${discovered.drv_hhmm}_${discovered.mri_exam_number}_${discovered.mri_recon_indices}"

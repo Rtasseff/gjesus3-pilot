@@ -1,0 +1,40 @@
+# The MRI platform's archive (stream AR): DEDUP PROOF (DRY RUN ONLY -- never run for real; guarded below).
+# Gate: tasks/mri_archive_ingest_gate.md. The 130 tier-C studies are the M. Jesus drive's (stream M), registered from
+# the drive on 2026-10-07. Every exam of them that production holds, extracted from the ARCHIVE the same way as the
+# batches (flat <study>/<exam>) and dated by the SAME rule (cases_DEDUP.csv): the dry run must list NONE and skip every
+# one "already in registry (idempotent re-run)". The other exams of those studies (no row) are skipped by name.
+# GUARD: copy_strategy below does not exist. A dry run never reaches the copy; a real run would fail every case at the
+# copy step, before anything is registered.
+#   python tools/ingest_raw.py --config tools/configs/mri_archive/mri_archive_dedup_proof.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false
+  acquisition_layout: folder
+  copy_strategy: dedup_proof_never_run_for_real
+  reconstructions: all
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/mri_archive/extract/C"
+  pattern: "*/[0-9]*"
+  case_table:
+    file:       cases_DEDUP.csv
+    key:        original_name
+    on_missing: skip
+  subject_from_db: false
+
+registry:
+  instrument:           MRI
+  data_ecosystem:       DICOM
+  instrument_model:     "Bruker BioSpec 7T"
+  modalities_in_study:  NA
+  researcher:           "NA"
+  data_source:          internal
+  sample_id:            "dedup-proof"
+  sample_type:          organism
+  session_id:           ""
+  acquisition_datetime: discovered.drv_acq_datetime
+  project_name:         ""
+  notes:                "DEDUP PROOF, never registered"
+
+operator: "NA"
