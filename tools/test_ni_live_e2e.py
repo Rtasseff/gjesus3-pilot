@@ -34,11 +34,17 @@ working on the Mac (RESUME_ni_live.md, top):
              queued to registries/pending_links.csv.
   always     the source tree is never written; nothing lands in HOME or TEMP;
              nothing is written next to the staged code.
+  terminal   in-process, with stdin made to look like a real terminal: live mode
+             asks no metadata question, only the final 'Proceed? [y/N]'.
 
 Run:  python tools/test_ni_live_e2e.py          (add -v to print every run's output)
 """
+import builtins
+import contextlib
 import csv
 import hashlib
+import importlib.util
+import io
 import json
 import os
 import shutil
@@ -303,11 +309,63 @@ def enotsup_flow(tmp):
     check(os.listdir(w["home"]) == [] and os.listdir(w["systemp"]) == [], "HOME and TEMP are still empty")
 
 
+class _FakeTerminal(io.StringIO):
+    def isatty(self):
+        return True
+
+
+def terminal_flow(tmp):
+    """A person at a real terminal (every subprocess run above is non-interactive).
+
+    Live mode must ask NOTHING but the final 'Proceed? [y/N]': no batch-wide
+    is_control question (Ryan, 2026-10-08 -- the scripted runs above could never
+    show it, which is how it survived the 2026-10-06 on-box gates). Answers 'n'
+    at Proceed, so nothing is written.
+    """
+    print("a person at a terminal: live mode asks nothing but 'Proceed?'")
+    w = build_world(tmp)
+    spec = importlib.util.spec_from_file_location(
+        "ni_ingest_under_test", os.path.join(_HERE, "operator", "ni_ingest.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    seen_interactive = []
+    real_collect = mod.metadata_prompt.collect_overrides
+
+    def recording_collect(cli, **kw):
+        seen_interactive.append(kw.get("interactive"))
+        return real_collect(cli, **kw)
+
+    asked = []
+
+    def fake_input(prompt=""):
+        asked.append(prompt)
+        return "n"
+
+    nas0 = snapshot(w["nas"])
+    old = (builtins.input, sys.stdin, mod.metadata_prompt.collect_overrides)
+    builtins.input, sys.stdin = fake_input, _FakeTerminal()
+    mod.metadata_prompt.collect_overrides = recording_collect
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            rc = mod.main([w["box"], "--live", "--nas-root", w["nas"],
+                           "--corrections", os.path.join(tmp, "corr_tty.csv")])
+    finally:
+        builtins.input, sys.stdin, mod.metadata_prompt.collect_overrides = old
+    check(rc == 0, "the terminal run exits 0 after answering 'n'")
+    check(seen_interactive == [False], f"no metadata questions in live mode (interactive={seen_interactive})")
+    check(len(asked) == 1 and asked[0].startswith("Proceed?"),
+          f"the only question is the final confirmation (asked: {asked!r})")
+    check(snapshot(w["nas"]) == nas0, "declining at Proceed wrote nothing")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="ni_live_e2e_") as tmp:
         main_flow(os.path.join(tmp, "a"))
     with tempfile.TemporaryDirectory(prefix="ni_live_e2e_") as tmp:
         enotsup_flow(os.path.join(tmp, "b"))
+    with tempfile.TemporaryDirectory(prefix="ni_live_e2e_") as tmp:
+        terminal_flow(os.path.join(tmp, "c"))
     if FAILED:
         print(f"\n{len(FAILED)} CHECK(S) FAILED")
         sys.exit(1)

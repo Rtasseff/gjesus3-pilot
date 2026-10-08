@@ -418,16 +418,16 @@ def _run_live(args, nas_root):
     operator = (args.operator or researcher).strip()
     log(f"researcher: {researcher}   operator: {operator}", "INFO")
 
-    # Condition/anatomy metadata (per-batch, optional, non-blocking).
+    # Condition/anatomy metadata (optional, non-blocking): from explicit flags ONLY.
     #
-    # NEVER prompt on a read-only pass. `--plan` writes a worksheet and stops and
-    # `--dry-run` commits nothing, so asking the operator is pure friction — and it
-    # asked at the NI box on 2026-08-05, three times, during the plan step. The NI
-    # live template supplies the per-batch anatomy default (Molecubes scans the whole
-    # animal every time), so the only genuinely per-batch question left is the
-    # condition one, and that belongs on a real ingest.
-    read_only = bool(args.plan) or bool(args.dry_run)
-    interactive = (not args.no_prompt) and sys.stdin.isatty() and not read_only
+    # Live mode NEVER prompts. A live sync covers every new reconstruction in the
+    # researcher's folder -- many sessions, animals and studies at once -- so one
+    # typed-in answer applied to all of them is wrong more often than right (Ryan,
+    # 2026-10-08; it asked at the NI box on 2026-08-05 too). Unanswered,
+    # `is_control` stays null, which never blocks (08_METADATA §4.7). The flags
+    # remain for an operator who deliberately wants one value for the whole run.
+    # The template supplies anatomy (Molecubes scans the whole animal every time).
+    interactive = False
     meta_overrides = metadata_prompt.collect_overrides(
         {
             "is_control": args.is_control,

@@ -206,6 +206,11 @@ mri-ingest /path/to/study --is-control false --disease-model "EAE" \
   per-acquisition later.
 - `--no-prompt` turns the questions off entirely (for scripted runs); you then
   get only what you passed as flags.
+- **`ni-ingest --live` never asks** (2026-10-08). A live sync covers every new
+  reconstruction in your folder, which spans many sessions, animals and studies,
+  so one answer for all of them would be wrong more often than right. The values
+  stay blank, which never blocks, unless you deliberately pass a flag for the
+  whole run.
 
 ### The everyday flow (both Linux tools)
 
