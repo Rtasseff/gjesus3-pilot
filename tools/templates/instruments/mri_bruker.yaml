@@ -359,6 +359,10 @@ registry:
 # REQUIRED. For MRI operator == researcher; `mri-ingest --operator <name>` sets
 # both (it prompts if you omit it on a terminal, errors in a script). On the
 # data-office YAML path, replace the placeholder.
+# HISTORICAL loads (Data Office; Ryan, 2026-10-07): when the source records no
+# operator (ParaVision keeps only the shared `nmr` login), set
+# `operator: pending-claim` (the hold value, 06_REGISTRIES §2.3a-bis) -- not NA,
+# never a guess -- and list the sessions with `tools/claim_workbooks.py claims-append`.
 operator: "<REQUIRED - set via mri-ingest --operator, or replace here>"
 
 # First-time project-creation defaults (10_TOOLS §2.1.4). Read only on

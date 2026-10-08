@@ -24,9 +24,17 @@ DECISIONS IT IMPLEMENTS (Ryan, 2026-10-01/02; close-out plan "Two placement deci
   * Other streams' material is never placed here: imaging classes (bruker / volume / nmr) AND every
     file in a directory that holds one (stream B, the drives' DICOM), `LEONE.zip` (stream C).
   * `.lsm` and every file with no claim or a (C) claim -> `holding` (2c, later).
-  * (B) `Project-0521` takes the 4 `Antiguo proyecto 0720` members as well (no Project-0720).
+  * (B) `Project-0521` takes the 4 `Antiguo proyecto 0720` members as well (no Project-0720). Any
+    other (B) code has no project (drive 3's `0924`, 2 CEEA documents) -> holding.
   * A target project whose registry status is `closed` -> decision `closed-project`: listed, never
     copied by this tool until the project is reopened (Ryan's case-by-case call).
+  * Decision `held` (drive 3, 2026-10-06): planned, with a destination, but NEVER copied by `copy` or
+    `holding`; the `hold` column says what it waits on. A later manifest releases it
+    (tools/drive_staging/drive3/p_plan.py release).
+
+THE THIRD DRIVE (D3, M. Jesus's working drive, staged on the NAS at J:\\_staging_drive3_MJ\\, read-only):
+its manifest is built by tools/drive_staging/drive3/p_plan.py from part A2's plan (record:
+tasks/drive3_placement_gate.md); `copy`, `verify` and `holding` below are the same for every drive.
 
 THE COPY (`copy --execute`), per file: stream the source (staged loose file, or the member read out
 of its archive) into `<dest dir>\\.~nonraw-<sha8>.part`, re-read that temp file FROM THE NAS and hash
@@ -68,8 +76,16 @@ SEVENZIP = r"C:\Program Files\7-Zip\7z.exe"
 DRIVES = {  # catalog code -> (drive label used on the NAS, staged root)
     "D1": ("drive1_FRIO-X6", os.path.join(STAGING, "drive1_FRIO-X6_2322E4A111E7")),
     "D2": ("drive2_MFB-Disco-2", os.path.join(STAGING, "drive2_MFB-Disco-2_2322E4A112BD")),
+    # the third drive was staged to the NAS share root, outside gjesus3-data: READ-ONLY for this tool
+    "D3": ("drive3_MJesus-MFB", r"J:\_staging_drive3_MJ\drive3_MJesus_WX22D623YP29"),
 }
-CLAIMS_DRIVE = {"drive1": "D1", "drive2": "D2"}
+CLAIMS_DRIVE = {"drive1": "D1", "drive2": "D2", "drive3": "D3"}
+# what a provenance row says about the drive a file was copied from (D1/D2 wording unchanged)
+DRIVE_DESC = {
+    "D1": "the historical operator drive drive1_FRIO-X6 (staged 2026-09-22/28)",
+    "D2": "the historical operator drive drive2_MFB-Disco-2 (staged 2026-09-22/28)",
+    "D3": "the historical drive drive3_MJesus-MFB (a researcher's working drive, staged 2026-09-29/30)",
+}
 SUBDIR = ("working", "historical_drives")
 
 IMAGING_CLASSES = {"bruker", "volume", "nmr"}           # stream B
@@ -78,6 +94,10 @@ LEONE = "LEONE.zip"                                     # stream C
 INSTALLER_ARCHIVE_RE = re.compile(r"Downloadly|\\Crack\\|(^|\\)ok\.dll\.zip$", re.I)
 PROJECT_0521 = "Project-0521"
 ANTIGUO_0720_RE = re.compile(r"Antiguo proyecto 0720", re.I)
+# (B) claims (a code the animal-facility DB does not hold, phrased as a project id): the engine proposes
+# `Project-<code>`. Only these have a project (Ryan, 2026-10-02): 0521 itself, and 0720 folded into it.
+# Any other (B) -- drive 3's `0924`, 2 CEEA documents -- has none and goes to holding.
+B_PROJECTS = {"Project-0521": PROJECT_0521, "Project-0720": PROJECT_0521}
 
 # Projects Ryan approved on 2026-09-29/10-02 that may not exist yet. The tool creates none of them
 # (create_project.py does); it only lets a claim target one before it exists.
@@ -90,7 +110,10 @@ MANIFEST_FIELDS = [
     "row", "drive", "drive_label", "relpath", "archive", "member", "size", "sha256", "class", "ext",
     "flag", "claim_id", "verdict", "researcher", "project_name", "project_id", "project_status",
     "dest_rel", "decision", "reason", "note", "root_key", "shortened", "why", "why_detail",
+    "hold",   # decision `held`: what the row waits on (e.g. `M1-0118`, `reopen-AE-biomaGUNE-1521`)
 ]
+# Decisions a run COPIES: `copy` takes `place` (and `closed-project` once its project is active again),
+# `holding` takes `holding`. Everything else -- `held` above all -- is listed, never copied.
 
 # Ryan, 2026-10-04: MRI that has no reconstructed image, or whose reconstruction cannot be converted
 # to DICOM, is NOT registered; it is kept as other data, beside a plain README saying why
@@ -104,12 +127,22 @@ NOTREG_WHY = {   # plain language, one per stream-B kind (agreed with B, 2026-10
 NOTREG_README = "README_not_registered.txt"
 
 
-def notreg_text(whys):
-    """README beside each not-registered exam group (stream B's proposal, in plain language)."""
+FIRST_TWO_TAGS = ("FRIO-X6", "MFB-Disco-2")
+
+
+def notreg_text(whys, tags=()):
+    """README beside each not-registered exam group (stream B's proposal, in plain language).
+    `tags`: the drive folder(s) the group sits under. The drives 1+2 text is unchanged (it named both
+    of them whichever it was); a group from another drive names that drive."""
+    tags = sorted(set(tags) - {""})
+    if not tags or set(tags) <= set(FIRST_TWO_TAGS):
+        drives = "(FRIO-X6 and MFB-Disco-2, staged in September 2026). They are kept, but they are"
+    else:
+        drives = f"({' and '.join(tags)}, staged in September 2026). They are kept, but they are"
     lines = ["NOT REGISTERED IN gjesus3 -- KEPT HERE AS OTHER DATA",
              "===================================================", "",
              "The MRI exam folders here come from the lab's historical external drives",
-             "(FRIO-X6 and MFB-Disco-2, staged in September 2026). They are kept, but they are",
+             drives,
              "not official acquisitions in gjesus3: gjesus3 registers an MRI scan only when it",
              "has a reconstructed image stored as DICOM.", "",
              "Why these are not registered:"]
@@ -212,7 +245,9 @@ def project_for(verdict, proposed, where):
     if verdict in ("CONFIRMED", "A"):
         return proposed or None
     if verdict == "B":
-        return PROJECT_0521  # 0521 itself, and 0720 folded into it (Ryan, 2026-10-02)
+        # per code (B_PROJECTS): 0521 itself, and 0720 folded into it (Ryan, 2026-10-02). Until drive 3
+        # every (B) was 0521/0720, so this sent every (B) to Project-0521; drive 3's 0924 is not.
+        return B_PROJECTS.get(proposed)
     if verdict == "C" and ANTIGUO_0720_RE.search(where or ""):
         return PROJECT_0521
     return None
@@ -1004,9 +1039,10 @@ def prov_entry(r, run_id, by, today):
             "file_type": os.path.splitext(out_rel)[1] or "file", "date_created": today,
             "creator": by, "input_refs": refs,
             "process_description": (
-                "Copied by nonraw_placement.py from the historical operator drive "
-                f"{r['drive_label']} (staged 2026-09-22/28): non-raw project material "
-                f"(class {r['class']}; {r['reason']}). Byte-verified against the drive manifest."),
+                "Copied by nonraw_placement.py from "
+                + DRIVE_DESC.get(r["drive"], f"the historical drive {r['drive_label']}")
+                + f": non-raw project material (class {r['class']}; {r['reason']}). "
+                "Byte-verified against the drive manifest."),
             "software_version": provenance_version(),
             "parameters_ref": run_id, "lab_notebook_ref": "",
             "notes": f"sha256:{r['sha256']}" + (f"; claim {r['claim_id']}" if r["claim_id"] else "")}
@@ -1051,28 +1087,56 @@ def load_manifest(path):
     return rd(path)
 
 
+def holding_sources(rows, nas):
+    """copy --from-holding: set r["_src"] on every 2b-mapped row to its copy in the NAS holding folder, and return
+    how many of those paths do not exist.
+
+    The source is WHERE `holding --execute` PUT the file, as the holding folder's own manifest.csv records it
+    (`new_path`, keyed by `original_path` = historical_paths.original_display): the rendered tree uses the drive's
+    display label (drive 3: `MJesus-MFB`, not `drive3_MJesus-MFB`) and shortens folders to the 240 budget
+    (`Segmentacion~738e`), so recomputing the raw path with holding_rel finds nothing (stream M's P2b, 2026-10-07).
+    holding_rel stays as the fallback for a key the manifest lacks. copy_one still re-verifies every byte against
+    the drive manifest's SHA-256, so a wrong match cannot pass silently."""
+    where = {}
+    hm = os.path.join(nas, HOLDING_BASE, "manifest.csv")
+    if os.path.exists(lp(hm)):
+        with open(lp(hm), encoding="utf-8-sig", newline="") as f:
+            for h in csv.DictReader(f):
+                if h.get("new_path"):
+                    where[h["original_path"]] = h["new_path"]
+    absent = 0
+    for r in rows:
+        if r["reason"].startswith("2b mapping"):
+            key = H.original_display(r["drive"], r["relpath"], r["archive"], r["member"])
+            r["_src"] = (os.path.join(nas, HOLDING_BASE, where[key]) if key in where else
+                         os.path.join(nas, holding_rel(r["drive_label"], r["relpath"], r["archive"], r["member"])))
+            absent += not os.path.exists(lp(r["_src"]))
+    return absent
+
+
 def cmd_copy(args):
     projects = load_projects(args.nas)
     # a `closed-project` row is placeable once the LIVE registry says its project is active again
     # (Ryan reopens case by case: 1519 / 0320 on 2026-10-04)
     reopened = {n for n, p in projects.items() if (p.get("status") or "").strip().lower() == "active"}
-    rows = [r for r in load_manifest(args.manifest)
+    allrows = load_manifest(args.manifest)
+    rows = [r for r in allrows
             if r["decision"] == "place" or (r["decision"] == "closed-project" and r["project_name"] in reopened)]
     if args.project:
         rows = [r for r in rows if r["project_name"] in args.project]
-    held = sorted({r["project_name"] for r in load_manifest(args.manifest)
-                   if r["decision"] == "closed-project" and r["project_name"] not in reopened})
-    if held:
-        print(f"still closed, not copied: {held}")
+    still_closed = sorted({r["project_name"] for r in allrows
+                           if r["decision"] == "closed-project" and r["project_name"] not in reopened})
+    if still_closed:
+        print(f"still closed, not copied: {still_closed}")
+    held = collections.Counter(r.get("hold") or "(no hold tag)" for r in allrows if r["decision"] == "held"
+                               and (not args.project or r["project_name"] in args.project))
+    if held:  # `held` rows are never copied: a later manifest releases them (drive3/p_plan.py release)
+        print(f"held, not copied by this run: {sum(held.values())} files {dict(sorted(held.items()))}")
     if args.from_holding:
         # 2b after the D: staging is gone: a mapped group's files are read from their copy in the NAS
         # holding folder (filled by `holding --execute`). Rows placed earlier from D: are already at
         # their destination and are skipped as identical before any source is opened.
-        absent = 0
-        for r in rows:
-            if r["reason"].startswith("2b mapping"):
-                r["_src"] = os.path.join(args.nas, holding_rel(r["drive_label"], r["relpath"], r["archive"], r["member"]))
-                absent += not os.path.exists(lp(r["_src"]))
+        absent = holding_sources(rows, args.nas)
         print(f"--from-holding: {sum(1 for r in rows if r.get('_src'))} mapped files read from the holding folder; "
               f"{absent} of them are NOT there")
         if absent and args.execute:
@@ -1195,24 +1259,34 @@ def cmd_verify(args):
 # -------------------------------------------------------------------------------------- holding
 
 README_TXT = """\
-Historical operator drives -- unassigned material
-=================================================
+Historical drives -- unassigned material
+========================================
 
 What this is
-  Files from two operator external drives that were staged on 2026-09-22/28:
-    FRIO-X6       (drive1_FRIO-X6, serial 2322E4A111E7)
-    MFB-Disco-2   (drive2_MFB-Disco-2, serial 2322E4A112BD)
+  Files from the lab's historical external drives, one folder per drive:
+    FRIO-X6       operator drive (drive1_FRIO-X6, serial 2322E4A111E7),
+                  staged 2026-09-22/28
+    MFB-Disco-2   operator drive (drive2_MFB-Disco-2, serial 2322E4A112BD),
+                  staged 2026-09-22/28
+    MJesus-MFB    a researcher's working drive (drive3_MJesus-MFB, WD My
+                  Passport, serial WX22D623YP29), staged 2026-09-29/30
   The folders below keep the drives' own directory structure, so a folder name may
   tell you which study or person a file came from. A .zip or .7z archive became a
   normal folder named like Manon_zip.
 
 Why it is here and not in gjesus3
-  These files are NOT part of the gjesus3 archive. They are not raw data (the raw
-  acquisitions from these drives were ingested into gjesus3 separately), and they
-  have not been assigned to a project.
+  These files are NOT part of the gjesus3 archive. They are not raw data (gjesus3
+  registers the raw acquisitions from these drives separately), and they have not
+  been assigned to a project.
 
   Left out on purpose: installed software, system files, and personal or
   administrative documents.
+
+  MJesus-MFB\\Otros\\PH_analysis_Segmentation_tool is the group's own 3D Slicer
+  segmentation module, with its trained models. The model predictions found
+  elsewhere on that drive (the Predict_Slicer folders, and the Pred_ and
+  Postprocessed_ volumes in Segmentacion 2DG RATAS) are kept here with it: they
+  are model output, not hand-drawn segmentations.
 
 Some folder names were shortened
   Windows cannot open very long paths, so a few long folder or file names were
@@ -1223,6 +1297,8 @@ Some folder names were shortened
 Not copied
   Simu_2_V_XYZ.zip (drive FRIO-X6, 97 GB): the archive is truncated and cannot be
   opened, so it was not copied. It remains on the owner's drive.
+  MJesus-MFB: the folder biomaGUNE MJ (the researcher's own working folder) is
+  not included here; it is being reviewed separately.
 
 The originals
   The originals remain on the owners' external drives.
@@ -1322,7 +1398,7 @@ def tree_documents(manifest, base, holding=False, extra_index_rows=(), nas=None)
     w.writeheader()
     w.writerows(merge_pathmap(ex_pm, our_pm))
     docs[f"{base}\\{H.PATHMAP_NAME}"] = buf.getvalue().encode("utf-8-sig")
-    readme = README_TXT if holding else H.PROJECT_README
+    readme = README_TXT if holding else H.project_readme(base)   # a project's own note, if it has one
     docs[f"{base}\\{H.README_NAME}"] = readme.replace("\n", "\r\n").encode("utf-8")
     origins = collections.defaultdict(list)
     op = os.path.join(tdir, "_ORIGINS.csv")
@@ -1341,7 +1417,7 @@ def tree_documents(manifest, base, holding=False, extra_index_rows=(), nas=None)
         for r in rd(nrp):
             nr[r["folder"]].add(r["why"])
         for folder, whys in nr.items():
-            docs[f"{base}\\{folder}\\{NOTREG_README}"] = notreg_text(whys).encode("utf-8")
+            docs[f"{base}\\{folder}\\{NOTREG_README}"] = notreg_text(whys, {folder.split("\\")[0]}).encode("utf-8")
     return docs
 
 

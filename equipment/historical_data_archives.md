@@ -88,6 +88,53 @@ Optional (low priority given low sensitivity) lock-down:
 `icacls "%USERPROFILE%\.ssh\gjesus3_mri.cred" /inheritance:r /grant:r "%USERNAME%:R"`.
 The agent does not have the password — it is pasted in out-of-band on the sync machine.
 
+### The MRI platform's archive (older 7 T data) — READ-ONLY (added 2026-10-07)
+
+When the 7 T acquisition machine's disk fills, the platform moves the oldest studies to its **own archive** (Ryan,
+2026-10-06). We can reach that archive over SSH/SFTP. **It belongs to the platform, not to gjesus3.**
+
+```
+host:   10.10.3.175        (behind the institute firewall; password protected)
+user:   mriuser
+folder: /share/homes/mriuser/backup_7T_olddata_260824
+```
+
+**Layout** (listed 2026-10-07): the year folders `2019_pv6`, `2020_pv6`, `2021_pv6`, `2022_pv6`, `2022_pv7` and
+`2022_PV6_PV7`. Each holds **one compressed archive per ParaVision study**, named after the study folder
+(`<study>.tar.gz` or `<study>.tar.xz`, e.g. `20200107_145059_jrc200107_m6_hypx_1_1.tar.gz`). Most archives have a
+`.sha1` file beside them, and a few have a `.sha256`. Four of the six folders also hold a `00_LOGFILE_sha1.txt` (not `2022_pv6` or `2022_pv7`), plus older
+`MRI7_*.md5sums.Saved_*` lists. All groups' studies are there: `jrc` is MFB, and `pr`, `abh`, `sp`, `jl`, `dan`
+and others are other groups. In all there are 3,048 archives (617.7 GB) holding 2,555 distinct studies from
+2019–2022. 2022 studies appear in up to three folders, and the archive has **no 2023 folder**. The census is in
+[`tasks/mri_archive_census.md`](../tasks/mri_archive_census.md).
+
+**Credentials:** a separate **`[mri_archive]`** section in the same `%USERPROFILE%\.ssh\gjesus3_mri.cred`
+(host, user, password, port). It is never printed.
+
+**The three rules** (Ryan, 2026-10-07, "critical importance"):
+
+1. **Never write, rename, chmod or delete anything there.** The account *can* write, so the rule is enforced in
+   code. All access goes through `tools/mri_archive.py`. Its wrapper holds only "list a folder", "stat a path" and
+   "open a file for reading (`rb`)". It has no write, delete, shell or command method, and it refuses any path
+   outside the folder above. No `.part`, lock or temp file is ever created there: downloads write locally.
+2. **One connection, one call at a time. No file contents between 08:00 and 18:00, Monday to Friday.** Listing
+   is fine in those hours, done gently (the module paces its calls). Downloading archives is for nights and
+   weekends only, and the module refuses to open a file in working hours.
+3. **The normal tools never point at it.** The operator GUI, `mri-ingest` and `ftp_mirror.py` read only `[mri]`
+   (the scanner, `kenia`). Only `tools/mri_archive.py` reads `[mri_archive]`, and it never falls back to `[mri]`.
+
+**Listing (read-only):** `python tools\mri_archive.py list --out <local.csv>` writes one row per entry (path,
+kind, size, modification time) to a local CSV. The census listing took 7 calls and about 2 s.
+
+**Download (after hours only):** `python tools\mri_archive.py fetch --plan <pull_plan.csv> --dest
+D:\projects\gjesus3\mri_archive\pull [--dry-run] [--max-gb N] [--stop-at HH:MM]` fetches the plan's pulled tiers
+(C, A, A2, B: Ryan's rulings of 2026-10-07) to `<dest>\<year folder>\<archive>` on local disk, with the `.sha1` /
+`.sha256` beside each. Each archive is read in chunks into a local `.part`, hashed while reading, and renamed
+only when its checksum matches; a mismatch is kept as `.bad`. Archives with no checksum file are checked by the
+compression's own check plus a full tar listing. `<dest>\fetch_manifest.csv` records every attempt, and a re-run
+skips the verified ones. The run refuses to start in working hours, starts no file it cannot finish before 08:00
+(or `--stop-at`), and stops mid-file at that time, leaving only the local `.part`. `--dry-run` lists only.
+
 ---
 
 ## Microscopy
@@ -131,6 +178,8 @@ the CELL + LSM 900 operator.)
 
 - **NI `gnuclear3`** — request access (the intended standardized long-term store).
 - **MRI credentials** — set up the SSH key (above) on the sync machine; decide key-vs-password.
+- **MRI platform archive** — pulling from it (MFB studies production lacks, and stream M's originals check) is
+  proposed in [`tasks/mri_archive_census.md`](../tasks/mri_archive_census.md) §5. Nothing has been decided or downloaded.
 - **Microscopy external-drive pull** — the two staged drives' `.czi` are ingested (above); capture any
   further per-operator drive locations as they surface.
 - Add a pointer to this file from `equipment/INDEX.md` once the in-flight migration settles.

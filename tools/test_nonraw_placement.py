@@ -80,7 +80,11 @@ def test_decide():
     check(D(verdict="A")[0] == "place", "(A) -> place")
     check(D(verdict="", proposed_project="")[0] == "holding", "no claim -> holding")
     check(D(verdict="C", proposed_project="")[0] == "holding", "(C) -> holding")
-    check(D(verdict="B", proposed_project="")[2] == "Project-0521", "(B) -> Project-0521")
+    check(D(verdict="B", proposed_project="Project-0521")[2] == "Project-0521", "(B) 0521 -> Project-0521")
+    check(D(verdict="B", proposed_project="Project-0720")[2] == "Project-0521", "(B) 0720 folds into Project-0521")
+    check(D(verdict="B", proposed_project="Project-0924")[0] == "holding",
+          "(B) 0924 (drive 3, 2 CEEA documents, no project) -> holding, NOT Project-0521")
+    check(D(verdict="B", proposed_project="")[0] == "holding", "(B) without a proposed project -> holding")
     r = D(verdict="C", proposed_project="", archive="Z.zip", relpath="Z.zip",
           member="Pili y Mili/Proyecto 0521 iNO/Antiguo proyecto 0720/doc.pdf")
     check(r[0] == "place" and r[2] == "Project-0521", "nested 0720 folds into Project-0521")
@@ -373,6 +377,172 @@ def test_publish_merges():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_third_drive():
+    print("the third drive (D3, M. Jesus's working drive, staged on the NAS 2026-09-29/30)")
+    check(N.DRIVES["D3"] == ("drive3_MJesus-MFB", r"J:\_staging_drive3_MJ\drive3_MJesus_WX22D623YP29"),
+          f"D3 staged root {N.DRIVES['D3']}")
+    check(N.DRIVES["D1"][0] == "drive1_FRIO-X6" and N.DRIVES["D2"][0] == "drive2_MFB-Disco-2", "D1/D2 unchanged")
+    check(N.CLAIMS_DRIVE.get("drive3") == "D3", "the claims engine's drive3 maps to D3")
+    check(N.staged_path({"drive": "D3", "relpath": r"Pili y Mili\a.docx"}) ==
+          r"J:\_staging_drive3_MJ\drive3_MJesus_WX22D623YP29\files\Pili y Mili\a.docx", "staged path of a D3 file")
+    r = {"drive": "D1", "drive_label": "drive1_FRIO-X6", "relpath": "a\\b.png", "archive": "", "member": "",
+         "dest_rel": r"projects\P\working\historical_drives\FRIO-X6\a\b.png", "class": "figure",
+         "reason": "claim CONFIRMED", "claim_id": "CL-1", "sha256": "x"}
+    old = ("Copied by nonraw_placement.py from the historical operator drive drive1_FRIO-X6 (staged 2026-09-22/28): "
+           "non-raw project material (class figure; claim CONFIRMED). Byte-verified against the drive manifest.")
+    check(N.prov_entry(r, "RUN", "t", "x")["process_description"] == old, "D1 provenance wording unchanged")
+    d3 = N.prov_entry(dict(r, drive="D3", drive_label="drive3_MJesus-MFB"), "RUN", "t", "x")["process_description"]
+    check("drive3_MJesus-MFB" in d3 and "2026-09-29/30" in d3 and "operator" not in d3,
+          f"D3 provenance names its drive and staging dates: {d3[:90]}")
+    # the not-registered README: drives 1+2 text unchanged; a drive-3 group names its drive
+    t12 = N.notreg_text({"x"})
+    check("(FRIO-X6 and MFB-Disco-2, staged in September 2026)" in t12 and t12 == N.notreg_text({"x"}, {"FRIO-X6"}),
+          "drives 1+2 not-registered README unchanged")
+    t3 = N.notreg_text({"x"}, {"MJesus-MFB"})
+    check("(MJesus-MFB, staged in September 2026)" in t3 and "FRIO-X6" not in t3, "drive-3 README names drive 3 only")
+    # the holding README: three drives, the not-copied archive, the model outputs, biomaGUNE MJ
+    for s in ("FRIO-X6", "2322E4A111E7", "MFB-Disco-2", "2322E4A112BD", "MJesus-MFB", "WX22D623YP29",
+              "Simu_2_V_XYZ.zip", "PH_analysis_Segmentation_tool", "Predict_Slicer", "biomaGUNE MJ", "manifest.csv"):
+        check(s in N.README_TXT, f"holding README names {s}")
+
+
+def _d3_stage(tmp):
+    """A staged drive-3 tree in tmp: files\\A\\S\\{p.txt, h.txt, held.txt} -> (stage root, {name: bytes})."""
+    stage = os.path.join(tmp, "stage3")
+    os.makedirs(os.path.join(stage, "files", "A", "S"))
+    data = {"p.txt": b"placed now", "h.txt": b"to the holding folder", "held.txt": b"waits on M1"}
+    for n, b in data.items():
+        with open(os.path.join(stage, "files", "A", "S", n), "wb") as f:
+            f.write(b)
+    return stage, data
+
+
+def test_held_never_copied():
+    print("decision `held` (drive 3): planned, never copied by copy / holding, ignored by verify")
+    tmp = tempfile.mkdtemp(prefix="nonraw_held_")
+    old = N.DRIVES
+    try:
+        stage, data = _d3_stage(tmp)
+        N.DRIVES = dict(old, D3=("drive3_MJesus-MFB", stage))
+        nas, out = os.path.join(tmp, "nas"), os.path.join(tmp, "out")
+        os.makedirs(os.path.join(nas, "registries"))
+        with open(os.path.join(nas, "registries", "registry_projects.csv"), "w", encoding="utf-8", newline="") as f:
+            f.write("project_id,name,description,owner,start_date,status,last_activity,folder_location,notes\r\n"
+                    "PROJ-0001,P,,x,,active,,/projects/P/,\r\n")
+        from ingest import provenance
+        provenance.write_empty(os.path.join(nas, "projects", "P", "provenance.csv"))
+        projects = N.load_projects(nas)
+        base = {"drive": "D3", "drive_label": "drive3_MJesus-MFB", "archive": "", "member": "", "class": "document",
+                "ext": ".txt", "flag": "", "claim_id": "CL-9", "verdict": "CONFIRMED", "researcher": "",
+                "project_id": "PROJ-0001", "project_status": "active", "dest_rel": "", "note": "", "shortened": "",
+                "why": "", "why_detail": ""}
+        rows = [dict(base, row=1, relpath=r"A\S\p.txt", project_name="P", decision="place", reason="claim CONFIRMED",
+                     root_key="a|s", hold=""),
+                dict(base, row=2, relpath=r"A\S\h.txt", project_name="", decision="holding", reason="(C) claim",
+                     root_key="-", hold=""),
+                dict(base, row=3, relpath=r"A\S\held.txt", project_name="P", decision="held",
+                     reason="claim CONFIRMED | HELD: M1", root_key="a|s", hold="M1-0118")]
+        for r in rows:
+            r["size"] = str(len(data[os.path.basename(r["relpath"])]))
+            r["sha256"] = _sha(data[os.path.basename(r["relpath"])])
+        N.assign_destinations(rows, projects, nas, out, lambda m: None, {}, None)
+        check(rows[0]["dest_rel"] == r"projects\P\working\historical_drives\MJesus-MFB\S\p.txt", rows[0]["dest_rel"])
+        check(rows[2]["dest_rel"] == "", "a held row gets no destination from the copy plan")
+        rows[2]["dest_rel"] = r"projects\P\working\historical_drives\MJesus-MFB\S\held.txt"   # as p_plan sets it
+        manifest = os.path.join(out, "placement_manifest.csv")
+        N.wcsv(manifest, N.MANIFEST_FIELDS, rows)
+        scratch = os.path.join(tmp, "scratch")
+        rc = N.main(["--out", out, "--nas", nas, "copy", "--manifest", manifest, "--execute", "--scratch", scratch])
+        tree = os.path.join(nas, "projects", "P", "working", "historical_drives")
+        check(rc == 0 and open(os.path.join(tree, "MJesus-MFB", "S", "p.txt"), "rb").read() == data["p.txt"],
+              "copy --execute placed the place row")
+        check(not os.path.exists(os.path.join(tree, "MJesus-MFB", "S", "held.txt")), "copy never copies a held row")
+        idx = list(csv.DictReader(open(os.path.join(tree, "_INDEX.csv"), encoding="utf-8-sig", newline="")))
+        check([x["new_path"] for x in idx] == [r"MJesus-MFB\S\p.txt"], f"the published index lists no held row {idx}")
+        check(idx[0]["drive"] == "drive3_MJesus-MFB" and idx[0]["original_path"] == r"drive3_MJesus-MFB\A\S\p.txt",
+              "index row names drive 3")
+        org = open(os.path.join(tree, "MJesus-MFB", "S", "_ORIGIN.txt"), encoding="utf-8").read()
+        check(r"drive3_MJesus-MFB\A\S" in org, "_ORIGIN.txt in the study folder names the drive-3 path")
+        check(open(os.path.join(tree, "README.txt"), "rb").read() ==
+              N.H.PROJECT_README.replace("\n", "\r\n").encode("utf-8"), "README.txt is the three-drive text")
+        rc = N.main(["--out", out, "--nas", nas, "holding", "--manifest", manifest, "--execute", "--scratch", scratch])
+        hold = os.path.join(nas, "staging", "historical_drives_unassigned")
+        check(rc == 0 and open(os.path.join(hold, "MJesus-MFB", "A", "S", "h.txt"), "rb").read() == data["h.txt"],
+              "holding --execute copied the holding row, in its original structure")
+        hm = list(csv.DictReader(open(os.path.join(hold, "manifest.csv"), encoding="utf-8-sig", newline="")))
+        check([x["new_path"] for x in hm] == [r"MJesus-MFB\A\S\h.txt"], f"holding manifest: the holding row only {hm}")
+        check(not os.path.exists(os.path.join(hold, "MJesus-MFB", "A", "S", "held.txt")), "holding never copies a held row")
+        rc = N.main(["--out", out, "--nas", nas, "verify", "--manifest", manifest, "--sample", "1.0"])
+        check(rc == 0, "verify passes: the held row is not expected on the NAS")
+        rc = N.main(["--out", out, "--nas", nas, "copy", "--manifest", manifest, "--execute", "--scratch", scratch])
+        provs = list(csv.DictReader(open(os.path.join(nas, "projects", "P", "provenance.csv"), encoding="utf-8", newline="")))
+        check(rc == 0 and len([p for p in provs if p["output_path"].endswith("p.txt")]) == 1,
+              "a re-run is idempotent: one provenance row per file")
+    finally:
+        N.DRIVES = old
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_publish_merges_third_drive():
+    print("drive-3 rows MERGE into a drives 1+2 tree (the AE-biomaGUNE-0118 case: 9-column header, D1 folders)")
+    import historical_paths as H
+    tmp = tempfile.mkdtemp(prefix="nonraw_merge3_")
+    try:
+        out, nas = os.path.join(tmp, "out"), os.path.join(tmp, "nas")
+        manifest = os.path.join(out, "placement_manifest.csv")
+        base = r"projects\AE-biomaGUNE-0118\working\historical_drives"
+        tree = os.path.join(nas, base)
+        os.makedirs(os.path.join(tree, "FRIO-X6", "Proyecto 0118 Monocrotalina"))
+        old9 = ["new_path", "drive", "archive", "original_path", "size", "sha256", "claim_id", "shortened", "note"]
+        d1 = [{"new_path": rf"FRIO-X6\Proyecto 0118 Monocrotalina\doc{i}.pdf", "drive": "drive1_FRIO-X6",
+               "archive": "Drive MJ.zip", "original_path": rf"drive1_FRIO-X6\Drive MJ.zip!Pili y Mili\Proyecto 0118 Monocrotalina\doc{i}.pdf",
+               "size": str(i), "sha256": f"d1sha{i}", "claim_id": "CL-1", "shortened": "N", "note": ""} for i in range(3)]
+        with open(os.path.join(tree, H.INDEX_NAME), "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=old9, lineterminator="\r\n")
+            w.writeheader()
+            w.writerows(d1)
+        H.write_pathmap(os.path.join(tree, H.PATHMAP_NAME),
+                        [{"node_key": r"D1:Drive MJ.zip\Pili y Mili\Proyecto 0118 Monocrotalina",
+                          "rendered": r"FRIO-X6\Proyecto 0118 Monocrotalina"}])
+        d1_origin = H.origin_text([r"drive1_FRIO-X6\Drive MJ.zip!Pili y Mili\Proyecto 0118 Monocrotalina"]).encode("utf-8")
+        with open(os.path.join(tree, "FRIO-X6", "Proyecto 0118 Monocrotalina", H.ORIGIN_NAME), "wb") as f:
+            f.write(d1_origin)
+        with open(os.path.join(tree, H.README_NAME), "w", encoding="utf-8") as f:
+            f.write("the old two-drive README")
+        # this run's preview: three drive-3 documents in the same-named study folder
+        it3 = [H.Item(id=str(i), drive="D3", relpath=rf"Pili y Mili\Proyecto 0118 Monocrotalina\MRI 2DG ratas\x{i}.xlsx",
+                      root=H.claim_root_segments(r"Pili y Mili\Proyecto 0118 Monocrotalina"),
+                      extra={"size": "5", "sha256": f"d3sha{i}", "claim_id": "CL-1176"}) for i in range(3)]
+        p = H.Planner(base)
+        p.load_pathmap(os.path.join(tree, H.PATHMAP_NAME))
+        dests = p.plan(it3)
+        tdir = N.tree_preview_dir(manifest, base)
+        H.write_index(os.path.join(tdir, H.INDEX_NAME), H.index_rows(dests, it3, base))
+        H.write_pathmap(os.path.join(tdir, H.PATHMAP_NAME), p.pathmap_rows())
+        N.wcsv(os.path.join(tdir, "_ORIGINS.csv"), ["folder", "original"],
+               [{"folder": k, "original": o} for k, v in p.origins(it3).items() for o in v])
+        check(all(r"\MJesus-MFB\Proyecto 0118 Monocrotalina\MRI 2DG ratas" in d for d in dests.values()),
+              "drive 3's study folder sits beside drive 1's, under its own tag, with no (2)")
+        N.publish_tree(nas, manifest, base, execute=True)
+        rows = list(csv.DictReader(open(os.path.join(tree, H.INDEX_NAME), encoding="utf-8-sig", newline="")))
+        kept = [r for r in rows if r["drive"] == "drive1_FRIO-X6"]
+        check(len(kept) == 3 and all(any(all(k[c] == r[c] for c in old9) for r in kept) for k in d1),
+              "all 3 drive-1 rows kept, every column unchanged")
+        check(len([r for r in rows if r["drive"] == "drive3_MJesus-MFB"]) == 3 and len(rows) == 6, "3 drive-3 rows added")
+        pm = {r["node_key"]: r["rendered"] for r in csv.DictReader(open(os.path.join(tree, H.PATHMAP_NAME), encoding="utf-8-sig", newline=""))}
+        check(pm.get(r"D1:Drive MJ.zip\Pili y Mili\Proyecto 0118 Monocrotalina") == r"FRIO-X6\Proyecto 0118 Monocrotalina"
+              and any(k.startswith("D3:") for k in pm), "_PATHMAP.csv keeps D1's folder and adds D3's")
+        check(open(os.path.join(tree, "FRIO-X6", "Proyecto 0118 Monocrotalina", H.ORIGIN_NAME), "rb").read() == d1_origin,
+              "drive 1's _ORIGIN.txt is not touched (byte-identical)")
+        check(os.path.exists(os.path.join(tree, "MJesus-MFB", "Proyecto 0118 Monocrotalina", H.ORIGIN_NAME)),
+              "drive 3's study folder gets its own _ORIGIN.txt")
+        check(open(os.path.join(tree, H.README_NAME), "rb").read() == H.PROJECT_README.replace("\n", "\r\n").encode("utf-8"),
+              "README.txt is rewritten to the three-drive text")
+        check(not any(w for _r, w in N.publish_tree(nas, manifest, base, execute=True)), "a re-publish writes nothing")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _sha(b):
     return hashlib.sha256(b).hexdigest()
 
@@ -450,7 +620,65 @@ def test_copy():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_from_holding_rendered():
+    print("copy --from-holding: the source is where `holding` put the file (its manifest), not a recomputed path")
+    import historical_paths as H
+    tmp = tempfile.mkdtemp(prefix="nonraw_fromhold_")
+    try:
+        nas = os.path.join(tmp, "nas")
+        os.makedirs(os.path.join(nas, "projects", "P"))
+        base = os.path.join(nas, N.HOLDING_BASE)
+        # (1) drive 3 as `holding --execute` rendered it: display label MJesus-MFB (not drive3_MJesus-MFB) and one
+        #     folder shortened to the 240 budget
+        rel1 = "Otros\\Segmentaciones ITK SNAP\\pigs\\m.nii.gz"
+        new1 = "MJesus-MFB\\Otros\\Segmentacion~738e\\pigs\\m.nii.gz"
+        os.makedirs(os.path.join(base, os.path.dirname(new1)))
+        with open(os.path.join(base, new1), "wb") as f:
+            f.write(b"mask bytes")
+        with open(os.path.join(base, "manifest.csv"), "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=["new_path", "drive", "archive", "original_path", "size", "sha256",
+                                              "claim_id", "shortened", "why", "note"])
+            w.writeheader()
+            w.writerow({"new_path": new1, "drive": "drive3_MJesus-MFB", "original_path": H.original_display("D3", rel1),
+                        "size": "10", "sha256": _sha(b"mask bytes"), "shortened": "Y"})
+        check(not os.path.exists(os.path.join(nas, N.holding_rel("drive3_MJesus-MFB", rel1))),
+              "the recomputed holding_rel path does not exist (the bug of 2026-10-07)")
+        # (2) a key the holding manifest lacks: holding_rel is the fallback, found when it exists ...
+        rel2 = "Otros\\old layout\\x.png"
+        p2 = os.path.join(nas, N.holding_rel("drive3_MJesus-MFB", rel2))
+        os.makedirs(os.path.dirname(p2))
+        with open(p2, "wb") as f:
+            f.write(b"old layout bytes")
+        rel3 = "Otros\\nowhere\\y.png"                                        # ... and NOT there when it does not
+        mk = lambda rel, data: {"drive": "D3", "drive_label": "drive3_MJesus-MFB", "relpath": rel, "archive": "",
+                                "member": "", "sha256": _sha(data), "size": str(len(data)), "class": "other",
+                                "reason": "2b mapping (x | Otros)", "claim_id": "",
+                                "dest_rel": N.dest_rel("P", "MJesus-MFB", rel)}
+        rows = [mk(rel1, b"mask bytes"), mk(rel2, b"old layout bytes"), mk(rel3, b"absent")]
+        absent = N.holding_sources(rows, nas)
+        check(os.path.normcase(rows[0]["_src"]) == os.path.normcase(os.path.join(base, new1)),
+              f"(1) found through the holding manifest's new_path: {rows[0]['_src']}")
+        check(os.path.normcase(rows[1]["_src"]) == os.path.normcase(p2), "(2) a key missing from the manifest falls back to holding_rel")
+        check(absent == 1 and not os.path.exists(rows[2]["_src"]), "(2) ... and is counted NOT there when that path is absent too")
+        ms = N.MemberSource(os.path.join(tmp, "scratch"))
+        try:
+            bad = dict(rows[0], sha256=_sha(b"what the drive manifest says"))
+            try:
+                N.copy_one(bad, nas, ms)
+                check(False, "(3) a holding copy whose bytes differ from the drive manifest must be refused")
+            except RuntimeError:
+                check(not os.path.exists(os.path.join(nas, bad["dest_rel"])), "(3) refused: nothing placed")
+            check(N.copy_one(rows[0], nas, ms) == "copied", "(1) copied from the rendered holding path")
+            check(open(os.path.join(nas, rows[0]["dest_rel"]), "rb").read() == b"mask bytes", "(1) the bytes in place")
+            check(os.path.exists(os.path.join(base, new1)), "the holding copy is left in place")
+        finally:
+            ms.close()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
+    test_from_holding_rendered()
     test_layout()
     test_decide()
     test_roots()
@@ -462,5 +690,8 @@ if __name__ == "__main__":
     test_publish()
     test_publish_merges()
     test_copy()
+    test_third_drive()
+    test_held_never_copied()
+    test_publish_merges_third_drive()
     print(f"\n{'FAILED: ' + str(len(FAILS)) if FAILS else 'all passed'}")
     sys.exit(1 if FAILS else 0)

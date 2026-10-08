@@ -14,6 +14,12 @@ those cells change.
      no-BOM / CRLF and every other byte, verifies itself against a backup and restores it on a
      mismatch; and it refuses a count mismatch, an existing backup folder, a backup inside the
      NAS, a record it cannot parse exactly, and values it cannot edit safely.
+  3. The row selectors (Ryan, 2026-10-07: historical internal MRI loaded without an operator gets
+     the hold value): `--from-blank --instrument MRI --config-prefix P` changes a blank only inside
+     the selectors (a CELL, PET or XMRI blank under the same prefix, and an MRI blank under another
+     prefix, are untouched; `/` and `\\` are the same); a blank --from is refused without BOTH
+     selectors; --expect still has to match; the verification rejects a change to an unselected
+     record even when the count is right.
 
 Temporary directories only: no NAS, no database, no pytest.
 
@@ -672,6 +678,158 @@ def test_backup_must_verify():
               "a corrupt backup copy: refused, the registry untouched")
 
 
+# ---- 5. row selectors: the general rule for historical MRI (Ryan, 2026-10-07) -----------
+
+PFX_A = "tools/configs/drive3_mri/"
+PFX_B = "tools/configs/mri_1019_kgjesus_2021_"
+
+
+def selector_rows():
+    """Blank operators of every kind; only the internal MRI ones under PFX_A / PFX_B are to change."""
+    return [
+        reg_row("ACQ-20190909-MRI-001", operator="", ingest_config=PFX_A + "drive3_mri_M01_0118.yaml"),   # yes
+        reg_row("ACQ-20190909-MRI-002", operator="", notes="a, b",
+                ingest_config="tools\\configs\\drive3_mri\\drive3_mri_M02.yaml"),                           # yes (backslashes)
+        reg_row("ACQ-20210420-MRI-001", operator="", ingest_config=PFX_B + "mes02.yaml"),                 # yes
+        reg_row("ACQ-20190909-MRI-003", operator="Irene", ingest_config=PFX_A + "x.yaml"),                # set: no
+        reg_row("ACQ-20190909-MRI-004", operator=HOLD, ingest_config=PFX_A + "x.yaml"),                   # hold: no
+        reg_row("ACQ-20190909-XMRI-001", instrument="XMRI", operator="", data_source="collaborator:CNIC",
+                ingest_config=PFX_A + "drive3_mri_P01_cnic_heards.yaml"),                                  # XMRI: no
+        reg_row("ACQ-20221024-CELL-001", instrument="CELL", data_ecosystem="MICROSCOPY", operator="",
+                ingest_config=PFX_A + "odd.yaml"),                                                         # CELL: no
+        reg_row("ACQ-20220518-PET-001", instrument="PET", operator="",
+                ingest_config="tools/configs/drive3_petct/drive3_petct_snapshot.yaml"),                    # PET: no
+        reg_row("ACQ-20200304-MRI-001", operator="", ingest_config="tools/configs/drives_2026-09/dicom/b.yaml"),  # other prefix: no
+        reg_row("ACQ-20200304-MRI-002", operator="", ingest_config="tools/configs/mri_1019_other.yaml"),  # near-miss prefix: no
+        reg_row("ACQ-20210420-MRI-002", operator="", ingest_config=PFX_B + "mes06.yaml"),                 # yes, the last record
+    ]
+
+
+N_SEL = 4
+SEL_ARGS = ("--from-blank", "--instrument", "MRI", "--config-prefix", PFX_A, "--config-prefix", PFX_B)
+
+
+def selected_oracle(rows):
+    """The expected rows: the hold value on exactly the 4 selected blank cells."""
+    yes = {"ACQ-20190909-MRI-001", "ACQ-20190909-MRI-002", "ACQ-20210420-MRI-001", "ACQ-20210420-MRI-002"}
+    return [dict(r, operator=HOLD) if r["acq_id"] in yes else r for r in rows]
+
+
+def test_blank_from_needs_both_selectors():
+    print("repair_operator_hold: a blank --from is refused without BOTH selectors:")
+    rows = selector_rows()
+    with tempfile.TemporaryDirectory() as d:
+        nas = write_nas(d, registry_bytes(rows), rows)
+        before = snapshot(d)
+        for args, why in ((["--from-blank"], "--from-blank alone"),
+                          (["--from", ""], "--from \"\" alone"),
+                          (["--from-blank", "--instrument", "MRI"], "--from-blank with --instrument only"),
+                          (["--from-blank", "--config-prefix", PFX_A], "--from-blank with --config-prefix only"),
+                          (["--from", "", "--config-prefix", PFX_A], "--from \"\" with --config-prefix only"),
+                          (["--from-blank", "--instrument", "MRI", "--config-prefix", " "], "a blank --config-prefix"),
+                          (["--from-blank", "--from", "x"], "--from-blank together with --from")):
+            rc, _o, err = run_tool("--nas-root", nas, *args)
+            check(rc == 2 and snapshot(d) == before, f"{why}: exit 2, nothing written")
+        rc, _o, err = run_tool("--nas-root", nas, "--from-blank", "--instrument", "MRI", "--apply", "--expect", "4",
+                               "--backup-dir", os.path.join(d, "bk"))
+        check(rc == 2 and snapshot(d) == before and not os.path.exists(os.path.join(d, "bk")),
+              "--apply with --instrument only: exit 2, no backup made, nothing written")
+        check("BOTH row selectors" in err, "and the message names the two selectors")
+
+
+def test_selectors_dry_run():
+    print("repair_operator_hold: the selectors pick only internal MRI blanks under the prefixes (dry run):")
+    rows = selector_rows()
+    with tempfile.TemporaryDirectory() as d:
+        nas = write_nas(d, registry_bytes(rows), rows)
+        before = snapshot(d)
+        rc, out, err = run_tool("--nas-root", nas, *SEL_ARGS)
+        check(rc == 0, f"exit 0 (got {rc}; {err.strip()[-200:]})")
+        check(f"operator cells matching: {N_SEL}" in out, f"{N_SEL} cells selected")
+        check(f"by prefix:   {2:6d}  {PFX_A}" in out,
+              "reported per prefix: drive3_mri/ 2 (one spelled with forward slashes, one with backslashes)")
+        check(f"by prefix:   {2:6d}  {PFX_B}" in out, "reported per prefix: the 1019 family 2")
+        check("by instrument: MRI=4" in out, "all MRI")
+        check("CELL=1" in out and "XMRI=1" in out and "left alone" in out,
+              "the CELL and XMRI blanks under the same prefix are reported as left alone")
+        check("selectors:     instrument == 'MRI' AND ingest_config starts with one of" in out, "the selectors are printed")
+        check("outside a matching operator cell" not in err, "a blank --from raises no 'text elsewhere' warning")
+        check(snapshot(d) == before, "nothing written")
+        rc, _o, _e = run_tool("--nas-root", nas, *SEL_ARGS, "--expect", "5")
+        check(rc == 1 and snapshot(d) == before, "--expect with the wrong count: refused")
+        # a prefix given with backslashes selects forward-slash configs, and vice versa
+        rc, out, _e = run_tool("--nas-root", nas, "--from-blank", "--instrument", "MRI",
+                               "--config-prefix", PFX_A.replace("/", "\\"))
+        check(rc == 0 and "operator cells matching: 2" in out, "a backslash prefix selects both spellings (2)")
+        # the selector is exact on instrument: XMRI alone
+        rc, out, _e = run_tool("--nas-root", nas, "--from-blank", "--instrument", "XMRI", "--config-prefix", PFX_A)
+        check(rc == 0 and "operator cells matching: 1" in out and "by instrument: XMRI=1\n" in out,
+              "--instrument XMRI selects the XMRI row only (exact match, not a substring)")
+
+
+def test_selectors_apply():
+    print("repair_operator_hold: --apply with selectors changes exactly the selected blank cells:")
+    rows = selector_rows()
+    data = registry_bytes(rows)
+    expected = registry_bytes(selected_oracle(rows))
+    with tempfile.TemporaryDirectory() as d:
+        nas = write_nas(d, data, rows)
+        bk = os.path.join(d, "bk")
+        rc, _o, err = run_tool("--nas-root", nas, *SEL_ARGS, "--apply", "--expect", "3", "--backup-dir", bk)
+        check(rc == 1 and read(reg_path(nas)) == data and not os.path.exists(bk),
+              "--expect 3 but 4 selected: refused, no backup, nothing written")
+        rc, out, err = run_tool("--nas-root", nas, *SEL_ARGS, "--apply", "--expect", str(N_SEL), "--backup-dir", bk)
+        new = read(reg_path(nas))
+        check(rc == 0, f"exit 0 (got {rc}; {err.strip()[-300:]})")
+        check(new == expected, "only the 4 selected cells changed (compared with an independent csv.writer rebuild)")
+        check(len(new) - len(data) == N_SEL * len(HOLD), f"the size grew by exactly {N_SEL} x len('{HOLD}')")
+        check(read(os.path.join(bk, "registry_raw.csv")) == data, "the backup is the old file")
+        issues, _n = validate(nas)
+        check(issues.operator_hold == N_SEL + 1,
+              f"the validator counts {N_SEL + 1} hold rows (the 4 new + the 1 already held)")
+        rc, out, _e = run_tool("--nas-root", nas, *SEL_ARGS)
+        check(rc == 0 and "operator cells matching: 0" in out, "a second dry run selects nothing")
+
+
+def test_selectors_verify_catches_an_unselected_change():
+    print("repair_operator_hold: the verification rejects a change to a record the selectors did not pick:")
+    rows = selector_rows()
+    data = registry_bytes(rows)
+    sel = rah.Selectors("MRI", [PFX_A, PFX_B])
+    plan = rah.find_matches(data, "", HOLD, sel)
+    check(len(plan.matches) == N_SEL and all(m.record for m in plan.matches), "the plan records the record numbers")
+    every_blank = rah.find_matches(data, "", HOLD, rah.Selectors("MRI", ["tools/"]))
+    other = [m for m in every_blank.matches if m.record not in {x.record for x in plan.matches}]
+    check(len(other) >= 1, "(fixture: an unselected blank MRI cell exists)")
+    # the same NUMBER of changes, but one of them on the wrong record
+    swapped = plan.matches[:-1] + [other[0]]
+    bad = rah.splice(data, sorted(swapped, key=lambda m: m.start), HOLD)
+    with tempfile.TemporaryDirectory() as d:
+        old_p, new_p = os.path.join(d, "old.csv"), os.path.join(d, "new.csv")
+        for p, b in ((old_p, data), (new_p, bad)):
+            with open(p, "wb") as f:
+                f.write(b)
+        problems = rah.verify_repair(old_p, new_p, plan)
+        check(any("not one of the planned" in p for p in problems), "caught: a same-count edit on an unselected record")
+        check(any("planned, but unchanged" in p for p in problems), "caught: the selected record left unchanged")
+        good = rah.splice(data, plan.matches, HOLD)
+        with open(new_p, "wb") as f:
+            f.write(good)
+        check(rah.verify_repair(old_p, new_p, plan) == [], "the correct result verifies")
+
+
+def test_selectors_with_a_named_from():
+    print("repair_operator_hold: selectors narrow a non-blank --from too:")
+    rows = [reg_row("ACQ-20220118-MRI-001", operator=PH, ingest_config=PFX_A + "a.yaml"),
+            reg_row("ACQ-20220118-MRI-002", operator=PH, ingest_config="tools/configs/mri_jrc_pilot.yaml")]
+    with tempfile.TemporaryDirectory() as d:
+        nas = write_nas(d, registry_bytes(rows), rows)
+        rc, out, _e = run_tool("--nas-root", nas, "--config-prefix", PFX_A)
+        check(rc == 0 and "operator cells matching: 1" in out, "--config-prefix alone narrows the default --from to 1")
+        rc, out, _e = run_tool("--nas-root", nas)
+        check(rc == 0 and "operator cells matching: 2" in out, "without selectors: both, as before")
+
+
 # ---- Run -------------------------------------------------------------------
 
 def main():
@@ -690,7 +848,12 @@ def main():
                test_arguments_refused,
                test_verify_repair_catches_tampering,
                test_failed_verification_restores_the_backup,
-               test_backup_must_verify):
+               test_backup_must_verify,
+               test_blank_from_needs_both_selectors,
+               test_selectors_dry_run,
+               test_selectors_apply,
+               test_selectors_verify_catches_an_unselected_change,
+               test_selectors_with_a_named_from):
         fn()
     print()
     if FAILS:

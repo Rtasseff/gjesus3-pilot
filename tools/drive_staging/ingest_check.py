@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""ingest_check.py -- the dry-run review for the historical-drives .czi ingest (checks 1-7 of the
-handoff), run against the ENGINE'S OWN resolution of every generated config.
+"""ingest_check.py -- the dry-run review for a historical-drive .czi ingest, run against the ENGINE'S
+OWN resolution of every generated config.
 
-For every batch config in tools/configs/drives_2026-09/ it calls ingest/config.expand_batch -- the
-exact code path `ingest_raw.py --dry-run` runs before its early return, reading each .czi's own
-metadata and the live registry for dedup -- and compares every resolved case, file by file, with
-the independent expected table (ingest_plan.py plan). It never writes to the NAS.
+For every batch config of the profile (ingest_plan.PROFILES; default drives_2026-09, the drives 1+2
+ingest; `--profile drive3_2026-10` for M. Jesus's drive) it calls ingest/config.expand_batch -- the exact
+code path `ingest_raw.py --dry-run` runs before its early return, reading each .czi's own metadata and the
+live registry for dedup -- and compares every resolved case, file by file, with the independent expected
+table (ingest_plan.py plan). It never writes to the NAS.
 
-    python tools/drive_staging/ingest_check.py [--batch B01 ...] [--nas J:\\gjesus3-data]
+    python tools/drive_staging/ingest_check.py [--profile P] [--batch B01 ...] [--nas J:\\gjesus3-data]
 
 Output: <out>\\check_cases.csv (one row per case, engine value vs expected), check_report.json and a
 printed PASS/FAIL per check. Exit 1 on any unexplained mismatch.
 
   1 reconciliation   every in-scope content in exactly one batch; engine cases == expected rows;
-                     per-instrument counts/GB re-derived here from the catalog; nothing out of scope
+                     per-instrument counts/GB re-derived here from the catalog (drive 3: from part A1's
+                     header table); nothing out of scope
   2 per file         instrument, project, researcher, operator, subject id, acquisition_datetime,
                      data_source, original_name (+ instrument_model, sample, link name): 0 mismatches
   3 production       no in-scope sha256 in the production index, and that index is not older than
@@ -21,12 +23,20 @@ printed PASS/FAIL per check. Exit 1 on any unexplained mismatch.
   3b re-saves        no planned file is a re-save of a production acquisition (same instrument,
                      timestamp to the second and filename), and no two planned files are (gate R1/R2)
   3c derivatives     no planned file shares instrument + timestamp with a production acquisition (R3),
-                     except a planned R4 sibling an earlier batch of this run ingested (INFO-listed)
+                     except a planned sibling an earlier batch of this run ingested (INFO-listed) and,
+                     drive 3, a production row the pixel check compared it with (its decided group)
+  3d decided         drive 3: every planned file that shares an instrument + second with another planned
+                     file or a production row sits in a group the pixel check decided for exactly the
+                     current membership, as keep or keep-flag
+  3e structure       drive 3: every planned (farm) file's last subblock ends inside the file (no
+                     truncated primary), and its farm path fits MAX_PATH
   4 dates            no blank acquisition_datetime, no ACQ-ID date == today
-  5 projects         exactly one project would be created (AE-biomaGUNE-0118); every other exists
-  6 subjects         none on 0118 / (C) / no-claim rows; each present one re-resolves in the facility
+  5 projects         only the profile's one new project may be created (drive 3: none); every other exists
+  6 subjects         none on (A)-held / (C) / no-claim rows; each present one re-resolves in the facility
                      DB, in its own protocol, to itself
-  7 XMIC             338 rows, instrument_model "Axio Imager.Z2", the chosen data_source
+  7 XMIC             drives 1+2: 338 rows, instrument_model "Axio Imager.Z2", the chosen data_source
+  8 link names       drive 3: every planned link name is unique in its project and free in the project's
+                     live raw_linked\\ (the engine's 2026-10-05 pre-check refuses a taken one at run time)
 """
 import argparse
 import collections
@@ -48,33 +58,78 @@ from ingest import config, enrichment, linker, resolver  # noqa: E402
 import animal_db  # noqa: E402
 
 
-def split_3c_hits(e, prod_rows, exp):
+def split_3c_hits(e, prod_rows, exp, decided=frozenset()):
     """Split one planned file's production matches (same instrument + timestamp) for check 3c.
 
     Returns (exempt, hits). A match is EXEMPT -- an expected planned sibling, not a derivative --
     when the production row's original_name is itself a row of the frozen plan (so an earlier batch
     of THIS run ingested it) AND that row's planned acq_group equals the checked file's acq_group
-    (gate rule R4: keep every member of a same-timestamp group). Everything else stays a hit: a
-    derivative of an acquisition that was in production before this run, or an operator ingest of
-    a sibling. (Coordinator answer to the B08 stop, 2026-10-01: ANSWER_B08_STOP.md.)
+    (gate rule R4: keep every member of a same-timestamp group). Drive 3 adds one more exemption: a
+    production row that is a member of the file's decided pixel-check group (`decided`: the ACQ-IDs
+    that group was decided with). Everything else stays a hit: a derivative of an acquisition that was
+    in production before this run, or an operator ingest of a sibling. (Coordinator answer to the B08
+    stop, 2026-10-01: ANSWER_B08_STOP.md.)
     """
     grp = e.get("acq_group", "")
     exempt, hits = [], []
     for r in prod_rows:
         planned = exp.get(r["original_name"])
-        (exempt if grp and planned and planned.get("acq_group") == grp else hits).append(r)
+        if r["acq_id"] in decided:
+            exempt.append(r)
+        elif grp and planned and planned.get("acq_group") == grp:
+            exempt.append(r)
+        else:
+            hits.append(r)
     return exempt, hits
 
 
+def split_3d_new_production(prows, dec_prod, sibs):
+    """Check 3d: which production rows sharing a decided group's second are NEW since the pixel check.
+
+    Returns (new, sibling). A production row is not new when the pixel check already knew it as a
+    production member (`dec_prod`, its ACQ-IDs), and it is an expected SIBLING when its original_name is a
+    planned member of the same group (`sibs`, the whole plan's members, every batch): an earlier batch of
+    THIS run ingested it, and the pixel check decided it as a planned member. Everything else is new: an
+    operator ingest, or a row from outside the plan. (The 3d twin of check 3c's exemption; the coordinator,
+    2026-10-07, after C03 stopped on ten such C02 siblings.)
+    """
+    planned_names = {s["original_name"] for s in sibs}
+    new, sibling = [], []
+    for p in prows:
+        if p["acq_id"] in dec_prod:
+            continue
+        (sibling if p["original_name"] in planned_names else new).append(p)
+    return new, sibling
+
+
+def czi_last_subblock_inside(path):
+    """(inside?, last end, size): does the .czi's last subblock (any pyramid level) end inside the file?"""
+    import czifile
+    lp = P.longpath(path)
+    size = os.path.getsize(lp)
+    with czifile.CziFile(lp) as czi:
+        last = max(czi.subblock_directory, key=lambda e: e.file_position)
+        seg = last.read_segment_data(czi)
+        end = seg.data_offset + seg.data_size
+    return end <= size, end, size
+
+
 def main():
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--profile", default=P.DEFAULT_PROFILE)
+    known, _ = pre.parse_known_args()
+    P.use_profile(known.profile)
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--profile", default=P.DEFAULT_PROFILE, choices=sorted(P.PROFILES))
     ap.add_argument("--out", default=P.OUT)
     ap.add_argument("--nas", default=P.NAS)
     ap.add_argument("--config-dir", default=P.CONFIG_DIR)
     ap.add_argument("--batch", action="append")
+    ap.add_argument("--no-structure", action="store_true", help="drive 3: skip check 3e's file reads")
     args = ap.parse_args()
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
+    decide = P.SAME_ACQ_MODE == "decide"
 
     exp = {e["original_name"]: e for e in P.load_expected(args.out)}
     batches = list(P.rcsv(os.path.join(args.config_dir, "batches.csv")))
@@ -89,7 +144,7 @@ def main():
     rows, cases_by_batch, engine_log = [], {}, {}
     t0 = time.time()
     for b in batches:
-        cfg_path = os.path.join(args.config_dir, f"drives_{b['batch']}.yaml")
+        cfg_path = os.path.join(args.config_dir, f"{P.CONFIG_PREFIX}{b['batch']}.yaml")
         cfg = config.load_config(cfg_path)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
@@ -127,6 +182,7 @@ def main():
                 "link_name": link or "", "sha256": d.get("drv_sha256", ""),
                 "czi_microscope_name": d.get("czi_microscope_name", ""),
                 "acq_group": d.get("drv_acq_group", ""), "notes": c.get("notes", ""),
+                "source_path": c.get("source_path", ""),
             })
         print(f"{b['batch']}: {len(cases)} cases, log {engine_log[b['batch']]} "
               f"({time.time() - t0:.0f}s)", flush=True)
@@ -147,21 +203,27 @@ def main():
            for k in got if k in exp_in and got[k]["batch"] != exp_in[k]["batch"]]
     c1 += [f"{k}: engine sha {got[k]['sha256'][:12]} != plan {exp_in[k]['sha256'][:12]}"
            for k in got if k in exp_in and got[k]["sha256"] != exp_in[k]["sha256"]]
-    # independent re-derivation from the catalog (not from the plan's own code path)
+    # independent re-derivation from the source tables (not from the plan's own code path)
     prod = {r["sha256"] for r in P.rcsv(os.path.join(P.CAT, "production_hashes.csv"))}
-    gopt = collections.Counter()   # planned exclusions other than production (S: AxioScan, dot-files)
+    gopt = collections.Counter()   # planned exclusions other than production (re-saves, derivatives, ...)
     for x in P.rcsv(os.path.join(args.out, "excluded.csv")):
         if x["reason"] != "in-production":
             gopt[x["sha256"]] += 1
     derived = collections.defaultdict(dict)
-    for r in P.rcsv(os.path.join(P.CAT, "files.csv")):
-        if r["ext"].lower() == ".czi" and r["class"] == "czi-raw" and r["instrument"] in P.INSTRUMENTS:
-            if r["sha256"] not in prod and r["sha256"] not in gopt:
-                derived[P.INSTRUMENTS[r["instrument"]]][r["sha256"]] = int(r["size"])
-    for r in P.rcsv(os.path.join(P.CAT, "archive_members.csv")):
-        if r["ext"].lower() == ".czi" and r["class"] == "czi-raw" and r["instrument"] in P.INSTRUMENTS:
-            if r["sha256"] not in prod and r["sha256"] not in gopt:
-                derived[P.INSTRUMENTS[r["instrument"]]][r["sha256"]] = int(r["size"])
+    if decide:
+        for r in P.rcsv(P.A1_FILES):
+            if r["ext"].lower() == ".czi" and r["czi_class"] == "czi-raw" and r["instrument"] in P.INSTRUMENTS:
+                if r["sha256"] not in prod and r["sha256"] not in gopt:
+                    derived[P.INSTRUMENTS[r["instrument"]]][r["sha256"]] = int(r["size"])
+    else:
+        for r in P.rcsv(os.path.join(P.CAT, "files.csv")):
+            if r["ext"].lower() == ".czi" and r["class"] == "czi-raw" and r["instrument"] in P.INSTRUMENTS:
+                if r["sha256"] not in prod and r["sha256"] not in gopt:
+                    derived[P.INSTRUMENTS[r["instrument"]]][r["sha256"]] = int(r["size"])
+        for r in P.rcsv(os.path.join(P.CAT, "archive_members.csv")):
+            if r["ext"].lower() == ".czi" and r["class"] == "czi-raw" and r["instrument"] in P.INSTRUMENTS:
+                if r["sha256"] not in prod and r["sha256"] not in gopt:
+                    derived[P.INSTRUMENTS[r["instrument"]]][r["sha256"]] = int(r["size"])
     recon = {}
     for inst in sorted(set(derived) | {e["instrument"] for e in exp.values()}):
         pe = [e for e in exp.values() if e["instrument"] == inst]
@@ -229,7 +291,8 @@ def main():
         n_reg = sum(1 for _ in csv.DictReader(f))
     n_ph_acq = len({r["acq_id"] for r in P.rcsv(ph)})
     if os.path.getmtime(reg) > os.path.getmtime(ph):
-        c3.append(f"registry_raw.csv is newer than production_hashes.csv: re-run catalog.py production")
+        c3.append(f"registry_raw.csv is newer than production_hashes.csv: re-run catalog.py production"
+                  + (f" --out {P.CAT}" if decide else ""))
     notes["3"].append({"registry_rows_now": n_reg, "acquisitions_in_hash_index": n_ph_acq,
                        "registry_mtime": dt.datetime.fromtimestamp(os.path.getmtime(reg)).isoformat(timespec="seconds"),
                        "hash_index_mtime": dt.datetime.fromtimestamp(os.path.getmtime(ph)).isoformat(timespec="seconds")})
@@ -237,6 +300,12 @@ def main():
 
     # ---- 3b / 3c the same ACQUISITION under different bytes (gate 2026-09-30, R1-R3) -----------
     by_key, by_ts = P.production_index(args.nas)
+    decided = collections.defaultdict(dict)       # drive 3: group -> {member: decision row}
+    if decide:
+        dpath = os.path.join(args.out, "pixel_decisions.csv")
+        if os.path.isfile(dpath):
+            for d in P.rcsv(dpath):
+                decided[d["group"]][d["member"]] = d
     c3b, c3c, exempt_3c = [], [], []
     seen_key = collections.defaultdict(list)
     for e in exp_in.values():
@@ -246,7 +315,8 @@ def main():
         seen_key[k].append(e["original_name"])
         t = (e["instrument"], e["acquisition_datetime"][:19])
         if t in by_ts:
-            exempt, hits = split_3c_hits(e, by_ts[t], exp)
+            dec_ids = frozenset(m for m, d in decided.get(P.group_id(*t), {}).items() if d["role"] == "production")
+            exempt, hits = split_3c_hits(e, by_ts[t], exp, decided=dec_ids)
             for r in exempt:
                 exempt_3c.append((e["original_name"], r["acq_id"], e["acq_group"]))
             if hits:
@@ -256,12 +326,70 @@ def main():
     checks["3b re-saves"] = c3b
     checks["3c derivatives"] = c3c
     for name, acq, grp in exempt_3c:
-        print(f"INFO 3c exempt (planned R4 sibling ingested earlier in this run): {name} -> {acq}, group {grp}")
+        print(f"INFO 3c exempt (planned sibling ingested earlier in this run, or a production member of the "
+              f"file's decided pixel-check group): {name} -> {acq}, group {grp}")
     print(f"INFO 3c exemptions: {len({n for n, _, _ in exempt_3c})} files "
           f"({len(exempt_3c)} file-to-production matches)", flush=True)
     groups = {e["acq_group"] for e in exp_in.values() if e.get("acq_group")}
     notes["3b"].append({"planned_rows": len(exp_in), "same_timestamp_groups_flagged": len(groups),
                         "files_in_them": sum(1 for e in exp_in.values() if e.get("acq_group"))})
+
+    # ---- 3d / 3e drive 3: every same-acquisition group decided; no truncated file; paths fit --------
+    if decide:
+        c3d, c3e = [], []
+        exempt_3d = []
+        plan_by_group = collections.defaultdict(list)
+        for e in exp.values():                       # the WHOLE plan: siblings may sit in other batches
+            plan_by_group[P.group_id(e["instrument"], e["acquisition_datetime"])].append(e)
+        for e in exp_in.values():
+            gid = P.group_id(e["instrument"], e["acquisition_datetime"])
+            sibs = plan_by_group[gid]
+            prows = by_ts.get((e["instrument"], e["acquisition_datetime"][:19]), [])
+            if e.get("same_acq_action") == P.ACTION_UNDECIDED:
+                c3d.append(f"undecided: {e['original_name']}")
+                continue
+            if len(sibs) + len(prows) < 2:
+                continue
+            dec = decided.get(gid, {})
+            if e["sha256"] not in dec:
+                c3d.append(f"in a same-second group with no pixel decision: {e['original_name']}")
+                continue
+            # the membership now: the decided group's planned members (kept or not) + production now
+            dec_prod = {m for m, d in dec.items() if d["role"] == "production"}
+            new_prod, sib_prod = split_3d_new_production(prows, dec_prod, sibs)
+            for p in sib_prod:
+                exempt_3d.append((e["original_name"], p["acq_id"], gid))
+            if new_prod:
+                c3d.append(f"production rows added since the pixel check share its second: "
+                           f"{sorted(p['acq_id'] for p in new_prod)}: {e['original_name']}")
+            if e.get("same_acq_action") not in (P.ACTION_KEEP, P.ACTION_FLAG):
+                c3d.append(f"planned with action {e.get('same_acq_action')!r}: {e['original_name']}")
+            if dec[e["sha256"]].get("complete") != "Y":
+                notes["3d"].append(f"kept although incomplete (flagged): {e['original_name']}")
+        checks["3d decided"] = c3d
+        for name, acq, grp in exempt_3d:
+            print(f"INFO 3d exempt (a planned sibling an earlier batch of this run ingested): {name} -> {acq}, group {grp}")
+        print(f"INFO 3d exemptions: {len(exempt_3d)} file-to-production matches", flush=True)
+        notes["3d"].append({"groups_decided": len(decided),
+                            "planned_rows_in_groups": sum(1 for e in exp_in.values() if e.get("same_acq_group"))})
+        n_struct = 0
+        for k, g in got.items():
+            e = exp_in.get(k)
+            if not e:
+                continue
+            if len(g["source_path"]) > P.MAX_FARM_PATH:
+                c3e.append(f"farm path {len(g['source_path'])} > {P.MAX_FARM_PATH}: {g['source_path']}")
+            if not args.no_structure:
+                try:
+                    inside, end, size = czi_last_subblock_inside(g["source_path"])
+                    n_struct += 1
+                    if not inside:
+                        c3e.append(f"last subblock ends at {end} past the file's {size} bytes (truncated): {k}")
+                except Exception as ex:     # an unreadable file is a failure, never skipped
+                    c3e.append(f"cannot read its subblock directory ({type(ex).__name__}: {ex}): {k}")
+        checks["3e structure"] = c3e
+        notes["3e"].append({"files_structure_checked": n_struct,
+                            "max_source_path": max((len(g["source_path"]) for g in rows), default=0)})
 
     # ---- 4 dates ------------------------------------------------------------------------------------
     c4 = []
@@ -289,12 +417,18 @@ def main():
             if not g["auto_create"]:
                 c5.append(f"{g['original_name']}: project {g['project']} does not exist and its batch "
                           f"does not auto-create (would register with NO project)")
-    if set(created) - {P.NEW_PROJECT}:
-        c5.append(f"would create unexpected projects: {sorted(set(created) - {P.NEW_PROJECT})}")
+    allowed = {P.NEW_PROJECT} - {None}
+    if set(created) - allowed:
+        c5.append(f"would create unexpected projects: {sorted(set(created) - allowed)}")
     auto_batches = {g["batch"] for g in rows if g["auto_create"]}
     for g in rows:
         if g["batch"] in auto_batches and g["project"] != P.NEW_PROJECT:
-            c5.append(f"auto-create batch holds a non-0118 file: {g['original_name']}")
+            c5.append(f"auto-create batch holds a non-{P.NEW_PROJECT} file: {g['original_name']}")
+    if decide:
+        status = {r["project_id"]: r["status"] for r in P.rcsv(projects_csv)}
+        for (pname, pid), n in existing.items():
+            if status.get(pid) != "active":
+                c5.append(f"target project {pname} ({pid}) is {status.get(pid)!r}, not active ({n} files)")
     notes["5"].append({"created": dict(created),
                        "existing": {f"{p} = {i}": n for (p, i), n in sorted(existing.items())}})
     checks["5 projects"] = c5
@@ -307,10 +441,12 @@ def main():
         e = exp_in.get(g["original_name"])
         if not e:
             continue
-        if g["subject_id"] and (e["verdict"] != "CONFIRMED" or not g["project"]):
+        # a subject only where the claim is Confirmed, or an ACCEPTED reading filled it (drive 3: readings.csv)
+        if g["subject_id"] and (not (e["verdict"] == "CONFIRMED" or e["verdict"].startswith("READING-"))
+                                or not g["project"]):
             c6.append(f"subject on a {e['verdict']} / blank-project row: {g['original_name']}")
-        if g["project"] == P.NEW_PROJECT and g["subject_id"]:
-            c6.append(f"subject on a 0118 row (HELD): {g['original_name']}")
+        if P.NEW_PROJECT and g["project"] == P.NEW_PROJECT and g["subject_id"]:
+            c6.append(f"subject on a {P.NEW_PROJECT} row (HELD): {g['original_name']}")
         if g["subject_id"]:
             alias = g["subject_id"].split("-AE-biomaGUNE-")[-1]
             if g["project"][-4:] != alias:
@@ -330,17 +466,44 @@ def main():
     # ---- 7 XMIC ------------------------------------------------------------------------------------------
     xm = [g for g in rows if g["instrument"] == "XMIC"]
     c7 = []
-    if not args.batch and len(xm) != 338:
-        c7.append(f"XMIC rows {len(xm)} != 338")
+    want_xmic = P.PROFILE.get("xmic_expected")
+    if want_xmic is not None and not args.batch and len(xm) != want_xmic:
+        c7.append(f"XMIC rows {len(xm)} != {want_xmic}")
+    if want_xmic is None and xm:
+        c7.append(f"{len(xm)} XMIC rows in a profile that plans none")
     c7 += [f"XMIC model/source wrong: {g['original_name']}" for g in xm
            if g["instrument_model"] != P.XMIC_MODEL or g["data_source"] != P.XMIC_SOURCE]
     notes["7"].append({"xmic_rows": len(xm)})
     checks["7 XMIC"] = c7
 
+    # ---- 8 link names (drive 3) ---------------------------------------------------------------------------
+    if decide:
+        c8 = []
+        projects = P.load_projects(args.nas)
+        live = {}
+        per_project = collections.defaultdict(collections.Counter)
+        for e in exp.values():
+            if e["project"]:
+                per_project[e["project"].lower()][e["link_name"].lower()] += 1
+        for p, cnt in per_project.items():
+            c8 += [f"link name {n!r} planned {k} times in {p}" for n, k in cnt.items() if k > 1]
+        for g in rows:
+            e = exp_in.get(g["original_name"])
+            if not e or not e["project"]:
+                continue
+            key = e["project"].lower()
+            if key not in live:
+                pr = projects.get(key)
+                live[key] = P.existing_links(args.nas, pr["folder"]) if pr else set()
+            if g["link_name"].lower() in live[key]:
+                c8.append(f"link name taken in {e['project']}\\raw_linked: {g['link_name']} ({g['original_name']})")
+        checks["8 link names"] = c8
+        notes["8"].append({"projects": len(per_project), "planned_links": sum(sum(c.values()) for c in per_project.values())})
+
     # ---- report ----------------------------------------------------------------------------------------
     P.wcsv(os.path.join(args.out, "check_cases.csv"), list(rows[0].keys()) if rows else ["original_name"], rows)
-    rep = {"generated": dt.datetime.now().isoformat(timespec="seconds"), "batches": len(batches),
-           "cases": len(rows), "engine": engine_log,
+    rep = {"generated": dt.datetime.now().isoformat(timespec="seconds"), "profile": P.PROFILE_NAME,
+           "batches": len(batches), "cases": len(rows), "engine": engine_log,
            "checks": {k: {"pass": not v, "failures": len(v), "first": v[:20]} for k, v in checks.items()},
            "notes": notes}
     with open(os.path.join(args.out, "check_report.json"), "w", encoding="utf-8") as f:

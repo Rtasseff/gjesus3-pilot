@@ -12,19 +12,36 @@ recoverable (ParaVision records only `nmr`, a shared login). Ryan ruled on 2026-
 (STATUS section 0, D1) that the cells become the HOLD VALUE `pending-claim` ("awaiting
 claim") now, and that whatever is still unclaimed when the claim window closes is blanked
 later. Blank means "unknown" and is final; `pending-claim` means a claim is still open.
-The value is `ingest.registry.OPERATOR_HOLD`; it is set by the Data Office with THIS tool,
-never by an ingest. 06_REGISTRIES section 2.3a-bis. Defaults are part (a):
+The value is `ingest.registry.OPERATOR_HOLD`; it is set by the Data Office (with THIS tool on
+rows already loaded, or by a historical config's `operator: pending-claim`), never by an
+operator's ingest. 06_REGISTRIES section 2.3a-bis. Defaults are part (a):
 
     --from "<REQUIRED - set via mri-ingest --operator, or replace here>"   --to pending-claim
 
 Part (c), once the claim window closes, reuses the tool: `--from pending-claim --to-blank`
 (`--to ""` does the same; Windows PowerShell 5.1 drops an empty argument, hence --to-blank).
 
+THE GENERAL RULE (Ryan, 2026-10-07; STATUS section 0.5 "Hold"): historical internal MRI loaded
+without an operator gets `operator = pending-claim`, and its sessions are listed in the claim
+workbook (tools/claim_workbooks.py claims-append). Those rows hold a BLANK operator, so the
+run selects them with ROW SELECTORS, every one of which must match:
+
+    python tools/repair_operator_hold.py --nas-root "J:\\gjesus3-data" --from-blank \\
+        --instrument MRI --config-prefix tools/configs/drive3_mri/ --config-prefix ...   (dry run)
+
+  --instrument X        the `instrument` cell equals X exactly (MRI; never XMRI, which is
+                        collaborators' scanners and out of scope)
+  --config-prefix P     the `ingest_config` cell starts with P, `/` and `\\` counted as the same
+                        (repeatable: a row matches when ANY prefix does; reported per prefix)
+
+A blank --from (`--from ""` or `--from-blank`) is refused unless BOTH selectors are given:
+blank means "unknown", and a bare blank would select every blank operator of microscopy, NI
+and XMRI as well.
+
 WHAT IT CHANGES. Only `operator` cells whose value equals --from EXACTLY (no trimming, no
-case folding), in registry_raw.csv, and nothing else: not another column, not another row,
-not a sidecar (`user_supplied.operator` in /raw/<ACQ-ID>/metadata.json keeps its text until
-its own final value is known). A --from that is blank is refused: blank means "unknown" and
-must never be bulk-filled.
+case folding), on rows that pass the selectors (when given), in registry_raw.csv, and nothing
+else: not another column, not another row, not a sidecar (`user_supplied.operator` in
+/raw/<ACQ-ID>/metadata.json keeps its text until its own final value is known).
 
 HOW. The file is edited as bytes, never through a csv round-trip (it has no BOM and CRLF line
 endings; a csv.writer would reformat quoting across 15 MB). Records are split with
@@ -42,9 +59,10 @@ and must be off the NAS; registry_raw.csv is copied there and the copy's SHA-256
 against the source BEFORE anything is written. The registry lock (ingest.locking) is held
 from the read to the end of the verification, so no ingest can append between them. The
 new file is written beside the registry and swapped in with os.replace. It is then re-read
-and compared with the backup record by record: exactly N records differ, each in `operator`
-only, each old value equal to --from and each new value equal to --to, every other byte
-identical, line terminators unchanged, and the size changed by exactly the expected delta.
+and compared with the backup record by record: exactly N records differ, and they are exactly
+the planned records (so a selected row, never another one), each in `operator` only, each old
+value equal to --from and each new value equal to --to, every other byte identical, line
+terminators unchanged, and the size changed by exactly the expected delta.
 On any mismatch the backup is restored and the exit code is non-zero.
 
 Exit codes: 0 done / dry run / nothing to do with --expect 0; 1 refused, or verification
@@ -79,12 +97,55 @@ PLACEHOLDER = "<REQUIRED - set via mri-ingest --operator, or replace here>"
 EXAMPLES_SHOWN = 3
 
 # One planned edit: the absolute byte span [start, end) of the operator field in the file
-# (surrounding quotes included, when it is quoted), the row it is on, and its form.
-Match = namedtuple("Match", "start end acq_id instrument quoted")
+# (surrounding quotes included, when it is quoted), the row it is on, and its form. `record`
+# is the 1-based record number (the header is 1); `prefix` the --config-prefix that selected it.
+Match = namedtuple("Match", "start end acq_id instrument quoted record prefix", defaults=(None, ""))
 
 
 class RepairError(Exception):
     """A refusal: the run stops, and (unless it says otherwise) nothing was written."""
+
+
+def norm_config(value):
+    """An ingest_config path or prefix with `\\` and `/` counted as the same."""
+    return value.replace("\\", "/")
+
+
+class Selectors:
+    """Row selectors; a row is selected only when EVERY given selector matches it."""
+
+    def __init__(self, instrument=None, prefixes=()):
+        self.instrument = instrument
+        self.prefixes = list(prefixes or ())
+        self._norm = [norm_config(p) for p in self.prefixes]
+
+    def __bool__(self):
+        return self.instrument is not None or bool(self.prefixes)
+
+    @property
+    def complete(self):
+        """Both kinds given: what a blank --from requires."""
+        return self.instrument is not None and bool(self.prefixes)
+
+    def select(self, instrument, ingest_config):
+        """The matching prefix ("" when no prefix selector is given), or None if the row is not selected."""
+        if self.instrument is not None and instrument != self.instrument:
+            return None
+        if not self.prefixes:
+            return ""
+        cfg = norm_config(ingest_config)
+        for p, n in zip(self.prefixes, self._norm):
+            if cfg.startswith(n):
+                return p
+        return None
+
+    def describe(self):
+        parts = []
+        if self.instrument is not None:
+            parts.append(f"instrument == {self.instrument!r}")
+        if self.prefixes:
+            parts.append("ingest_config starts with one of " + ", ".join(repr(p) for p in self.prefixes))
+        return " AND ".join(parts) if parts else "(none: every row)"
 
 
 def log(msg, level="INFO"):
@@ -94,11 +155,16 @@ def log(msg, level="INFO"):
 
 # ---- Arguments -----------------------------------------------------------
 
-def check_values(from_value, to_value):
+def check_values(from_value, to_value, selectors=None):
     """Refuse values this tool cannot edit safely. Raises RepairError."""
-    if from_value == "":
+    if from_value == "" and not (selectors is not None and selectors.complete):
         raise RepairError(
-            "--from is blank. Blank means 'unknown' and is final; this tool never bulk-fills it.")
+            "--from is blank. Blank means 'unknown'; a blank --from is accepted only with BOTH row "
+            "selectors, --instrument and --config-prefix (otherwise it would select every blank "
+            "operator of every instrument).")
+    for p in (selectors.prefixes if selectors is not None else ()):
+        if not p.strip():
+            raise RepairError("--config-prefix is blank: it would select every config.")
     if from_value == to_value:
         raise RepairError("--from and --to are identical: nothing to change.")
     for flag, value, banned in (("--from", from_value, '"\r\n'), ("--to", to_value, ',"\r\n')):
@@ -182,14 +248,17 @@ def _label(record, number):
 class Plan:
     """What a run would change. Built by find_matches; never touches the file."""
 
-    def __init__(self, size, n_records, from_value, to_value):
+    def __init__(self, size, n_records, from_value, to_value, selectors=None):
         self.size = size
         self.n_records = n_records                 # header included
         self.from_value = from_value
         self.to_value = to_value
+        self.selectors = selectors if selectors is not None else Selectors()
         self.matches = []                          # Match, in file order
         self.elsewhere = []                        # acq_ids: the --from text sits outside a matching cell
         self.by_instrument = Counter()
+        self.by_prefix = Counter()                 # --config-prefix -> selected cells
+        self.not_selected = Counter()              # instrument -> cells equal to --from that the selectors leave alone
 
     @property
     def quoted(self):
@@ -202,12 +271,14 @@ class Plan:
         return sum(to_len - (m.end - m.start) for m in self.matches)
 
 
-def find_matches(data, from_value, to_value):
-    """Plan the edit: every record whose `operator` equals from_value. Raises RepairError.
+def find_matches(data, from_value, to_value, selectors=None):
+    """Plan the edit: every record whose `operator` equals from_value and that the selectors
+    select. Raises RepairError.
 
-    Only records that contain the --from bytes are examined closely; every other record is
-    never parsed and is carried over untouched.
+    Only records that contain the --from bytes are examined closely (with a blank --from, that
+    is every record); every other record is never parsed and is carried over untouched.
     """
+    selectors = selectors if selectors is not None else Selectors()
     from_b = from_value.encode("utf-8")
     records = csv_safe.split_records(data)
     if not records:
@@ -222,13 +293,21 @@ def find_matches(data, from_value, to_value):
             f"({len(header)} columns found, {len(registry.REGISTRY_FIELDS)} expected): refusing to edit.")
     op = header.index("operator")
     ins = header.index("instrument")
-    plan = Plan(len(data), len(records), from_value, to_value)
+    cfg = header.index("ingest_config")
+    plan = Plan(len(data), len(records), from_value, to_value, selectors)
+    # A record can only be selected if it holds a prefix's text (slashes normalised); the others
+    # are never parsed, which matters most for a blank --from (it is "in" every record).
+    pref_b = [norm_config(p).encode("utf-8") for p in selectors.prefixes]
     offset = len(records[0])
     for number, rec in enumerate(records[1:], start=2):    # the header is record 1
         rec_start = offset
         offset += len(rec)
         if from_b not in rec:
             continue
+        if pref_b:
+            flat = rec.replace(b"\\", b"/")
+            if not any(p in flat for p in pref_b):
+                continue
         body, _term = _split_terminator(rec)
         try:
             fields = _record_fields(rec)
@@ -249,11 +328,19 @@ def find_matches(data, from_value, to_value):
             raise RepairError(f"{acq} (record {number}): the csv module and the byte scanner disagree "
                               f"about the operator cell {raw!r}; refusing to guess.")
         if not by_csv:
-            plan.elsewhere.append(acq)                      # the text is in another column / part of a longer value
+            if from_b:                                      # (a blank --from is "in" every record)
+                plan.elsewhere.append(acq)                  # the text is in another column / part of a longer value
             continue
-        plan.matches.append(Match(rec_start + s, rec_start + e, acq, fields[ins], raw.startswith(b'"')))
+        prefix = selectors.select(fields[ins], fields[cfg])
+        if prefix is None:
+            plan.not_selected[fields[ins]] += 1             # equal to --from, but outside the selectors
+            continue
+        plan.matches.append(Match(rec_start + s, rec_start + e, acq, fields[ins], raw.startswith(b'"'),
+                                  number, prefix))
         plan.by_instrument[fields[ins]] += 1
-        if from_b in body[:s] + body[e:]:
+        if selectors.prefixes:
+            plan.by_prefix[prefix] += 1
+        if from_b and from_b in body[:s] + body[e:]:
             plan.elsewhere.append(acq)                      # also elsewhere on the same row
     return plan
 
@@ -358,11 +445,16 @@ def verify_repair(backup_path, registry_path, plan):
         problems.append(f"the record count changed: {len(old_recs)} -> {len(new_recs)}")
         return problems
     op = registry.REGISTRY_FIELDS.index("operator")      # the header was checked against it in find_matches
+    planned = {m.record for m in plan.matches}
     changed = 0
     for number, (a, b) in enumerate(zip(old_recs, new_recs), start=1):
         if a == b:
+            if number in planned:
+                problems.append(f"record {number}: planned, but unchanged")
             continue
         why = _diff_record(a, b, op, plan.from_value, plan.to_value)
+        if not why and number not in planned:
+            why = "changed, but it is not one of the planned (selected) records"
         if why:
             problems.append(f"record {number}: {why}")
             if len(problems) >= 10:
@@ -388,7 +480,15 @@ def print_plan(plan, path):
     print(f"size:          {plan.size} bytes, {plan.n_records} records (header + {plan.n_records - 1} rows)")
     print(f"from:          {plan.from_value!r}")
     print(f"to:            {plan.to_value!r}")
+    if plan.selectors:
+        print(f"selectors:     {plan.selectors.describe()}")
     print(f"operator cells matching: {n}")
+    if plan.selectors.prefixes:
+        for p in plan.selectors.prefixes:
+            print(f"  by prefix:   {plan.by_prefix.get(p, 0):6d}  {p}")
+    if plan.not_selected:
+        print("left alone (equal to --from but outside the selectors): "
+              + ", ".join(f"{k or '(blank)'}={v}" for k, v in sorted(plan.not_selected.items())))
     if n:
         print("by instrument: " + ", ".join(f"{k or '(blank)'}={v}" for k, v in sorted(plan.by_instrument.items())))
         first = ", ".join(m.acq_id for m in plan.matches[:EXAMPLES_SHOWN])
@@ -403,7 +503,7 @@ def print_plan(plan, path):
 
 # ---- Run -----------------------------------------------------------------
 
-def apply_repair(args, nas_root, registries_dir, path, from_value, to_value):
+def apply_repair(args, nas_root, registries_dir, path, from_value, to_value, selectors=None):
     """The write. Returns the exit code."""
     backup_dir = os.path.abspath(args.backup_dir)
     if os.path.exists(backup_dir):
@@ -416,7 +516,7 @@ def apply_repair(args, nas_root, registries_dir, path, from_value, to_value):
     # ingest appending in between would otherwise be lost.
     with locking.registry_lock(registries_dir, log=log):
         data = read_bytes(path)
-        plan = find_matches(data, from_value, to_value)
+        plan = find_matches(data, from_value, to_value, selectors)
         print_plan(plan, path)
         n = len(plan.matches)
         if n != args.expect:
@@ -489,8 +589,17 @@ def main(argv=None):
                     "in bytes. Dry run unless --apply.")
     parser.add_argument("--nas-root", default=os.environ.get("GJESUS3_ROOT", "/mnt/gjesus3"),
                         help="Path to the NAS root (default: $GJESUS3_ROOT or /mnt/gjesus3).")
-    parser.add_argument("--from", dest="from_value", default=PLACEHOLDER,
-                        help="the exact operator value to replace (default: the MRI template instruction)")
+    src = parser.add_mutually_exclusive_group()
+    src.add_argument("--from", dest="from_value", default=PLACEHOLDER,
+                     help="the exact operator value to replace (default: the MRI template instruction)")
+    src.add_argument("--from-blank", action="store_true",
+                     help="replace BLANK operator cells (the same as --from \"\"); requires both "
+                          "--instrument and --config-prefix")
+    parser.add_argument("--instrument", metavar="X",
+                        help="row selector: only rows whose `instrument` is exactly X")
+    parser.add_argument("--config-prefix", dest="config_prefixes", action="append", default=[], metavar="P",
+                        help="row selector (repeatable): only rows whose `ingest_config` starts with P, "
+                             "with / and \\ counted as the same; a row matches when any prefix does")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--to", dest="to_value", default=registry.OPERATOR_HOLD,
                        help=f"the new operator value (default: {registry.OPERATOR_HOLD})")
@@ -504,10 +613,11 @@ def main(argv=None):
                              "copied there (SHA-256 verified) before anything is written")
     args = parser.parse_args(argv)
 
-    from_value = args.from_value
+    from_value = "" if args.from_blank else args.from_value
     to_value = "" if args.to_blank else args.to_value
+    selectors = Selectors(args.instrument, args.config_prefixes)
     try:
-        check_values(from_value, to_value)
+        check_values(from_value, to_value, selectors)
     except RepairError as exc:
         log(str(exc), "ERROR")
         return 2
@@ -529,14 +639,14 @@ def main(argv=None):
 
     try:
         if args.apply:
-            return apply_repair(args, nas_root, registries_dir, path, from_value, to_value)
-        plan = find_matches(read_bytes(path), from_value, to_value)
+            return apply_repair(args, nas_root, registries_dir, path, from_value, to_value, selectors)
+        plan = find_matches(read_bytes(path), from_value, to_value, selectors)
         print("DRY RUN - nothing is written.")
         print_plan(plan, path)
         if args.expect is not None and len(plan.matches) != args.expect:
             raise RepairError(f"found {len(plan.matches)} matching operator cells but --expect is "
                               f"{args.expect}.")
-        print("To write: re-run with --apply --expect "
+        print("To write: re-run with the same arguments plus --apply --expect "
               f"{len(plan.matches)} --backup-dir <a folder that does not exist yet, off the NAS>.")
         return 0
     except RepairError as exc:

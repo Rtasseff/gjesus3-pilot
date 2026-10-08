@@ -1578,7 +1578,7 @@ wrong, but until this is settled the validator cannot serve as a gate for anythi
 - [x] *(✅ Decided 2026-10-05, Ryan: a hold value now, a claim list, then blank whatever is unclaimed when the claim window closes.)* **Decide the representation** (recommend: blank). It is the only decision here — the write
   itself is the same byte-level, delimited, no-BOM/CRLF-preserving edit already done twice.
 - [x] *(✅ Done 2026-10-05: merge `2b891d5`; `tools/repair_operator_hold.py` wrote exactly 10,314 cells, verified by the tool and independently; the validator: exit 0, 0 errors, `operator awaiting claim (pending-claim): 10314`.)* **(a) The hold value `pending-claim`.**
-- [x] *(✅ (b) built 2026-10-05, not sent: `J:\gjesus3-data\projects\_MRI sessions - who ran them (2026-10).xlsx`, 926 sessions in 21 projects. Answers join back by the grey `session key`, the study-folder part of `original_name`.)* **(b) The claim list.**
+- [x] *(✅ (b) built 2026-10-05, not sent: `J:\gjesus3-data\projects\_MRI sessions - who ran them.xlsx`, 926 sessions in 21 projects. Answers join back by the grey `session key`, the study-folder part of `original_name`.)* **(b) The claim list.**
 - [ ] **(c) LATER, due when the claim window closes** (Ryan sets the window at the pilot re-launch; the date goes here then). Blank whatever is still unclaimed: every `operator` cell still holding the hold value becomes empty. Do nothing before the window closes.
   - The tool is ready: `tools/repair_operator_hold.py --from pending-claim --to-blank --apply --expect N --backup-dir <new>`.
   - The claimed names go in at the same time, joined by the claim list's `session key`, the study-folder part of `original_name`.
@@ -2218,9 +2218,7 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
 **The conflict:** production already holds MRI rows registered as empty placeholders before the line existed. The 2026-07-16 drain of the DICOM-regen worklist (10_TOOLS §3.8) left **365 rows `not-applicable`** (spectroscopy/calibration: STEAM/PRESS/WOBBLE) and **94 `no-source`**. *(99 `no-source` since 2026-10-05: the five header-only G1 exams were flipped on Ryan's ruling, STATUS §0 D7.)*
 
 - [ ] Count them afresh, from `registries/pending_dicom_regen.csv` and from `/raw/` folders with an empty `.data\`.
-- [ ] **Decide (Ryan):**
-  - retire them with the retire tool (which disposition? a new `not-an-image`, or `derivative`?), keeping any recoverable files as other data in the project folder;
-  - or leave them, with the line applying only from 2026-10-04 on.
+- [x] **Decided (Ryan, 2026-10-08): retire them.** "If they are attached to projects we can move the images and sidecars to the project folder." The Data Office's disposition: a new `no-dicom`. Built and rehearsed on `feat/mri-placeholder-retire`; **runs after the MRI archive ingest** (one registry writer at a time). Today's link audit: 324 of the placeholders are in projects. 10 of them have k-space on the M. Jesús drive, their only data: placed by the drive-3 close-out before the staged copy goes.
 - [ ] Live ingest: should the MRI path stop registering spectroscopy and calibration exams at ingest? Today it registers them as `not-applicable` placeholders.
 
 ## 🔹 LOW — an exam that produced no data is registered with today's date (2026-10-04)
@@ -2272,8 +2270,8 @@ Two things follow:
 - **Check the drive-3 MRI against the originals.** Stream M ingests 3,309 exams from M. Jesús's copies (Ryan's M2:
   "make a note of them and the fact that we need to check them against the originals"). Its gate lists every study.
   Compare each with the archive's copy (DICOM bytes, or pixels where re-exported), and record the result. The archive
-  ingest must use the same `original_name` form (`<study>/<exam>`) so that it skips these studies instead of
-  registering them twice.
+  ingest must use the same `original_name` form (`<study>/<exam>`) **and date exams by `VisuCreationDate`, as stream M did**,
+  so that it skips these studies instead of registering them twice (stream M gate §8, M-e).
 - **Re-run the drive-3 segmentation trace** (`tools/drive_staging/drive3/a3_run_all.py`) once the archive's 2019–2021
   studies are in: today those cohorts trace at 0–7 % only because their MRI is missing. The masks are kept (placed, or in
   the staged copy until `biomaGUNE MJ` is done) for exactly this.
@@ -2304,6 +2302,60 @@ project, and none of it is raw. For now it goes to the drive-3 holding folder (A
   read-only folder for model weights), and record which animals trained which model, so that any future benchmark
   built on a curated dataset (e.g. CAND-A) can exclude them.
 
+## 🔹 LOW — 10 project `_project.yaml` files are not UTF-8 (2026-10-07)
+
+Found while creating `CNIC-HEARDS`: `create_project.py` (and whatever wrote the older ones) writes `_project.yaml` in the
+Windows default encoding, so a description with an accent or an em dash is stored as cp1252. 10 of 65 files are not
+valid UTF-8 (`AE-biomaGUNE-0420`, `-0424`, `-0522`, `-0525`, `-0619`, `-0721`, `-1025`, `-1123`, `-1422`, `CNIC-HEARDS`). The
+registry is not affected (`registry_projects.csv` is UTF-8, checked). A UTF-8 reader of these files fails.
+
+- [ ] Write `_project.yaml` with `encoding="utf-8"` everywhere it is written; convert the 10 (cp1252 → UTF-8, backed up).
+
+## 🔹 LOW — 165 pig files wait in holding for a path-level remap (2026-10-07)
+
+`CNIC-HEARDS` received its masks by a 2b group remap, but one no-claim group (`D3||Otros\Segmentaciones ITK SNAP`) mixes
+165 pig files (148 split volumes, 17 masks of `HEARDSMRI2444P_1_2000`) with two mouse London segmentations, and a 2b
+mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadata\README_CNIC-HEARDS_pig_files_in_holding.txt`.
+
+- [ ] A path-level mapping in `nonraw_placement.py remap` (with a test), then move the 165.
+
+## 🔸 MODERATE — 231 placed MetaImage headers name a `.raw` the path budget renamed (2026-10-08)
+
+The drive-3 close-out read every affected `.mhd`: **231 placed `.mhd` headers** (225 from drive 1, 6 from drive 3, all in
+`AE-biomaGUNE-1019\working\historical_drives\`) still name their `.raw` by its original file name in `ElementDataFile`,
+but the 240-character placement rule shortened that `.raw`'s name. ITK-SNAP / 3D Slicer cannot open these volumes as
+placed. SegBioMed's remapped manifest carries the real `.raw` path for its 6 (`split_raw_path`).
+
+- [ ] Choose a fix that keeps the index honest: rewrite `ElementDataFile` in the placed `.mhd` (a changed copy: update its
+  `_INDEX.csv` size/SHA-256 and say so in the README), or add a corrected sibling header. Then teach
+  `nonraw_placement.py` to keep a `.mhd`/`.raw` pair's names in step when it shortens.
+
+## 🔹 LOW — the M. Jesús drive: adjust by hand if late answers come (2026-10-08)
+
+Ryan: no more answers are likely, so the drive was finished on what we knew; anything that arrives later is changed by
+hand. Open: `tasks/drive3_questions_for_mjesus.md` Q2 (`1121`'s `Revision`), 6, 7, 8, 11–14; Q9's `1422` protocol and
+Irene's offer to review which `0522` Biodonostia scans are worth keeping; Q10's Leica protocol; the `CNIC-HEARDS`
+owner. The revised `0522`/`0619`/`0424` masks are in Jesús and Irene's shared OneDrive (needed before CAND-A).
+
+- [ ] On an answer: re-assign the project (the 2b runbook for placed material; a project reassignment for acquisitions),
+  update the README note or the dataset, and log it in the CHANGELOG.
+
+## 🔹 LOW — 106 drive-3 exams hold converted DICOM where the archive has the scanner's own (2026-10-08)
+
+The archive check (`tasks/drive3_mri_archive_check.md`) found six `0619` animals of 2021-03-22 (106 exams) whose production
+DICOM was made by Dicomifier from M. Jesús's copy, while the platform's archive holds the scanner's own DICOM export.
+The pixels are not compared (different reconstructions of the same data).
+
+- [ ] Decide whether to replace the converted DICOM with the scanner's, in place (the recovery pattern; ACQ-IDs kept).
+
+## 🔹 LOW — the assign workbook's append reads drive-3 sources only (2026-10-08)
+
+`tools/claim_workbooks.py assign-append` lists the drive-3 holding files and drive-3 acquisitions with no project. The MRI
+archive ingest adds 118 studies with no project (41 animal studies, 77 phantoms/QC); its build writes them to
+`D:\projects\gjesus3\mri_archive\out\for_assign_workbook.csv`.
+
+- [ ] Let `assign-append` take a generic list of acquisitions, then append the archive's after its ingest.
+
 ## 🔸 MODERATE — the drives' DICOM stream: follow-ups (stream B, 2026-10-04)
 
 - [ ] **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T.
@@ -2319,7 +2371,7 @@ project, and none of it is raw. For now it goes to the drive-3 holding folder (A
 ## 🔺 HIGH — historical drives: the 2b mapping round (Ryan's worksheet) (2026-10-04)
 
 - [ ] **Ryan fills `tasks/drives_nonraw_mapping_worksheet.csv`.** Only the 62 `A` rows matter; a blank row stays in holding.
-  *(2026-10-05: the worksheet was regenerated from the final manifest (290 groups) and shared with Jesus's group as a workbook: `J:\gjesus3-data\projects\_Historical drives - assign to projects (2026-10).xlsx`. It is temporary. When answers come back, join them into the CSV **by `group key`** and follow the runbook.)*
+  *(2026-10-05: the worksheet was regenerated from the final manifest (290 groups) and shared with Jesus's group as a workbook: `J:\gjesus3-data\projects\_Historical data - assign to projects.xlsx`. It is temporary. When answers come back, join them into the CSV **by `group key`** and follow the runbook.)*
 - [ ] **A session applies it,** following `tasks/drives_nonraw_2b_2c_followup.md`: `remap`, then `apply-raw` (projects on the blank-project raw rows; write-once-if-blank), then `copy --from-holding`. The holding folder is already filled, so D: is not needed.
 - [x] *(✅ Done 2026-10-05, before the erase: it is at `J:\gjesus3-data\staging\historical_drives_records\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.)* **Before the D: staging is erased,** keep the record manifest off D: (runbook §2.6). The current one is `D:\projects\gjesus3\staging\_analysis\drives-nonraw-placement-v3b\placement_manifest.csv`.
 

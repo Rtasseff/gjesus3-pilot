@@ -9,7 +9,7 @@ later 2b mapping and the 2c holding folder). Ryan, 2026-10-02: no paths that thr
 THE RULE
   <base>\\<tag>\\<root label>\\<path below the root>\\<file>
     base   projects\\<project>\\working\\historical_drives   (or staging\\historical_drives_unassigned)
-    tag    FRIO-X6 | MFB-Disco-2                            (the drive)
+    tag    FRIO-X6 | MFB-Disco-2 | MJesus-MFB               (the drive; TAGS below)
     root   the OUTERMOST claim-root folder of the file's project on its path (a study folder such as
            `Proyecto 1019 Envejecimiento y dieta`); everything ABOVE it is dropped -- the drive's
            wrapper folders, the researcher folders, an archive's name and its repeated top folder.
@@ -54,8 +54,11 @@ BUDGET = 240
 COMPONENT_MAX = 255
 KEEP = 24
 KEEP_LEVELS = (24, 12, 6)  # graded shortening: a later run may cut NEW folders harder (old ones are frozen)
-TAGS = {"D1": "FRIO-X6", "D2": "MFB-Disco-2"}
-DRIVE_LABELS = {"D1": "drive1_FRIO-X6", "D2": "drive2_MFB-Disco-2"}
+# The drives, by the code the catalogs use. D3 is M. Jesus's own working drive (WD My Passport, serial
+# WX22D623YP29, volume label MJesus-MFB-biomaGUNE), staged 2026-09-29/30; its tag is the volume label
+# shortened the way the first two were made (A2, tasks/drive3_projects_and_placement.md §4.1).
+TAGS = {"D1": "FRIO-X6", "D2": "MFB-Disco-2", "D3": "MJesus-MFB"}
+DRIVE_LABELS = {"D1": "drive1_FRIO-X6", "D2": "drive2_MFB-Disco-2", "D3": "drive3_MJesus-MFB"}
 NESTED_SEP = "!"
 ARCHIVE_EXT = (".zip", ".7z", ".rar")
 INDEX_NAME, PATHMAP_NAME, README_NAME, ORIGIN_NAME = "_INDEX.csv", "_PATHMAP.csv", "README.txt", "_ORIGIN.txt"
@@ -502,13 +505,19 @@ Historical drive material for this project
 ==========================================
 
 What this folder is
-  Files from two operator external drives (FRIO X6, serial 2322E4A111E7, and
-  MFB Disco 2, serial 2322E4A112BD) that belong to this project but are not raw
-  acquisitions: exported images (.tif), figures, slides, documents, analysis
-  files, scale-bar copies. The raw acquisitions themselves are in gjesus3's
-  archive and are linked in this project's raw_linked\\ folder.
+  Files from the lab's historical external drives that belong to this project
+  but are not raw acquisitions: exported images (.tif), figures, slides,
+  documents, analysis files, segmentations and derived image volumes (NIfTI,
+  MetaImage), scale-bar copies. The raw acquisitions themselves are not here:
+  gjesus3 registers them in its archive, and links each registered one in this
+  project's raw_linked\\ folder.
 
-  FRIO-X6\\ and MFB-Disco-2\\ hold what came from each drive.
+  Each drive has its own folder here (only the drives that held material for
+  this project appear):
+    FRIO-X6\\       operator drive FRIO X6, serial 2322E4A111E7
+    MFB-Disco-2\\   operator drive MFB Disco 2, serial 2322E4A112BD
+    MJesus-MFB\\    a researcher's working drive (WD My Passport, serial
+                   WX22D623YP29, labelled MJesus-MFB-biomaGUNE)
 
 The folder names were shortened
   Windows cannot open very long paths, so:
@@ -532,6 +541,35 @@ The originals
 _PATHMAP.csv is for the Data Office (it keeps folder names stable when more
 material is added later). Please do not edit it.
 """
+
+# A note for ONE project's tree, appended to PROJECT_README (every other tree keeps the text above, byte for
+# byte). The researchers' answers of 2026-10-08 (questions about drive 3, A2/A3): the 0522, 0619 and 0424
+# masks were revised by Jesus and Irene, and the revised versions live in a shared OneDrive folder, not on
+# the drive; in 0522's 2023 masks, `IRE` marks Irene's corrections of the drive owner's masks.
+_MASKS_DRAFT = """
+Segmentation masks under MJesus-MFB\\ are drafts
+  The segmentation masks of protocol {code} under MJesus-MFB\\ are working
+  drafts from the drive. Jesus Ruiz-Cabello and Irene Fernandez later revised
+  them; the revised versions are in their shared OneDrive folder, not here.
+  Use the masks here as work in progress, not as final results.
+"""
+_IRE_CORRECTIONS = """\
+  In the 2023 masks, the files labelled IRE are Irene's corrections of the
+  drive owner's masks (not a second, independent reading).
+"""
+PROJECT_README_NOTES = {
+    "AE-biomaGUNE-0522": _MASKS_DRAFT.format(code="0522") + _IRE_CORRECTIONS,
+    "AE-biomaGUNE-0619": _MASKS_DRAFT.format(code="0619"),
+    "AE-biomaGUNE-0424": _MASKS_DRAFT.format(code="0424"),
+}
+
+
+def project_readme(base=""):
+    """README.txt of one project tree (`projects\\<folder>\\working\\historical_drives`): PROJECT_README, plus
+    that project's note if it has one (PROJECT_README_NOTES). Any other base gets PROJECT_README unchanged."""
+    parts = base.split("\\")
+    note = PROJECT_README_NOTES.get(parts[1]) if len(parts) > 1 and parts[0] == "projects" else None
+    return PROJECT_README + note if note else PROJECT_README
 
 
 def origin_text(origs):
