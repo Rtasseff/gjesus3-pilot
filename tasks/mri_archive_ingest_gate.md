@@ -59,7 +59,7 @@ for the coordinator's gate and then Ryan's go. **Nothing was written to producti
    validator green (`pending-claim` 15,963), the six live checks, case tables identical to the commit, 313 subject ids,
    bytes 0, **18 + 1 dry runs: 7,627 listed = the case tables, 0 failed, 0 disagreements, registries unchanged**. Its
    snapshot lets the morning's `write` start without re-running it (§7).
-7. **Rehearsal of the script itself** on a D: root built from production at 35,791 rows: ⟨REH⟩.
+7. **Rehearsal of the script itself** on a D: root built from production at 35,791 rows: **7,627 / 7,627 / 0** (18 batches, 72 min, alongside the production pre-flight's dry runs), each batch verified 18/18 PASS against its own backup; W5 `pending-claim` 23,590 = 15,963 + 7,627, 0 findings on the new rows; the claim workbook (a copy) appended 627 sessions / 7,627 acquisition rows with every existing cell unchanged; ⟨POSTSUM⟩.
 8. **Run time on the NAS: about 3 to 3.5 hours** for `write` (§7). It fits 07:00–10:30 only if it starts on time; it can start as soon
    as the go comes.
 
@@ -175,7 +175,25 @@ skips the root-independent pre-flight steps already run against production, and 
 `reopen_project.py` relinks production's 392 `0220` acquisitions, whose `/raw/` the D: root does not hold. Its production dry
 run (read-only, 2026-10-08): links `present 245, created 147, collision 0, no_raw 0, error 0`, status `closed → active`.
 
-⟨REHT⟩
+Run folder `D:\projects\gjesus3\mri_archive\out\script_rehearsal2\` (every step's output and log).
+
+| Phase / step | Result |
+|---|---|
+| `preflight` (REHEARSAL: P1, P7) | validator (production's rows' missing folders only) `pending-claim` 15,963; snapshot 35,791 rows |
+| W0 | MRI rows unchanged; registries byte-identical to the pre-flight's, so the validator is not re-run |
+| W1, W2, W3 | `bk0`; `0220` set active; `bk1` |
+| the 18 batches | **every one `Total = Success =` its case table, `Failed 0`, its rows in the registry equal, verify 18/18 PASS** against `bk_<batch>`. Times on local disk (with the production dry runs running beside it): AR03 11 s, AR01 5 min 46 s, AR02 3 min 20 s, AR04 3 min 23 s, AR05 5 min 34 s, AR06 4 min 46 s, AR08 17 min 21 s, AR09 7 min 41 s, AR12 13 min 6 s, AR13 2 min 45 s, AR14 5 min 5 s, the small ones under 40 s. 72 min in all |
+| W4 | rows written by this stream: 7,627 |
+| W5 | `pending-claim 23590 == 15963 + 7627`; findings on the new rows 0 |
+| W6, W7 | preview `to append: 627 sessions (7,626 acquisitions); 7,627 acquisition rows (1 of them in sessions already listed)`; `APPENDED (claims-append)`: Sessions to claim +627, Acquisitions +7,627, Read me +1 |
+
+The first `write` stopped at W7 although the append had succeeded: the check looked for `APPENDED (claims)` and the tool
+prints `APPENDED (claims-append)`. Fixed; the workbook copy was put back and `finish` re-run with the final script: W4–W7 all
+as expected (W5 now reads the validator's output once instead of running it twice). Sizes on disk: 14.59 GB, 212,098 DICOM
+files; ACQ-IDs `ACQ-20190128-MRI-001` (AR01) … `ACQ-20221221-MRI-008` (AR07); production gives the same IDs only if no other
+MRI row lands on these days first.
+
+⟨POSTTAB⟩
 
 ---
 
@@ -184,6 +202,11 @@ run (read-only, 2026-10-08): links `present 245, created 147, collision 0, no_ra
 **Who and when.** The coordinator's gate, then Ryan's go. **One registry writer at a time**: no Cell Observer, drive or
 operator batch, and no NI sync, during `write`. Git Bash, **from this branch's worktree** (the script is LF; a CRLF checkout
 breaks bash). Off-NAS run folder `C:\Users\rtasseff\temp\gjesus3_mri_archive_20261009\` (override `RUN=…`).
+
+**Time.** The batches: 7,627 exams at the rate stream M measured on the NAS on 2026-10-07 (3,309 exams in 74 min, 45 per
+minute) ≈ **2 h 50 min**; per-batch backups and verifies ≈ 15–20 min; W5's validator ≈ 13 min; W0 (its validator skipped
+while the registries are unchanged), the reopen, W6–W7 ≈ 10 min. **About 3 to 3.5 hours in all**, so a 07:00 start ends
+about 10:00–10:30. The same run took 78 min on local disk (§6). `post` (read-only) can run after the window.
 
 ```bash
 bash tools/drive_staging/mri_archive/ar_16_production.sh preflight   # DONE tonight (§5); re-run only if W0 says so
@@ -203,7 +226,7 @@ bash tools/drive_staging/mri_archive/ar_16_production.sh post        # read-only
 | W4 | every batch's rows == its case table | `rows written by this stream: 7627` |
 | W5 | validator after (~13 min on the NAS); the new rows apart | `pending-claim 23590 == 15963 + 7627`; `findings on them: 0` |
 | W6 | claim workbook, dry run | `to append 627 sessions (7626 acquisitions)`; `every existing cell unchanged` |
-| W7 | **claim workbook, append** (only now: every batch passed) | `APPENDED (claims)`; the workbook's copy in `claims_backup\` |
+| W7 | **claim workbook, append** (only now: every batch passed) | `APPENDED (claims-append)`; the workbook's copy in `claims_backup\` |
 
 W6's numbers are one lower than the totals because `m131_0619/7` joins a session the workbook already lists (stream M's).
 
