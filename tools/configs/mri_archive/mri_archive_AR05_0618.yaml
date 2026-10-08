@@ -1,4 +1,4 @@
-# The MRI platform's archive (stream AR), batch AR05_0618: 21 studies (A 21), 2019-2021; AE-biomaGUNE-0618 21.
+# The MRI platform's archive (stream AR), batch AR05_0618: 73 studies (A 67, A2 6), 2019-2022; AE-biomaGUNE-0618 73.
 # Gate: tasks/mri_archive_ingest_gate.md. Census: tasks/mri_archive_census.md. Rulings: tasks/STATUS.md 0.5 (Hold), 0.6.
 #
 # SOURCE: the MRI platform's archive (mriuser@10.10.3.175 backup_7T_olddata_260824), pulled to LOCAL disk by

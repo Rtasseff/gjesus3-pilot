@@ -25,6 +25,9 @@ cd "$WT" || exit 2
 export PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tools PYTHONIOENCODING=utf-8
 NAS="${NAS:-J:/gjesus3-data}"          # REHEARSAL: NAS=<the D: rehearsal root> REHEARSAL=1 RUN=<a D: folder>
 VALFLAG="${REHEARSAL:+--allow-missing-folders}"
+T="${REHEARSAL:+reh_}"                  # log tags, so a rehearsal never overwrites production's dry-run logs
+# REHEARSAL=1 skips the root-independent pre-flight steps P2-P6 and W0's plan check (run against production by the
+# production pre-flight at the same commit); it rehearses the write mechanics on the D: root.
 S=tools/drive_staging/mri_archive
 C=tools/configs/mri_archive
 O="D:/projects/gjesus3/mri_archive/out"
@@ -38,8 +41,8 @@ BATCHES="AR03_0220 AR01_0118 AR02_0219 AR02n_0219 AR04_0320 AR04n_0320 AR05_0618
 PROJECTS="AE-biomaGUNE-0118 AE-biomaGUNE-0219 AE-biomaGUNE-0220 AE-biomaGUNE-0320 AE-biomaGUNE-0618 AE-biomaGUNE-0619 AE-biomaGUNE-0721 AE-biomaGUNE-1019 AE-biomaGUNE-1116 AE-biomaGUNE-1319 AE-biomaGUNE-1321 AE-biomaGUNE-1519"
 # The claim workbook after every batch: sessions / acquisitions to append (the extra m131 exam joins a session already
 # listed, so it is in neither number). Set from the final plan; the gate §7 shows the derivation.
-CLAIM_SESSIONS=__CLAIM_SESSIONS__
-CLAIM_ACQS=__CLAIM_ACQS__
+CLAIM_SESSIONS=627      # 628 study folders, less jrc210322_m131_0619 (stream M listed it)
+CLAIM_ACQS=7626        # 7,627 acquisitions, less the m131 exam
 
 mkdir -p "$RUN/preflight" "$RUN/write" "$RUN/post"
 LOG="$RUN/$(date +%Y%m%d_%H%M%S)_${1:-none}.log"
@@ -53,6 +56,7 @@ preflight() {
   step "P1 validator (expect: validation OK; the pending-claim line is saved as the baseline)"
   python tools/validate_registries.py --nas-root "$NAS" --no-enrichment > "$RUN/preflight/validate.txt" 2>&1
   $CHK validator "$RUN/preflight/validate.txt" $VALFLAG --save-baseline "$RUN/preflight/pending_claim.txt" || stop "P1 the validator is not green: read $RUN/preflight/validate.txt"
+  if [ -z "${REHEARSAL:-}" ]; then
   step "P2 the plan against live production (expect: names 0; session+day 0; sample+day = the 12 A2 only; links taken 0; dated 2026 0)"
   python $S/ar_05_plan.py > "$RUN/preflight/plan.txt" 2>&1 || stop "P2 ar_05_plan.py failed"
   $CHK plan "$RUN/preflight/plan.txt" || stop "P2 a live check differs: read $RUN/preflight/plan.txt"
@@ -67,11 +71,12 @@ preflight() {
   grep -q "exams with any file production holds: 0 \[\]" "$RUN/preflight/bytes.txt" || stop "P5 a planned DICOM is in production: $RUN/preflight/bytes.txt"
   step "P6 dry runs, each bracketed (expect: every rc=0, registries changed=False; dedup proof total 0)"
   local all="$C/mri_archive_dedup_proof.yaml"; for b in $BATCHES; do all="$all $(cfg $b)"; done
-  python $S/ar_09_run.py "$NAS" prod_pre $all > "$RUN/preflight/dryruns.txt" 2>&1 || stop "P6 a dry run failed or changed the registries: $RUN/preflight/dryruns.txt"
-  python $S/ar_10_check_log.py "$O/dryrun_prod_pre_mri_archive_dedup_proof.log" DEDUP || stop "P6 the dedup proof listed an exam"
+  python $S/ar_09_run.py "$NAS" ${T}prod_pre $all > "$RUN/preflight/dryruns.txt" 2>&1 || stop "P6 a dry run failed or changed the registries: $RUN/preflight/dryruns.txt"
+  python $S/ar_10_check_log.py "$O/dryrun_${T}prod_pre_mri_archive_dedup_proof.log" DEDUP || stop "P6 the dedup proof listed an exam"
   for b in $BATCHES; do
-    python $S/ar_10_check_log.py "$O/dryrun_prod_pre_mri_archive_$b.log" $b || stop "P6 $b: the dry run differs from its case table"
+    python $S/ar_10_check_log.py "$O/dryrun_${T}prod_pre_mri_archive_$b.log" $b || stop "P6 $b: the dry run differs from its case table"
   done
+  fi
   step "P7 snapshot of the registries (the write phase checks that no other MRI row arrived since)"
   $CHK snapshot "$NAS" "$RUN/preflight/snapshot.txt" || stop "P7 snapshot"
   date > "$RUN/preflight/PASS"; echo; echo "PREFLIGHT PASS"
@@ -111,7 +116,9 @@ write() {
   python tools/validate_registries.py --nas-root "$NAS" --no-enrichment > "$RUN/write/validate_W0.txt" 2>&1
   $CHK validator "$RUN/write/validate_W0.txt" $VALFLAG || stop "W0 the validator is not green"
   if [ -z "$from" ]; then
-    python $S/ar_05_plan.py > "$RUN/write/plan.txt" 2>&1; $CHK plan "$RUN/write/plan.txt" || stop "W0 a live check differs: $RUN/write/plan.txt"
+    if [ -z "${REHEARSAL:-}" ]; then
+      python $S/ar_05_plan.py > "$RUN/write/plan.txt" 2>&1; $CHK plan "$RUN/write/plan.txt" || stop "W0 a live check differs: $RUN/write/plan.txt"
+    fi
     step "W1 backup before anything (rollback of the whole run, the reopen included)"
     [ -d "$RUN/bk0" ] || $BACKUP "$NAS" "$RUN/bk0" $PROJECTS > "$RUN/write/bk0.txt" 2>&1 || stop "W1 backup failed (another writer?)"
   fi
@@ -136,8 +143,8 @@ finish() {
   python tools/validate_registries.py --nas-root "$NAS" --no-enrichment > "$RUN/write/validate_after.txt" 2>&1
   $CHK validator "$RUN/write/validate_after.txt" $VALFLAG --expect-pending-from "$RUN/preflight/pending_claim.txt" --plus $total \
     || stop "W5 the validator after the write: $RUN/write/validate_after.txt"
-  python $S/ar_13_validate_new.py "$NAS" prod_after > "$RUN/write/validate_new.txt" 2>&1; head -1 "$RUN/write/validate_new.txt"
-  grep -q "findings on them: 0;" "$RUN/write/validate_new.txt" || stop "W5 findings on the new rows: $O/validate_prod_after.txt"
+  python $S/ar_13_validate_new.py "$NAS" ${T}prod_after > "$RUN/write/validate_new.txt" 2>&1; head -1 "$RUN/write/validate_new.txt"
+  grep -q "findings on them: 0;" "$RUN/write/validate_new.txt" || stop "W5 findings on the new rows: $O/validate_${T}prod_after.txt"
   step "W6 the claim workbook, dry run (expect: to append $CLAIM_SESSIONS sessions ($CLAIM_ACQS acquisitions); every existing cell unchanged)"
   python tools/claim_workbooks.py claims-append --nas-root "$NAS" --preview-dir "$RUN/claims_preview" > "$RUN/write/claims_dry.txt" 2>&1 \
     || stop "W6 claims-append dry run refused (Excel open somewhere? lock file ~\$...): $RUN/write/claims_dry.txt"
@@ -155,8 +162,8 @@ post() {
   grep -q "^FAIL" "$RUN/post/verify_all.txt" && stop "Q1 a check FAILED: $RUN/post/verify_all.txt"
   step "Q2 idempotent dry runs (expect: every total 0; the dedup proof unchanged)"
   local all="$C/mri_archive_dedup_proof.yaml"; for b in $BATCHES; do all="$all $(cfg $b)"; done
-  python $S/ar_09_run.py "$NAS" prod_post $all | tee "$RUN/post/dryruns.txt" | grep -v "'total': 0," && stop "Q2 a dry run lists something: $RUN/post/dryruns.txt"
-  python $S/ar_10_check_log.py "$O/dryrun_prod_post_mri_archive_dedup_proof.log" DEDUP || stop "Q2 the dedup proof changed"
+  python $S/ar_09_run.py "$NAS" ${T}prod_post $all | tee "$RUN/post/dryruns.txt" | grep -v "'total': 0," && stop "Q2 a dry run lists something: $RUN/post/dryruns.txt"
+  python $S/ar_10_check_log.py "$O/dryrun_${T}prod_post_mri_archive_dedup_proof.log" DEDUP || stop "Q2 the dedup proof changed"
   step "Q3 the hand-over lists with the ACQ-IDs (assign workbook, placement batch)"
   python $S/ar_15_lists.py "$NAS"
   echo; echo "POST PASS"

@@ -1,10 +1,10 @@
-# The MRI platform's archive (stream AR), batch AR06_0619: 28 studies (A 27, C 1), 2020-2021; AE-biomaGUNE-0619 28.
+# The MRI platform's archive (stream AR), batch AR07_0721: 10 studies (A 4, A2 6), 2021-2022; AE-biomaGUNE-0721 10.
 # Gate: tasks/mri_archive_ingest_gate.md. Census: tasks/mri_archive_census.md. Rulings: tasks/STATUS.md 0.5 (Hold), 0.6.
 #
 # SOURCE: the MRI platform's archive (mriuser@10.10.3.175 backup_7T_olddata_260824), pulled to LOCAL disk by
 # tools/mri_archive.py fetch (each tarball SHA-1-verified) and extracted by tools/drive_staging/mri_archive/
 # ar_01_extract.py (k-space excluded; every file hashed) to a FLAT tree on D::
-#     D:/projects/gjesus3/mri_archive/extract/AR06_0619/<study>/<exam>/
+#     D:/projects/gjesus3/mri_archive/extract/AR07_0721/<study>/<exam>/
 # so original_name = "<study>/<exam>", the shape of every production MRI row (the staging_dir trap), dated by
 # VisuCreationDate as production: an exam already registered (e.g. from the M. Jesus drive) is skipped, never
 # registered twice. Convert-first (Ryan, 2026-10-04): every exam in the case table holds DICOM (the scanner's own, or
@@ -18,7 +18,7 @@
 # operator = pending-claim: historical internal MRI, listed in the claim workbook (STATUS 0.5, Ryan 2026-10-07).
 #
 # Dry run (read-only):
-#   python tools/ingest_raw.py --config tools/configs/mri_archive/mri_archive_AR06_0619.yaml --nas-root J:/gjesus3-data --dry-run
+#   python tools/ingest_raw.py --config tools/configs/mri_archive/mri_archive_AR07_0721.yaml --nas-root J:/gjesus3-data --dry-run
 
 ingest:
   delete_source_after_ingest: false
@@ -28,10 +28,10 @@ ingest:
   reconstructions: all
 
 auto_discover:
-  staging_dir: "D:/projects/gjesus3/mri_archive/extract/AR06_0619"
+  staging_dir: "D:/projects/gjesus3/mri_archive/extract/AR07_0721"
   pattern: "*/[0-9]*"
   case_table:
-    file:       cases_AR06_0619.csv
+    file:       cases_AR07_0721.csv
     key:        original_name
     on_missing: skip                      # the exams not registered (listed in out/not_registered*.csv)
   subject_from_db: true

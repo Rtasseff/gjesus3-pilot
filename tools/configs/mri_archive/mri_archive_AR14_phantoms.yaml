@@ -1,4 +1,4 @@
-# The MRI platform's archive (stream AR), batch AR14_phantoms: 32 studies (B 32), 2019-2021; (no project) 32.
+# The MRI platform's archive (stream AR), batch AR14_phantoms: 67 studies (B 67), 2019-2022; (no project) 67.
 # Phantoms / QC (STATUS 0.6 Q2), as July's jrc phantoms: no project, no subject id.
 # Gate: tasks/mri_archive_ingest_gate.md. Census: tasks/mri_archive_census.md. Rulings: tasks/STATUS.md 0.5 (Hold), 0.6.
 #
