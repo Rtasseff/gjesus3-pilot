@@ -542,6 +542,35 @@ _PATHMAP.csv is for the Data Office (it keeps folder names stable when more
 material is added later). Please do not edit it.
 """
 
+# A note for ONE project's tree, appended to PROJECT_README (every other tree keeps the text above, byte for
+# byte). The researchers' answers of 2026-10-08 (questions about drive 3, A2/A3): the 0522, 0619 and 0424
+# masks were revised by Jesus and Irene, and the revised versions live in a shared OneDrive folder, not on
+# the drive; in 0522's 2023 masks, `IRE` marks Irene's corrections of the drive owner's masks.
+_MASKS_DRAFT = """
+Segmentation masks under MJesus-MFB\\ are drafts
+  The segmentation masks of protocol {code} under MJesus-MFB\\ are working
+  drafts from the drive. Jesus Ruiz-Cabello and Irene Fernandez later revised
+  them; the revised versions are in their shared OneDrive folder, not here.
+  Use the masks here as work in progress, not as final results.
+"""
+_IRE_CORRECTIONS = """\
+  In the 2023 masks, the files labelled IRE are Irene's corrections of the
+  drive owner's masks (not a second, independent reading).
+"""
+PROJECT_README_NOTES = {
+    "AE-biomaGUNE-0522": _MASKS_DRAFT.format(code="0522") + _IRE_CORRECTIONS,
+    "AE-biomaGUNE-0619": _MASKS_DRAFT.format(code="0619"),
+    "AE-biomaGUNE-0424": _MASKS_DRAFT.format(code="0424"),
+}
+
+
+def project_readme(base=""):
+    """README.txt of one project tree (`projects\\<folder>\\working\\historical_drives`): PROJECT_README, plus
+    that project's note if it has one (PROJECT_README_NOTES). Any other base gets PROJECT_README unchanged."""
+    parts = base.split("\\")
+    note = PROJECT_README_NOTES.get(parts[1]) if len(parts) > 1 and parts[0] == "projects" else None
+    return PROJECT_README + note if note else PROJECT_README
+
 
 def origin_text(origs):
     lines = ["Where this folder came from", "===========================", "",

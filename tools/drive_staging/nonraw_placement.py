@@ -1398,7 +1398,7 @@ def tree_documents(manifest, base, holding=False, extra_index_rows=(), nas=None)
     w.writeheader()
     w.writerows(merge_pathmap(ex_pm, our_pm))
     docs[f"{base}\\{H.PATHMAP_NAME}"] = buf.getvalue().encode("utf-8-sig")
-    readme = README_TXT if holding else H.PROJECT_README
+    readme = README_TXT if holding else H.project_readme(base)   # a project's own note, if it has one
     docs[f"{base}\\{H.README_NAME}"] = readme.replace("\n", "\r\n").encode("utf-8")
     origins = collections.defaultdict(list)
     op = os.path.join(tdir, "_ORIGINS.csv")
