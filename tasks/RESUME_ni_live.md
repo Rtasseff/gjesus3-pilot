@@ -250,8 +250,9 @@ the 2026-10-06 merge).
      - **The Mac:** the interim mount (`~/.gjesus3`, `~/.macmounter/gjesus3.conf`, the keychain
        item) stays until Box A, then goes via `undo.sh`.
      - **Git:** prune the local `backup/ni-live-*` tags after the merge into `main`.
-     - **The remote:** it still holds the August pre-rebase history. The force-push was blocked
-       for the agent on 2026-10-08; Ryan's call.
+     - ✅ **The remote is done.** Ryan force-pushed on 2026-10-08 (`44512ec...ea2f68f`), so the
+       August pre-rebase history is gone from origin. It survives locally in
+       `backup/ni-live-pre-rebase-20260807`.
      - **The `ni-tunnel-live` worktree** is merged, but it belongs to its own session.
      - **`J:\gjesus3-sandbox`:** its shared registry is stale (§7, `project_hint` header). That
        is not ours to purge without asking.
@@ -302,8 +303,9 @@ the 2026-10-06 merge).
   (`85af9d6`) is **3 commits ahead of `origin/main`** (`b882e4a`) and is the only one that
   has the pending-links adoption. Rebasing onto `origin/main` silently misses it and
   reintroduces a second deferred-link queue. Check both: `git rev-parse main origin/main`.
-- **`origin/feat/ni-live-hardening` still points at the OLD pre-rebase commits.** The next
-  push needs `--force-with-lease`, and **pushing requires explicit permission.**
+- **`origin/feat/ni-live-hardening` is current** (force-pushed by Ryan, 2026-10-08). Future
+  pushes are ordinary fast-forwards, because the branch now catches up by merging, not by
+  rebasing. **Pushing still requires explicit permission.**
 - **NOT merged, deliberately.** Merge waits on the on-box test (§4).
 - All 20 test suites green, NI ones included: `tools/test_ni_corrections.py` (48 checks),
   `test_ni_per_recon.py`, `test_pending_links.py`, `test_ni_live_discover.py`,
