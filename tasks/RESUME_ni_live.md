@@ -292,6 +292,39 @@ the 2026-10-06 merge).
    production, so treat each run as a production operation. ✅ **The platform manager (Unai)
    has OK'd running the sync tests on the box remotely** (2026-10-02, asked by Ryan). The rest of
    §3 still applies. Schedule runs outside acquisitions, because the box is slow.
+3a. ✅ **THE FIRST PRODUCTION SYNC: irene's whole box folder, 2026-10-08 19:32–19:57 (Ryan's
+   go; he chose the whole folder over one session).**
+   - **Prepared:**
+     - Irene's own corrections file was created by her normal `--plan` at
+       `S:\gnuclear\2026\Jesus\irene\ni_corrections_irene.csv` (50 sessions; Ryan approved that
+       one write into her folder).
+     - **5 sessions corrected 1015 → 1025** (Ryan's ruling). The box has `1025/250529/1015_m…`,
+       which is a REMI typo in both the protocol and the folder date. The scanner timestamp is
+       2026-05-29, and Irene's gnuclear copy already filed the same animals under
+       AE-biomaGUNE-1025.
+     - A final dry run showed 0 auto-created projects.
+   - **Result** (log `Ryan\ni-sync-test\go_irene_20261008.log`):
+     - **95/95 ingested, 0 failed, 6.07 GB, 25 min, load ≤1.7.** Projects: AE-biomaGUNE-1025 ×54,
+       0522 ×33, 1125 ×8. No project created.
+     - 75 reconstructions skipped as already in production (cross-source).
+     - **52 attenuation maps placed** in `outputs/derived/`, each with a provenance row.
+     - `registries/pending_links.csv` created with 95 rows, all real `Errno 45`.
+     - `pending_subject_metadata.csv` 292 → 387, because there is no animal-DB login on the Mac.
+     - NOT PARSED: 2 folders literally named `new recon` (the known depth-mismatch backlog item);
+       nothing under them was ingested.
+   - **Verified read-only from the workstation:** every check in
+     `scratchpad/verify_irene_sync.py` passes (registry +95, all live rows; routing as previewed;
+     every folder complete; links queued; derived files with provenance tied to real ACQ-IDs).
+     **`verify_checksums` 95/95 PASS.** validate_registries: see below.
+   - **Coordination: one registry writer at a time.** The coordinator session `gj3-handoff` runs
+     the drive-3 XMIC ingest on 2026-10-08 20:05–21:30 and the MRI archive ingest on Friday
+     07:00–10:30. NI makes no production writes in those windows, and `gj3-handoff` messages
+     when each closes.
+   - **Next production writes** (each needs Ryan's go and a free window):
+     - (i) `tools/relink_pending.py` from Windows, which drains the 95 queued project links;
+     - (ii) the subject-metadata recovery for the 95 `pending-db` rows.
+   - **Note for clean-up:** production spells the researcher both `Irene` (1,010 rows) and
+     `irene` (254 + these 95). The live sync writes the box folder name.
 3b. **🧹 CLEAN-UP PHASE (Ryan, 2026-10-08). Do it after step 3's first real sync, and do not
    skip it.**
    - **The rule:** lose nothing that works, especially setup steps Box A will repeat, but stop
