@@ -113,6 +113,18 @@ the 2026-10-06 merge).
      - Then `undo.sh` removes the mount and the password from the Mac. See `BACKLOG.md`,
        "Ingest from one place".
 
+   - ✅ **INSTALLED 2026-10-08 by Ryan.**
+     - **Verified from here:** `//rtasseff@10.10.1.73/gjesus3 on /Users/molecubes/.gjesus3
+       (smbfs, …, nobrowse)`; `gjesus3-data/registries` is visible; `~/.macmounter/gjesus3.conf`
+       matches the staged copy; the password appears in no process arguments.
+     - **The launcher now resolves to `/Users/molecubes/.gjesus3/gjesus3-data`, which is
+       PRODUCTION.** Every test from now on uses the kit's `ni-ingest` (pinned to `nas3`) or an
+       explicit `--nas-root`.
+     - **First attempt, for the record:** it failed with `Authentication error`, and the old
+       script kept the saved password, so a typo could not be retried. The fix is `95f93bc`:
+       setup always re-asks, and the mount reads the password from the keychain itself.
+     - **Not yet proven:** MacMounter actually re-mounting after a drop. Proving it means
+       unmounting once and watching for up to 2 minutes, which needs Ryan's go-ahead.
    - **Things the setup relies on (checked 2026-10-08):**
      - MacMounter loads only *new* `.conf` files when `~/.macmounter/` changes, so the scanner
        mounts are untouched. Deleting the file stops its thread ("File … is gone!").
