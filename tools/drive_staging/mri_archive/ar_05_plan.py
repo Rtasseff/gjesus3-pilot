@@ -34,6 +34,14 @@ STUDY_RE = re.compile(r"^(?P<date>\d{8})_(?P<time>\d{6})_(?P<core>.+?)_\d+_\d+$"
 SUFFIXED = re.compile(r"(?i)(?:^|_)(?P<tok>[mr]\d{1,4}[a-z]{1,3})(?=_|$)")      # m7e, m1a, m8b, m145b
 PLAIN = re.compile(r"(?i)(?:^|_)(?P<tok>[mr]\d{1,4})(?=_|$|prueba)")              # tier B animals: m38, m3prueba
 Q4 = {"0917", "0116", "1316"}
+# Exams of the 130 tier-C (stream M) studies that production LACKS, registered by this stream (the coordinator's call,
+# 2026-10-08; Part 1 found exactly one: an image exam that was not on M. Jesus's drive copy). Its study's other exams are
+# stream M's; the exam is COPIED from extract\C\ into its batch folder by --sort (extract\C\ stays the dedup proof's).
+EXTRA = {"20210322_083218_jrc210322_m131_0619_1_1/7": {
+    "batch": "AR06_0619", "code": "0619", "animal": "131", "sample_id": "m131_0619", "session_id": "jrc210322_m131_0619",
+    "db_verdict": "CONFIRMED",
+    "db_evidence": "stream M (A1): 0619 found, Mus musculus, logs MRI 7T@2021-03-22",
+    "why": "an exam of a study stream M registered from the drive; only the archive holds it (Part 1)"}}
 ORDER = ["0118", "0219", "0220", "0320", "0618", "0619", "0721", "1019", "1116", "1319", "1321", "1519"]
 
 
@@ -181,6 +189,37 @@ def main():
                 notreg.append(rec)
         studies.append(srec)
 
+    # ---- the extra exams of tier-C studies (EXTRA) ---------------------------------------------------------------
+    invc = {e["original_name"]: e for e in C.rows(os.path.join(C.OUT, "inventory_exams.csv")) if e["tier"] == "C"}
+    for on, xe in EXTRA.items():
+        study, exam = on.split("/")
+        x, p = invc[on], plan[study]
+        if names.get(on):
+            raise SystemExit(f"{on} is in production already: {names[on]}")
+        if x["class"] != "c":
+            raise SystemExit(f"{on}: class {x['class']} (expected scanner DICOM)")
+        m = STUDY_RE.match(study)
+        srec = {"study": study, "tier": "C", "batch": xe["batch"], "kind": "animal", "claim": xe["code"],
+                "db_verdict": xe["db_verdict"], "db_evidence": xe["db_evidence"],
+                "project_name": f"AE-biomaGUNE-{xe['code']}", "project_status": projs[f"AE-biomaGUNE-{xe['code']}"]["status"],
+                "alias": xe["code"], "animal": xe["animal"], "sample_id": xe["sample_id"], "sample_type": "organism",
+                "session_id": xe["session_id"], "study_hhmm": m.group("time")[:4], "why": xe["why"],
+                "extracted": "Y", "truncated_exam": "", "exams": 1, "register_c": 1, "convert_d": 0, "not_registered": 0,
+                "archive": p["chosen_path"], "archive_sha1": done[study]["sha1"], "census_size": p["size"],
+                "copies_differ": p["copies_differ"], "prod_same_session_day": ""}   # production holds the study's other exams: by design
+        d8 = x["acq_datetime"][:10].replace("-", "")
+        exams.append({**{k: srec[k] for k in ("study", "tier", "batch", "kind", "project_name", "alias", "animal",
+                                              "sample_id", "sample_type", "session_id", "study_hhmm")},
+                      "exam": exam, "original_name": on, "class": x["class"], "class_detail": x["class_detail"],
+                      "disposition": "register", "reason": "", "acq_datetime": x["acq_datetime"],
+                      "date_source": x["date_source"], "acq_time": x["acq_time"], "model": x["model"],
+                      "method": x["method"], "scan_name": x["scan_name"], "pdata": x["pdata"],
+                      "recons_dicom": x["recons_dicom"], "recons_without_dicom": x["recons_without_dicom"],
+                      "n_dicom": x["n_dicom"], "dicom_set_sha256": x["dicom_set_sha256"],
+                      "link_name": f"MRI_{srec['sample_id']}_{d8}_{srec['study_hhmm']}_{exam}_{x['pdata'].replace(';', ',')}",
+                      "prod_name_hits": "", "prod_same_sample_day": ""})
+        studies.append(srec)
+
     reg_ex = [x for x in exams if x["disposition"] != "not-registered"]
     C.write_csv(C.out("plan_studies.csv"), studies)
     C.write_csv(C.out("plan_exams.csv"), exams)
@@ -240,10 +279,20 @@ def main():
                 continue
             src = done[s["study"]]["dir"]
             dst = C.w(C.EXTRACT, s["batch"], s["study"])
+            if s["tier"] == "C":
+                continue
             if src and os.path.abspath(src).lower() != dst.lower():
                 os.rename(C.lp(src), C.lp(dst))
                 moved += 1
-        print(f"sorted into batch folders: {moved}")
+        import shutil
+        for on, xe in EXTRA.items():
+            study, exam = on.split("/")
+            src = os.path.join(C.EXTRACT, "C", study, exam)
+            dst = C.w(C.EXTRACT, xe["batch"], study, exam)
+            if not os.path.isdir(dst):
+                shutil.copytree(C.lp(src), C.lp(dst))
+                moved += 1
+        print(f"sorted into batch folders: {moved} (incl. the extra tier-C exams, copied)")
 
 
 if __name__ == "__main__":
