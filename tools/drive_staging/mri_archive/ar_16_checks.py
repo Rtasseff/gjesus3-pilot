@@ -11,6 +11,8 @@
                                                          # Failed 0, and the registry holds exactly <expected> rows of it
     python ar_16_checks.py project-active <nas> <name>
     python ar_16_checks.py claims <dry-run output> <sessions> <acquisitions>
+    python ar_16_checks.py same-registries <nas> <snapshot>   # every registry file unchanged since the pre-flight
+    python ar_16_checks.py rehearsal-reopen <rehearsal root> <project>   # REHEARSAL ONLY: status -> active
 """
 import collections
 import csv
@@ -41,7 +43,7 @@ def validator(a):
     failed = re.search(r"validation FAILED", text)
     if failed and "--allow-missing-folders" in a:
         # the rehearsal root holds no /raw/ for production's own rows: those errors, and only those, are expected
-        errs = [l for l in text.splitlines() if "ERROR" in l and "validation FAILED" not in l]
+        errs = [l for l in text.splitlines() if "ERROR" in l and "validation FAILED" not in l and "-- ERRORS (" not in l]
         failed = [l for l in errs if "acquisition folder not found on disk" not in l]
     ok = (not failed) and (re.search(r"validation OK", text) or "--allow-missing-folders" in a) and pending is not None
     if "--save-baseline" in a:
@@ -75,6 +77,36 @@ def mri_unchanged(a):
     other = collections.Counter(r["instrument"] for r in rows if r["acq_id"] not in then and r["instrument"] not in ("MRI", "XMRI"))
     return say(now == then, f"MRI/XMRI rows unchanged since the pre-flight ({len(now)}); rows now {len(rows)} "
                f"(was {lines[0].split()[1]}); MRI added {len(now - then)}, removed {len(then - now)}")
+
+
+def same_registries(a):
+    """Every registry file byte-identical to the pre-flight snapshot (then the pre-flight's validator still stands)."""
+    nas, path = a
+    lines = open(path, encoding="utf-8").read().splitlines()
+    then = dict(l.split(" ", 1) for l in lines[1:lines.index("MRI")])
+    regd = os.path.join(nas, "registries")
+    now = {n: hashlib.sha256(open(os.path.join(regd, n), "rb").read()).hexdigest()
+           for n in sorted(os.listdir(regd)) if os.path.isfile(os.path.join(regd, n))}
+    diff = sorted(n for n in set(then) | set(now) if then.get(n) != now.get(n))
+    print(f"registry files changed since the pre-flight: {diff or 'none'}")
+    return 0 if not diff else 1
+
+
+def rehearsal_reopen(a):
+    """REHEARSAL ONLY: what tools/reopen_project.py does to the project row (status active), on the D: rehearsal root,
+    whose /raw/ is empty so the real tool cannot relink production's acquisitions there. Refuses any other root."""
+    nas, name = a
+    if os.path.abspath(nas).lower() != os.path.abspath(C.REH).lower():
+        return say(False, f"rehearsal-reopen refuses {nas}: the rehearsal root only")
+    sys.path.insert(0, os.path.join(C.WT, "tools"))
+    from ingest import locking, projects_registry
+    regd = os.path.join(nas, "registries")
+    with io.open(os.path.join(regd, "registry_projects.csv"), encoding="utf-8-sig", newline="") as f:
+        pid = [p["project_id"] for p in csv.DictReader(f) if p["name"] == name][0]
+    with locking.registry_lock(regd):
+        found, applied = projects_registry.update_row(os.path.join(regd, "registry_projects.csv"), pid,
+                                                      {"status": "active"}, allowed=["status"])
+    return say(found, f"rehearsal: {name} ({pid}) status set active {sorted(applied)}")
 
 
 def plan(a):
@@ -130,4 +162,4 @@ if __name__ == "__main__":
     cmd, args = sys.argv[1], sys.argv[2:]
     sys.exit({"validator": validator, "snapshot": snapshot, "mri-unchanged": mri_unchanged, "plan": plan,
               "cases": cases, "rows": rows, "run-log": run_log, "project-active": project_active,
-              "claims": claims}[cmd](args))
+              "claims": claims, "same-registries": same_registries, "rehearsal-reopen": rehearsal_reopen}[cmd](args))
