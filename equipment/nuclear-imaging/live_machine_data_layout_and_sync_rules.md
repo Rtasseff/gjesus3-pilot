@@ -446,6 +446,15 @@ lean on what already exists (§6) and add only the live-mode discovery + field-d
   rows. *(Note: this is the same idempotency concern flagged for archive ingest in
   `tasks/archive/correction_pass_handoff.md` item (4) — the live-mode key must be chosen so re-sync is a
   true no-op.)*
+  **As built:** the box's own rows dedup on `(acq_date, original_name)`, where `original_name` is
+  `<series>/<date>/<subject>/<ts>_<MOD>/recon_<n>`. **Since 2026-10-08,** reconstructions already
+  loaded from *another* source (the `S:\gnuclear` pull, the historical drives, the platform
+  archive) are also skipped, on `(timestamp, modality, reconstruction)`; see
+  [10_TOOLS](../../mfb-rdm-docs/10_TOOLS.md), "NI cross-source dedup".
+  - **Why:** on the real `irene` folder, 75 of 222 new-looking reconstructions were already in
+    production from the August pull.
+  - **Verified on the box:** the pull's `_<n>` is the box's `recon_<n>`: `recon_1/` holds
+    `…_CT_ISRA_1.dcm`.
 
 - **R8 — Don't delete the source.** The live box / platform owns the originals; sync **copies**.
   No `--delete-source` on the live path.

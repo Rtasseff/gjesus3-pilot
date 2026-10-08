@@ -565,6 +565,17 @@ def expand_batch(cfg, nas_root=None, unparsed=None):
     )
     existing_keys = _build_dedupe_index(registry_path)
 
+    # Cross-source guard for the live-box sync (per_recon_acquisitions): the SAME
+    # registry guard the flat S:\gnuclear pull uses (ni_flat), at reconstruction
+    # grain. A reconstruction already loaded from another source -- the gnuclear
+    # pull, the historical drives, the platform archive -- names it differently,
+    # so the (acq_date, original_name) key above cannot see it. 28 of irene's 54
+    # box sessions were already in production that way on 2026-10-08.
+    other_recons, other_scans = set(), set()
+    if (cfg.get("ingest") or {}).get("per_recon_acquisitions"):
+        from . import ni_flat
+        other_recons, other_scans = ni_flat.registered_recons(registry_path)
+
     # Optional per-case override table (default off) -- see load_case_table.
     case_table, case_table_missing = load_case_table(
         disco.get("case_table"), cfg.get("_config_dir"))
@@ -901,6 +912,21 @@ def expand_batch(cfg, nas_root=None, unparsed=None):
                     print(
                         f"[expand_batch] SKIP {rc['original_name']}: "
                         f"already in registry (idempotent re-run)"
+                    )
+                    continue
+                d = rc.get("discovered") or {}
+                scan = ((d.get("acq_datetime_full") or "")[:14],
+                        (d.get("modality") or "").upper())
+                n = str(d.get("ni_recon_idx") or "")
+                n = str(int(n)) if n.isdigit() else n
+                if scan + (n,) in other_recons or scan in other_scans:
+                    # Same line shape as the idempotent skip above, so the
+                    # preview counts it as already-ingested (operator/preview.py
+                    # _categorize_skips keys on "already in registry").
+                    print(
+                        f"[expand_batch] SKIP {rc['original_name']}: "
+                        f"already in registry (from another source: same "
+                        f"timestamp, modality and reconstruction)"
                     )
                     continue
                 cases.append(rc)

@@ -80,8 +80,9 @@ reconstruction of that same scan turns up weeks later it gets your corrected val
 automatically. That's also why step 1 gets quieter over time — it only shows you sessions
 that have never been reviewed.
 
-**Re-running is safe.** The sync skips anything already on gjesus3. Run it as often as you
-like — after every session, or once a week. Nothing is ever copied twice.
+**Re-running is safe.** The sync skips anything already on gjesus3, including scans that got
+there another way, e.g. ones you copied to `gnuclear` that the data office already loaded. Run it
+as often as you like — after every session, or once a week. Nothing is ever copied twice.
 
 **Reconstructions that aren't finished yet are skipped, not lost.** If you sync while a
 reconstruction is still running, that scan is skipped with a note and picked up on your

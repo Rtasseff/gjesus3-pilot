@@ -36,6 +36,9 @@ working on the Mac (RESUME_ni_live.md, top):
              nothing is written next to the staged code.
   terminal   in-process, with stdin made to look like a real terminal: live mode
              asks no metadata question, only the final 'Proceed? [y/N]'.
+  x-source   a reconstruction already registered from another source (a flat
+             S:\\gnuclear-pull row, a platform-archive bundle) is not ingested again;
+             a reconstruction that source never had still is.
 
 Run:  python tools/test_ni_live_e2e.py          (add -v to print every run's output)
 """
@@ -309,6 +312,48 @@ def enotsup_flow(tmp):
     check(os.listdir(w["home"]) == [] and os.listdir(w["systemp"]) == [], "HOME and TEMP are still empty")
 
 
+def cross_source_flow(tmp):
+    """Scans already loaded from ANOTHER source are not loaded again from the box.
+
+    Seeds the registry with rows shaped like production's (2026-10-08): a flat
+    S:\\gnuclear-pull row naming its reconstruction (`<ts>_<MOD>_<ALGO>_<n>`) and a
+    platform-archive bundle row naming none. The box holds session A (recon_0,
+    recon_1) and session B (recon_0).
+    """
+    print("cross-source: what another source already loaded is not loaded again")
+    w = build_world(tmp)
+    reg = os.path.join(w["nas"], "registries", "registry_raw.csv")
+    seed = [
+        {"acq_id": "ACQ-SEED-PULL", "acquisition_datetime": "2026-02-12T13:07:22Z",
+         "instrument": "CT", "data_ecosystem": "DICOM",
+         "original_name": "20260212130722_CT_ISRA_0"},           # A's recon_0, from the pull
+        {"acq_id": "ACQ-SEED-ARCHIVE", "acquisition_datetime": "2026-02-13T10:15:00Z",
+         "instrument": "CT", "data_ecosystem": "DICOM",
+         "original_name": "irene_1207_260213_0324_m62_20260213101500_CT"},  # B, archive bundle
+    ]
+    with open(reg, "a", encoding="utf-8", newline="") as f:
+        dw = csv.DictWriter(f, fieldnames=registry.REGISTRY_FIELDS)
+        for r in seed:
+            dw.writerow({k: r.get(k, "") for k in registry.REGISTRY_FIELDS})
+    corr = os.path.join(tmp, "corr_xs.csv")
+
+    rc, out = run(w, "--plan", "--corrections", corr)
+    with open(corr, encoding="utf-8", newline="") as f:
+        sessions = sorted(r["session_path"] for r in csv.DictReader(f))
+    check(rc == 0 and sessions == ["1207/260212/0324_m61"],
+          f"--plan lists only the session with something new (got {sessions})")
+    rc, out = run(w, "--dry-run", "--corrections", corr)
+    check(rc == 0 and "1 new acquisition(s) to ingest; 2 already ingested (skipped)" in out,
+          "the preview summary counts them as already ingested (not '0 skipped')")
+    rc, out = run(w, "--go", "--corrections", corr)
+    new = [r for r in raw_rows(w["nas"]) if not r["acq_id"].startswith("ACQ-SEED")]
+    names = sorted(r["original_name"] for r in new)
+    check(rc == 0 and names == ["1207/260212/0324_m61/20260212130722_CT/recon_1"],
+          f"only A's recon_1 is ingested; A's recon_0 and all of B are not (got {names})")
+    check(out.count("already in registry (from another source") == 2,
+          "each skip says why, in the line shape every ingest uses")
+
+
 class _FakeTerminal(io.StringIO):
     def isatty(self):
         return True
@@ -366,6 +411,8 @@ def main():
         enotsup_flow(os.path.join(tmp, "b"))
     with tempfile.TemporaryDirectory(prefix="ni_live_e2e_") as tmp:
         terminal_flow(os.path.join(tmp, "c"))
+    with tempfile.TemporaryDirectory(prefix="ni_live_e2e_") as tmp:
+        cross_source_flow(os.path.join(tmp, "d"))
     if FAILED:
         print(f"\n{len(FAILED)} CHECK(S) FAILED")
         sys.exit(1)

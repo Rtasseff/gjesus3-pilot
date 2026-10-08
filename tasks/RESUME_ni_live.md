@@ -234,7 +234,32 @@ the 2026-10-06 merge).
      - Series: 1025 ×32, 1125 ×6, 1207 ×16, including new scans from 2026-09-29 and 2026-10-07.
      - The older series (0314/0324/0525, 21 of August's 75 sessions) no longer produce
        sessions. Most likely the researcher moved them off the box to gnuclear. Unverified.
-   - ⛔ **BLOCKER for any real `--go` on a researcher folder, step 3 included: CROSS-SOURCE
+   - ✅ **The cross-source blocker below is FIXED (2026-10-08, Ryan chose per-reconstruction).**
+     - **How:** the live preview reuses the existing `ni_flat` registry guard, one notch finer
+       (`ni_flat.registered_recons`).
+       - Skip a box reconstruction whose `(timestamp, modality, n)` is already registered by a
+         row that names its reconstruction: flat pulls `_<ALGO>_<n>`, live `recon_<n>`.
+       - Skip any reconstruction of a scan held by a platform-archive bundle, which has no `n`.
+       - `_registered_scans`, the coarse guard the flat pulls use, is unchanged.
+     - **Verified on the box:** the pull's `_<n>` is the box's `recon_<n>` (`recon_1/` holds
+       `…_CT_ISRA_1.dcm`).
+     - **On the real tree** (read-only dry run): **147 reconstructions to ingest, 75 already in
+       production and skipped.** 4 sessions drop out entirely; the other 24 overlapping sessions
+       keep their extra reconstructions.
+     - **Preview count:** each skip prints the standard `SKIP … already in registry (from another
+       source …)` line, so the preview counts it under "already ingested".
+     - **Tests:** `test_ni_flat` covers the three production name shapes; `test_ni_live_e2e`'s
+       x-source flow runs the real command. 41/41 suites pass.
+   - ❓ **Open (Ryan, 2026-10-08): CT attenuation maps.** A box `recon_<n>/` can hold only
+     `ATTMAP.dcm`, e.g. `irene/1025/260522/1025_m1/20260522095612_CT/recon_2/`.
+     - **What it is:** the CT converted into PET attenuation coefficients on the PET grid, an
+       input to the PET reconstruction. That is closer to a derivative than a reconstruction.
+     - **Today:** the live sync registers it as its own acquisition. The flat pulls never took one.
+     - **Options:** skip it (it stays on the box and in `gnuclear2$`, which is the recommendation),
+       or copy it to the project folder as an associated file (new behaviour, better left to the
+       Box A app).
+     - Count them before the first real `--go`.
+   - (Was:) ⛔ **BLOCKER for any real `--go` on a researcher folder, step 3 included: CROSS-SOURCE
      DUPLICATES.**
      - **28 of those 54 sessions are ALREADY IN PRODUCTION** from the 2026-08-13 `S:\gnuclear`
        pull (`ni_gnuclear_prod_Irene.yaml`; same subject + date, 1–3 rows each).

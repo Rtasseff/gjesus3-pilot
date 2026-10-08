@@ -110,6 +110,39 @@ def main():
               "already-ingested is an empty result WITH files seen (a clean no-op, "
               "not an error)")
 
+        print("\nregistered_recons: the same guard at reconstruction grain (live sync)")
+        reg5 = os.path.join(tmp, "registries5", "registry_raw.csv")
+        os.makedirs(os.path.dirname(reg5), exist_ok=True)
+        with open(reg5, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["acq_id", "acquisition_datetime",
+                                              "instrument", "original_name"])
+            w.writeheader()
+            w.writerows([
+                # the three NI shapes in production, and one non-NI row
+                {"acq_id": "A", "acquisition_datetime": "2026-05-22T09:56:12Z",
+                 "instrument": "CT", "original_name": "20260522095612_CT_ISRA_0"},
+                {"acq_id": "B", "acquisition_datetime": "2026-02-12T13:07:22",
+                 "instrument": "CT",
+                 "original_name": "1207/260212/0324_m61/20260212130722_CT/recon_01"},
+                {"acq_id": "C", "acquisition_datetime": "2025-04-08T17:31:51Z",
+                 "instrument": "PET",
+                 "original_name": "irene_1207_250407_0522_m41_20250408173151_PET"},
+                {"acq_id": "D", "acquisition_datetime": "2025-01-01T00:00:00Z",
+                 "instrument": "ZWSI", "original_name": "slide.czi"},
+            ])
+        rr, ws = ni_flat.registered_recons(reg5)
+        check(("20260522095612", "CT", "0") in rr,
+              "a flat-pull row names its reconstruction (_ISRA_0 -> 0)")
+        check(("20260212130722", "CT", "1") in rr,
+              "a live row names its reconstruction (recon_01 -> 1)")
+        check(ws == {("20250408173151", "PET")},
+              "a platform-archive bundle (no reconstruction in its name) matches the whole scan")
+        check(len(rr) == 2, "non-NI rows are ignored")
+        check(ni_flat._registered_scans(reg5) == {("20260522095612", "CT"),
+                                                  ("20260212130722", "CT"),
+                                                  ("20250408173151", "PET")},
+              "_registered_scans (the coarse guard the flat pull uses) is unchanged")
+
         print("\nempty source is distinguishable from already-ingested")
         empty = os.path.join(tmp, "empty")
         os.makedirs(empty)
