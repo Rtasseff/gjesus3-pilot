@@ -557,10 +557,23 @@ _IRE_CORRECTIONS = """\
   In the 2023 masks, the files labelled IRE are Irene's corrections of the
   drive owner's masks (not a second, independent reading).
 """
+# The fourth drive-3 batch (tasks/drive3_foreign_raw_gate.md): the Leica confocal files of protocol 1121 are raw
+# images that gjesus3 does not register (no .lif reader or instrument code); Irene, 2026-10-08: the Leica TCS SP8 was
+# biomaGUNE's own microscope, not the London partner's.
+_LEICA_NOT_REGISTERED = """
+Raw Leica confocal files under MJesus-MFB\\ (not registered)
+  The .lif and .lifext files under MJesus-MFB\\Proyecto 1121 London\\
+  Experimentos\\Histologia\\ are raw confocal images from biomaGUNE's former
+  Leica TCS SP8 microscope (serial 8100000207). They are kept here, byte for
+  byte, as project material: gjesus3 does not register them, because it has
+  no reader for Leica .lif files and no instrument code for that microscope.
+  The .png files named after a .lif are exports made from it.
+"""
 PROJECT_README_NOTES = {
     "AE-biomaGUNE-0522": _MASKS_DRAFT.format(code="0522") + _IRE_CORRECTIONS,
     "AE-biomaGUNE-0619": _MASKS_DRAFT.format(code="0619"),
     "AE-biomaGUNE-0424": _MASKS_DRAFT.format(code="0424"),
+    "AE-biomaGUNE-1121": _LEICA_NOT_REGISTERED,
 }
 
 
