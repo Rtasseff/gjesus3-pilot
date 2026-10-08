@@ -123,8 +123,25 @@ the 2026-10-06 merge).
      - **First attempt, for the record:** it failed with `Authentication error`, and the old
        script kept the saved password, so a typo could not be retried. The fix is `95f93bc`:
        setup always re-asks, and the mount reads the password from the keychain itself.
-     - **Not yet proven:** MacMounter actually re-mounting after a drop. Proving it means
-       unmounting once and watching for up to 2 minutes, which needs Ryan's go-ahead.
+     - ✅ **Proven 2026-10-08, at Ryan's OK:**
+       - **Re-mount works:** after an unmount, MacMounter re-mounted gjesus3 within 60 s with
+         nobody at the Mac, reading the password from the keychain in the GUI session.
+       - **Race found:** two of the three MacMounter copies mounted at the same time, stacking
+         two layers.
+       - **Race fixed** (deployed 17:31, the approved write): `~/.macmounter/gjesus3-mount.py`
+         takes an exclusive `flock` on `/tmp/gjesus3-mount.lock`, re-checks, clears dead layers,
+         then mounts. In the race test exactly **one** layer was added, and it stayed one
+         through the next cycle.
+       - **One dead layer remains** underneath the live mount. `umount` from ssh and from
+         MacMounter both fail with "Operation not permitted". It is harmless, because the path
+         resolves to the live top layer. A reboot clears it, as may an admin `umount -f`.
+     - **Lessons:**
+       - Do not unmount from ssh in tests: a mount made in the GUI session cannot be removed
+         from ssh.
+       - **Never overwrite `~/.macmounter/gjesus3.conf` in place.** MacMounter takes the
+         newest file mtime in that folder as the folder's "mtime", and relaunches any `.conf`
+         newer than its last look, which means duplicate threads. Remove it, wait, then copy.
+         `setup.sh` now does exactly that.
    - **Things the setup relies on (checked 2026-10-08):**
      - MacMounter loads only *new* `.conf` files when `~/.macmounter/` changes, so the scanner
        mounts are untouched. Deleting the file stops its thread ("File … is gone!").
@@ -210,8 +227,27 @@ the 2026-10-06 merge).
      - Suggested: A now, D as the destination, and B only if the CLI phase runs long.
      - ✅ **Decided (Ryan, 2026-10-07): A now, D later.** D is logged in `BACKLOG.md` under
        "Ingest from one place".
-   - **The real-tree `--plan` is approved (Ryan, 2026-10-07).** Run it only in a quiet slot.
-     At 15:04 that day `molecubes_gui` was at 37% CPU, so it was held.
+   - ✅ **Real-tree `--plan` on `irene`: done 2026-10-08 17:37.**
+     - **The run:** 90 s; `molecubes_gui` at 0% CPU; load unchanged. It wrote 54 session rows to
+       `ni-sync-test\ni_corrections_irene_realplan.csv` (log `realplan_irene.log`) and nothing to
+       gjesus3.
+     - Series: 1025 ×32, 1125 ×6, 1207 ×16, including new scans from 2026-09-29 and 2026-10-07.
+     - The older series (0314/0324/0525, 21 of August's 75 sessions) no longer produce
+       sessions. Most likely the researcher moved them off the box to gnuclear. Unverified.
+   - ⛔ **BLOCKER for any real `--go` on a researcher folder, step 3 included: CROSS-SOURCE
+     DUPLICATES.**
+     - **28 of those 54 sessions are ALREADY IN PRODUCTION** from the 2026-08-13 `S:\gnuclear`
+       pull (`ni_gnuclear_prod_Irene.yaml`; same subject + date, 1–3 rows each).
+     - The live dedup key is `(acq_date, original_name)`, and the two sources name the same
+       scan differently: live gives `<series>/<date>/<subject>/<ts>_<MOD>/recon_<idx>`, the pull
+       gives `<ts>_<MOD>_<ALGO>_<idx>`. So a live `--go` would re-ingest them as new
+       acquisitions.
+     - **Fix before step 3:** make the live preview also skip a reconstruction already
+       registered under the canonical `(timestamp, modality, recon index)`. The pull was
+       built per reconstruction "to reconcile with the live box", and `ni_flat` already
+       dedups by timestamp. First confirm that the pull's `_<idx>` equals the box's
+       `recon_<idx>`; check one session on both sides, keeping the reads small.
+     - **It does not block merging into `main`,** because merging deploys nothing.
    - Original note: Stage a fresh copy of `tools/` on
    `gnuclear` first (§4). Gate 3 needs the `gjesus3` mount from step 2. A `--go` writes to
    production, so treat each run as a production operation. ✅ **The platform manager (Unai)
