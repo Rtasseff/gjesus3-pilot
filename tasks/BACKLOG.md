@@ -85,6 +85,26 @@ a DPA reference.** That gives a validator rule: human ⇒ DPA present.
   and README in `/raw/` (the recovery pattern), plus the agreement details for each cohort from
   Ryan.
 
+## 🔺 HIGH — 292 `pending-db` subject rows that were never recoverable (found 2026-10-08)
+
+`registries/pending_subject_metadata.csv` holds 292 non-NI rows (MRI and microscopy) that have
+never been recovered.
+- **Why:** `recover_subject_metadata.py` used each row's NAS-relative `sidecar_path` as-is, so
+  from Windows every DB hit failed with "sidecar not found".
+- **Status:** fixed on `feat/ni-live-hardening` 2026-10-08, along with a multi-animal bug that
+  wrote one animal's record into another animal's block (08_METADATA §4.4.6).
+- **Scale:** a dry run that day found **103 of the 292 already have DB hits**.
+- **Before any `--apply`:**
+  - check whether any of them are multi-animal scans;
+  - dry-run with the fixed tool;
+  - verify each block against its own animal's DB record afterwards, as was done for the NI rows.
+- Then refresh the subjects table with `backfill_subjects_table.py --acq-ids` for the recovered
+  acquisitions.
+- **Design gap behind the bug:** `pending.append_pending` is idempotent on `acq_id`, so a
+  multi-animal scan's row names only the last animal queued. The fixed tool no longer relies on
+  it, but the row is misleading to a reader.
+- Ryan's call; nothing was done to these rows.
+
 ## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
 
 Found by stream F while previewing the first m12 study of 2026-07-10.

@@ -320,7 +320,27 @@ the 2026-10-06 merge).
      the drive-3 XMIC ingest on 2026-10-08 20:05–21:30 and the MRI archive ingest on Friday
      07:00–10:30. NI makes no production writes in those windows, and `gj3-handoff` messages
      when each closes.
-   - **Next production writes** (each needs Ryan's go and a free window):
+   - ✅ **Both follow-up writes DONE 2026-10-08 (Ryan's go; the coordinator yielded the slot).**
+     - **(i) Project links, 22:48.** `relink_pending.py`: 95/95 linked, `pending_links.csv` all
+       `linked`, every link file a true hard link (same file id as raw), provenance +54/+8/+33.
+     - **(ii) Subject records, 22:53–23:01.** The run surfaced two bugs in
+       `recover_subject_metadata.py`, both fixed with tests (`test_recover_subject_metadata.py`):
+       - (a) It used the NAS-relative `sidecar_path` as-is, so nothing was recoverable from
+         Windows.
+       - (b) **It filled the primary `subject` block from the pending row's animal.** That row
+         names the LAST animal of a multi-animal scan, so the first apply wrote the wrong
+         animal's sex, DOB and procedures into **25 two-mouse sidecars**.
+     - **Repair:**
+       - Backups went to `C:\Users\rtasseff\temp\gjesus3_ni_subject_repair_20261008\`.
+       - It was confirmed that all 25 primaries held exactly that wrong record. They were reset,
+         the rows re-opened, and the 25 re-recovered with the fixed per-animal tool.
+     - **Independent check:** all 145 subject blocks (57 animals) equal their own animal's DB
+       record.
+     - The subjects table was then refreshed for just these acquisitions (`backfill_subjects_table
+       --acq-ids`): 12 rows updated, 0 differences against the DB.
+     - **Final:** `registry_subjects.csv` 1468; `pending_subject_metadata.csv` 387 (95 recovered,
+       292 pending, untouched, not NI).
+   - (Was:) **Next production writes** (each needs Ryan's go and a free window):
      - (i) `tools/relink_pending.py` from Windows, which drains the 95 queued project links;
      - (ii) the subject-metadata recovery for the 95 `pending-db` rows.
    - **Note for clean-up:** production spells the researcher both `Irene` (1,010 rows) and
