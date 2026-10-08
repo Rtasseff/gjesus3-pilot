@@ -39,6 +39,9 @@ working on the Mac (RESUME_ni_live.md, top):
   x-source   a reconstruction already registered from another source (a flat
              S:\\gnuclear-pull row, a platform-archive bundle) is not ingested again;
              a reconstruction that source never had still is.
+  derived    a CT attenuation map (recon_<n>/ATTMAP.dcm) gets no ACQ-ID: it is copied to
+             <project>/outputs/derived/, recorded in provenance with the scan's ACQ-IDs, and
+             waits while nothing of its scan is registered; a re-sync adds nothing.
 
 Run:  python tools/test_ni_live_e2e.py          (add -v to print every run's output)
 """
@@ -354,6 +357,70 @@ def cross_source_flow(tmp):
           "each skip says why, in the line shape every ingest uses")
 
 
+def derived_flow(tmp):
+    """CT attenuation maps are derived files: project outputs/derived/, provenance, never /raw/.
+
+    Session A's CT gains recon_2/ATTMAP.dcm (the box's layout: alone in its recon folder). A
+    third session holds ONLY an attenuation map, so nothing of its scan is registered and the
+    file must wait rather than be placed with no raw to point at.
+    """
+    print("derived files: an attenuation map goes to the project, not to /raw/")
+    from ingest import ni_derived
+    check(ni_derived.attenuation_map_files({"dicoms": [{"src_relpath": "recon_2/ATTMAP.dcm"}]})
+          == ["recon_2/ATTMAP.dcm"], "a recon folder holding only ATTMAP.dcm is a derived file")
+    check(ni_derived.attenuation_map_files({"dicoms": [
+        {"src_relpath": "recon_1/20260212130722_CT_ISRA_1.dcm"}]}) == [],
+        "a real reconstruction is not")
+    w = build_world(tmp)
+    a_ct = os.path.join(w["box"], "1207", "260212", "0324_m61", "20260212130722_CT")
+    attmap = os.path.join(a_ct, "recon_2", "ATTMAP.dcm")
+    write(attmap, b"ATTMAP-BYTES-" * 100)
+    add_acquisition(w["box"], "1207/260214/0324_m63/20260214090000_CT", [])
+    write(os.path.join(w["box"], "1207", "260214", "0324_m63", "20260214090000_CT",
+                       "recon_0", "ATTMAP.dcm"), b"LONE-ATTMAP")
+    box0 = snapshot(w["box"])
+    corr = os.path.join(tmp, "corr_d.csv")
+    run(w, "--plan", "--corrections", corr)
+
+    rc, out = run(w, "--dry-run", "--corrections", corr)
+    check(rc == 0 and "3 new acquisition(s) to ingest" in out,
+          "the preview table holds the 3 reconstructions only, no attenuation map")
+    check("2 derived file(s) (CT attenuation maps) to copy into" in out,
+          "the preview says how many derived files will be copied")
+
+    rc, out = run(w, "--go", "--corrections", corr)
+    rows = raw_rows(w["nas"])
+    check(rc == 0 and len(rows) == 3 and not any("recon_2" in r["original_name"] or
+                                                 "0324_m63" in r["original_name"] for r in rows),
+          f"no ACQ-ID for an attenuation map ({len(rows)} rows registered)")
+    name = "CT_0324_m61_20260212_20260212130722_recon2_ATTMAP.dcm"
+    placed = os.path.join(w["nas"], "projects", "AE-biomaGUNE-0324", "outputs", "derived", name)
+    check(os.path.isfile(placed) and open(placed, "rb").read() == open(attmap, "rb").read(),
+          f"placed byte-identical at projects/AE-biomaGUNE-0324/outputs/derived/{name}")
+    a_ids = sorted(r["acq_id"] for r in rows if "0324_m61" in r["original_name"])
+    with open(os.path.join(w["nas"], "projects", "AE-biomaGUNE-0324", "provenance.csv"),
+              encoding="utf-8", newline="") as f:
+        prov = [r for r in csv.DictReader(f) if r["output_path"] == f"outputs/derived/{name}"]
+    check(len(prov) == 1 and prov[0]["input_refs"] == ";".join(a_ids),
+          f"one provenance row, input_refs = the CT scan's ACQ-IDs ({prov[0]['input_refs'] if prov else None})")
+    check(bool(prov) and prov[0]["parameters_ref"] ==
+          "1207/260212/0324_m61/20260212130722_CT/recon_2/ATTMAP.dcm",
+          "the provenance row names the exact source file on the box")
+    check("derived file waiting: 1207/260214/0324_m63/20260214090000_CT/recon_0" in out,
+          "an attenuation map whose scan has nothing registered waits")
+    check(not os.path.exists(os.path.join(w["nas"], "projects", "AE-biomaGUNE-0324", "outputs",
+                                          "derived", "CT_0324_m63_20260214_20260214090000_recon0_ATTMAP.dcm")),
+          "... and is not placed")
+
+    rc, out = run(w, "--go", "--corrections", corr)
+    with open(os.path.join(w["nas"], "projects", "AE-biomaGUNE-0324", "provenance.csv"),
+              encoding="utf-8", newline="") as f:
+        n_prov = sum(1 for r in csv.DictReader(f) if r["output_path"] == f"outputs/derived/{name}")
+    check(rc == 0 and len(raw_rows(w["nas"])) == 3 and n_prov == 1,
+          "a re-sync adds nothing: no row, no second copy, no second provenance entry")
+    check(snapshot(w["box"]) == box0, "the box was never written")
+
+
 class _FakeTerminal(io.StringIO):
     def isatty(self):
         return True
@@ -413,6 +480,8 @@ def main():
         terminal_flow(os.path.join(tmp, "c"))
     with tempfile.TemporaryDirectory(prefix="ni_live_e2e_") as tmp:
         cross_source_flow(os.path.join(tmp, "d"))
+    with tempfile.TemporaryDirectory(prefix="ni_live_e2e_") as tmp:
+        derived_flow(os.path.join(tmp, "e"))
     if FAILED:
         print(f"\n{len(FAILED)} CHECK(S) FAILED")
         sys.exit(1)

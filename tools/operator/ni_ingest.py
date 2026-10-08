@@ -87,6 +87,7 @@ metadata_prompt = _CORE.metadata_prompt
 # The loader put tools/ on sys.path, so the ingest package resolves. ni_corrections
 # owns the per-researcher corrections file (live mode only).
 from ingest import ni_corrections  # noqa: E402
+from ingest import ni_derived  # noqa: E402
 
 
 INSTRUMENT_KEY = "NI"          # hardcoded -> molecubes_ni.yaml (templates map)
@@ -490,12 +491,23 @@ def _run_live(args, nas_root):
     if args.plan:
         return _append_plan_rows(result, corr_path, existing=corr)
 
-    if not result.cases:
+    # Derived files (CT attenuation maps): never acquisitions, so never in the table above.
+    # They are copied into the project's outputs/derived/ after the commit (ni_derived.py).
+    # A read-only look first, so the preview says how many and a re-sync stays quiet.
+    derived_pre = ni_derived.place(result.derived, nas_root, log, dry_run=True)
+
+    if not result.cases and not derived_pre["placed"]:
         log("no new NI reconstructions to sync (everything matched is already "
             "in the registry, or no reconstructions are ready yet).", "WARN")
         _print_preview_table(result)
         return 0
-    _print_preview_table(result)
+    if result.cases:
+        _print_preview_table(result)
+    if derived_pre["placed"]:
+        log(f"{derived_pre['placed']} derived file(s) (CT attenuation maps) to copy into "
+            f"their project's outputs/derived/ -- derived from a scan, so not registered as "
+            f"acquisitions; each is copied once its scan is registered" + (f"; {derived_pre['already']} already there"
+                               if derived_pre["already"] else "") + ".", "INFO")
 
     if args.dry_run:
         log("--dry-run: nothing was written.", "INFO")
@@ -509,11 +521,24 @@ def _run_live(args, nas_root):
             log("aborted; nothing was written.", "INFO")
             return 0
 
-    log("committing live sync...", "INFO")
-    # Nothing to save afterwards: the corrections file the operator edited IS
-    # the stored copy, so it already applies to every future sync of these
-    # sessions — including reconstructions that appear months from now.
-    return _commit(cfg, nas_root, instrument_key=LIVE_INSTRUMENT_KEY)
+    rc = 0
+    if result.cases:
+        log("committing live sync...", "INFO")
+        # Nothing to save afterwards: the corrections file the operator edited IS
+        # the stored copy, so it already applies to every future sync of these
+        # sessions — including reconstructions that appear months from now.
+        rc = _commit(cfg, nas_root, instrument_key=LIVE_INSTRUMENT_KEY)
+    # After the commit, so the scans they came from are registered and their projects exist.
+    if result.derived:
+        d = ni_derived.place(result.derived, nas_root, log)
+        if d["placed"] or d["already"]:
+            log(f"derived files: {d['placed']} placed in outputs/derived/, {d['already']} "
+                f"already there.", "INFO")
+        for msg in d["waiting"]:
+            log(f"derived file waiting: {msg}", "INFO")
+        for msg in d["problems"]:
+            log(f"derived file NOT placed: {msg}", "WARN")
+    return rc
 
 
 # ------------------------------------------------------------------------- main

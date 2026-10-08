@@ -72,6 +72,8 @@ class PreviewResult:
                                                        # "reason", "n_matches", "n_exam_folders"}
     n_new: int = 0                                     # cases that would ingest
     blocking_errors: list = field(default_factory=list)
+    derived: list = field(default_factory=list)       # NI live: derived files (attenuation maps) for
+                                                       # the project's outputs/derived/; never cases
     warnings: list = field(default_factory=list)       # batch-level warnings
 
 
@@ -157,7 +159,8 @@ def preview_batch(cfg, nas_root, count_matches=True):
     try:
         with contextlib.redirect_stdout(buf):
             cases = config.expand_batch(cfg, nas_root=nas_root,
-                                        unparsed=unparsed_records)
+                                        unparsed=unparsed_records,
+                                        derived=result.derived)
     except ValueError as e:
         result.blocking_errors.append(str(e))
         _drain_stdout(buf, result.warnings)

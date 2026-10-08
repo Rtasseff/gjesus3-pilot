@@ -283,8 +283,13 @@ def _build_dedupe_index(registry_path):
     return keys
 
 
-def fanout_ni_recons(case, rel_match):
+def fanout_ni_recons(case, rel_match, derived=None):
     """Split one NI anchor case into one case PER `recon_<idx>/` that has DICOMs.
+
+    A recon folder holding ONLY an attenuation map (`ATTMAP.dcm`) is a derivative
+    of the CT, not a reconstruction (Ryan, 2026-10-08): it never becomes a case.
+    When `derived` (a list) is given, an item for it is appended there, so the
+    live sync can place it in the project's outputs/derived/ (ingest/ni_derived.py).
 
     Opt-in, NI-live only: called from `expand_batch` ONLY when the case's
     `ingest.per_recon_acquisitions` flag is set (it lives in
@@ -329,8 +334,15 @@ def fanout_ni_recons(case, rel_match):
         )
         return []
 
+    from . import ni_derived
+
     out = []
     for idx in with_dicoms:
+        attmap = ni_derived.attenuation_map_files(by_index.get(idx))
+        if attmap:
+            if derived is not None:
+                derived.append(ni_derived.make_item(case, rel_match, idx, attmap))
+            continue
         rc = _copy.deepcopy(case)
         rc["original_name"] = f"{rel_match}/recon_{idx}"
         rc["ni_recon_idx"] = idx
@@ -451,7 +463,7 @@ def _note_unparsed(groups, rule, pattern, err, parse_target, parse_source,
     )
 
 
-def expand_batch(cfg, nas_root=None, unparsed=None):
+def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
     """Expand a batch config into a list of validated, registry-resolved cases.
 
     `unparsed` (optional, a list): when given, one record per parse TARGET whose
@@ -460,6 +472,8 @@ def expand_batch(cfg, nas_root=None, unparsed=None):
     ingest/unparsed.py for the record). The return value is unchanged, so callers
     that don't pass it behave exactly as before. Every caller also gets one
     `[expand_batch] NOT PARSED: ...` line on stdout when any target was dropped.
+    `derived` (optional, a list): NI-live only -- one item per recon folder that is a
+    derived file (an attenuation map), never a case; see ingest/ni_derived.py.
 
     Schema:
 
@@ -906,7 +920,7 @@ def expand_batch(cfg, nas_root=None, unparsed=None):
         # Everything without the flag (archive NI, microscopy, MRI) falls
         # through to the unchanged single-case path below.
         if (case.get("ingest") or {}).get("per_recon_acquisitions"):
-            for rc in fanout_ni_recons(case, rel_match):
+            for rc in fanout_ni_recons(case, rel_match, derived):
                 adt_rc = (rc.get("acquisition_datetime") or "")[:10].replace("-", "")
                 if (adt_rc, rc["original_name"]) in existing_keys:
                     print(
