@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Source: tools/operator/NI_SYNC_GUIDE.html (repo gjesus3-pilot). Staged next to the NI sync launcher on gnuclear. -->
+<title>Molecubes Scan Sync</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; numbered steps down the page, each a short text + the exact screen the researcher sees.
+   Palette: CT greys for the page, the PET "hot" scale (deep red -> amber -> pale yellow) as the only accent. */
+:root {
+  --paper: #f5f7f8;
+  --card: #ffffff;
+  --ink: #18222b;
+  --muted: #55636f;
+  --line: #d6dde2;
+  --ct: #3f5a70;          /* CT grey-blue: structure, borders, diagram boxes */
+  --hot: #c2410c;         /* PET hot: the accent (step numbers, the one thing to do) */
+  --hot-soft: #fde7cf;
+  --warn: #9a3412;
+  --ok: #166534;
+  --ok-soft: #dcfce7;
+  --term-bg: #ffffff;
+  --term-ink: #111111;
+  --term-bar: #e8ebee;
+  --display: "Barlow Semi Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12181d; --card: #1a2229; --ink: #e6ebef; --muted: #9eabb6; --line: #2e3a44;
+    --ct: #8fb0c9; --hot: #fb923c; --hot-soft: #3b2414; --warn: #fdba74; --ok: #86efac; --ok-soft: #14301f;
+    --term-bg: #0d1114; --term-ink: #e6ebef; --term-bar: #222b33; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12181d; --card: #1a2229; --ink: #e6ebef; --muted: #9eabb6; --line: #2e3a44;
+  --ct: #8fb0c9; --hot: #fb923c; --hot-soft: #3b2414; --warn: #fdba74; --ok: #86efac; --ok-soft: #14301f;
+  --term-bg: #0d1114; --term-ink: #e6ebef; --term-bar: #222b33; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.55 var(--body); }
+.wrap { max-width: 860px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 2.9rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.65rem; font-weight: 600; }
+h3 { font-size: 1.2rem; font-weight: 600; }
+p { margin: 0; max-width: 66ch; }
+code, kbd { font-family: var(--mono); font-size: 0.88em; }
+code { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0.05em 0.35em; overflow-wrap: anywhere; }
+kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0.05em 0.4em; background: var(--card); }
+a { color: var(--ct); }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+section { padding-block: 34px 6px; display: flex; flex-direction: column; gap: 16px; }
+.eyebrow { font-family: var(--display); text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+
+/* hero */
+header.hero { display: flex; flex-direction: column; gap: 14px; padding-block: 8px 10px; }
+.hotbar { height: 6px; border-radius: 3px; width: 160px;
+  background: linear-gradient(90deg, #1a0a05, #7f1d1d 20%, #c2410c 45%, #f59e0b 70%, #fef3c7); }
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 60ch; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cmdcard { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cmdcard .k { font-family: var(--display); font-weight: 600; font-size: 1.05rem; }
+.cmdcard .d { color: var(--muted); font-size: 0.95rem; }
+
+/* diagrams */
+figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+figure .scroll { overflow-x: auto; }
+figure svg { display: block; width: 100%; min-width: 620px; height: auto; }
+figcaption { color: var(--muted); font-size: 0.9rem; }
+.svg-box { fill: var(--paper); stroke: var(--ct); stroke-width: 1.5; }
+.svg-hot { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 1.8; }
+.svg-t { fill: var(--ink); font: 600 15px var(--display); }
+.svg-s { fill: var(--muted); font: 13px var(--body); }
+.svg-m { fill: var(--ink); font: 12px var(--mono); }
+.svg-arrow { stroke: var(--ct); stroke-width: 2; fill: none; }
+.svg-arrowhead { fill: var(--ct); }
+.svg-dash { stroke: var(--muted); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+
+/* steps */
+.step { display: grid; grid-template-columns: 48px 1fr; gap: 16px; align-items: start; }
+.num { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 1.35rem var(--display); color: #fff; background: var(--hot); }
+.step-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* terminal */
+.term { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--term-bg); }
+.term .bar { background: var(--term-bar); padding: 6px 12px; display: flex; align-items: center; gap: 10px; font: 12px var(--body); color: var(--muted); }
+.term .bar .t { flex: 1; text-align: center; }
+.term pre { margin: 0; padding: 12px 14px; overflow-x: auto; color: var(--term-ink); font: 13px/1.5 var(--mono); white-space: pre; }
+.term .you { font-weight: 600; }
+.term .hl { background: var(--hot-soft); }
+.copy { font: 600 12px var(--body); border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.copy:focus-visible, a:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+
+/* corrections table */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 0.95rem; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-weight: 600; font-size: 0.82rem; background: var(--paper); }
+td { font-family: var(--mono); font-size: 0.88rem; }
+td.locked { color: var(--muted); }
+td.fix { background: var(--hot-soft); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.legend div { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 0.95rem; min-width: 0; }
+.legend b { font-family: var(--mono); font-size: 0.85rem; display: block; margin-bottom: 2px; }
+
+/* notes */
+.note { border-left: 4px solid var(--ct); background: var(--card); padding: 10px 14px; border-radius: 0 8px 8px 0; }
+.note.hot { border-left-color: var(--hot); }
+.note.ok { border-left-color: var(--ok); }
+ul.plain { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+.faq { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.faq div { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.faq h3 { font-size: 1.05rem; }
+.trouble td:first-child { white-space: nowrap; }
+.trouble td { font-family: var(--body); font-size: 0.95rem; }
+.trouble td code { font-size: 0.82rem; }
+footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.88rem; display: flex; flex-direction: column; gap: 4px; }
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .two { grid-template-columns: 1fr; }
+  .step { grid-template-columns: 36px 1fr; gap: 12px; }
+  .num { width: 34px; height: 34px; font-size: 1.1rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media print {
+  body { background: #fff; color: #000; font-size: 11.5pt; }
+  .copy { display: none; }
+  section, figure, .term, .tablewrap { break-inside: avoid; }
+  .wrap { max-width: none; padding-block: 0; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="hotbar" aria-hidden="true"></div>
+  <span class="eyebrow">CIC biomaGUNE · Molecubes PET/SPECT/CT · gjesus3</span>
+  <h1>Your scans to gjesus3, in two commands</h1>
+  <p class="lede">When your reconstructions are done, one command at the Molecubes Mac copies them to gjesus3, registers them and files them in your project. It only reads your scan folder. It never moves, renames or deletes anything there.</p>
+  <div class="two">
+    <div class="cmdcard"><span class="k">1 · See what's new</span><code>ni-ingest &lt;your folder&gt; --plan</code><span class="d">Lists new sessions in your corrections file. Copies nothing.</span></div>
+    <div class="cmdcard"><span class="k">2 · Sync it</span><code>ni-ingest &lt;your folder&gt;</code><span class="d">Shows a table, asks <code>Proceed? [y/N]</code>, then copies.</span></div>
+  </div>
+</header>
+
+<section aria-labelledby="flow">
+  <span class="eyebrow">How it fits together</span>
+  <h2 id="flow">Where your data goes</h2>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 780 300" role="img" aria-label="Diagram: the scanner writes reconstructions to your folder on the box; ni-ingest on the Mac reads them and copies them to gjesus3, where they are registered and filed in your project. Your corrections file on gnuclear is read by ni-ingest.">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="svg-arrowhead"/></marker></defs>
+      <rect x="10" y="40" width="170" height="96" rx="8" class="svg-box"/>
+      <text x="95" y="72" text-anchor="middle" class="svg-t">Scanner + REMI</text>
+      <text x="95" y="94" text-anchor="middle" class="svg-s">you acquire and</text>
+      <text x="95" y="112" text-anchor="middle" class="svg-s">reconstruct as usual</text>
+      <rect x="215" y="40" width="190" height="96" rx="8" class="svg-box"/>
+      <text x="310" y="72" text-anchor="middle" class="svg-t">Your folder on the box</text>
+      <text x="310" y="96" text-anchor="middle" class="svg-m">remiW11/data/&lt;you&gt;</text>
+      <text x="310" y="116" text-anchor="middle" class="svg-s">only ever read</text>
+      <rect x="440" y="40" width="140" height="96" rx="8" class="svg-hot"/>
+      <text x="510" y="72" text-anchor="middle" class="svg-t">ni-ingest</text>
+      <text x="510" y="94" text-anchor="middle" class="svg-s">on the Molecubes</text>
+      <text x="510" y="112" text-anchor="middle" class="svg-s">Mac (Terminal)</text>
+      <rect x="615" y="40" width="155" height="96" rx="8" class="svg-box"/>
+      <text x="692" y="72" text-anchor="middle" class="svg-t">gjesus3</text>
+      <text x="692" y="94" text-anchor="middle" class="svg-s">registered, checksummed</text>
+      <text x="692" y="112" text-anchor="middle" class="svg-s">filed in your project</text>
+      <path d="M180 88 H213" class="svg-arrow" marker-end="url(#ah)"/>
+      <path d="M405 88 H438" class="svg-arrow" marker-end="url(#ah)"/>
+      <path d="M580 88 H613" class="svg-arrow" marker-end="url(#ah)"/>
+      <rect x="380" y="196" width="260" height="84" rx="8" class="svg-box"/>
+      <text x="510" y="226" text-anchor="middle" class="svg-t">Your corrections file</text>
+      <text x="510" y="248" text-anchor="middle" class="svg-m">gnuclear/2026/Jesus/&lt;you&gt;/</text>
+      <text x="510" y="266" text-anchor="middle" class="svg-m">ni_corrections_&lt;you&gt;.csv</text>
+      <path d="M495 194 V138" class="svg-dash" marker-end="url(#ah)"/>
+      <path d="M525 138 V194" class="svg-dash" marker-end="url(#ah)"/>
+      <text x="300" y="232" text-anchor="end" class="svg-s">--plan adds new sessions;</text>
+      <text x="300" y="250" text-anchor="end" class="svg-s">every sync reads your fixes</text>
+      <path d="M305 240 H376" class="svg-dash"/>
+    </svg>
+    </div>
+    <figcaption>Your folder on the box is only read. Your fixes, such as a mistyped protocol number or the tracer, go in the corrections file.</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="before">
+  <span class="eyebrow">Before you start</span>
+  <h2 id="before">You need three things</h2>
+  <ul class="plain">
+    <li>To be at the <b>Molecubes Mac</b>, logged in as usual.</li>
+    <li>Your scans <b>reconstructed</b>. A reconstruction still running is simply picked up next time.</li>
+    <li>Your <b>scan folder</b>. In Finder: <b>Documents ▸ volumes ▸ remiW11 ▸ data ▸ <i>your name</i></b>.</li>
+  </ul>
+</section>
+
+<section aria-labelledby="s1">
+  <div class="step">
+    <div class="num" aria-hidden="true">1</div>
+    <div class="step-body">
+      <h2 id="s1">Open Terminal</h2>
+      <p>Press <kbd>⌘</kbd> + <kbd>Space</kbd>, type <b>Terminal</b>, press <kbd>Return</kbd>. A white window with a text prompt opens. That's where you type the commands below.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="s2">
+  <div class="step">
+    <div class="num" aria-hidden="true">2</div>
+    <div class="step-body">
+      <h2 id="s2">See what's new</h2>
+      <p>Type <code>ni-ingest</code> and a space. Then <b>drag your folder from Finder into the Terminal window</b>, which types its full path for you. Add a space and <code>--plan</code>, then press <kbd>Return</kbd>.</p>
+      <div class="term">
+        <div class="bar"><span class="t">Terminal — bash</span><button class="copy" type="button" data-copy="ni-ingest /Users/molecubes/Documents/volumes/remiW11/data/YOURNAME --plan">Copy</button></div>
+<pre><span class="you">$ ni-ingest /Users/molecubes/Documents/volumes/remiW11/data/yourname --plan</span>
+INFO: live source (READ-ONLY): /Users/molecubes/Documents/volumes/remiW11/data/yourname
+INFO: researcher: yourname   operator: yourname
+<span class="hl">INFO: corrections file: /Volumes/gnuclear/2026/Jesus/yourname/ni_corrections_yourname.csv</span>
+INFO: building preview (read-only)...
+<span class="hl">INFO: added 3 session row(s) to .../ni_corrections_yourname.csv.</span> Open it, fix
+      anything wrong / add extra_metadata (e.g. tracer=FDG), then re-run with --go.</pre>
+      </div>
+      <p>It takes about a minute. The line <b>corrections file:</b> tells you exactly which file is yours. If it says <b>nothing new to review</b>, skip to step 4.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="s3">
+  <div class="step">
+    <div class="num" aria-hidden="true">3</div>
+    <div class="step-body">
+      <h2 id="s3">Check your corrections file</h2>
+      <p>Open it <b>in Excel on the Mac</b>: in Finder, go to <b>gnuclear ▸ 2026 ▸ Jesus ▸ <i>your name</i></b>. Each new session has one row, already filled in from your folder names. <b>Change only what's wrong</b>, then save and close.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>session_path</th><th>project</th><th>animal_codes</th><th>extra_metadata</th></tr></thead>
+          <tbody>
+            <tr><td class="locked">1025/260522/1025_m1</td><td>1025</td><td>1</td><td>tracer=FDG</td></tr>
+            <tr><td class="locked">1025/250529/1015_m10-15</td><td class="fix">1025</td><td>10;15</td><td></td></tr>
+            <tr><td class="locked">1125/260709/1125_m4</td><td>1125</td><td>4</td><td>tracer=FDG;dose=10 MBq</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The highlighted cell is a real kind of mistake: the folder was typed <code>1015</code>, but the animals belong to protocol <code>1025</code>. Fixing it here files the scans in the right project. Your folder on the box stays as it is.</p>
+      <div class="legend">
+        <div><b>session_path</b>Don't change it. It's how the sync finds the session.</div>
+        <div><b>project</b>The animal-protocol number (4 digits). Anything else becomes a project named <code>Project-&lt;what you typed&gt;</code>.</div>
+        <div><b>animal_codes</b>The mouse or rat numbers, separated by <code>;</code>.</div>
+        <div><b>extra_metadata</b>Anything else, as <code>key=value</code>. Most useful: the tracer, e.g. <code>tracer=FDG</code>.</div>
+      </div>
+      <div class="note">You fix a session <b>once</b>. A reconstruction of the same scan that arrives weeks later gets your corrected values automatically. From a Windows PC the file is read-only, so edit it on the Mac.</div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="s4">
+  <div class="step">
+    <div class="num" aria-hidden="true">4</div>
+    <div class="step-body">
+      <h2 id="s4">Sync</h2>
+      <p>Same command, without <code>--plan</code>. Check the table, type <kbd>y</kbd> and press <kbd>Return</kbd>.</p>
+      <div class="term">
+        <div class="bar"><span class="t">Terminal — bash</span><button class="copy" type="button" data-copy="ni-ingest /Users/molecubes/Documents/volumes/remiW11/data/YOURNAME">Copy</button></div>
+<pre><span class="you">$ ni-ingest /Users/molecubes/Documents/volumes/remiW11/data/yourname</span>
+INFO: corrections: 3 reviewed session(s) loaded
+acq_id               sample_id     project     link name                         n_files
+-------------------  ------------  ----------  --------------------------------  -------
+ACQ-20260522-PET-001 1025_m1       PROJ-0015   PET_1025_m1_20260522_2026052...        2
+ACQ-20260522-CT-001  1025_m1       PROJ-0015   CT_1025_m1_20260522_20260522...        3
+ACQ-20260522-CT-002  1025_m1       PROJ-0015   CT_1025_m1_20260522_20260522...        3
+3 new acquisition(s) to ingest; 0 already ingested (skipped)
+INFO: 1 derived file(s) (CT attenuation maps) to copy into their project's outputs/derived/
+<span class="hl">Proceed? [y/N] y</span>
+  ...
+<span class="hl">INFO: ingest finished: 3 acquisition(s) ingested OK.</span></pre>
+      </div>
+      <div class="note ok"><b>Leave the window open until it says <i>ingest finished</i>.</b> A normal day's scans take a few minutes. The first sync of a folder holding months of scans can take half an hour.</div>
+      <div class="note hot">In the <b>project</b> column, a value starting <code>will auto-create:</code> means that number has no project yet. If it's a typo, answer <kbd>n</kbd>, fix it in your corrections file, and run the sync again.</div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="where">
+  <span class="eyebrow">After the sync</span>
+  <h2 id="where">What you'll find on gjesus3</h2>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 780 250" role="img" aria-label="Diagram: each reconstruction becomes one entry under raw DICOM with its own ACQ number; your project folder gets a link to it in raw_linked, and CT attenuation maps go to outputs derived.">
+      <rect x="10" y="20" width="360" height="210" rx="8" class="svg-box"/>
+      <text x="28" y="50" class="svg-t">raw/DICOM/2026/2026-05/</text>
+      <text x="44" y="78" class="svg-m">ACQ-20260522-CT-002/</text>
+      <text x="62" y="102" class="svg-m">ACQ-20260522-CT-002.data/  the images</text>
+      <text x="62" y="124" class="svg-m">checksums.json             proof of the copy</text>
+      <text x="62" y="146" class="svg-m">metadata.json              scan + animal details</text>
+      <text x="28" y="186" class="svg-s">One entry per reconstruction. Permanent, and</text>
+      <text x="28" y="206" class="svg-s">never changed by researchers.</text>
+      <rect x="410" y="20" width="360" height="210" rx="8" class="svg-hot"/>
+      <text x="428" y="50" class="svg-t">projects/AE-biomaGUNE-1025/</text>
+      <text x="444" y="78" class="svg-m">raw_linked/</text>
+      <text x="462" y="100" class="svg-m">CT_1025_m1_20260522_..._recon1</text>
+      <text x="444" y="128" class="svg-m">outputs/derived/</text>
+      <text x="462" y="150" class="svg-m">CT_1025_m1_..._recon2_ATTMAP.dcm</text>
+      <text x="428" y="186" class="svg-s">Your working space. Links appear here shortly</text>
+      <text x="428" y="206" class="svg-s">after the sync (made by the data office).</text>
+      <path d="M372 92 C 395 92, 395 96, 408 96" class="svg-dash" marker-end="url(#ah2)"/>
+      <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="svg-arrowhead"/></marker></defs>
+    </svg>
+    </div>
+    <figcaption>A scan with three reconstructions becomes three entries. A CT attenuation map, the CT converted for the PET's correction, is a derived file: it goes to <code>outputs/derived/</code>, named after its scan.</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="know">
+  <span class="eyebrow">Good to know</span>
+  <h2 id="know">Run it as often as you like</h2>
+  <div class="faq">
+    <div><h3>Nothing is copied twice</h3><p>The sync skips anything already on gjesus3, including scans that got there another way, for example from your copies on gnuclear.</p></div>
+    <div><h3>Late reconstructions</h3><p>A reconstruction you add later is picked up on your next sync and gets your corrections automatically.</p></div>
+    <div><h3>Warnings you can ignore</h3><p><code>Could not create hard link … queued</code>, <code>DB unreachable … pending-db</code>, <code>is_control is null</code>, and lines starting <code>[expand_batch] SKIP</code>. The data office completes those parts later.</p></div>
+    <div><h3>One sync at a time</h3><p>Don't start a second sync while one is running, and don't close Terminal or log out until it says <b>ingest finished</b>.</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="help">
+  <span class="eyebrow">If something goes wrong</span>
+  <h2 id="help">What the messages mean</h2>
+  <div class="tablewrap">
+    <table class="trouble">
+      <thead><tr><th>You see</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td><code>command not found: ni-ingest</code></td><td>Close Terminal and open a new window, then try again. If it still happens, contact the data office.</td></tr>
+        <tr><td><code>not a directory</code></td><td>The path isn't a folder. Drag your own folder (the one with your name) from Finder into Terminal.</td></tr>
+        <tr><td><code>NAS root does not look valid</code></td><td>gjesus3 isn't connected right now. Nothing was written. Try again in a few minutes, then contact the data office.</td></tr>
+        <tr><td><code>Proceed? [y/N]</code></td><td>The confirmation before copying. Type <kbd>y</kbd> and <kbd>Return</kbd> to go ahead, or just <kbd>Return</kbd> to stop.</td></tr>
+        <tr><td>A scan you expected isn't listed</td><td>It's most likely already on gjesus3, or its reconstruction hasn't finished. Run the sync again later.</td></tr>
+        <tr><td>Anything else, or an <code>ERROR</code></td><td>Stop. Don't run it again and again. Copy the Terminal text and send it to the data office. A stopped sync is safe to leave.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Data Office: Ryan Tasseff, <span>rtasseff@cicbiomagune.es</span></p>
+</section>
+
+<footer>
+  <span>The tool lives on gnuclear in <code>2026/Jesus/_gjesus3_sync/</code> (on the Mac: <code>/Volumes/gnuclear/2026/Jesus/_gjesus3_sync/</code>). Please don't edit files there.</span>
+  <span>Version 2026-10-08 · CIC biomaGUNE Data Office · gjesus3 research data management</span>
+</footer>
+</div>
+
+<script>
+document.querySelectorAll(".copy").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var text = b.getAttribute("data-copy");
+    var done = function () { var o = b.textContent; b.textContent = "Copied"; setTimeout(function () { b.textContent = o; }, 1500); };
+    var fallback = function () {
+      var pre = b.closest(".term").querySelector("pre .you");
+      var r = document.createRange(); r.selectNodeContents(pre);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      b.textContent = "Selected, press ⌘C";
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else { fallback(); }
+    } catch (e) { fallback(); }
+  });
+});
+</script>
+</body>
+</html>

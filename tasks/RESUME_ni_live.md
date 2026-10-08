@@ -345,6 +345,29 @@ the 2026-10-06 merge).
      - (ii) the subject-metadata recovery for the 95 `pending-db` rows.
    - **Note for clean-up:** production spells the researcher both `Irene` (1,010 rows) and
      `irene` (254 + these 95). The live sync writes the box folder name.
+3c. **READY FOR A SUPERVISED PILOT (2026-10-08, Ryan's calls that night).**
+   - **Production home:** `S:\gnuclear\2026\Jesus\_gjesus3_sync\`, holding `ni-ingest` (the
+     launcher), `tools/` staged from `7d07b23`, `VERSION.txt`, and `NI_SYNC_GUIDE.html`.
+     - **Restage after every merge** with `scratchpad/stage_production.py`, which refuses a dirty
+       tools/. It belongs in the repo before clean-up.
+     - Researchers' corrections files resolve to `2026\Jesus\<name>\`.
+   - **Mac shortcut:** `alias ni-ingest='bash …/_gjesus3_sync/ni-ingest --live'` in the molecubes
+     `~/.bash_profile` (backup `~/.bash_profile.before-ni-ingest-20261008`). Researchers type
+     `ni-ingest <folder> --plan`, then `ni-ingest <folder>`.
+   - **Project naming** (Ryan's rule, `7d07b23`): 4 digits = `AE-biomaGUNE-NNNN`, else
+     `Project-<code>`. There is no DB check on the Mac; every animal is queued pending-db.
+   - **Guide:** `tools/operator/NI_SYNC_GUIDE.html` (staged next to the launcher). There is a
+     private preview at https://claude.ai/artifact/CRFCsDDb6q3vCk59arev7a; share it from its menu
+     if wanted.
+   - **Still open before opening it to everyone:**
+     - (a) a supervised first sync by Irene herself;
+     - (b) **data-office routine after researcher syncs**: `relink_pending.py`, then
+       `recover_subject_metadata.py --acq-ids` plus `backfill_subjects_table.py --acq-ids`, then
+       verify the blocks (as on 2026-10-08). A scheduled checker is a BACKLOG item;
+     - (c) **researcher syncs are unscheduled registry writers**, and the coordinator's batch
+       runs stop when another writer touches the registry. Agree a rule with the coordinator;
+     - (d) a read-only `--plan` of each other researcher's box folder before they start, to find
+       naming problems.
 3b. **🧹 CLEAN-UP PHASE (Ryan, 2026-10-08). Do it after step 3's first real sync, and do not
    skip it.**
    - **The rule:** lose nothing that works, especially setup steps Box A will repeat, but stop

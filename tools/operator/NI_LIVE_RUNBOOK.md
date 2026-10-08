@@ -9,16 +9,18 @@ Your data stays where it is — the sync only ever **reads** your folder.
 ## The short version
 
 ```
-ni-ingest <your folder> --live --plan     # 1. what's new?
-ni-ingest <your folder> --live --go       # 2. sync it
+ni-ingest <your folder> --plan     # 1. what's new?
+ni-ingest <your folder>            # 2. sync it (asks Proceed? first)
 ```
 
 `<your folder>` is your own data folder on the box, e.g.
 `/Users/molecubes/Documents/volumes/remiW11/data/irene`.
 
-`ni-ingest` is a small launcher on the shared `gnuclear` drive. Type its full path (the
-data office gives it to you), e.g. `/Volumes/gnuclear/…/ni-ingest`. Nothing is installed
-on the Mac. `gjesus3` must be connected in Finder.
+`ni-ingest` is a shortcut on the Molecubes Mac (2026-10-08) for the launcher on `gnuclear`
+(`/Volumes/gnuclear/2026/Jesus/_gjesus3_sync/ni-ingest`). It already includes `--live`. To get
+`<your folder>`, drag your folder from Finder into Terminal. **The illustrated guide for
+researchers is `NI_SYNC_GUIDE.html`**, in the same folder on gnuclear (repo:
+`tools/operator/NI_SYNC_GUIDE.html`).
 
 Step 1 writes nothing to gjesus3 and changes nothing on your box. If it says
 **"nothing new to review"**, skip straight to step 2 — that is the normal case once
@@ -29,7 +31,7 @@ you've synced before.
 ## Step 1 — see what's new
 
 ```
-ni-ingest <your folder> --live --plan
+ni-ingest <your folder> --plan
 ```
 
 This looks for scans that aren't on gjesus3 yet and adds **one row per session** to
@@ -66,7 +68,7 @@ never rewrites, reorders or clears anything you typed.
 ## Step 2 — sync
 
 ```
-ni-ingest <your folder> --live --go
+ni-ingest <your folder>
 ```
 
 That's it — no filename, no extra flag. Your corrections file is read automatically. It
