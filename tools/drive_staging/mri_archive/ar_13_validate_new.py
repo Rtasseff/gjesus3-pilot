@@ -1,6 +1,6 @@
 """Stream AR: run validate_registries.py on a root and split its findings into "on this stream's rows" and "other".
 
-    python ar_13_validate_new.py <nas_root> <tag> [--full]
+    python ar_13_validate_new.py <nas_root> <tag> [--full] [--from <validator output already on disk>]
 
 Stream M's mri_15_validate_new.py for this stream: the new rows are those whose ingest_config is under
 tools/configs/mri_archive/. In the rehearsal root production's own rows have no /raw/ folder, so they fail by design;
@@ -24,8 +24,11 @@ def main():
     if not full:
         cmd.append("--no-enrichment")
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=os.path.join(C.WT, "tools"), PYTHONIOENCODING="utf-8")
-    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, cwd=C.WT)
-    out = r.stdout + r.stderr
+    if "--from" in sys.argv:          # an output of the same validator run already on disk (no second 13-minute run)
+        out = open(sys.argv[sys.argv.index("--from") + 1], encoding="utf-8", errors="replace").read()
+    else:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, cwd=C.WT)
+        out = r.stdout + r.stderr
     open(C.out(f"validate_{tag}.txt"), "w", encoding="utf-8").write(out)
     lines = [l for l in out.splitlines() if re.search(r"\b(ERROR|WARN)\b", l)]
     on_mine, other = collections.Counter(), collections.Counter()

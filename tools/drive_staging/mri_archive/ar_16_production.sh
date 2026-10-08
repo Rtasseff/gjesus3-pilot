@@ -150,19 +150,19 @@ finish() {
     [ "$n" = "$exp" ] || stop "W4 $b holds $n rows, expected $exp"
   done
   echo "rows written by this stream: $total"
-  step "W5 validator after (expect: validation OK; pending-claim = the pre-flight's + $total)"
+  step "W5 validator after, ~13 min on the NAS (expect: validation OK; pending-claim = the pre-flight's + $total)"
   python tools/validate_registries.py --nas-root "$NAS" --no-enrichment > "$RUN/write/validate_after.txt" 2>&1
   $CHK validator "$RUN/write/validate_after.txt" $VALFLAG --expect-pending-from "$RUN/preflight/pending_claim.txt" --plus $total \
     || stop "W5 the validator after the write: $RUN/write/validate_after.txt"
-  python $S/ar_13_validate_new.py "$NAS" ${T}prod_after > "$RUN/write/validate_new.txt" 2>&1; head -1 "$RUN/write/validate_new.txt"
+  python $S/ar_13_validate_new.py "$NAS" ${T}prod_after --from "$RUN/write/validate_after.txt" > "$RUN/write/validate_new.txt" 2>&1; head -1 "$RUN/write/validate_new.txt"
   grep -q "findings on them: 0;" "$RUN/write/validate_new.txt" || stop "W5 findings on the new rows: $O/validate_${T}prod_after.txt"
   step "W6 the claim workbook, dry run (expect: to append $CLAIM_SESSIONS sessions ($CLAIM_ACQS acquisitions); every existing cell unchanged)"
   python tools/claim_workbooks.py claims-append --nas-root "$NAS" --preview-dir "$RUN/claims_preview" > "$RUN/write/claims_dry.txt" 2>&1 \
     || stop "W6 claims-append dry run refused (Excel open somewhere? lock file ~\$...): $RUN/write/claims_dry.txt"
   $CHK claims "$RUN/write/claims_dry.txt" $CLAIM_SESSIONS $CLAIM_ACQS || stop "W6 the claim-workbook preview differs: $RUN/write/claims_dry.txt"
-  step "W7 the claim workbook, append (expect: APPENDED (claims); the workbook's copy in $RUN/claims_backup)"
+  step "W7 the claim workbook, append (expect: APPENDED (claims-append); the workbook's copy in $RUN/claims_backup)"
   python tools/claim_workbooks.py claims-append --nas-root "$NAS" --apply --backup-dir "$RUN/claims_backup" > "$RUN/write/claims_apply.txt" 2>&1
-  grep -q "^APPENDED (claims)" "$RUN/write/claims_apply.txt" || stop "W7 the append did not complete: $RUN/write/claims_apply.txt (it restores the workbook itself on a failed verification)"
+  grep -q "^APPENDED (claims-append)" "$RUN/write/claims_apply.txt" || stop "W7 the append did not complete: $RUN/write/claims_apply.txt (it restores the workbook itself on a failed verification)"
   echo; echo "WRITE COMPLETE: $total acquisitions; claim workbook appended. Next (read-only, after the window): post"
 }
 

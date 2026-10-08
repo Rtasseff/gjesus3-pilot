@@ -15,31 +15,31 @@ for the coordinator's gate and then Ryan's go. **Nothing was written to producti
 
 1. **650 new MFB studies** (tiers A 561, A2 12, B 77) **plus 1 exam of a stream-M study** (`jrc210322_m131_0619/7`, Part 1:
    only the archive holds it; the coordinator's call) → **7,627 exams in 628 sessions, 18 batches, 12 projects + 118
-   studies with no project.** 23 studies have nothing to register (aborted starts, spectroscopy only). ⟨GB⟩ GB, 212,098 DICOM
+   studies with no project.** 23 studies have nothing to register (aborted starts, spectroscopy only). 14.59 GB, 212,098 DICOM
    files, 313 subject ids.
 
    | Batch | Project | Studies | Sessions | Exams: scanner + Dicomifier | GB | Animals (subject ids) | Note |
    |---|---|---:|---:|---:|---:|---:|---|
-   | AR03_0220 | `AE-biomaGUNE-0220` (closed: **reopened first**, Q5) | 3 | 3 | 0 + 22 = **22** | ⟨03⟩ | 3 | written FIRST, right after the reopen |
-   | AR01_0118 | `AE-biomaGUNE-0118` | 41 | 37 | 555 + 47 = **602** | ⟨01⟩ | 32 rats | 36 studies by the DB (no code: `monocr`, `2DG`, `controlR47`, Ermal's `_ermal`) |
-   | AR02_0219 | `AE-biomaGUNE-0219` | 35 | 34 | 101 + 88 = **189** | ⟨02⟩ | 16 | |
-   | AR02n_0219 | `AE-biomaGUNE-0219` | 1 | 1 | 6 + 0 = **6** | ⟨02n⟩ | — | `m8b`: no plain animal number |
-   | AR04_0320 | `AE-biomaGUNE-0320` | 19 | 17 | 282 + 94 = **376** | ⟨04⟩ | 17 | |
-   | AR04n_0320 | `AE-biomaGUNE-0320` | 3 | 3 | 35 + 19 = **54** | ⟨04n⟩ | — | `m1a`, `m8b`, `m11b` |
-   | AR05_0618 | `AE-biomaGUNE-0618` | 74 | 73 | 529 + 261 = **790** | ⟨05⟩ | 73 | incl. the 6 A2 `_post` sessions; 3 by the DB (`apoe` 2019) |
-   | AR05n_0618 | `AE-biomaGUNE-0618` | 1 | 1 | 13 + 0 = **13** | ⟨05n⟩ | — | `jrc190514_0618ApoE1` |
-   | AR06_0619 | `AE-biomaGUNE-0619` | 27 + 1 | 28 | 398 + 63 = **461** | ⟨06⟩ | 25 | 18 by the DB (`hypx`); **+ `m131_0619/7`** |
-   | AR07_0721 | `AE-biomaGUNE-0721` | 10 | 10 | 24 + 42 = **66** | ⟨07⟩ | 10 | incl. the 6 A2 `postadm`/`post` sessions |
-   | AR08_1019 | `AE-biomaGUNE-1019` | 135 | 135 | 901 + 380 = **1,281** | ⟨08⟩ | 55 | 13 by the DB (`london`) |
-   | AR09_1116 | `AE-biomaGUNE-1116` | 80 | 78 | 702 + 343 = **1,045** | ⟨09⟩ | 51 | **57 by the DB** (`cnd`/`CND`, `lungHugo`, `m179_flow`, `Mndoped`) |
-   | AR09n_1116 | `AE-biomaGUNE-1116` | 6 | 6 | 16 + 16 = **32** | ⟨09n⟩ | — | `m200`, `m201`, `m242`–`m245`: not in the DB under 1116 |
-   | AR10_1319 | `AE-biomaGUNE-1319` | 5 | 5 | 0 + 40 = **40** | ⟨10⟩ | 5 | |
-   | AR11_1321 | `AE-biomaGUNE-1321` | 1 | 1 | 0 + 4 = **4** | ⟨11⟩ | 1 | `jrc220622_m6_132` (the DB: 1321) |
-   | AR12_1519 | `AE-biomaGUNE-1519` | 89 | 89 | 1,339 + 0 = **1,339** | ⟨12⟩ | 25 | |
-   | AR13_noproject | **none** | 41 | 40 | 275 + 84 = **359** | ⟨13⟩ | — | Q4 (`0917` ×4, `0116`, `1316`); no code and no unique DB answer (30 + 4); DB contradicts the claim (1) |
-   | AR14_phantoms | **none** | 77 | 67 | 157 + 791 = **948** | ⟨14⟩ | — | Q2: phantoms / QC, as July's |
+   | AR03_0220 | `AE-biomaGUNE-0220` (closed: **reopened first**, Q5) | 3 | 3 | 0 + 22 = **22** | 0.06 | 3 | written FIRST, right after the reopen |
+   | AR01_0118 | `AE-biomaGUNE-0118` | 41 | 37 | 555 + 47 = **602** | 0.74 | 32 rats | 36 studies by the DB (no code: `monocr`, `2DG`, `controlR47`, Ermal's `_ermal`) |
+   | AR02_0219 | `AE-biomaGUNE-0219` | 35 | 34 | 101 + 88 = **189** | 0.72 | 16 | |
+   | AR02n_0219 | `AE-biomaGUNE-0219` | 1 | 1 | 6 + 0 = **6** | 0.04 | — | `m8b`: no plain animal number |
+   | AR04_0320 | `AE-biomaGUNE-0320` | 19 | 17 | 282 + 94 = **376** | 0.51 | 17 | |
+   | AR04n_0320 | `AE-biomaGUNE-0320` | 3 | 3 | 35 + 19 = **54** | 0.07 | — | `m1a`, `m8b`, `m11b` |
+   | AR05_0618 | `AE-biomaGUNE-0618` | 74 | 73 | 529 + 261 = **790** | 1.11 | 73 | incl. the 6 A2 `_post` sessions; 3 by the DB (`apoe` 2019) |
+   | AR05n_0618 | `AE-biomaGUNE-0618` | 1 | 1 | 13 + 0 = **13** | 0.03 | — | `jrc190514_0618ApoE1` |
+   | AR06_0619 | `AE-biomaGUNE-0619` | 27 + 1 | 28 | 398 + 63 = **461** | 0.48 | 25 | 18 by the DB (`hypx`); **+ `m131_0619/7`** |
+   | AR07_0721 | `AE-biomaGUNE-0721` | 10 | 10 | 24 + 42 = **66** | 0.28 | 10 | incl. the 6 A2 `postadm`/`post` sessions |
+   | AR08_1019 | `AE-biomaGUNE-1019` | 135 | 135 | 901 + 380 = **1,281** | 4.11 | 55 | 13 by the DB (`london`) |
+   | AR09_1116 | `AE-biomaGUNE-1116` | 80 | 78 | 702 + 343 = **1,045** | 2.77 | 51 | **57 by the DB** (`cnd`/`CND`, `lungHugo`, `m179_flow`, `Mndoped`) |
+   | AR09n_1116 | `AE-biomaGUNE-1116` | 6 | 6 | 16 + 16 = **32** | 0.06 | — | `m200`, `m201`, `m242`–`m245`: not in the DB under 1116 |
+   | AR10_1319 | `AE-biomaGUNE-1319` | 5 | 5 | 0 + 40 = **40** | 0.08 | 5 | |
+   | AR11_1321 | `AE-biomaGUNE-1321` | 1 | 1 | 0 + 4 = **4** | 0.02 | 1 | `jrc220622_m6_132` (the DB: 1321) |
+   | AR12_1519 | `AE-biomaGUNE-1519` | 89 | 89 | 1,339 + 0 = **1,339** | 2.04 | 25 | |
+   | AR13_noproject | **none** | 41 | 40 | 275 + 84 = **359** | 0.96 | — | Q4 (`0917` ×4, `0116`, `1316`); no code and no unique DB answer (30 + 4); DB contradicts the claim (1) |
+   | AR14_phantoms | **none** | 77 | 67 | 157 + 791 = **948** | 0.53 | — | Q2: phantoms / QC, as July's |
    | *(no batch)* | `AE-biomaGUNE-1319` | *2* | *0* | *0* | | | *`m7e`, `m7f`: never acquired* |
-   | **Total** | **12 projects + none** | **650 + 1** | **628** | **5,333 + 2,294 = 7,627** | **⟨GB⟩** | **313** | |
+   | **Total** | **12 projects + none** | **650 + 1** | **628** | **5,333 + 2,294 = 7,627** | **14.59** | **313** | |
 
 2. **Every exam registered has DICOM** (Ryan's 2026-10-04 rule): 5,333 the scanner's own, **2,294 made by Dicomifier before
    ingest** in the extract tree (2,310 tried; **16 failed**: not registered, listed). **Not registered: 233 exams** (144
@@ -55,12 +55,12 @@ for the coordinator's gate and then Ryan's go. **Nothing was written to producti
    the 12 A2 second sessions (by design); **0 of 212,098 DICOM files in production by SHA-256** (against 627,841); the dedup
    proof (stream M's 130 studies extracted from the archive and dated the same way: **2,339 skipped as registered, 0
    listed**, `m175`/`m178` included); every dry run lists exactly its case table.
-6. **The production pre-flight already ran against live production** (`ar_16_production.sh preflight`, read-only, ⟨PFtime⟩):
+6. **The production pre-flight already ran against live production** (`ar_16_production.sh preflight`, read-only, 2026-10-08 23:04 → 2026-10-09 00:48):
    validator green (`pending-claim` 15,963), the six live checks, case tables identical to the commit, 313 subject ids,
    bytes 0, **18 + 1 dry runs: 7,627 listed = the case tables, 0 failed, 0 disagreements, registries unchanged**. Its
    snapshot lets the morning's `write` start without re-running it (§7).
 7. **Rehearsal of the script itself** on a D: root built from production at 35,791 rows: ⟨REH⟩.
-8. **Run time on the NAS: about ⟨RT⟩** for `write` (§7). It fits 07:00–10:30 only if it starts on time; it can start as soon
+8. **Run time on the NAS: about 3 to 3.5 hours** for `write` (§7). It fits 07:00–10:30 only if it starts on time; it can start as soon
    as the go comes.
 
 ---
@@ -150,7 +150,23 @@ in the old name form (no `HHMM`), so none can take an AR03 name.
 
 ## 5. The production pre-flight (read-only, already run)
 
-⟨PF⟩
+`bash tools/drive_staging/mri_archive/ar_16_production.sh preflight`, 2026-10-08 23:04 → 2026-10-09 00:48, against live
+production (35,791 rows, quiet since the `XMIC` batches ended at 21:57). Run folder
+`C:\Users\rtasseff\temp\gjesus3_mri_archive_20261009\preflight\` (`PASS`, `snapshot.txt`, every step's output).
+
+| Step | Result | Time |
+|---|---|---|
+| P1 validator | `validation OK: 0 errors, 0 warnings`; `pending-claim` **15,963** (saved as the baseline) | 13 min |
+| P2 the plan, live | names 0; session + day 0; same animal + day = the 12 A2 only; links taken 0; duplicated 0; dated 2026 0 (**6 of 6**) | 4 s |
+| P3 case tables rebuilt | problems 0; identical to the commit (`git status` clean) | 10 s |
+| P4 subject ids | 313 found, 313 ok | 3 s |
+| P5 bytes | 0 of 212,098 DICOM files in production | 8 min |
+| P6 dry runs (18 batches + the dedup proof), each bracketed and checked case by case | **7,627 listed = the case tables**, 0 failed, 0 disagreements, every link free (6,320), the skipped-by-name sets equal the planned not-registered ones, **registries changed=False ×19**; dedup proof 0 listed, 2,339 skipped as registered | 82 min |
+| P7 snapshot | 35,791 rows, 16,602 MRI/XMRI | — |
+
+Per batch (listed / skipped by name): AR03 22/8, AR01 602/29, AR02 189/19, AR02n 6/2, AR04 376/2, AR04n 54/0, AR05 790/9,
+AR05n 13/1, AR06 461/2, AR07 66/1, AR08 1,281/17, AR09 1,045/55, AR09n 32/0, AR10 40/0, AR11 4/1, AR12 1,339/5, AR13 359/14,
+AR14 948/65. Logs `D:\projects\gjesus3\mri_archive\out\dryrun_prod_pre_*.log`.
 
 ## 6. Rehearsal of the script (D: root `D:\projects\gjesus3\mri_archive\rehearsal_nas\`, built from production at 35,791 rows)
 
