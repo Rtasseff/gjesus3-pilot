@@ -86,8 +86,15 @@ batch() {
   local b=$1 p bk exp; p=$(project_of $b); exp=$($CHK cases $b)
   if [ "$b" = AR03_0220 ]; then
     step "W2 reopen AE-biomaGUNE-0220 (Q5), immediately before its batch (expect: dry run lists the changes; then status active)"
-    python tools/reopen_project.py --nas-root "$NAS" --project AE-biomaGUNE-0220 --dry-run > "$RUN/write/reopen_dry.txt" 2>&1 || stop "W2 reopen dry run failed: $RUN/write/reopen_dry.txt"
-    python tools/reopen_project.py --nas-root "$NAS" --project AE-biomaGUNE-0220 --reason "the MRI platform's archive: 3 studies of 2022 (STATUS 0.6 Q5, Ryan 2026-10-07)" > "$RUN/write/reopen.txt" 2>&1 || stop "W2 reopen failed: $RUN/write/reopen.txt (the project stays closed; nothing of the batch was written)"
+    if [ -n "${REHEARSAL:-}" ]; then
+      $CHK rehearsal-reopen "$NAS" AE-biomaGUNE-0220 || stop "W2 rehearsal reopen"
+    else
+      # expect (dry run of 2026-10-08): links {'present': 245, 'created': 147, 'collision': 0, 'no_raw': 0, 'error': 0}; status 'closed' -> 'active'
+      python tools/reopen_project.py --nas-root "$NAS" --project AE-biomaGUNE-0220 --dry-run > "$RUN/write/reopen_dry.txt" 2>&1 || stop "W2 reopen dry run failed: $RUN/write/reopen_dry.txt"
+      grep "\[dry-run\] links:" "$RUN/write/reopen_dry.txt"
+      grep -q "'collision': 0, 'no_raw': 0, 'error': 0" "$RUN/write/reopen_dry.txt" || stop "W2 the reopen dry run reports collisions or errors: $RUN/write/reopen_dry.txt"
+      python tools/reopen_project.py --nas-root "$NAS" --project AE-biomaGUNE-0220 --reason "the MRI platform's archive: 3 studies of 2022 (STATUS 0.6 Q5, Ryan 2026-10-07)" > "$RUN/write/reopen.txt" 2>&1 || stop "W2 reopen failed: $RUN/write/reopen.txt (the project stays closed; nothing of the batch was written)"
+    fi
     $CHK project-active "$NAS" AE-biomaGUNE-0220 || stop "W2 0220 is not active after the reopen"
     step "W3 baseline backup after the reopen, every target project (the post phase verifies against it)"
     [ -d "$RUN/bk1" ] || $BACKUP "$NAS" "$RUN/bk1" $PROJECTS > "$RUN/write/bk1.txt" 2>&1 || stop "W3 backup failed (another writer?)"
@@ -113,8 +120,12 @@ write() {
   [ -f "$RUN/preflight/PASS" ] || stop "W0 no pre-flight PASS in $RUN/preflight: run the preflight first"
   step "W0 no other MRI row since the pre-flight; the validator green; the live plan checks again (expect: OK, OK, 6 of 6)"
   $CHK mri-unchanged "$NAS" "$RUN/preflight/snapshot.txt" || stop "W0 another writer added or removed MRI rows: re-run the preflight"
-  python tools/validate_registries.py --nas-root "$NAS" --no-enrichment > "$RUN/write/validate_W0.txt" 2>&1
-  $CHK validator "$RUN/write/validate_W0.txt" $VALFLAG || stop "W0 the validator is not green"
+  if $CHK same-registries "$NAS" "$RUN/preflight/snapshot.txt"; then
+    echo "OK   the validator is not re-run: the registries are byte-identical to the pre-flight's (whose validator passed)"
+  else
+    python tools/validate_registries.py --nas-root "$NAS" --no-enrichment > "$RUN/write/validate_W0.txt" 2>&1   # ~13 min on the NAS
+    $CHK validator "$RUN/write/validate_W0.txt" $VALFLAG || stop "W0 the validator is not green"
+  fi
   if [ -z "$from" ]; then
     if [ -z "${REHEARSAL:-}" ]; then
       python $S/ar_05_plan.py > "$RUN/write/plan.txt" 2>&1; $CHK plan "$RUN/write/plan.txt" || stop "W0 a live check differs: $RUN/write/plan.txt"
