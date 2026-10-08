@@ -16,6 +16,20 @@ easier, Ryan can go through them with you in 15 minutes.
 
 ---
 
+## Answers received (2026-10-08, from Irene, in red in Ryan's copy `historical-mjesus-drive\questions.docx`)
+
+| Q | Answer (Irene's words, condensed) | What it changes |
+|---|---|---|
+| 1 | "Unai is the NI platform manager and IF … would be me, Irene Fernández." | `IF` = Irene Fernández. The other initials stay as guessed |
+| 2 | "0522, 0619 and 0424 have been revised by Jesús and Irene, the new segmentations are in OneDrive in a shared folder." | **The drive's masks of those cohorts are pre-revision drafts.** The revised set must be fetched from that folder before CAND-A can be promoted. `1121`'s `Revision` question is unanswered |
+| 3 | "The one with IRE label is the correction." | `0522` 2023: `IRE` supersedes M. Jesús's tracing; not two readers |
+| 4 | `1519`: the LV is the main tissue; M. Jesús analysed only the LV; the analysis itself is not known | Consistent with the measured LV cavity + LV muscle |
+| 5 | "If this is not older than 2021 I can check the analysis in PMOD." | The PET/CT mask values can be named for 2021+ studies, on request |
+| 9 | Scanned **in Biodonostia**, with no formal collaboration: Elena (our group; her other thesis director is at Biodonostia) scanned M. Jesús's samples as a favour, because biomaGUNE had no Axioscan in 2024. `0522` is ours; `1422` unknown. Irene can review which `0522` images are worth keeping (some were also imaged by Marta at biomaGUNE) | The 116 scans are MFB's own animals on an external instrument |
+| 10 | The Leica SP8 is **biomaGUNE's own**, "the microscope that we used to use"; protocol unknown | Not London: an internal instrument gjesus3 never onboarded |
+
+Still open: 6, 7, 8, 11, 12, 13, 14 (and 2's `1121` part).
+
 ## A. The cardiac segmentations (★ the curated dataset depends on these)
 
 The drive holds about **8,600 distinct segmentation masks**. We matched them pixel by pixel to the MRI scans in gjesus3:
