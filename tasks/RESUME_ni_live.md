@@ -365,7 +365,19 @@ the 2026-10-06 merge).
        `recover_subject_metadata.py --acq-ids` plus `backfill_subjects_table.py --acq-ids`, then
        verify the blocks (as on 2026-10-08). A scheduled checker is a BACKLOG item;
      - (c) **researcher syncs are unscheduled registry writers**, and the coordinator's batch
-       runs stop when another writer touches the registry. Agree a rule with the coordinator;
+       runs stop when another writer touches the registry. ❓ **Ryan's call.** The coordinator
+       (`gj3-handoff`, 2026-10-08) prefers **(b) a published batch-window flag**: the flag names
+       the writer, the start and the expected end. A researcher sync then waits, or says "a Data
+       Office batch is running until HH:MM, try later". This is "one registry writer at a time"
+       made mechanical.
+       - It needs the Data Office tools to set and clear the flag, with a stale-flag timeout and a
+         clear-on-crash. The end time must be shown, because batches can run for hours.
+       - It rejected (a), whitelisting appended NI rows: that weakens guards meant to notice the
+         unexpected, and before/after proofs would go stale mid-batch.
+       - Interim until (b) exists: (c), researchers sync only outside announced windows.
+       - **Hold now:** no researcher or NI sync until `gj3-handoff` says its MRI archive ingest
+         and placeholder retirement are done (worst case Friday ~10:30). Irene's supervised first
+         sync comes after that;
      - (d) a read-only `--plan` of each other researcher's box folder before they start, to find
        naming problems.
 3b. **🧹 CLEAN-UP PHASE (Ryan, 2026-10-08). Do it after step 3's first real sync, and do not
