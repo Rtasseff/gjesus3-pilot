@@ -2166,9 +2166,7 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
 **The conflict:** production already holds MRI rows registered as empty placeholders before the line existed. The 2026-07-16 drain of the DICOM-regen worklist (10_TOOLS §3.8) left **365 rows `not-applicable`** (spectroscopy/calibration: STEAM/PRESS/WOBBLE) and **94 `no-source`**. *(99 `no-source` since 2026-10-05: the five header-only G1 exams were flipped on Ryan's ruling, STATUS §0 D7.)*
 
 - [ ] Count them afresh, from `registries/pending_dicom_regen.csv` and from `/raw/` folders with an empty `.data\`.
-- [ ] **Decide (Ryan):**
-  - retire them with the retire tool (which disposition? a new `not-an-image`, or `derivative`?), keeping any recoverable files as other data in the project folder;
-  - or leave them, with the line applying only from 2026-10-04 on.
+- [x] **Decided (Ryan, 2026-10-08): retire them.** "If they are attached to projects we can move the images and sidecars to the project folder." The Data Office's disposition: a new `no-dicom`. Being built on `feat/mri-placeholder-retire` (dry run and rehearsal before any production write); **runs after the MRI archive ingest** (one registry writer at a time). Today's link audit: 324 of the placeholders are in projects. 10 of them have k-space on the M. Jesús drive, their only data: placed by the drive-3 close-out before the staged copy goes.
 - [ ] Live ingest: should the MRI path stop registering spectroscopy and calibration exams at ingest? Today it registers them as `not-applicable` placeholders.
 
 ## 🔹 LOW — an exam that produced no data is registered with today's date (2026-10-04)
@@ -2268,6 +2266,43 @@ registry is not affected (`registry_projects.csv` is UTF-8, checked). A UTF-8 re
 mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadata\README_CNIC-HEARDS_pig_files_in_holding.txt`.
 
 - [ ] A path-level mapping in `nonraw_placement.py remap` (with a test), then move the 165.
+
+## 🔸 MODERATE — 231 placed MetaImage headers name a `.raw` the path budget renamed (2026-10-08)
+
+The drive-3 close-out read every affected `.mhd`: **231 placed `.mhd` headers** (225 from drive 1, 6 from drive 3, all in
+`AE-biomaGUNE-1019\working\historical_drives\`) still name their `.raw` by its original file name in `ElementDataFile`,
+but the 240-character placement rule shortened that `.raw`'s name. ITK-SNAP / 3D Slicer cannot open these volumes as
+placed. SegBioMed's remapped manifest carries the real `.raw` path for its 6 (`split_raw_path`).
+
+- [ ] Choose a fix that keeps the index honest: rewrite `ElementDataFile` in the placed `.mhd` (a changed copy: update its
+  `_INDEX.csv` size/SHA-256 and say so in the README), or add a corrected sibling header. Then teach
+  `nonraw_placement.py` to keep a `.mhd`/`.raw` pair's names in step when it shortens.
+
+## 🔹 LOW — the M. Jesús drive: adjust by hand if late answers come (2026-10-08)
+
+Ryan: no more answers are likely, so the drive was finished on what we knew; anything that arrives later is changed by
+hand. Open: `tasks/drive3_questions_for_mjesus.md` Q2 (`1121`'s `Revision`), 6, 7, 8, 11–14; Q9's `1422` protocol and
+Irene's offer to review which `0522` Biodonostia scans are worth keeping; Q10's Leica protocol; the `CNIC-HEARDS`
+owner. The revised `0522`/`0619`/`0424` masks are in Jesús and Irene's shared OneDrive (needed before CAND-A).
+
+- [ ] On an answer: re-assign the project (the 2b runbook for placed material; a project reassignment for acquisitions),
+  update the README note or the dataset, and log it in the CHANGELOG.
+
+## 🔹 LOW — 106 drive-3 exams hold converted DICOM where the archive has the scanner's own (2026-10-08)
+
+The archive check (`tasks/drive3_mri_archive_check.md`) found six `0619` animals of 2021-03-22 (106 exams) whose production
+DICOM was made by Dicomifier from M. Jesús's copy, while the platform's archive holds the scanner's own DICOM export.
+The pixels are not compared (different reconstructions of the same data).
+
+- [ ] Decide whether to replace the converted DICOM with the scanner's, in place (the recovery pattern; ACQ-IDs kept).
+
+## 🔹 LOW — the assign workbook's append reads drive-3 sources only (2026-10-08)
+
+`tools/claim_workbooks.py assign-append` lists the drive-3 holding files and drive-3 acquisitions with no project. The MRI
+archive ingest adds 118 studies with no project (41 animal studies, 77 phantoms/QC); its build writes them to
+`D:\projects\gjesus3\mri_archive\out\for_assign_workbook.csv`.
+
+- [ ] Let `assign-append` take a generic list of acquisitions, then append the archive's after its ingest.
 
 ## 🔸 MODERATE — the drives' DICOM stream: follow-ups (stream B, 2026-10-04)
 

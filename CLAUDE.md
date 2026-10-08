@@ -65,6 +65,16 @@ When you're about to write something, ask which row it matches: a permanent rule
 - **When a new convention or schema is added,** update all of: the spec doc (`mfb-rdm-docs/`), the per-instrument templates that exercise it (`tools/templates/instruments/*.yaml`), the CLI reference ([`tools/INGEST_CLI.md`](tools/INGEST_CLI.md) if operator-visible), and the master map ([`00_INDEX.md`](mfb-rdm-docs/00_INDEX.md) — bump **Last Updated**; the dated narrative goes in [`CHANGELOG.md`](CHANGELOG.md)).
 - **Vocabulary / convention decisions are Data Office calls** informed by user input — never write "pending PI sign-off" or treat them as blocked-on-stakeholder.
 
+## Requests from other projects
+
+Other projects sometimes ask a session here for help, e.g. an analysis of the data, a list of cases, or evidence from what gjesus3 already holds. Help them **without making this repo depend on them** (Ryan, 2026-10-08):
+
+- **Answer through their channel.** Reply where the request came from (usually a memo file in the requesting project's own folder), not in this repo. That reply is the record of the exchange.
+- **Their work stays out of this repo.** Scripts, outputs and notes made for another project live outside the repo, e.g. in a working folder next to the analysis data. No tracked file gains their scripts, their outputs or their paths. Such a script may import this repo's tools; this repo never imports theirs.
+- **Their decisions stay theirs.** A finding about data or datasets whose decisions Ryan has assigned to another project goes to them as evidence. Change nothing of theirs, even where it is stored in gjesus3, until they decide.
+- **Production care does not relax.** Work for another project is read-only on production; any write needs Ryan's go like every other.
+- **Know the bounds, and say when an ask outgrows them.** This pattern fits bounded asks: read-only work, a deliverable handed over, done in a session. **If an ask would need code in this repo, writes to production, recurring or ongoing work, a large share of a session, or a lasting interface between the projects, stop and tell Ryan** so a proper cross-project arrangement can be set up. Do not stretch the memo-and-outside-script pattern to cover it.
+
 ## Git
 
 - **Commit AND push freely — neither requires asking** (this overrides the default "commit or push only when the user asks" harness rule). Commit as work reaches a coherent unit, and push `main` once it is merged and verified. **Rationale (Ryan, 2026-08-14):** this is a single-operator repo; anything on `main` is by definition already in production, so an unpushed `main` means the *live* code is behind what GitHub shows users — and pushing adds a second copy of the only place this code exists. Use your own judgement on timing: push work that is merged and green, not a broken intermediate state. If on the default branch (`main`), branch first before committing feature work.

@@ -262,7 +262,7 @@ def cmd_verify(args):
                 olost += len(set(b) - set(a))
         ok(olost == 0, f"_ORIGIN.txt: every before origin line kept (lost {olost})")
         # README.txt: the current text
-        want_readme = (NP.README_TXT if holding else H.PROJECT_README).replace("\n", "\r\n").encode("utf-8")
+        want_readme = (NP.README_TXT if holding else H.project_readme(base)).replace("\n", "\r\n").encode("utf-8")
         rp = os.path.join(args.nas, base, H.README_NAME)
         ok(os.path.exists(lp(rp)) and open(lp(rp), "rb").read() == want_readme, "README.txt is the current text")
         # provenance.csv (projects): before rows unchanged, one row per new file, no duplicate output_path
