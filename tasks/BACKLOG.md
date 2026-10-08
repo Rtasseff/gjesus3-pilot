@@ -234,7 +234,9 @@ on the Mac**. A file the Mac creates there is read-only from Windows, because it
 `nuclearuser` and the group has read-only access. The options considered are in
 `tasks/RESUME_ni_live.md` §0 step 3, on `feat/ni-live-hardening`. The form must keep the
 sync-safety invariant: a correction changes the metadata values, never the session key or
-`original_name`.
+`original_name`. **It is also the natural home for per-session `is_control`.** Since 2026-10-08
+the live sync no longer asks it once per batch, because one answer cannot cover a multi-study
+sync. So today it stays null unless set later.
 
 ---
 
