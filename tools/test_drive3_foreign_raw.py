@@ -53,7 +53,15 @@ def test_profile():
         check(P.STAGING.lower().startswith("j:\\_staging_drive3_mj") and "xmic" in P.LOCAL.lower()
               and "xmic" in P.OUT.lower(), "the staged copy is read; its own mirror and plan on D:")
         check(not P.PEOPLE_BY_FOLDER and not P.OPERATOR_TOPS, "no person from a folder (none names one)")
+        rows = [{"relpath": "Microscopio\\a.czi", "researcher": "", "operator": ""},
+                {"relpath": "Microscopio\\b.czi", "researcher": "Ana", "operator": ""}]
+        filled = P.apply_people(rows)
+        check([(r["researcher"], r["operator"]) for r in rows] == [("MJ", ""), ("Ana", "")]
+              and filled == {("researcher", "MJ"): 1},
+              "Ryan's ruling (2026-10-08): researcher MJ on every file, never overwriting; the operator stays blank")
         P.use_profile("drive3_2026-10")
+        check(P.apply_people([{"relpath": "Microscopio\\x.czi", "researcher": "", "operator": ""}]) == {},
+              "stream C's profile has no such ruling")
         check(P.INSTRUMENTS == {"CELL": "CELL"} and P.PILOT == P.PILOT_DEFAULT and not P.PROFILE.get("refingerprint"),
               "stream C's profile is unchanged")
     finally:

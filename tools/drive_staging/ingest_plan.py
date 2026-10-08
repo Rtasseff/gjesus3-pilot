@@ -239,7 +239,11 @@ PROFILES = {
         "refingerprint": True,
         "deprioritised_tops": ("biomaGUNE MJ",),
         "operator_tops": set(),
-        "people_by_folder": (),           # stream C's practice: a person only from a folder that names one; none here
+        "people_by_folder": (),           # no folder here names a person
+        # Ryan, 2026-10-08 (via the coordinator), on Irene's answer ("Elena performed these scans with MJ's samples"):
+        # researcher = M. Jesus on every file, with the token production already uses for her on this drive (`MJ`:
+        # stream C's 3,719 Cell Observer rows, stream N's PET/CT). The operator stays blank; the note names Elena.
+        "people_all": (("researcher", "MJ"),),
         "new_project": None,
         "xmic_expected": 83,
         "xmic_model": "Axioscan 7",       # the stand name the file carries (as production's ZWSI rows)
@@ -1414,13 +1418,17 @@ def apply_readings(expected, readings, labels=None):
 
 
 def apply_people(expected):
-    """Fill a blank researcher / operator from PEOPLE_BY_FOLDER, by the canonical copy's path. Returns
-    {(field, value): rows filled}."""
+    """Fill a blank researcher / operator from PEOPLE_BY_FOLDER, by the canonical copy's path, then from the
+    profile's `people_all` (a ruling for every file). Returns {(field, value): rows filled}."""
     filled = collections.Counter()
     for e in expected:
         rel = e["relpath"].lower()
         for prefix, field, value in PEOPLE_BY_FOLDER:
             if rel.startswith(prefix.lower()) and not e[field]:
+                e[field] = value
+                filled[(field, value)] += 1
+        for field, value in PROFILE.get("people_all", ()):     # a ruling for every file of the profile
+            if not e[field]:
                 e[field] = value
                 filled[(field, value)] += 1
     return filled
@@ -2144,8 +2152,8 @@ EXTRA_XMIC_D3 = """#
 # XMIC = Biodonostia's ZEISS Axioscan 7 (device serial 4661000340; ours, ZWSI, is 4661000718): external
 # data, like XMRI and the Charite Axio Imager.Z2. A PhD student of the group scanned M. Jesus's slides there,
 # with no formal collaboration (Irene, 2026-10-08). The instrument model is written literally; data_source records
-# the origin; the operator stays blank (no folder names her; her surname is unknown): each row's note says who
-# scanned it.
+# the origin; the researcher is M. Jesus (`MJ`, Ryan 2026-10-08); the operator stays blank (her surname is unknown):
+# each row's note says who scanned it. Projects include the slide-label readings L1 and L2 (Ryan, 2026-10-08).
 """
 EXTRA_CLOSED = """#
 # !! TARGET PROJECT IS CLOSED (folder deleted 2026-07-14). Do NOT run until the coordinator has
