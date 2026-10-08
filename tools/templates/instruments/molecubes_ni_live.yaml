@@ -50,6 +50,10 @@ auto_discover:
     regex: '^(?P<acq_datetime_full>\d{14})_(?P<modality>PET|CT|SPECT|OI)$'
   subject_parse:                           # split the subject folder -> project + 1-4 animal codes
     field: subject                         #   (reuses ni_live_discover.parse_subject)
+    # Ryan, 2026-10-08: 4 digits in the code position = an animal protocol (AE-biomaGUNE-NNNN);
+    # any other code there = Project-<code>; no code = the series folder's 4 digits. Never
+    # checked against the animal DB here; every animal is queued pending-db for the data office.
+    project_rule: protocol-or-project
   subject_from_db: true                    # look each parsed animal up; a miss queues to pending (non-blocking)
 
 registry:
@@ -63,15 +67,15 @@ registry:
   acquisition_datetime: discovered.acq_datetime_full
   # group the PET + CT of one animal-visit into one ISA "study":
   session_id:           "${discovered.series}_${discovered.date}_${discovered.subject}"
-  # project from the subject prefix (§3A authoritative), via subject_parse:
-  project_name:         "AE-biomaGUNE-${discovered.project}"
+  # project from the subject folder's code position (subject_parse project_rule, above):
+  project_name:         "${discovered.project_name}"
   notes:                "Live-box NI sync: ${discovered.modality} of subject ${discovered.subject} (project ${discovered.project})"
 
 operator: irene                            # EDIT per sync
 
 auto_create_project:
   owner:       "NI-platform"
-  description: "Auto-created during live-box NI sync; animal protocol ${discovered.project}. PROVISIONAL."
+  description: "Auto-created during live-box NI sync; code ${discovered.project} as typed on the box. PROVISIONAL."
   notes:       "Auto-created on first live NI sync. Edit owner via _project.yaml."
 
 # Name of the project hard link under /projects/<proj>/raw_linked/. Unique per

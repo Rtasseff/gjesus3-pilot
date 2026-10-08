@@ -77,6 +77,23 @@ def test_grammar_happy_path():
     check(nums(p) == [2, 4, 5, 6] and "gt-4-animals" not in p["flags"], "0124_2-4-5-6 -> 4 animals, within cap")
 
 
+def test_live_project_rule():
+    """Ryan, 2026-10-08: the code position names the project; 4 digits = protocol."""
+    cases = [
+        ("1025_m1", "1025", "1025", "AE-biomaGUNE-1025", "4 digits in the code position = a protocol"),
+        ("1015_m10-15", "1025", "1015", "AE-biomaGUNE-1015", "a 4-digit typo is still taken as typed (corrections fix it)"),
+        ("324_m61", "1207", "324", "Project-324", "3 digits is not a protocol -> Project-324"),
+        ("FDG_m3", "1207", "FDG", "Project-FDG", "a word in the code position -> Project-FDG, NOT the series 1207"),
+        ("ctrl_m2", "1125", "ctrl", "Project-ctrl", "any non-animal word there is the code"),
+        ("m61", "0324", "0324", "AE-biomaGUNE-0324", "no code: the 4-digit series folder, as before"),
+        ("m5", "260302", "", "", "no code under a DATE series folder -> no project, not AE-biomaGUNE-2603"),
+        ("phantom_1", "1207", "", "", "a phantom has no project"),
+    ]
+    for subj, series, code, name, why in cases:
+        got = nd.live_project_code(subj, series)
+        check(got == code and nd.live_project_name(got) == name,
+              f"{subj} under {series} -> {name or '(no project)'}: {why} (got {got!r})")
+
 def test_flags_and_edges():
     print("[sec 3A flags - phantom, range, typo, cap]")
     # phantom -> QC, no DB link.
@@ -142,6 +159,7 @@ def main():
     test_flags_and_edges()
     test_project_conflict_near_miss()
     test_facility_id_contract()
+    test_live_project_rule()
     print()
     if FAILS:
         print(f"FAILED ({len(FAILS)}):")

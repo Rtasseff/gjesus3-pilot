@@ -855,7 +855,15 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
             if subj_val:
                 parsed = ni_live_discover.parse_subject(
                     subj_val, discovered.get("series"))
-                if parsed.get("project"):
+                if sp_cfg.get("project_rule") == "protocol-or-project":
+                    # NI live (Ryan, 2026-10-08): the code in the code position,
+                    # 4 digits = protocol, anything else = Project-<code>; the name
+                    # is built after the corrections below (live_project_name).
+                    code = ni_live_discover.live_project_code(
+                        subj_val, discovered.get("series"))
+                    if code:
+                        discovered.setdefault("project", code)
+                elif parsed.get("project"):
                     discovered.setdefault("project", parsed["project"])
                 discovered["animal_codes"] = ";".join(
                     str(a["number"]) for a in parsed["animals"])
@@ -892,6 +900,12 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
         # <subject> session key, so original_name (the dedup identity) is untouched.
         _ni_corr = cfg.get("_ni_corrections") or {}
         _corr_row = ni_corrections.apply_pre(case, _ni_corr) if _ni_corr else None
+        if sp_cfg.get("project_rule") == "protocol-or-project":
+            # After the corrections, so a fixed code (1015 -> 1025, FDG -> 0522) names
+            # the project. Read by the template's `${discovered.project_name}`.
+            import ni_live_discover
+            case["discovered"]["project_name"] = ni_live_discover.live_project_name(
+                case["discovered"].get("project"))
 
         try:
             apply_registry_block(case, registry_block)

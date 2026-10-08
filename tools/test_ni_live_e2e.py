@@ -421,6 +421,34 @@ def derived_flow(tmp):
     check(snapshot(w["box"]) == box0, "the box was never written")
 
 
+def project_rule_flow(tmp):
+    """Ryan, 2026-10-08: the code position names the project (protocol-or-project)."""
+    print("project names: 4 digits = protocol, any other code = Project-<code>")
+    w = build_world(tmp)
+    shutil.rmtree(w["box"])
+    add_acquisition(w["box"], "1207/260212/FDG_m3/20260212100000_CT", [0])
+    add_acquisition(w["box"], "1207/260212/324_m61/20260212110000_CT", [0])
+    corr = os.path.join(tmp, "corr_p.csv")
+    run(w, "--plan", "--corrections", corr)
+    with open(corr, encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    check({r["session_path"]: r["project"] for r in rows} ==
+          {"1207/260212/FDG_m3": "FDG", "1207/260212/324_m61": "324"},
+          "the corrections file shows the code as typed (FDG, 324), not the series 1207")
+    for r in rows:                                   # the operator fixes one of them
+        if r["session_path"] == "1207/260212/324_m61":
+            r["project"] = "0525"
+    with open(corr, "w", encoding="utf-8", newline="") as f:
+        dw = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        dw.writeheader()
+        dw.writerows(rows)
+    rc, out = run(w, "--go", "--corrections", corr)
+    names = sorted(project_name(w["nas"], r) for r in raw_rows(w["nas"]))
+    check(rc == 0 and names == ["AE-biomaGUNE-0525", "Project-FDG"],
+          f"FDG_m3 -> Project-FDG (new); 324 corrected to 0525 -> AE-biomaGUNE-0525 (got {names})")
+    check(not any("1207" in n for n in names), "nothing filed under the series/funding number 1207")
+
+
 class _FakeTerminal(io.StringIO):
     def isatty(self):
         return True
@@ -482,6 +510,8 @@ def main():
         cross_source_flow(os.path.join(tmp, "d"))
     with tempfile.TemporaryDirectory(prefix="ni_live_e2e_") as tmp:
         derived_flow(os.path.join(tmp, "e"))
+    with tempfile.TemporaryDirectory(prefix="ni_live_e2e_") as tmp:
+        project_rule_flow(os.path.join(tmp, "f"))
     if FAILED:
         print(f"\n{len(FAILED)} CHECK(S) FAILED")
         sys.exit(1)

@@ -48,7 +48,8 @@ creates it, and `gnuclear` lets the group read but not change it). It looks like
 | `1207/260212/0324_m61` | 0324 | 61;62 | |
 
 - **`session_path`** — don't change this. It's how we find your folder.
-- **`project`** — the animal-protocol number.
+- **`project`** — the animal-protocol number (four digits). Anything else you type here becomes a
+  project named `Project-<what you typed>`, so fix a typo here before you sync.
 - **`animal_codes`** — the mouse numbers, separated by `;`.
 - **`extra_metadata`** — anything else worth recording, as `key=value`. Most usefully
   the tracer: `tracer=FDG`. Several: `tracer=FDG;dose=10 MBq`.
