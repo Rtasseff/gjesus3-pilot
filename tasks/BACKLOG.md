@@ -208,6 +208,25 @@ anticipates for the GUI exes ("redesigned as one web app and the exes retire").
   The live sync's one-acquisition-per-reconstruction model already absorbs late arrivals; a
   server-side pull could reuse it, and a scheduled sweep might replace "pull now".
 
+**🕗 Decided for the app (Ryan, 2026-10-08): Box A pulls NI data through the tunnel, and the Mac
+stops mounting gjesus3.**
+- Until Box A, the Mac mounts gjesus3 with Ryan's login, kept up by MacMounter
+  (`tools/operator/ni_mac/`; IT will not provide an account). That puts superuser rights and a
+  saved password on a shared machine, which is accepted only as an interim.
+- After the tunnel moves (B2), Box A's `localhost:2222` is the Mac's sshd. Box A reads the
+  researcher folders (`~/Documents/volumes/remiW11/data/<researcher>`) over SFTP/rsync, read-only.
+  It runs the same per-reconstruction ingest locally and writes to gjesus3 with its own setup.
+- Gains:
+  - The Mac runs only sshd: no Python, no NAS credentials, no mount.
+  - Hard links work (Box A runs Windows).
+  - Nobody has to be at the Mac.
+- Then `ni_mac/gjesus3_mount_undo.sh` removes the interim mount and the password.
+- Open:
+  - Through the Mac, or past it? The data path is remiW11 → Mac (sshfs) → tunnel → Box A. A
+    `ProxyJump` through the Mac straight to remiW11 (192.168.0.246) would spare the Mac, but needs
+    a key on the scanner PC, the platform's machine.
+  - Pull timing: see "When does the app pull an NI session?" above.
+
 **🕗 Decided for the app (Ryan, 2026-10-07): NI corrections become a form in the app.** It is
 how a researcher fixes a wrong project or mouse id, or adds the tracer, from any computer, and it
 retires the per-researcher corrections CSV. Until then the CSV stays on gnuclear and is **edited

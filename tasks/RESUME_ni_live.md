@@ -86,7 +86,45 @@ the 2026-10-06 merge).
    commits replaying over code conflicts, consider `git merge main` (one resolution pass) instead
    of a rebase (possibly the same `ingest_raw.py` hunk several times) — Ryan's call. Either way,
    the push needs explicit permission.
-2. **Get the Mac's `gjesus3` mount to stay up.** ⬅ **NEXT.** **Findings, 2026-10-06** (read-only):
+2. **Get the Mac's `gjesus3` mount to stay up.** ⬅ **NEXT.**
+
+   ✅ **DECIDED (Ryan, 2026-10-08, after talking with IT, who will not provide an account): a
+   two-part solution.**
+   - **(i) Now, until Box A:** mount gjesus3 with **Ryan's own login** and leave it mounted.
+     - The kit is in `tools/operator/ni_mac/`, staged in `S:\gnuclear\2026\Jesus\Ryan\gjesus3-mount\`.
+       Ryan runs `setup.sh` himself, because it needs his password, and `undo.sh` reverses it.
+     - It saves the password in the molecubes login keychain, mounts gjesus3 at `~/.gjesus3`
+       with `nobrowse` (hidden from Finder), and installs `~/.macmounter/gjesus3.conf`, so
+       MacMounter re-mounts it every 120 s if it drops.
+     - The launcher finds `~/.gjesus3/gjesus3-data` automatically.
+     - This is the controlled Mac write Ryan approved on 2026-10-07, with his login as the
+       credential.
+     - **Accepted trade-offs**, stated to Ryan on 2026-10-08:
+       - Anyone using the shared molecubes account has Ryan's full gjesus3 rights while it
+         is mounted. The NAS logs every sync as `rtasseff`; the registry still records
+         researcher and operator.
+       - The password sits in a shared account's keychain.
+   - **(ii) After Box A:** the Mac stops mounting gjesus3 at all.
+     - Box A pulls each session through the reverse tunnel. The Mac dials Box A, and Box A's
+       `localhost:2222` is the Mac's sshd.
+     - Box A reads the researcher folders read-only (SFTP/rsync), runs the same ingest locally,
+       and writes to gjesus3 with its own setup. Box A runs Windows, so hard links work and
+       `pending_links.csv` stops filling.
+     - Then `undo.sh` removes the mount and the password from the Mac. See `BACKLOG.md`,
+       "Ingest from one place".
+
+   - **Things the setup relies on (checked 2026-10-08):**
+     - MacMounter loads only *new* `.conf` files when `~/.macmounter/` changes, so the scanner
+       mounts are untouched. Deleting the file stops its thread ("File … is gone!").
+     - **Three MacMounter copies run** (PIDs from Sep 11, 15 and 21; the platform's, not ours).
+       That is why the entry only force-unmounts a listed-but-dead mount.
+     - Over ssh the login keychain is locked ("User interaction is not allowed"), so setup
+       unlocks it with the molecubes password.
+     - It is not yet proven that `mount_smbfs -N` takes the password from the keychain. Setup
+       step 4 tests exactly that and stops if not. The fallback is a mode-600 password file read
+       at mount time.
+
+   **Findings, 2026-10-06** (read-only):
    - It was **not mounted** at 18:16. There was no reboot (uptime 25 days); `molecubes` is
      logged in at the console.
    - **No password is saved for it.** The keychain item for `GJESUS3._smb._tcp.local` has

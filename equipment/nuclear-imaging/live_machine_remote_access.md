@@ -87,7 +87,7 @@ ssh -p 2222 molecubes@localhost                      # from a WSL shell
 | **Login** | No password. The WSL key `~/.ssh/id_ed25519` (comment `rtasseff@gmail.com`) is in the box's `~/.ssh/authorized_keys`. Plain Windows `ssh` also reaches the box (see the loopback mirroring below), but it asks for the Mac's password, because the key lives in WSL. |
 | **The box** | `molecubess-iMac.local`, user `molecubes`, macOS 11.6.5. Host key ED25519 `SHA256:EAfNEV4TsBCUK22crq2CtMdZuZ1OvAw6H02A+2DKZrw`, saved in WSL's `known_hosts` as `[localhost]:2222`. |
 | **Is it up?** | `wsl -d Ubuntu -- bash -c 'nc -w 4 localhost 2222 </dev/null \| head -1'` prints `SSH-2.0-OpenSSH_8.1`. That is the **box's** sshd; WSL's own reports 9.6. On the box, `launchctl list \| grep eus.biomagune` shows the agent with a PID. |
-| **Mounts on the box** (2026-10-01) | `/Volumes/gnuclear` = `//nuclearuser@10.10.1.92/gnuclear` · `/Volumes/gnuclear2$` = `//nuclearuser@cicmgsp02/gnuclear2$` · `/Volumes/gjesus3` = `//rtasseff@GJESUS3._smb._tcp.local/gjesus3` (SMB 3.1.1). Ryan reports that the `gjesus3` mount does not stay up. It is the sync's destination, so that is tracked as a sync prerequisite in [`tasks/STATUS.md`](../../tasks/STATUS.md), not here. |
+| **Mounts on the box** (2026-10-01) | `/Volumes/gnuclear` = `//nuclearuser@10.10.1.92/gnuclear` · `/Volumes/gnuclear2$` = `//nuclearuser@cicmgsp02/gnuclear2$` · `/Volumes/gjesus3` = `//rtasseff@GJESUS3._smb._tcp.local/gjesus3` (SMB 3.1.1). Ryan reports that the `gjesus3` mount does not stay up. It is the sync's destination, so that is tracked as a sync prerequisite in [`tasks/STATUS.md`](../../tasks/STATUS.md), not here. **Cause found 2026-10-06:** no password is saved for it, so nothing re-mounts it. The interim fix (2026-10-08) is in §7. |
 
 **The rules of §3 apply to remote work too.** The box is slow and runs live acquisitions. Keep what
 runs over the tunnel light and short, and never write into its acquisition folders.
@@ -338,6 +338,17 @@ Other posture notes:
   re-tested from the workstation alone, without the acquisition box. It carries the same
   restrictions. Remove it with `rm ~/.ssh/id_ed25519_molecubes_tunnel*` and drop its
   `authorized_keys` line if that capability is no longer wanted.
+- **Interim: gjesus3 mounted with the Data Office login (✅ decided by Ryan, 2026-10-08; IT will
+  not provide an account).**
+  - **What it is:** the NI sync writes to gjesus3 from this box, so until Box A pulls the data
+    through the tunnel (§10, and `tasks/BACKLOG.md` "Ingest from one place"), gjesus3 is kept
+    mounted at `~/.gjesus3`. It uses `nobrowse`, so it is hidden from Finder.
+  - **How it stays up:** Ryan's password is in the molecubes login keychain, and MacMounter's
+    entry `~/.macmounter/gjesus3.conf` re-mounts the share when it drops.
+  - **Accepted trade-off, interim only:** anyone using the shared `molecubes` account has Ryan's
+    full gjesus3 rights while it is mounted, and his password sits in a shared account's keychain.
+  - **Install / remove:** `tools/operator/ni_mac/gjesus3_mount_setup.sh` /
+    `gjesus3_mount_undo.sh`, which Ryan runs himself. Run the undo when Box A takes over.
 
 ---
 
