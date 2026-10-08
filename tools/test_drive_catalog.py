@@ -83,6 +83,10 @@ def main():
     check(f({}, {"LSM"}) == "LSM9" and cat.fingerprint(ref, [], ["LSM"], "")[1].startswith("stand-key"), "LSM key alone -> LSM9 via stand-key rule")
     check(f({"4661000718"}, {"Pollux", "UprightFixedStage"}, "Axioscan 7") == "ZWSI", "AxioScan 7")
     check(f({"784053"}, {"Upright"}, "Axio Imager.Z2") == "EXTERNAL:AxioImagerZ2", "external Axio Imager.Z2")
+    check(f({"4661000340"}, {"Pollux", "UprightFixedStage"}, "Axioscan 7") == "EXTERNAL:Axioscan7-Biodonostia",
+          "Biodonostia's Axioscan 7: told from our ZWSI by its serial alone")
+    check(f({"4661000341"}, {"Pollux", "UprightFixedStage"}, "Axioscan 7") == "unknown",
+          "another Axioscan 7 serial is neither ours nor Biodonostia's")
     check(f(set(), {"Inverted"}) == "CELL", "Cell Observer: no serial, keys exactly {Inverted}")
     check(f(set(), {"Inverted", "SampleFinder"}) == "unknown", "extra stand key -> unknown")
     check(f({"999"}, {"Inverted"}) == "unknown", "a serial we do not know is never CELL")

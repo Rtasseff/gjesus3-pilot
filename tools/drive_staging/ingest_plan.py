@@ -89,8 +89,8 @@ NAS = r"J:\gjesus3-data"
 GOPTICAL = r"S:\goptical\GOpticalUsers data\AxioScan"
 SEVENZIP = r"C:\Program Files\7-Zip\7z.exe"
 MFB_RE = re.compile(r"^MFB[_-]([A-Za-z]+)[_-]([^_]+)[_-]([^_]+)[_-]")
-XMIC_MODEL = "Axio Imager.Z2"
-XMIC_SOURCE = "collaborator:Charite"
+XMIC_MODEL = "Axio Imager.Z2"            # rebound per profile (use_profile): the external microscope's model,
+XMIC_SOURCE = "collaborator:Charite"      # written literally, and its data_source
 RESAVE_SIZE_TOL = 150_000      # bytes: a same-size twin is a plain re-save
 # characters: the engine globs and opens farm files WITHOUT the \\?\ prefix, and LongPathsEnabled is 0 on
 # the workstation, so a farm file path must stay within MAX_PATH (260 with the terminating NUL = 259
@@ -129,6 +129,13 @@ _D3_NOTE = ("Historical drive ingest 2026 ({label}); project / researcher / oper
 
 D3_ANALYSIS = r"D:\projects\gjesus3\drive3_analysis"
 D3_STREAM = r"D:\projects\gjesus3\drive3_streams\czi"
+D3X_STREAM = r"D:\projects\gjesus3\drive3_streams\xmic"
+# drive 3's Biodonostia Axioscan (tasks/drive3_foreign_raw_gate.md): Irene's answer of 2026-10-08 (question 9) is
+# recorded on every row, since the operator field stays blank (no folder names her, and her surname is unknown).
+_D3X_NOTE = ("Historical drive ingest 2026 ({label}); external instrument: ZEISS Axioscan 7 #4661000340 at "
+             "Biodonostia, where Elena (a PhD student of the group co-supervised at Biodonostia; surname not "
+             "recorded) scanned M. Jesus's slides, with no formal collaboration (Irene, 2026-10-08); "
+             "project / subject decided per file before ingest (tasks/drive3_foreign_raw_gate.md). Claim: {claim}.")
 
 PROFILES = {
     "drives_2026-09": {
@@ -206,10 +213,56 @@ PROFILES = {
         "review_doc": "tasks/drive3_czi_gate.md",
         "runbook": "tasks/drive3_czi_gate.md",
     },
+    # The same drive's scans from Biodonostia's Axioscan 7 #4661000340, as XMIC (the Charite precedent of drives
+    # 1+2). Stream C's inputs and rules, unchanged; what differs is the instrument (A1's table predates the
+    # reference entry, so its rows are re-fingerprinted against the reference: `refingerprint`), the XMIC model and
+    # source, the note, the pilot's size, and the same-acquisition facts: these files are stored JPEG XR
+    # compressed, which c_groups.py refuses, so the facts come from drive3/x_groups.py (stored tile payloads).
+    "drive3x_2026-10": {
+        "title": "M. Jesus's drive (MJesus-MFB, WD WX22D623YP29): the Biodonostia Axioscan 7 scans, as XMIC",
+        "staging": r"J:\_staging_drive3_MJ",     # READ-ONLY: never written by any command
+        "cat": os.path.join(D3X_STREAM, "catalog"),
+        "codes": os.path.join(D3_ANALYSIS, "a2", "claims"),
+        "out": os.path.join(D3X_STREAM, "plan"),
+        "farm": os.path.join(D3X_STREAM, "farm"),
+        "extract": os.path.join(D3X_STREAM, "_extract_unused"),
+        "local": os.path.join(D3X_STREAM, "local"),
+        "manifest": os.path.join(D3_ANALYSIS, "drive3_manifest.csv"),
+        "a1_files": os.path.join(D3_ANALYSIS, "a1", "microscopy_files.csv"),
+        "config_dir_rel": "tools/configs/drives3x_2026-10",
+        "config_prefix": "drives3x_",
+        "batch_prefix": "X",
+        "batch_cap": 250 * 10**9,
+        "scratch_root": os.path.join(D3X_STREAM, "rehearsal_nas"),
+        "drives": {"D3": ("drive3", "drive3_MJesus-MFB", "drive3_MJesus_WX22D623YP29")},
+        "instruments": {"EXTERNAL:Axioscan7-Biodonostia": "XMIC"},
+        "refingerprint": True,
+        "deprioritised_tops": ("biomaGUNE MJ",),
+        "operator_tops": set(),
+        "people_by_folder": (),           # stream C's practice: a person only from a folder that names one; none here
+        "new_project": None,
+        "xmic_expected": 83,
+        "xmic_model": "Axioscan 7",       # the stand name the file carries (as production's ZWSI rows)
+        "xmic_source": "collaborator:Biodonostia",
+        "pilot": {"per_project": 1, "per_project_no_subject": 1, "no_project": 2, "flagged": 2, "deepest": 1},
+        "note": _D3X_NOTE,
+        "a_claim_text": "",
+        "resave_decisions": {},
+        "derived_decisions": {},
+        "same_acq_mode": "decide",
+        "provenance": "tasks/drive3_foreign_raw_ingest_provenance.csv",
+        "review_doc": "tasks/drive3_foreign_raw_gate.md",
+        "runbook": "tasks/drive3_foreign_raw_gate.md",
+    },
 }
 DEFAULT_PROFILE = "drives_2026-09"
 PROFILE_NAME = None
 PROFILE = None
+# the pilot batch (pilot_selection): per project, the smallest files with a subject link and without; the smallest
+# files with no project; the smallest same-acquisition groups (members); the deepest farm paths. A profile may
+# shrink it ("pilot"): stream C's pilot was 42 small files, an Axioscan file is 0.3-3 GB.
+PILOT_DEFAULT = {"per_project": 4, "per_project_no_subject": 2, "no_project": 8, "flagged": 6, "deepest": 6}
+PILOT = dict(PILOT_DEFAULT)
 
 
 def use_profile(name):
@@ -218,6 +271,7 @@ def use_profile(name):
     global CONFIG_DIR, CONFIG_DIR_REL, CONFIG_PREFIX, BATCH_PREFIX, BATCH_CAP, SCRATCH_ROOT, DRIVES
     global INSTRUMENTS, DEPRIORITISED_TOPS, BACKUP_TOP, OPERATOR_TOPS, NEW_PROJECT, NOTE
     global RESAVE_DECISIONS, DERIVED_DECISIONS, SAME_ACQ_MODE, PROVENANCE, DRIVE_ORDER, PEOPLE_BY_FOLDER
+    global XMIC_MODEL, XMIC_SOURCE, PILOT
     if name not in PROFILES:
         raise SystemExit(f"unknown profile {name!r}; known: {sorted(PROFILES)}")
     p = PROFILES[name]
@@ -236,6 +290,9 @@ def use_profile(name):
     PEOPLE_BY_FOLDER = p.get("people_by_folder", ())
     RESAVE_DECISIONS, DERIVED_DECISIONS = p["resave_decisions"], p["derived_decisions"]
     SAME_ACQ_MODE, PROVENANCE = p["same_acq_mode"], p["provenance"]
+    XMIC_MODEL = p.get("xmic_model", "Axio Imager.Z2")
+    XMIC_SOURCE = p.get("xmic_source", "collaborator:Charite")
+    PILOT = dict(PILOT_DEFAULT, **p.get("pilot", {}))
     return p
 
 
@@ -580,12 +637,18 @@ def same_acquisition_actions(plan_rows, prod_rows, decisions):
             out[r] = (ACTION_HOLD, p, f"production {p} holds {what} of this file under the same name and second: "
                                       "repair its primary from this file (on approval); no second ACQ-ID")
             done.add(r)
-    # 1b. a planned truncated copy (incomplete subset) under the same name as its complete parent
+    # 1b. a planned truncated copy (incomplete subset) under the same name as its complete parent -- or (2026-10-08,
+    #     the Biodonostia scans) as a complete pixel-identical copy of that parent: `2025_02_14__5234.czi` stops after
+    #     1.46 of the 2.31 GB of the escaner copy of that name, a re-save of the root `ID1_0424_H+L.czi`
     for m in decisions:
         r = par[m]
-        if m in plan and m in derived and not whole[m] and name[m] == name[r] and whole[r]:
-            out[m] = (ACTION_DROP, r, f"a truncated copy of {tag(r)} (same name and second): the complete one is "
-                                      "the acquisition")
+        if not (m in plan and m in derived and not whole[m] and r in decisions and whole[r]):
+            continue
+        twins = [x for x in decisions if par[x] == r and cls[x] in IDENTICAL_CLASSES and whole[x]]
+        same = [r] if name[r] == name[m] else [x for x in twins if name[x] == name[m]]
+        if same:
+            out[m] = (ACTION_DROP, r, f"a truncated copy of {tag(same[0])} (same name and second): the complete one "
+                                      "is the acquisition")
             done.add(m)
     # 2. identical sets: a root and its pixel-identical copies; the kept member and its same-name re-saves.
     #    Among same-name twins the kept one is: a complete file; then, when the twins differ only by a
@@ -1051,11 +1114,37 @@ def out_of_scope_reason(r):
     return f"instrument {r['instrument'] or '?'} is not in this stream"
 
 
+_REF = None
+
+
+def a1_instrument(r):
+    """The instrument of one A1 header row. A1 fingerprinted every .czi against the reference as it stood on
+    2026-10-06; a profile with `refingerprint` applies the CURRENT reference (tools/reference/
+    microscopy_instruments.yaml, the catalog's rule) to A1's own serials / stand keys / stand, so an entry
+    added since (Biodonostia's Axioscan, 2026-10-08) names its rows. A row A1 had already named must come out
+    the same, or the reference changed under it: stop."""
+    if not PROFILE.get("refingerprint"):
+        return r["instrument"]
+    global _REF
+    import catalog
+    if _REF is None:
+        _REF = catalog.load_instruments()
+    split = lambda v: [x for x in (v or "").split(";") if x]  # noqa: E731
+    inst = catalog.fingerprint(_REF, split(r["serials"]), split(r["stand_keys"]), r["stand"])[0]
+    if r["instrument"] != "unknown" and inst != r["instrument"]:
+        raise SystemExit(f"the reference re-names an instrument A1 had named ({r['instrument']} -> {inst}): "
+                         f"{r['relpath']}")
+    return inst
+
+
 def load_copies_drive3():
     """Every copy of a drive-3 .czi in scope, with its claim. Checks A1's sha256/size against the
     drive manifest (A1 is a derived table; the manifest is the staging record)."""
     man = load_manifest(MANIFEST)
     a1 = list(rcsv(A1_FILES))
+    for r in a1:
+        if r["ext"].lower() == ".czi":
+            r["instrument"] = a1_instrument(r)
     want = {r["relpath"] for r in a1}
     fclaims = {}
     for r in rcsv(os.path.join(CODES, "file_claims.csv")):
@@ -1158,7 +1247,8 @@ def contents_to_expected(copies, claim_token, prod, excluded, conflicts):
             "researcher": canon["researcher"], "operator": canon["operator"], "subject_id": subject,
             "subject_alias": alias, "subject_animal": animal,
             "sample_id": canon["path"].split("\\")[-1], "sample_type": "tissue" if subject else "",
-            "data_source": "internal", "instrument_model": canon["stand"],
+            "data_source": XMIC_SOURCE if inst == "XMIC" else "internal",
+            "instrument_model": XMIC_MODEL if inst == "XMIC" else canon["stand"],
             "notes": NOTE.format(label=label, claim=claim_txt),
             "conflict": conflict_note or canon["conflict"],
             "n_copies": len(cs),
@@ -1197,12 +1287,6 @@ def cut_even(rows, cap):
     return chunks
 
 
-PILOT_PER_PROJECT = 4        # with a subject link; and 2 without, where a project has such files
-PILOT_NO_PROJECT = 8
-PILOT_FLAGGED = 6
-PILOT_DEEPEST = 6
-
-
 def pilot_selection(expected):
     """The first batch: a few small files of every kind the ingest handles, so that the rehearsal and the
     first production window exercise every code path cheaply -- each project's smallest files with and
@@ -1213,20 +1297,20 @@ def pilot_selection(expected):
     pick = []
     for p in sorted({e["project"] for e in rows if e["project"]}):
         pe = [e for e in rows if e["project"] == p]
-        pick += small([e for e in pe if e["subject_id"]])[:PILOT_PER_PROJECT]
-        pick += small([e for e in pe if not e["subject_id"]])[:2]
-    pick += small([e for e in rows if not e["project"]])[:PILOT_NO_PROJECT]
+        pick += small([e for e in pe if e["subject_id"]])[:PILOT["per_project"]]
+        pick += small([e for e in pe if not e["subject_id"]])[:PILOT["per_project_no_subject"]]
+    pick += small([e for e in rows if not e["project"]])[:PILOT["no_project"]]
     groups = collections.defaultdict(list)            # whole groups, so a group is exercised end to end
     for e in rows:
         if e.get("acq_group"):
             groups[e["acq_group"]].append(e)
     taken = 0
     for g in sorted(groups, key=lambda g: (sum(int(e["size"]) for e in groups[g]), g)):
-        if taken >= PILOT_FLAGGED:
+        if taken >= PILOT["flagged"]:
             break
         pick += groups[g]
         taken += len(groups[g])
-    pick += sorted(rows, key=lambda e: (-e["farm_path_len"], int(e["size"]), e["original_name"]))[:PILOT_DEEPEST]
+    pick += sorted(rows, key=lambda e: (-e["farm_path_len"], int(e["size"]), e["original_name"]))[:PILOT["deepest"]]
     return {e["sha256"] for e in pick}
 
 
@@ -1248,10 +1332,57 @@ def load_readings(config_dir=None):
     return list(rcsv(p)) if os.path.isfile(p) else []
 
 
-def apply_readings(expected, readings):
-    """Fill the project (and the subject) of the (C) / no-claim rows an ACCEPTED reading covers. Returns
-    {reading: rows applied} and, for the proposed (not accepted) ones, {reading: rows it would fill}."""
+# Label readings (the XMIC profile, 2026-10-08): a whole-slide scanner photographs the slide's paper label and stores
+# the photo inside the .czi (attachment `Label`), so the file itself says what the slide is. <config dir>\
+# label_readings.csv holds, per distinct content, the label as read (by a person, from the contact sheets), the
+# protocol and animal it names, and the reading that would use it. Kind `label` fills a (C) / no-claim row; kind
+# `label-overrule` replaces a CONFIRMED folder claim the file's own label contradicts. Both apply ONLY when their
+# row in readings.csv says `accepted`, and only where the label names a protocol and an animal.
+LABEL_COLS = ["n", "sha256", "relpath", "label", "protocol", "animal", "reading", "note"]
+
+
+def load_labels(config_dir=None):
+    p = os.path.join(config_dir or CONFIG_DIR, "label_readings.csv")
+    return {r["sha256"]: r for r in rcsv(p)} if os.path.isfile(p) else {}
+
+
+def apply_label_readings(expected, readings, labels):
+    """The label kinds of apply_readings (pure: tested). Returns (applied, would) Counters."""
     applied, would = collections.Counter(), collections.Counter()
+    kinds = {r["reading"]: r for r in readings if r["kind"] in ("label", "label-overrule")}
+    if not kinds or not labels:
+        return applied, would
+    for e in expected:
+        lab = labels.get(e.get("sha256"))
+        if not lab or lab["reading"] not in kinds or not (lab["protocol"] and lab["animal"]):
+            continue
+        r = kinds[lab["reading"]]
+        code, animal = lab["protocol"], str(int(lab["animal"]))
+        project = f"AE-biomaGUNE-{code}"
+        if r["kind"] == "label" and e["verdict"] not in ("C", "NO-CLAIM"):
+            continue
+        if r["kind"] == "label-overrule" and not (e["verdict"] == "CONFIRMED" and e["project"] != project):
+            continue
+        if r["status"] != "accepted":
+            would[r["reading"]] += 1
+            continue
+        was = e["verdict"] if e["verdict"] != "CONFIRMED" else f"CONFIRMED {e['project']}"
+        e.update(project=project, verdict=f"READING-{r['reading']}", subject_id=f"{animal}-AE-biomaGUNE-{code}",
+                 subject_alias=code, subject_animal=animal, sample_type="tissue")
+        e["notes"] = NOTE.format(label=DRIVES[e["drive"]][1],
+                                 claim=f"{was}, {'filled' if r['kind'] == 'label' else 'replaced'} by reading "
+                                       f"{r['reading']} (accepted {r['decided']}): the slide label in the file reads "
+                                       f"'{lab['label']}'")
+        applied[r["reading"]] += 1
+    return applied, would
+
+
+def apply_readings(expected, readings, labels=None):
+    """Fill the project (and the subject) of the (C) / no-claim rows an ACCEPTED reading covers. Returns
+    {reading: rows applied} and, for the proposed (not accepted) ones, {reading: rows it would fill}. The label
+    kinds (above) read `labels` ({sha256: label_readings row}); the folder kinds read the reading's prefix."""
+    applied, would = apply_label_readings(expected, readings, labels or {})
+    readings = [r for r in readings if r["kind"] not in ("label", "label-overrule")]
     for e in expected:
         if e["verdict"] not in ("C", "NO-CLAIM"):
             continue
@@ -1315,7 +1446,8 @@ def plan_drive3(args):
     excluded, conflicts = [], []
     expected, contents = contents_to_expected(copies, claim_token, prod, excluded, conflicts)
     n_candidates = len(expected)
-    readings_applied, readings_proposed = apply_readings(expected, load_readings())
+    cdir = getattr(args, "config_dir", None) or CONFIG_DIR     # --config-dir: a variant's readings (the gate's L1/L2)
+    readings_applied, readings_proposed = apply_readings(expected, load_readings(cdir), load_labels(cdir))
     people_filled = apply_people(expected)
     print(f"people by folder: {dict(people_filled)}", file=sys.stderr)
 
@@ -1513,19 +1645,19 @@ def plan_drive3(args):
             raise SystemExit(f"farm path {e['farm_path_len']} > {MAX_FARM_PATH} characters: {e['original_name']}")
     pilot = pilot_selection(expected)
 
-    def bucket(e):
+    def bucket(e):       # stream C: CELL-pilot, CELL-project, ...; the XMIC profile: XMIC-pilot, ...
         if e["top"] in DEPRIORITISED_TOPS:
-            return "CELL-biomaGUNE-MJ"
+            return f"{e['instrument']}-biomaGUNE-MJ"
         if e["sha256"] in pilot:
-            return "CELL-pilot"
-        return "CELL-project" if e["project"] else "CELL-noproject"
+            return f"{e['instrument']}-pilot"
+        return f"{e['instrument']}-project" if e["project"] else f"{e['instrument']}-noproject"
 
     by_bucket = collections.defaultdict(list)
     for e in expected:
         by_bucket[bucket(e)].append(e)
-    order = {"CELL-pilot": 0, "CELL-project": 1, "CELL-noproject": 2, "CELL-biomaGUNE-MJ": 3}
+    order = {"pilot": 0, "project": 1, "noproject": 2, "biomaGUNE-MJ": 3}
     chunks = []
-    for b in sorted(by_bucket, key=lambda b: order[b]):
+    for b in sorted(by_bucket, key=lambda b: (order[b.split("-", 1)[1]], b)):
         es = sorted(by_bucket[b], key=lambda e: (e["project"], e["original_name"]))
         chunks += [(b, c) for c in cut_even(es, BATCH_CAP)]
     batches = []
@@ -1576,6 +1708,25 @@ def plan_drive3(args):
     s["verdicts"] = dict(collections.Counter(e["verdict"] for e in expected))
     s["projects"] = dict(collections.Counter(f"{e['project']}|{e['project_id']}" for e in expected if e["project"]))
     s["max_farm_path"] = max((e["farm_path_len"] for e in expected), default=0)
+    labels = load_labels(cdir)
+    if labels:     # the XMIC profile: every planned row's project and subject against its slide's own label
+        lab_rows = []
+        for e in expected:
+            lab = labels.get(e["sha256"])
+            if lab is None:
+                continue
+            want = ((f"AE-biomaGUNE-{lab['protocol']}", f"{int(lab['animal'])}-AE-biomaGUNE-{lab['protocol']}")
+                    if lab["protocol"] and lab["animal"] else None)
+            got = (e["project"], e["subject_id"])
+            agree = ("label names no protocol" if want is None else "agree" if got == want else
+                     "blank, label names one" if not e["project"] else "DISAGREE")
+            lab_rows.append({"original_name": e["original_name"], "batch": e["batch"], "verdict": e["verdict"],
+                             "project": e["project"], "subject_id": e["subject_id"], "label": lab["label"],
+                             "label_project": want[0] if want else "", "label_subject": want[1] if want else "",
+                             "result": agree})
+        wcsv(os.path.join(args.out, "label_check.csv"), list(lab_rows[0]) if lab_rows else ["original_name"],
+             lab_rows)
+        s["label_check"] = dict(collections.Counter(r["result"] for r in lab_rows))
     with open(os.path.join(args.out, "plan_summary.json"), "w", encoding="utf-8") as f:
         json.dump(s, f, indent=1, ensure_ascii=False)
     print(json.dumps(s, indent=1, ensure_ascii=False))
@@ -1926,9 +2077,9 @@ YAML_D3 = """\
 # M. Jesus's drive (drive 3, MJesus-MFB, WD WX22D623YP29) -- batch {batch}: {instrument}, {files} files,
 # {gb} GB ({bucket}). Projects: {projects}
 #
-# GENERATED by tools/drive_staging/ingest_plan.py --profile drive3_2026-10 configs ({generated}). Do not
+# GENERATED by tools/drive_staging/ingest_plan.py --profile {profile} configs ({generated}). Do not
 # edit by hand: change the plan and re-generate. The gate, its decisions and the production procedure:
-# tasks/drive3_czi_gate.md. Rules: Ryan 2026-09-29 (claims, instrument by device serial), 2026-09-30
+# {review_doc}. Rules: Ryan 2026-09-29 (claims, instrument by device serial), 2026-09-30
 # (this drive), 2026-10-01 (raw vs derivative).
 #
 # staging_dir is a HARD-LINK FARM on D: (ingest_plan.py farm) into a LOCAL MIRROR of the staged copy
@@ -1989,6 +2140,13 @@ EXTRA_XMIC = """#
 # XMIC = the Charite Axio Imager.Z2 (device serial 784053): external data, like XMRI. The
 # instrument model is written literally; data_source records the origin.
 """
+EXTRA_XMIC_D3 = """#
+# XMIC = Biodonostia's ZEISS Axioscan 7 (device serial 4661000340; ours, ZWSI, is 4661000718): external
+# data, like XMRI and the Charite Axio Imager.Z2. A PhD student of the group scanned M. Jesus's slides there,
+# with no formal collaboration (Irene, 2026-10-08). The instrument model is written literally; data_source records
+# the origin; the operator stays blank (no folder names her; her surname is unknown): each row's note says who
+# scanned it.
+"""
 EXTRA_CLOSED = """#
 # !! TARGET PROJECT IS CLOSED (folder deleted 2026-07-14). Do NOT run until the coordinator has
 # decided to reopen it: Step 12 would otherwise re-create projects/<name>/raw_linked/ alone.
@@ -2021,9 +2179,13 @@ def cmd_configs(args):
         if SAME_ACQ_MODE == "decide":
             text = YAML_D3.format(
                 batch=b["batch"], instrument=inst, files=b["files"], gb=b["gb"], bucket=b["bucket"],
-                projects=b["projects"], generated=generated, cases=cases,
-                extra=EXTRA_BMJ if b["bucket"] == "CELL-biomaGUNE-MJ" else "",
-                staging=staging, model="discovered.czi_microscope_name", data_source="internal")
+                projects=b["projects"], generated=generated, cases=cases, profile=PROFILE_NAME,
+                review_doc=PROFILE["review_doc"],
+                extra=(EXTRA_BMJ if b["bucket"] == "CELL-biomaGUNE-MJ" else "")
+                + (EXTRA_XMIC_D3 if inst == "XMIC" else ""),
+                staging=staging,
+                model=f'"{XMIC_MODEL}"' if inst == "XMIC" else "discovered.czi_microscope_name",
+                data_source=f'"{XMIC_SOURCE}"' if inst == "XMIC" else "internal")
         else:
             extra = EXTRA_0118 if b["bucket"] == "CELL-0118" else EXTRA_XMIC if inst == "XMIC" else \
                 EXTRA_CLOSED if b["bucket"].startswith("CELL-closed") else ""
@@ -2096,10 +2258,12 @@ def main():
     ap.add_argument("--profile", default=DEFAULT_PROFILE, choices=sorted(PROFILES))
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--nas", default=NAS, help="production NAS root, read-only here")
+    ap.add_argument("--farm", default=None, help="another farm root (a variant's check); default the profile's")
     sub = ap.add_subparsers(dest="cmd", required=True)
     g = sub.add_parser("goptical")
     g.add_argument("--hash", action="store_true")
-    sub.add_parser("plan")
+    pl = sub.add_parser("plan")
+    pl.add_argument("--config-dir", default=CONFIG_DIR, help="where readings.csv / label_readings.csv are read")
     sub.add_parser("extract")
     lo = sub.add_parser("localize")
     lo.add_argument("--rehash", action="store_true", help="re-hash files already in the local mirror")
@@ -2119,6 +2283,9 @@ def main():
     sc.add_argument("--root", default=SCRATCH_ROOT)
     sc.add_argument("--batch", action="append")
     args = ap.parse_args()
+    if args.farm:
+        global FARM
+        FARM = args.farm
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
     {"goptical": cmd_goptical, "plan": cmd_plan, "extract": cmd_extract, "localize": cmd_localize,

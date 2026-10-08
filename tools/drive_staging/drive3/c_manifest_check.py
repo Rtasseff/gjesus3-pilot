@@ -35,7 +35,7 @@ DS = os.path.dirname(HERE)
 sys.path.insert(0, DS)
 import ingest_plan as P  # noqa: E402
 
-P.use_profile("drive3_2026-10")
+P.use_profile("drive3_2026-10")        # the default; --profile drive3x_2026-10 for the Biodonostia XMIC batches
 LABEL = P.DRIVES["D3"][1]
 
 
@@ -48,7 +48,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--nas-root", required=True)
     ap.add_argument("--batch", action="append", required=True)
+    ap.add_argument("--profile", default="drive3_2026-10", choices=[p for p in P.PROFILES if p.startswith("drive3")])
     args = ap.parse_args()
+    P.use_profile(args.profile)
     for s in (sys.stdout, sys.stderr):
         s.reconfigure(encoding="utf-8", errors="replace")
     nas = args.nas_root

@@ -1,0 +1,4 @@
+batch,bucket,instrument,files,gb,projects,members,auto_create,needs_decision
+X01,XMIC-pilot,XMIC,5,2.8,AE-biomaGUNE-0424;AE-biomaGUNE-0522;AE-biomaGUNE-1019,0,N,
+X02,XMIC-project,XMIC,23,41.3,AE-biomaGUNE-0424;AE-biomaGUNE-0522;AE-biomaGUNE-1019,0,N,
+X03,XMIC-noproject,XMIC,55,69.8,(none),0,N,
