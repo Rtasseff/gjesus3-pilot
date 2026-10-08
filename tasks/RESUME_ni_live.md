@@ -315,7 +315,7 @@ the 2026-10-06 merge).
    - **Verified read-only from the workstation:** every check in
      `scratchpad/verify_irene_sync.py` passes (registry +95, all live rows; routing as previewed;
      every folder complete; links queued; derived files with provenance tied to real ACQ-IDs).
-     **`verify_checksums` 95/95 PASS.** validate_registries: see below.
+     **`verify_checksums` 95/95 PASS.** **`validate_registries`: 0 errors** over all of production (20:48). Its 36,847 warnings are the non-blocking enrichment kind; for the new rows they are `pending-db` subjects and `is_control` null, as expected.
    - **Coordination: one registry writer at a time.** The coordinator session `gj3-handoff` runs
      the drive-3 XMIC ingest on 2026-10-08 20:05–21:30 and the MRI archive ingest on Friday
      07:00–10:30. NI makes no production writes in those windows, and `gj3-handoff` messages
