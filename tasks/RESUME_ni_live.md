@@ -217,7 +217,59 @@ the 2026-10-06 merge).
    production, so treat each run as a production operation. ✅ **The platform manager (Unai)
    has OK'd running the sync tests on the box remotely** (2026-10-02, asked by Ryan). The rest of
    §3 still applies. Schedule runs outside acquisitions, because the box is slow.
-4. **Merge; operators start using it** (`tools/operator/NI_LIVE_RUNBOOK.md`).
+3b. **🧹 CLEAN-UP PHASE (Ryan, 2026-10-08). Do it after step 3's first real sync, and do not
+   skip it.**
+   - **The rule:** lose nothing that works, especially setup steps Box A will repeat, but stop
+     littering. Nothing is deleted until its content is preserved in a repo (this one or
+     WorkstationOps). Deletions on gnuclear cover only files we wrote, listed group by group for
+     Ryan's OK.
+   - **Inventory of gnuclear `2026\Jesus\Ryan\` (2026-10-08):**
+     - **Keep:**
+       - `gjesus3-mount\`. Its `undo.sh` is needed until Box A; the source is
+         `tools/operator/ni_mac/`.
+     - **Preserve first, then remove:**
+       - `tunnel.txt`, the field card rev4. Rev5 follow-ups are pending (§9 of the remote-access
+         doc). It belongs in WorkstationOps or `equipment/`, because Box A repeats it.
+       - `tunnel_notes.txt`, the visit notes, summarised in remote-access §9. Archive them
+         verbatim.
+       - `eus.biomagune.mfb.tunnel.plist`. Check that WorkstationOps holds the same file.
+       - `ni-live-test\notes.txt`, Ryan's August notes. They hold the "dedicated account"
+         reasoning and the unified partial-ingest checker idea, which is in BACKLOG.
+     - **Check, then remove:**
+       - `ni-live-test\` (249 files): the June kit, a stale `tools/` copy, `RUN_THE_TEST.md`
+         (superseded by `NI_LIVE_RUNBOOK.md`), `ni_live_irene.yaml`, `p_5_output.txt`, and
+         `corrections_irene*.csv` / `review_irene.csv`. **Those hold real reviewed Irene
+         sessions; consider seeding her real corrections file from them before deleting.**
+       - Top level: `review_irene.csv`, `p0_p2_output(s).txt`, and `datapath.txt` (38 MB from
+         June; find out what it is first).
+     - **Remove once the sync's production home exists:**
+       - `ni-sync-test\` (550 files): the test kit, the scratch `nas\`, `nas2\` and `nas3\`, and
+         the synthetic `box\`.
+       - `ni_corrections_ryan.csv` (synthetic sessions).
+   - **Elsewhere:**
+     - **The Mac:** the interim mount (`~/.gjesus3`, `~/.macmounter/gjesus3.conf`, the keychain
+       item) stays until Box A, then goes via `undo.sh`.
+     - **Git:** prune the local `backup/ni-live-*` tags after the merge into `main`.
+     - **The remote:** it still holds the August pre-rebase history. The force-push was blocked
+       for the agent on 2026-10-08; Ryan's call.
+     - **The `ni-tunnel-live` worktree** is merged, but it belongs to its own session.
+     - **`J:\gjesus3-sandbox`:** its shared registry is stale (§7, `project_hint` header). That
+       is not ours to purge without asking.
+   - **Docs:**
+     - Shorten this RESUME (475 lines) to a current-state page. History goes to the CHANGELOG.
+     - Move `ni_live_onbox_test_review.md` (661 lines), `ni_live_operator_plan.md` (397) and
+       `ni_live_operator_flow_plan.md` (197) to `tasks/archive/` with pointers, now that the work
+       they planned is done and verified. Nothing is deleted.
+   - **❓ Decision needed before roll-out:** the sync code's **production home** on gnuclear,
+     i.e. where researchers' `ni-ingest` lives.
+     - It must sit under `<year>\<group>\`, so `resolve_path` puts each researcher's corrections
+       file in their own folder. For example `2026\Jesus\_gjesus3-sync\`.
+     - At year-end, staging under the new year changes nothing for existing files, which are
+       found in any year.
+4. **Merge; operators start using it** (`tools/operator/NI_LIVE_RUNBOOK.md`). The merge into
+   `main` can come before 3b: merging deploys nothing, because researchers run the copy staged on
+   gnuclear. Ryan is aiming for 2026-10-09, while `main` finishes its own work. Merge `main` into
+   this branch again first; it was 37 behind `origin/main` on 2026-10-08.
 5. **Then, not now:** the Box A port, which takes the tunnel along, make-before-break through the
    live tunnel with no visit (B2, decided 2026-10-01). After it, **one ingest web app on Box A**
    for every instrument: microscopy via network drives, MRI via SFTP, NI pulled through the
