@@ -2269,6 +2269,16 @@ mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadat
 
 - [ ] A path-level mapping in `nonraw_placement.py remap` (with a test), then move the 165.
 
+## 🔹 LOW — the M. Jesús drive: adjust by hand if late answers come (2026-10-08)
+
+Ryan: no more answers are likely, so the drive was finished on what we knew; anything that arrives later is changed by
+hand. Open: `tasks/drive3_questions_for_mjesus.md` Q2 (`1121`'s `Revision`), 6, 7, 8, 11–14; Q9's `1422` protocol and
+Irene's offer to review which `0522` Biodonostia scans are worth keeping; Q10's Leica protocol; the `CNIC-HEARDS`
+owner. The revised `0522`/`0619`/`0424` masks are in Jesús and Irene's shared OneDrive (needed before CAND-A).
+
+- [ ] On an answer: re-assign the project (the 2b runbook for placed material; a project reassignment for acquisitions),
+  update the README note or the dataset, and log it in the CHANGELOG.
+
 ## 🔹 LOW — 106 drive-3 exams hold converted DICOM where the archive has the scanner's own (2026-10-08)
 
 The archive check (`tasks/drive3_mri_archive_check.md`) found six `0619` animals of 2021-03-22 (106 exams) whose production
