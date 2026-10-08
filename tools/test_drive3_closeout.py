@@ -99,6 +99,7 @@ DRIVE_FILES = {   # relpath -> bytes (b"" = zero-byte)
     BMJ + "Proteomica\\Muestras\\IMG_20220905_135733.jpg": b"photo",       # personal
     "Microscopio\\resave.czi": b"czi-resave-of-prod",                      # czi-resave-of-production
     "Microscopio\\twin.czi": b"czi-resave-within",                         # czi-resave-within-drive
+    "MRI\\S4\\7\\acqp": b"acqp-S4-7",                                      # a placeholder's file, once placed: placed
 }
 BLOCKING = {   # relpath -> bytes: each must come out BLOCKER
     "MRI\\S1\\5\\pdata\\2\\2dseq": b"2dseq-S1-5-r2",                       # recon 2 not in /raw/
@@ -111,6 +112,7 @@ BLOCKING = {   # relpath -> bytes: each must come out BLOCKER
     "Pili y Mili\\docs\\half.zip": None,                                   # a zip with a member not kept
     "Otros\\notes\\IMG_20220905_135733.jpg": b"photo-elsewhere",           # the personal screen is biomaGUNE MJ's only
     "Otros\\notes\\lost.txt": b"lost",                                     # nothing at all
+    "MRI\\S4\\7\\fid": b"kspace-S4-7",                                     # a DICOM-less placeholder's k-space, not placed
 }
 
 
@@ -146,6 +148,7 @@ def build(tmp, with_blockers=True):
          {"ACQ-20200101-MRI-002.data/recon1_frame01.dcm": b"S2-3-production-bytes"}),
         ("ACQ-20200101-MRI-003", "MRI", "S3__2", "/raw/DICOM/2020/2020-01/ACQ-20200101-MRI-003/",
          {"ACQ-20200101-MRI-003.data/recon1_frame01.dcm": b"S3-2-production-bytes"}),
+        ("ACQ-20200101-MRI-004", "MRI", "S4/7", "/raw/DICOM/2020/2020-01/ACQ-20200101-MRI-004/", {}),   # placeholder
         ("ACQ-20230101-CELL-001", "CELL", "x/parent.czi", "/raw/MICROSCOPY/2023/2023-01/ACQ-20230101-CELL-001/",
          {"ACQ-20230101-CELL-001.czi": b"czi-parent"}),
         ("ACQ-20230101-CELL-002", "CELL", "x/kept-twin.czi", "/raw/MICROSCOPY/2023/2023-01/ACQ-20230101-CELL-002/",
@@ -177,6 +180,7 @@ def build(tmp, with_blockers=True):
     place("MJesus-MFB\\docs\\copy of a.docx", "Pili y Mili\\docs\\copy of a.docx", b"doc-a")
     place("MJesus-MFB\\docs\\a.docx", "Pili y Mili\\docs\\a.docx", b"doc-a")
     place("MJesus-MFB\\dicom\\MRIm01.dcm", "MRI\\S1\\5\\pdata\\1\\dicom\\MRIm01.dcm", b"dicom-in-raw")
+    place("MJesus-MFB\\MRI\\S4\\7\\acqp", "MRI\\S4\\7\\acqp", b"acqp-S4-7")
     place("MJesus-MFB\\docs\\pack_zip\\m1.txt", "Pili y Mili\\docs\\pack.zip", b"member-1", "m1.txt")
     place("MJesus-MFB\\docs\\pack_zip\\sub\\m2.txt", "Pili y Mili\\docs\\pack.zip", b"member-2", "sub/m2.txt")
     wcsv(os.path.join(tree, "_INDEX.csv"), ["new_path", "drive", "archive", "original_path", "size", "sha256"], idx)
@@ -203,7 +207,8 @@ def build(tmp, with_blockers=True):
     wcsv(os.path.join(an, "mri_exams.csv"), ["exam_key", "class_detail"],
          [{"exam_key": "S1/5", "class_detail": "a1-identical"}, {"exam_key": "S2/3", "class_detail": "a1-identical"},
           {"exam_key": "S3/2", "class_detail": "b-export (same names, different bytes)"},
-          {"exam_key": "S9/4", "class_detail": "e-neveracquired"}])
+          {"exam_key": "S9/4", "class_detail": "e-neveracquired"},
+          {"exam_key": "S4/7", "class_detail": "b-empty-prod (pending_dicom_regen: no-source)"}])
     wcsv(os.path.join(an, "excluded.csv"), ["sha256", "instrument", "size", "reason", "detail", "copies", "path"], [
         {"sha256": sha(b"czi-resave-of-prod"), "reason": "resave-of-production",
          "detail": "resave-of-production:ACQ-20230101-CELL-001; size diff 0 B"},
@@ -288,6 +293,7 @@ def test_end_to_end():
             "Pili y Mili\\docs\\empty.txt": "zero-byte", "MRI\\S1\\5\\empty_in_raw": "zero-byte",
             BMJ + "Proteomica\\Muestras\\IMG_20220905_135733.jpg": "personal",
             "Microscopio\\resave.czi": "czi-resave-of-production", "Microscopio\\twin.czi": "czi-resave-within-drive",
+            "MRI\\S4\\7\\acqp": "placed",
         }
         want.update({r: "BLOCKER" for r in BLOCKING})
         bad = {r: (cats.get(r) or {}).get("category") for r, c in want.items() if (cats.get(r) or {}).get("category") != c}
@@ -305,6 +311,8 @@ def test_end_to_end():
         check("never handed over" in hints["Microscopio\\crop.czi"], "a stream C derivative: its hint")
         check("holds no DICOM" in hints["MRI\\S1\\5\\pdata\\2\\2dseq"], "a 2dseq-only reconstruction: its hint")
         check("no registered exam" in hints["MRI\\S9\\subject"], "a study-level file of an unregistered study: its hint")
+        check("placeholder" in hints["MRI\\S4\\7\\fid"] and "ACQ-20200101-MRI-004" in hints["MRI\\S4\\7\\fid"],
+              "a DICOM-less placeholder's k-space is never ruled out (Ryan 2026-10-08): it blocks until placed")
         n = len(BLOCKING) + 1
         check(rc == 1 and text.rstrip().endswith(f"BLOCKED: {n} files"),
               f"the verdict: BLOCKED: {n} files ({len(BLOCKING)} in no category + 1 unlisted staged file)")

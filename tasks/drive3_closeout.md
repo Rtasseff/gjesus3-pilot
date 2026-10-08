@@ -12,9 +12,10 @@ SegBioMed's beside their manifest on D: (§6).
 
 ## Verdict
 
-**`BLOCKED: 254 files`** (210.8 GB), on 2026-10-08 against live production (a fresh `/raw/` index, `--stat`, `--walk`).
-Every other file of the drive (621,715 of 621,969) is kept in gjesus3 or ruled out by a category Ryan ruled or a gate
-decided.
+**`BLOCKED: 380 files`** (210.9 GB), on 2026-10-08 against live production (a fresh `/raw/` index, `--stat`, `--walk`,
+which said `BLOCKED: 254 files`; then re-run on the same index after **Ryan's ruling of 2026-10-08 on the DICOM-less
+placeholders**, which turns their 126 drive files from "not kept" into blockers until placed). Every other file of the
+drive (621,589 of 621,969) is kept in gjesus3 or ruled out by a category Ryan ruled or a gate decided.
 
 | Blocker | Files | GB | Clears when | Expected? |
 |---|---:|---:|---|---|
@@ -22,8 +23,9 @@ decided.
 | **Stream C's `.czi` derivatives** (crops, renamed re-saves, scale-bar copies) that stream C handed to stream P in `tasks/drive3_czi_nonraw_for_stream_p.csv` (gate §5) and **no batch ever placed** | 78 | 2.46 | placed (5 into `0619` / `0522`, 72 into holding) | **no: a gap** |
 | **`m152`'s three study-level ParaVision files** (`subject`, `AdjStatePerStudy`, `ScanProgram.scanProgram`): P2 placed the study's exam folders (never acquired) in `AE-biomaGUNE-0118`, not these | 3 | 0.00 | placed beside them | **no: a gap** |
 | **A `2dseq`-only reconstruction of an exam production already held:** `20220309_111235_jrc220309_m53_0320_1_1/14` (`ACQ-20220309-MRI-070`, `AE-biomaGUNE-0320`) holds reconstruction 1 as DICOM; the drive also has reconstruction 3, as `2dseq` only. Stream M placed the 45 such reconstructions of its own exams (gate §3.2, P2); this exam was in production before stream M, so nobody did | 1 | 0.00 | placed with its `pdata\3\` (6 files), as P2 did | **no: a gap** |
+| **The 10 DICOM-less placeholder exams** (A1 `b-empty-prod`; listed in §2): production registered them without DICOM (`pending_dicom_regen` `no-source` 8, `not-applicable` / WOBBLE 2). **Ryan, 2026-10-08: the placeholders are retired, their files kept** (the retirement is built on another branch and runs later), so their drive files, k-space and parameters, their only data, must not go with the staged copy | 126 | 0.10 | placed into the exam's project, as P2 placed unregistered exams | **ruled after the first run** |
 
-**So the foreign raw is not the only blocker: 82 more files need a placement.** They are ready as one handover list,
+**So the foreign raw is not the only blocker: 208 more files need a placement.** They are ready as one handover list,
 [`drive3_closeout_handover.csv`](drive3_closeout_handover.csv) (§2), for stream P's later-batch path. Once the
 foreign-raw batch and that list are written, the re-run (§4) should end `READY TO DELETE`.
 
@@ -57,16 +59,20 @@ ruled or a gate decided; anything else is a **blocker**.
 | not kept | `zero-byte` | 213 | 0.00 | 1 | 0.00 | no content (stream P: counted, never placed) |
 | not kept | `junk` | 6,363 | 0.05 | 260 | 0.03 | Ryan's list of 2026-09-30 and A2's accepted additions (below) |
 | not kept | `personal` | 1 | 0.00 | 1 | 0.00 | the `biomaGUNE MJ` gate's personal screen (§4 there); Ryan 2026-10-08: ignore |
-| not kept | `mri-kspace` | 17,355 | 440.74 | 12,099 | 318.16 | Ryan 2026-10-04: MRI is registered with DICOM only; k-space (`fid`, `rawdata.job*`) of a registered exam |
+| not kept | `mri-kspace` | 17,349 | 440.64 | 12,095 | 318.07 | Ryan 2026-10-04: MRI is registered with DICOM only; k-space (`fid`, `rawdata.job*`) of a registered exam (never of a DICOM-less placeholder: Ryan 2026-10-08) |
 | not kept | `mri-2dseq` | 17,559 | 15.01 | 12,278 | 10.45 | the same rule: a `2dseq` whose reconstruction `/raw/` holds as DICOM |
-| not kept | `mri-params` | 160,549 | 1.59 | 109,256 | 1.00 | the same rule: ParaVision parameter files of a registered exam, or of a study with a registered exam |
+| not kept | `mri-params` | 160,429 | 1.59 | 109,187 | 1.00 | the same rule: ParaVision parameter files of a registered exam (not a placeholder), or of a study with a registered exam |
 | not kept | `mri-dicom-reexport` | 4,771 | 0.29 | 4,341 | 0.26 | DICOM of a registered exam that A1 found re-exported: the same instances with other bytes (A1 §2.2, 191 exams) |
 | not kept | `czi-resave-of-production` | 119 | 12.48 | 118 | 12.45 | stream C gate §1.4: a re-save of a production acquisition (same instrument, second and name); each parent ACQ-ID checked live |
 | not kept | `czi-resave-within-drive` | 82 | 2.57 | 82 | 2.57 | stream C gate §1.4 / R2: a same-name, pixel-identical re-save whose twin was ingested; each twin checked in `/raw/` |
-| **BLOCKER** | | **254** | **210.82** | 224 | 163.05 | in no category (the Verdict table) |
+| **BLOCKER** | | **380** | **210.92** | 298 | 163.14 | in no category (the Verdict table) |
 | | **kept** | **414,703** | **997.70** | | | |
-| | **not kept** | **207,012** | **472.72** | | | |
+| | **not kept** | **206,886** | **472.62** | | | |
 | | **total** | **621,969** | **1,681.24** | | | = `run_info.json` (1,681,243,787,145 bytes) |
+
+(The table is the re-run after Ryan's placeholder ruling, `D:\…\closeout\run_20261008b\`, on the full run's `/raw/`
+index; it differs from the full run, `run_20261008\`, only by the 126 placeholder files moved from `mri-kspace` 6 /
+`mri-params` 120 to BLOCKER. The stat and walk below are the full run's.)
 
 **The inputs, as the run read them:**
 - **The manifest:** the staged copy's own `manifest.csv` (SHA-256 `0309adae…94bcf7d4`), byte-identical to A1's D: copy;
@@ -99,27 +105,28 @@ ruled or a gate decided; anything else is a **blocker**.
 - **Personal (1):** of the `biomaGUNE MJ` gate's 4 possibly personal files (names only, never opened), **3 are already in
   project folders by their bytes** (batch 1 placed their `Pili y Mili` copies in `AE-biomaGUNE-0619` 2 and `-0522` 1) and
   count as `placed`; the 4th is the one not kept. With Ryan's "ignore" (2026-10-08) nothing more is done.
-- **MRI originals (195,463 files, 457.3 GB):** the k-space, `2dseq` and parameter files of **7,264 registered exams**:
+- **MRI originals (195,337 files, 457.2 GB):** the k-space, `2dseq` and parameter files of **7,254 registered exams**:
   3,299 of the 3,309 stream M registered (the other 10 have every ParaVision file kept by its bytes; among them
-  `m175` / `m178`, whose second copies P2 placed) and the 3,965 production held before (by `<study>/<exam>` =
+  `m175` / `m178`, whose second copies P2 placed) and 3,955 production held before (by `<study>/<exam>` =
   `original_name`, read live), plus their studies' study-level files. A `2dseq` counts only when `/raw/` holds its
-  reconstruction as DICOM (the acquisition's `recon<n>_*.dcm`); the one that is not is a blocker. §3 says how much of
-  this the platform's archive holds.
+  reconstruction as DICOM (the acquisition's `recon<n>_*.dcm`); the one that is not is a blocker. **A DICOM-less
+  placeholder (an exam whose acquisitions hold no file in `/raw/`) is never ruled out** (Ryan 2026-10-08): its drive
+  files block until placed. §3 says how much of the rest the platform's archive holds.
 - **DICOM re-exports (4,771):** the 191 exams of A1 class `b-export` (and the one `b-mixed`): production holds the same
   instances exported on another day (4,341 of 4,342 pairs pixel-identical; the last is the zero-byte file).
 - **`.czi` re-saves (201):** stream C's 118 re-saves of production acquisitions (parent ACQ-IDs live today) and its 82
   same-name re-saves whose kept twin is in `/raw/`.
 
-**Where the kept files are, by the drive's top folders** (files / GB): `MRI\` 191,086 / 31.05 kept, 117,114 / 271.86 not
-kept (its originals); `Microscopio\` 6,774 / 730.34 kept; `biomaGUNE MJ\` 127,669 / 96.04 kept, 79,150 / 177.10 not kept
+**Where the kept files are, by the drive's top folders** (files / GB): `MRI\` 191,086 / 31.05 kept, 117,061 / 271.85 not
+kept (its originals); `Microscopio\` 6,774 / 730.34 kept; `biomaGUNE MJ\` 127,669 / 96.04 kept, 79,077 / 177.00 not kept
 (the second copy of most MRI studies); `Pili y Mili\` 44,352 / 71.97 kept; `Otros\` 43,736 / 43.40 kept; `PET\` 1,084 /
 24.91 kept. Placed files sit in 25 project trees (most: `0118` 35,720, `0619` 24,802, `0522` 20,969, `1019` 17,972).
 
 ---
 
-## 2. The blockers, and the handover list that clears 82 of them
+## 2. The blockers, and the handover list that clears 208 of them
 
-The per-file list is `D:\…\closeout\run_20261008\blockers.csv` (with each file's folder and hint), and
+The per-file list is `D:\…\closeout\run_20261008b\blockers.csv` (with each file's folder and hint), and
 `blockers_by_folder.csv`.
 
 **The 172 outside-instrument files** are exactly stream C's out-of-scope list (`tasks/drive3_czi_out_of_scope.csv`, gate
@@ -127,19 +134,43 @@ The per-file list is `D:\…\closeout\run_20261008\blockers.csv` (with each file
 and `biomaGUNE MJ\…\Microscopio-biodonostia`; 26 Leica files (6.72 GB) in `Pili y Mili\Proyecto 1121 London\Experimentos\
 Histologia\…`; 2 copies of `m204lung.czi`. The foreign-raw batch covers all three (its HANDOFF, jobs 1–3).
 
-**The other 82 are placement gaps**, all on stream P's own later-batch path (`p_plan.py handover`, as P2 and the
-`biomaGUNE MJ` batch ran). [`drive3_closeout_handover.csv`](drive3_closeout_handover.csv) holds them, 86 rows:
+**The other 208 are placement gaps**, all on stream P's own later-batch path (`p_plan.py handover`, as P2 and the
+`biomaGUNE MJ` batch ran). [`drive3_closeout_handover.csv`](drive3_closeout_handover.csv) holds them, 259 rows:
 
 | Rows | Kind | Project | What |
 |---:|---|---|---|
 | 77 | `derivative` (parent ACQ-IDs given) | holding 72, `AE-biomaGUNE-0619` 3, `-0522` 2 | stream C's list less the one already kept (`230530-ID161-alphasma8OHdG-lungs-20x-2.czi`, whose bytes drives 1+2 placed in `1019`); the 78th blocking file is the second copy of `ID 203 ROI masson`, kept by its bytes once the first is placed |
 | 3 | `other` | `AE-biomaGUNE-0118` | `m152`'s study-level files, beside its exam folders |
 | 6 | `other` | `AE-biomaGUNE-0320` | `jrc220309_m53_0320/14\pdata\3\`: the `2dseq` and its 5 parameter files, P2's "reconstruction without DICOM (2dseq only) of registered exam" |
+| 173 | `notregistered:no-recon` 154, `notregistered:non-image` 19 | the exam's project (below) | **the 10 placeholder exams**: every drive file of each exam folder, every copy, as P2 handed over unregistered exams (so each folder gets `README_not_registered.txt`); less 4 zero-byte files (`m104_0522/17`'s `rawdata.job0/1`, both copies: refused by the tool, no content) and 2 `audita.txt` that batch 1 and the `biomaGUNE MJ` batch already decided (placed). 47 of the 173 are already kept by their bytes elsewhere; the folder is placed whole |
+
+**The 10 placeholder exams** (Ryan 2026-10-08: retired, files kept). Each goes to
+`projects\<project>\working\historical_drives\MJesus-MFB\…\<study>\<exam>\`; where the drive holds a second copy of
+the folder (`MRI\` and `biomaGUNE MJ\`), it is a `duplicate-copy` (one study folder per content, A2 D3), kept by its
+bytes:
+
+| ACQ-ID (placeholder) | Exam | Regen state | Project | Placed / duplicate copies | Destination below `…\historical_drives\MJesus-MFB\` |
+|---|---|---|---|---:|---|
+| `ACQ-20260613-MRI-007` | `20220214_092942_jrc220214_m44_0320_1_1/33` | `no-source` | `AE-biomaGUNE-0320` | 6 / 0 | `Proyecto 0320\CAV1 Female 2022\…\33\` |
+| `ACQ-20260613-MRI-028` | `20221128_115338_jrc221128_m10_0522_1_1/1` | `no-source` | `AE-biomaGUNE-0522` | 12 / 12 | `Proyecto 0522\Male HCH\…\1\` |
+| `ACQ-20260613-MRI-029` | `20221128_115338_jrc221128_m10_0522_1_1/2` | `no-source` | `AE-biomaGUNE-0522` | 12 / 12 | `Proyecto 0522\Male HCH\…\2\` |
+| `ACQ-20260614-MRI-048` | `20230614_123505_jrc230614_0522_m47_1_1/900000` | `not-applicable` (WOBBLE) | `AE-biomaGUNE-0522` | 5 / 5 | `Proyecto 0522\Female PAH\…\900000\` |
+| `ACQ-20260613-MRI-039` | `20240530_082205_jrc240530_m43_1422_1_1/2` | `no-source` | `AE-biomaGUNE-1422` | 12 / 0 | `Manosa and 2DG Male_Proyecto 1422\Raw data\MRI\MJ 2024\…\2\` |
+| `ACQ-20241001-MRI-099` | `20241001_100924_jrc241001_m104_0522_1_1/17` | `no-source` | `AE-biomaGUNE-0522` | 12 / 12 | `Proyecto 0522\MRI dietas females\…\17\` (its k-space is zero bytes on the drive: parameters only) |
+| `ACQ-20260614-MRI-002` | `20241001_141059_jrc241001_m106_0522_1_1/5` | `no-source` | `AE-biomaGUNE-0522` | 11 / 11 | `Proyecto 0522\MRI dietas females\…\5\` |
+| `ACQ-20241001-MRI-100` | `20241001_141059_jrc241001_m106_0522_1_1/8` | `no-source` | `AE-biomaGUNE-0522` | 14 / 14 | `Proyecto 0522\MRI dietas females\…\8\` (with its k-space, 3.3 MB) |
+| `ACQ-20241010-MRI-104` | `20241010_092822_jrc241010_m29_1123_1_1/8` | `no-source` | `AE-biomaGUNE-1123` | 14 / 0 | `Bleomicina Mice_Proyecto 1123\Raw data\MRI\…\8\` (with its k-space, 93 MB) |
+| `ACQ-20260614-MRI-007` | `20241011_093242_jrc241011_m24_1123_1_1/900000` | `not-applicable` (WOBBLE) | `AE-biomaGUNE-1123` | 9 / 0 | `Bleomicina Mice_Proyecto 1123\Raw data\MRI\…\900000\` |
+
+All ten have a project (none goes to holding); every study keeps other exams with DICOM in `/raw/`, so the studies'
+own files stay as ruled. Kinds: `no-recon` for the 8 `no-source` exams, `non-image` for the 2 WOBBLE adjustment scans.
+After the retirement removes the placeholder rows, these files stay `placed` (the reconciliation decides by bytes).
 
 **Dry-planned here, read-only** (stream P's tool against live production, every earlier manifest passed, today's
-`/raw/` index): `handover (CO): 86 files {'holding': 72, 'place': 14}; refused 0; destinations already present: 0`;
-2.46 GB; longest path 199 characters, nothing shortened. Manifest:
-`D:\projects\gjesus3\drive3_streams\closeout\handover_plan_20261008\placement_manifest.csv`.
+`/raw/` index): `handover (CO): 259 files {'holding': 72, 'place': 121, 'duplicate-copy': 66}; refused 0; destinations
+already present: 0`; 2.56 GB copied (holding 2.37, `1123` 0.09, `0619` 0.05, `0522` 0.04); longest path 199 characters,
+nothing shortened. Manifest: `D:\projects\gjesus3\drive3_streams\closeout\handover_plan_20261008c\placement_manifest.csv`
+(the first plan, without the placeholders, is `handover_plan_20261008\`).
 
 **The production commands** (copies only; the window procedure of `drive3_placement_gate.md` §5, as P2a ran it). Re-plan
 first, because the foreign-raw batch may run before; then one window per tree:
@@ -156,10 +187,12 @@ python $PP --nas $NAS handover --manifest $M1 --manifest "$S\placement\release_M
     --manifest "$S\mri\out\p2\P2a_20261007_1053\placement_manifest.csv" --manifest "$S\mri\out\p2\P2b_20261007_1053\placement_manifest.csv" `
     --manifest "$S\mri\out\p2\P2b_masks_20261007_1053\placement_manifest.csv" --manifest "$S\bmj\batch3_v2\placement_manifest.csv" `
     --csv tasks\drive3_closeout_handover.csv --stream CO --raw-index "$S\closeout\live_raw_index_$D.csv" --out "$S\closeout\handover_$D"
-#   expect: handover (CO): 86 files {'holding': 72, 'place': 14}; refused 0; destinations already present: 0
+#   expect: handover (CO): 259 files {'holding': 72, 'place': 121, 'duplicate-copy': 66}; refused 0;
+#           destinations already present: 0
 $A = "$S\closeout\handover_$D\placement_manifest.csv"; $SCR = "$S\closeout\scratch"
-# 1. the four project windows: snapshot, dry run, execute, verify (expected files: 0118 3, 0320 6, 0522 2, 0619 3)
-foreach ($p in 'AE-biomaGUNE-0118','AE-biomaGUNE-0320','AE-biomaGUNE-0522','AE-biomaGUNE-0619') {
+# 1. the six project windows: snapshot, dry run, execute, verify
+#    (files copied: 0118 3, 0320 12, 0522 68, 0619 3, 1123 23, 1422 12)
+foreach ($p in 'AE-biomaGUNE-0118','AE-biomaGUNE-0320','AE-biomaGUNE-0522','AE-biomaGUNE-0619','AE-biomaGUNE-1123','AE-biomaGUNE-1422') {
   python $PV snapshot --manifest $A --nas $NAS --project $p --to "C:\Users\rtasseff\temp\gjesus3_placement_backup_${D}_drive3_CO_$p"
   python $NP --out "$S\closeout\runs_CO" --nas $NAS copy --manifest $A --scratch $SCR --project $p
   python $NP --out "$S\closeout\runs_CO" --nas $NAS copy --manifest $A --scratch $SCR --project $p --execute
@@ -176,7 +209,9 @@ python $PV verify --manifest $A --nas $NAS --snapshot "C:\Users\rtasseff\temp\gj
 
 **Stop** if step 0 refuses a row or finds a destination present, or a window's verify fails. Each derivative's
 provenance starts with its parent ACQ-ID (`kind = derivative`); the six `pdata\3\` files and `m152`'s three carry
-P2's reasons.
+P2's reasons; each placeholder file's reason names its ACQ-ID, its regen state and Ryan's ruling. The windows must run
+before the staged copy is deleted (they copy from it); their order with the placeholder retirement does not matter for
+the close-out, which decides by bytes.
 
 **The foreign-raw session's Leica placement is a fourth placement batch on the same tool**; the coordinator can run this
 list as part of it or as its own window (copies only: the coordinator's to approve under the drives' model).
@@ -196,8 +231,8 @@ on `feat/mri-archive-ingest`, `tasks/drive3_mri_archive_check.md`).
 | … 11.7 T exams (the archive is the 7 T's) | 267 | | | 41.99 | 41.47 |
 | … 7 T exams of days the archive lacks | 696 | | | 33.39 | 32.30 |
 | Stream M's exams the archive holds (compared: none differs) | 2,336 | 64,133 | 149.26 | 105.03 | 101.13 |
-| Exams production held before stream M, study **in** the archive listing (by name) | 1,169 | 24,258 | 49.58 | 40.48 | 38.75 |
-| Exams production held before stream M, study **not** in the archive listing | 2,796 | 69,784 | 153.06 | 108.55 | 104.52 |
+| Exams production held before stream M, study **in** the archive listing (by name) | 1,168 | 24,252 | 49.58 | 40.48 | 38.75 |
+| Exams production held before stream M, study **not** in the archive listing | 2,787 | 69,664 | 152.96 | 108.46 | 104.42 |
 | Study-level parameter files (no exam) | 421 studies | 15,891 | 0.48 | 0.34 | 0 |
 
 **Plainly:** deleting the staged copy removes the only copy gjesus3 has seen of **75.4 GB of ParaVision originals
@@ -205,22 +240,22 @@ on `feat/mri-archive-ingest`, `tasks/drive3_mri_archive_check.md`).
 (the scanner's own for 3,132 of stream M's exams; Dicomifier's, made from the drive's `2dseq`, for 177). The drive
 itself is M. Jesús's and was returned to her, so it remains a copy outside gjesus3, not under the Data Office's control.
 
-Three more things Ryan should see with it:
+Two more things Ryan should see with it (a third, the placeholders, he has ruled):
 - **`jrc200615_m21_1019`:** the archive's tarball of this study is short (its `.sha1` was taken from the short file), so
   **the drive is the only complete copy known** (19 of its exams partly or wholly absent from the archive). Its originals
   on the drive: 20 exams, 0.87 GB distinct (0.81 GB k-space).
-- **The earlier exams whose study is not in the archive listing (2,796, 108.6 GB distinct)** are mostly recent: by scan
-  year 2021 0.07 GB, **2022 21.2 GB, 2023 25.9 GB, 2024 61.4 GB**. The archive covers 2019–2022; the scanner keeps about
+- **The earlier exams whose study is not in the archive listing (2,787, 108.5 GB distinct)** are mostly recent: by scan
+  year 2021 0.07 GB, **2022 21.2 GB, 2023 25.9 GB, 2024 61.3 GB**. The archive covers 2019–2022; the scanner keeps about
   two years, so the 2024 ones may still be on it; where 2023 (and the missing 2022 days) went is Ryan's question Q7 to
   the platform manager (STATUS §0.6). Not a loss known today; not checked here exam by exam.
-- **10 exams production holds as an empty placeholder** (A1 `b-empty-prod`: 8 `no-source`, 2 `WOBBLE`): their drive
-  files are k-space and parameters only, 0.10 GB of k-space in all copies, the only data of those exams the drive has.
-  The rule covers them (they are registered); stream M placed the k-space of its 3 *unregistered* no-reconstruction
-  exams (P2). If Ryan wants these kept too, it is a 0.1 GB placement; otherwise they go with the copy.
+- **The 10 exams production holds as DICOM-less placeholders** (A1 `b-empty-prod`: 8 `no-source`, 2 WOBBLE): their
+  drive files (k-space and parameters, 0.10 GB of k-space in all copies) are their only data. **Ryan, 2026-10-08: the
+  placeholders are retired and their files kept.** So they are not in the table above: they are placed by the handover
+  (§2), and the reconciliation never rules a placeholder's files out.
 
 **If Ryan wants the 963 exams' originals kept after all,** the smallest step is to place their distinct non-DICOM files
 (75.4 GB, about 21,000 files) in the projects or the holding folder with the same handover tool before the deletion.
-Per-exam figures: `D:\…\closeout\run_20261008\mri_originals.csv` (one row per exam: archive result, year, k-space /
+Per-exam figures: `D:\…\closeout\run_20261008b\mri_originals.csv` (one row per exam: archive result, year, k-space /
 `2dseq` / parameter bytes, distinct bytes).
 
 ---
@@ -239,7 +274,7 @@ $D = Get-Date -Format yyyyMMdd_HHmm
 python tools\drive_staging\drive3\closeout.py --out "D:\projects\gjesus3\drive3_streams\closeout\final_$D" --stat --walk
 #   expect, last line:  READY TO DELETE   (exit code 0)
 #   expect in the table: BLOCKER 0; in-raw grows by the XMIC copies (144), placed / holding by the Leica files (26),
-#   the stray .czi (2) and the handover's files (82); every not-kept category unchanged.
+#   the stray .czi (2) and the handover's blockers (82 + the placeholders' 126); every not-kept category unchanged.
 ```
 
 - `--archive-check` defaults to `tasks/drive3_mri_archive_check.csv`, which arrives on `main` with `feat/mri-archive-ingest`;
@@ -355,7 +390,7 @@ her drive; staging is not a backup.
 1. **The final close-out run (§4) ends `READY TO DELETE`** with `--stat --walk`, after the foreign-raw batch and the
    handover list are written and verified.
 2. **The evidence copy (§5) is done and `verify` says `RECORDS VERIFY PASS`** (the final run's folder included).
-3. **Ryan has seen §3** (the MRI originals not kept, and the 10 placeholder exams' k-space) and gives the go.
+3. **Ryan has seen §3** (the MRI originals not kept) and gives the go.
 4. **SegBioMed has its production manifest** (§6; the coordinator's reply), since their R1 manifest pointed at the staged copy.
 5. **Nothing reads the staged copy any more:** no open session works from it (the foreign-raw batch, any MRI check);
    `convert_staged_exams.py` and the stream stagings worked from copies on D:.
@@ -387,10 +422,11 @@ bin's `_staging_drive3_MJ` entry in QTS File Station and review the snapshot sch
 
 ## 9. For the coordinator: unsettled, and findings
 
-1. **82 placement gaps (§2).** Stream C's derivative handover never ran; P2 left `m152`'s study files out; a 2dseq-only
-   reconstruction of a pre-existing exam had no owner. The handover list is ready; it is a copy-only batch.
+1. **208 files to place (§2).** Stream C's derivative handover never ran; P2 left `m152`'s study files out; a 2dseq-only
+   reconstruction of a pre-existing exam had no owner; and the 10 placeholder exams' files (Ryan, 2026-10-08). The
+   handover list is ready (259 rows, dry-planned: refused 0); it is a copy-only batch.
 2. **MRI originals (§3)** need Ryan's eyes before the go: 75.4 GB for the 963 exams the archive lacks; the `m21_1019` short
-   tarball; the 10 placeholder exams' k-space (0.1 GB). Proposed: as ruled (DICOM only), unless Ryan says keep.
+   tarball. Proposed: as ruled (DICOM only), unless Ryan says keep. (The placeholders' files are kept, as ruled.)
 3. **231 placed MetaImage volumes do not open as placed (a placement-tool finding, not a close-out blocker):** the
    240-character rule shortened their `.raw` file names but not the `ElementDataFile` line inside the `.mhd`; checked by
    reading every affected `.mhd`: 225 from drive 1 (`FRIO-X6`) and 6 from drive 3, all in `AE-biomaGUNE-1019`. The bytes are
@@ -407,7 +443,9 @@ bin's `_staging_drive3_MJ` entry in QTS File Station and review the snapshot sch
 
 **Proposed record lines** (the coordinator applies them; I edited none):
 - STATUS §2, "The M. Jesús drive": *Close-out reconciliation 2026-10-08 (`feat/drive3-closeout`): of 621,969 files,
-  414,703 kept (997.7 GB: `/raw/`, projects, holding), 207,012 ruled out (472.7 GB: MRI originals by the DICOM-only rule,
-  junk, zero-byte, re-saves, re-exports, 1 personal), 254 blocking: the 172 outside-instrument files (foreign-raw batch) and
-  82 placement gaps (handover list ready). MRI originals of the 963 exams the archive lacks: 75.4 GB, not kept.*
+  414,703 kept (997.7 GB: `/raw/`, projects, holding), 206,886 ruled out (472.6 GB: MRI originals by the DICOM-only rule,
+  junk, zero-byte, re-saves, re-exports, 1 personal), 380 blocking: the 172 outside-instrument files (foreign-raw batch) and
+  208 to place (handover list ready: stream C's 78 derivatives, `m152`'s 3, one 2dseq-only reconstruction, and the 10
+  DICOM-less placeholder exams' 126 files, Ryan 2026-10-08). MRI originals of the 963 exams the archive lacks: 75.4 GB,
+  not kept.*
 - BACKLOG: the 231 placed MetaImage pairs whose `.mhd` names a renamed `.raw` (§9.3).

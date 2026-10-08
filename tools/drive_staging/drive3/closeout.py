@@ -27,7 +27,9 @@ Each row of the staged copy's manifest.csv gets ONE category, the first that app
             mri-kspace, mri-2dseq,    ParaVision files of an exam /raw/ holds as DICOM (Ryan 2026-10-04: MRI is
             mri-params                registered with DICOM only): the exam's <study>/<exam> is a live registry
                                       original_name (and a 2dseq's reconstruction is among the acquisition's
-                                      recon<idx>_*.dcm); study-level files of a study with a registered exam
+                                      recon<idx>_*.dcm); study-level files of a study with a registered exam.
+                                      NOT for a DICOM-less placeholder (no file in /raw/): Ryan 2026-10-08 retires
+                                      them and keeps their files, so their drive files block until placed
             mri-dicom-reexport        DICOM of a registered exam that A1 found re-exported (the same instances,
                                       other bytes: A1 §2.2, exam class b-export / b-mixed)
             czi-resave-of-production  stream C §1.4: a re-save of a production acquisition (same instrument,
@@ -156,6 +158,7 @@ class Ctx:
     def __init__(self):
         self.raw = collections.defaultdict(list)       # sha256 -> [(acq_id, relpath in the acquisition)]
         self.recons = collections.defaultdict(set)     # acq_id -> {reconstruction index held as DICOM}
+        self.acq_with_files = set()                    # acquisitions with at least one file in /raw/
         self.acq_path = {}                             # acq_id -> canonical_path (live registry)
         self.acq_registered = {}                       # acq_id -> registration_datetime (live registry)
         self.mri_exam = collections.defaultdict(list)  # "<study>/<exam>" -> [acq_id] (MRI, live)
@@ -225,6 +228,7 @@ def load_raw_index(ctx, nas, raw_index, out, say):
     # A saved index is today's only if no indexed acquisition has left the registry and none was registered
     # after the newest one it holds. A live acquisition with no file in its checksums.json (an MRI
     # placeholder) has no index row: counted, not a difference.
+    ctx.acq_with_files = set(acqs)
     gone = sorted(set(acqs) - set(ctx.acq_path))
     newest = max(acqs.values() or [""])
     newer = sorted(a for a, t in ctx.acq_registered.items() if a not in acqs and t > newest)
@@ -319,6 +323,13 @@ def personal_rule(rel):
     return why if verdict == "personal" else ""
 
 
+def is_placeholder(acqs, ctx):
+    """Every registered acquisition of the exam holds no file in /raw/ (a DICOM-less placeholder: pending_dicom_regen
+    no-source / not-applicable). Ryan 2026-10-08: they are retired, their files kept; so the DICOM-only rule cannot
+    rule out their drive files, which must be placed (tasks/drive3_closeout_handover.csv)."""
+    return not any(a in ctx.acq_with_files for a in acqs)
+
+
 def mri_rule(rel, ctx):
     """-> (category, acq_id, detail) or None."""
     a = ctx.a1.get(rel)
@@ -338,8 +349,8 @@ def mri_rule(rel, ctx):
     if exam_dir:
         key = exam_key_of(exam_dir)
         acqs = ctx.mri_exam.get(key)
-        if not acqs:
-            return None
+        if not acqs or is_placeholder(acqs, ctx):
+            return None       # a placeholder's drive files are its only data: kept, never ruled out (Ryan 2026-10-08)
         if cat == "mri-2dseq":
             m = RECON_RE.search(rel)
             idx = str(int(m.group(1))) if m else ""
@@ -437,6 +448,9 @@ def hint(rel, sha, ctx):
         cls, exam_dir, study_dir = a
         if exam_dir:
             key = exam_key_of(exam_dir)
+            if key in ctx.mri_exam and is_placeholder(ctx.mri_exam[key], ctx):
+                return (f"MRI {cls} of a DICOM-less placeholder exam ({key}, {';'.join(ctx.mri_exam[key])}; Ryan "
+                        f"2026-10-08: retired, files kept): place it (tasks/drive3_closeout_handover.csv)")
             if key in ctx.mri_exam and cls == "mri-2dseq":
                 return (f"2dseq of a reconstruction /raw/ holds no DICOM of ({key}): place it as stream M §3.2 / P2 "
                         f"placed such reconstructions")
