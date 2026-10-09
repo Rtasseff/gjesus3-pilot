@@ -62,9 +62,11 @@ def _db_complete(row):
     return all((row.get(f) or "").strip() for f in ("species", "strain", "date_of_birth"))
 
 
-def collect_rows(nas_root, log, limit=0):
+def collect_rows(nas_root, log, limit=0, only=None):
     """Walk registry_raw.csv, read the subject-bearing sidecars, and return
-    (rows, stats): one richest row per distinct subject, in first-seen order."""
+    (rows, stats): one richest row per distinct subject, in first-seen order.
+    `only`: an optional set of ACQ-IDs; every other acquisition is skipped unread
+    (e.g. refreshing the subjects of just-recovered acquisitions, 2026-10-08)."""
     reg_path = os.path.join(nas_root, "registries", "registry_raw.csv")
     acqs = registry.read_registry(reg_path)
     log(f"registry_raw.csv: {len(acqs)} acquisitions")
@@ -75,6 +77,8 @@ def collect_rows(nas_root, log, limit=0):
     stats = Counter()
     scanned = 0
     for r in acqs:
+        if only is not None and r.get("acq_id", "") not in only:
+            continue
         packed = (r.get("subject_ids") or "").strip()
         if not packed:
             continue
@@ -145,6 +149,8 @@ def main(argv):
     mode.add_argument("--dry-run", action="store_true", help="report only; write nothing")
     mode.add_argument("--apply", action="store_true", help="write registry_subjects.csv")
     ap.add_argument("--limit", type=int, default=0, help="cap acqs scanned (debug)")
+    ap.add_argument("--acq-ids", metavar="FILE",
+                    help="only these acquisitions: one ACQ-ID per line ('#' comments allowed)")
     args = ap.parse_args(argv[1:])
 
     def log(m, level="INFO"):
@@ -152,7 +158,12 @@ def main(argv):
 
     nas_root = args.nas_root.rstrip("/").rstrip("\\")
     registries_dir = os.path.join(nas_root, "registries")
-    rows, stats = collect_rows(nas_root, log, limit=args.limit)
+    only = None
+    if args.acq_ids:
+        with open(args.acq_ids, encoding="utf-8-sig") as f:
+            only = {ln.split("#", 1)[0].strip() for ln in f} - {""}
+        log(f"scope: {len(only)} ACQ-ID(s) from {args.acq_ids}")
+    rows, stats = collect_rows(nas_root, log, limit=args.limit, only=only)
 
     print("\n=== BACK-FILL SUMMARY ===")
     print(f"subject-bearing acqs : {stats['acqs_with_subjects']}")

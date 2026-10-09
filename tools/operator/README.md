@@ -78,23 +78,59 @@ commands). Python 3 with `pyyaml`, `pydicom`, `tqdm`, and — for the MRI FTP pu
 ### Nuclear Imaging — `ni-ingest`
 
 ```sh
+# LIVE-machine sync (run ON the Molecubes box — the common case):
+python tools/operator/ni_ingest.py "<my data folder>" --live --operator <name>   # preview, then Proceed?
+python tools/operator/ni_ingest.py "<my data folder>" --live --dry-run           # preview only
+python tools/operator/ni_ingest.py "<my data folder>" --live --go                # skip the prompt
+
+# ARCHIVE mode (extracted .tgz folders):
 python tools/operator/ni_ingest.py /path/to/folder            # preview, then asks Proceed? [y/N]
 python tools/operator/ni_ingest.py /path/to/folder --dry-run  # preview only, never writes
-python tools/operator/ni_ingest.py /path/to/folder --go       # skip the prompt and commit
 ```
 
-- Point it at **one extracted acquisition folder**, or at a **parent folder of
-  many** — it auto-detects which and previews every acquisition it finds.
-- **Archive (`.tgz`) data must be extracted first.** If you point `ni-ingest` at
-  a `.tgz` (or a folder of `.tgz`), it tells you to run
-  [`tools/extract_ni_archives.py`](../extract_ni_archives.py) first rather than
-  guessing. Extract, then point `ni-ingest` at the extracted folder.
-- **Live-machine (non-archive) folders are not wired up yet.** The on-the-machine
-  folder layout still needs to be captured in a template
-  (`molecubes_ni_live.yaml`). If you point at a live folder, the tool says so and
-  asks you to use archive mode for now. *(Deployment itself is unblocked — the NI
-  server runs Linux and a script can be installed there, confirmed 2026-06-03;
-  only the live-layout template remains.)*
+- **Live mode (`--live`)** — point at **your researcher data folder on the box**
+  (e.g. `.../remiW11/data/irene`). The locked `molecubes_ni_live.yaml` convention
+  recurses `<series>/<date>/<subject>/<timestamp>_<MODALITY>/` and ingests **one
+  acquisition per reconstruction**: each `recon_<idx>/` with DICOMs is its own
+  acquisition, so a reconstruction you run *later* is automatically picked up on
+  the next sync; a reconstruction still running (no DICOMs yet) is skipped and
+  caught later — never an error. The box is **read-only** (never modified).
+  `--researcher` defaults to the folder name; `--operator` defaults to the
+  researcher. No YAML.
+- **Archive mode (default)** — point at **one extracted acquisition folder**, or a
+  **parent folder of many**; it auto-detects which. `.tgz` data must be extracted
+  first with [`tools/extract_ni_archives.py`](../extract_ni_archives.py) (the tool
+  tells you). Pointing archive mode at a live/non-extracted folder prints a hint
+  to use `--live`.
+
+**Fixing REMI mistakes + adding the tracer (live mode) — one file, kept forever.**
+Sometimes a project code or mouse id was typed wrong in REMI and can only be fixed on
+the way out, and the **tracer/compound** isn't in the scan files at all. Both are
+handled by a single corrections CSV per researcher, **without breaking the sync**:
+
+```sh
+# 1) add a row for each NEW session to your corrections file, then stop
+#    (nothing is synced; rows already in the file are left exactly as you wrote them):
+python tools/operator/ni_ingest.py "<my data folder>" --live --plan
+# 2) open the file it names, fix wrong values (project / animal_codes) and/or add
+#    per-session metadata in the extra_metadata cell, e.g.  tracer=FDG; dose=10 MBq
+#    (do NOT change the session_path column — it's the key)
+# 3) sync — your edits are picked up automatically, no flag needed:
+python tools/operator/ni_ingest.py "<my data folder>" --live --go
+```
+
+`--plan` takes **no filename**. The file is `ni_corrections_<researcher>.csv` on the
+shared `gnuclear` NAS, in the researcher's own folder under the `<year>/<group>/<user>`
+layout; the tool locates it from its own staged path (so it works unchanged on the NI
+Mac, where gnuclear is a `/Volumes/…` mount, not `S:`) and **logs the full path on
+every run**. `--corrections FILE.csv` overrides it for a test run.
+
+The corrected values populate the **metadata + project routing** (and the animal-DB
+lookup); the **sync identity never changes** (it stays the original on-box path), so a
+later sync still recognises what's already there. The `extra_metadata` lands in each
+acquisition's `metadata.json` under `session_extra`. **A fix is entered once.** Because
+the file persists, a reconstruction that shows up months later — a new acquisition in a
+session you already corrected — inherits the correction with nothing re-entered.
 
 ### MRI (Bruker ParaVision) — `mri-ingest`
 
@@ -170,6 +206,11 @@ mri-ingest /path/to/study --is-control false --disease-model "EAE" \
   per-acquisition later.
 - `--no-prompt` turns the questions off entirely (for scripted runs); you then
   get only what you passed as flags.
+- **`ni-ingest --live` never asks** (2026-10-08). A live sync covers every new
+  reconstruction in your folder, which spans many sessions, animals and studies,
+  so one answer for all of them would be wrong more often than right. The values
+  stay blank, which never blocks, unless you deliberately pass a flag for the
+  whole run.
 
 ### The everyday flow (both Linux tools)
 

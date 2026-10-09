@@ -12,6 +12,7 @@ from . import (
     dicom_utils,
     microscopy_utils,
     filename_parser,
+    ni_corrections,
     ni_metadata,
     paravision_metadata,
     registry,
@@ -282,6 +283,88 @@ def _build_dedupe_index(registry_path):
     return keys
 
 
+def fanout_ni_recons(case, rel_match, derived=None):
+    """Split one NI anchor case into one case PER `recon_<idx>/` that has DICOMs.
+
+    A recon folder holding ONLY an attenuation map (`ATTMAP.dcm`) is a derivative
+    of the CT, not a reconstruction (Ryan, 2026-10-08): it never becomes a case.
+    When `derived` (a list) is given, an item for it is appended there, so the
+    live sync can place it in the project's outputs/derived/ (ingest/ni_derived.py).
+
+    Opt-in, NI-live only: called from `expand_batch` ONLY when the case's
+    `ingest.per_recon_acquisitions` flag is set (it lives in
+    `molecubes_ni_live.yaml` alone). One acquisition per reconstruction
+    (decided 2026-06-25): each reconstruction is an independent acquisition, so
+    a reconstruction added on a later sync is automatically a new acquisition.
+
+    Reads the ALREADY-PARSED NI sidecar section (no extra disk I/O) to learn
+    which recons have copyable DICOMs:
+      - recons WITH DICOMs  -> one case each (the fan-out).
+      - recons that exist but are EMPTY (reconstruction not finished yet) ->
+        skipped + logged; a later sync picks them up (recon indices are
+        append-only, so `<anchor>/recon_<idx>` is a stable identity).
+      - no recon with DICOMs at all -> [] (the whole anchor is skipped).
+
+    Each emitted case gets a per-recon `original_name = <anchor>/recon_<idx>`
+    (the stable dedup key — `(acq_date, original_name)` is now per-recon, so the
+    registry naturally dedups per reconstruction), `discovered.ni_recon_idx` for
+    the link name, and its sidecar `reconstruction` block scoped to that recon.
+    Everything else (archive NI, microscopy, MRI) never reaches here — no flag.
+    """
+    import copy as _copy
+
+    def _key(x):
+        return int(x) if str(x).isdigit() else x
+
+    sec = case.get("ecosystem_section") or {}
+    by_index = ((sec.get("reconstruction") or {}).get("by_index")) or {}
+    indices = sorted(by_index, key=_key)
+    with_dicoms = [i for i in indices if (by_index[i] or {}).get("dicoms")]
+    empty = [i for i in indices if not (by_index[i] or {}).get("dicoms")]
+
+    if empty:
+        print(
+            f"[expand_batch] {rel_match}: recon(s) {empty} have no DICOMs yet - "
+            f"skipped (reconstruction pending); will pick up on a later sync."
+        )
+    if not with_dicoms:
+        print(
+            f"[expand_batch] SKIP {rel_match}: no reconstructed DICOMs yet "
+            f"(0 recon_<idx>/ with .dcm)."
+        )
+        return []
+
+    from . import ni_derived
+
+    out = []
+    for idx in with_dicoms:
+        attmap = ni_derived.attenuation_map_files(by_index.get(idx))
+        if attmap:
+            if derived is not None:
+                derived.append(ni_derived.make_item(case, rel_match, idx, attmap))
+            continue
+        rc = _copy.deepcopy(case)
+        rc["original_name"] = f"{rel_match}/recon_{idx}"
+        rc["ni_recon_idx"] = idx
+        disc = rc.get("discovered") or {}
+        disc["ni_recon_idx"] = idx
+        rc["discovered"] = disc
+        # Scope the sidecar reconstruction block to just this recon (the
+        # acquisition only carries this recon's DICOMs).
+        rsec = rc.get("ecosystem_section") or {}
+        rb = rsec.get("reconstruction")
+        if isinstance(rb, dict) and "by_index" in rb:
+            rb = dict(rb)
+            rb["recons_present"] = [idx]
+            rb["by_index"] = {idx: (by_index.get(idx) or {})}
+            rsec["reconstruction"] = rb
+        rm = rsec.get("_raw_metadata")
+        if isinstance(rm, dict) and isinstance(rm.get("reconparams_by_idx"), dict):
+            rm["reconparams_by_idx"] = {idx: rm["reconparams_by_idx"].get(idx, {})}
+        out.append(rc)
+    return out
+
+
 def apply_registry_block(case, registry_block):
     """Resolve cfg["registry"] against case["discovered"] and merge into case top-level.
 
@@ -380,7 +463,7 @@ def _note_unparsed(groups, rule, pattern, err, parse_target, parse_source,
     )
 
 
-def expand_batch(cfg, nas_root=None, unparsed=None):
+def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
     """Expand a batch config into a list of validated, registry-resolved cases.
 
     `unparsed` (optional, a list): when given, one record per parse TARGET whose
@@ -389,6 +472,8 @@ def expand_batch(cfg, nas_root=None, unparsed=None):
     ingest/unparsed.py for the record). The return value is unchanged, so callers
     that don't pass it behave exactly as before. Every caller also gets one
     `[expand_batch] NOT PARSED: ...` line on stdout when any target was dropped.
+    `derived` (optional, a list): NI-live only -- one item per recon folder that is a
+    derived file (an attenuation map), never a case; see ingest/ni_derived.py.
 
     Schema:
 
@@ -493,6 +578,17 @@ def expand_batch(cfg, nas_root=None, unparsed=None):
         if nas_root else None
     )
     existing_keys = _build_dedupe_index(registry_path)
+
+    # Cross-source guard for the live-box sync (per_recon_acquisitions): the SAME
+    # registry guard the flat S:\gnuclear pull uses (ni_flat), at reconstruction
+    # grain. A reconstruction already loaded from another source -- the gnuclear
+    # pull, the historical drives, the platform archive -- names it differently,
+    # so the (acq_date, original_name) key above cannot see it. 28 of irene's 54
+    # box sessions were already in production that way on 2026-10-08.
+    other_recons, other_scans = set(), set()
+    if (cfg.get("ingest") or {}).get("per_recon_acquisitions"):
+        from . import ni_flat
+        other_recons, other_scans = ni_flat.registered_recons(registry_path)
 
     # Optional per-case override table (default off) -- see load_case_table.
     case_table, case_table_missing = load_case_table(
@@ -759,7 +855,15 @@ def expand_batch(cfg, nas_root=None, unparsed=None):
             if subj_val:
                 parsed = ni_live_discover.parse_subject(
                     subj_val, discovered.get("series"))
-                if parsed.get("project"):
+                if sp_cfg.get("project_rule") == "protocol-or-project":
+                    # NI live (Ryan, 2026-10-08): the code in the code position,
+                    # 4 digits = protocol, anything else = Project-<code>; the name
+                    # is built after the corrections below (live_project_name).
+                    code = ni_live_discover.live_project_code(
+                        subj_val, discovered.get("series"))
+                    if code:
+                        discovered.setdefault("project", code)
+                elif parsed.get("project"):
                     discovered.setdefault("project", parsed["project"])
                 discovered["animal_codes"] = ";".join(
                     str(a["number"]) for a in parsed["animals"])
@@ -787,6 +891,22 @@ def expand_batch(cfg, nas_root=None, unparsed=None):
         if eco_section_name_override:
             case["ecosystem_section_name"] = eco_section_name_override
 
+        # NI per-session corrections (opt-in; cfg["_ni_corrections"] is set only
+        # by the --live --corrections path). apply_pre overrides
+        # discovered.{project,animal_codes} BEFORE resolution so project_hint, the
+        # subject DB lookup, and the packed subject_ids all use the fix; apply_post
+        # (below, after resolution) overrides the resolved session_id/sample_id and
+        # stashes session_extra. The correction binds to the RAW <series>/<date>/
+        # <subject> session key, so original_name (the dedup identity) is untouched.
+        _ni_corr = cfg.get("_ni_corrections") or {}
+        _corr_row = ni_corrections.apply_pre(case, _ni_corr) if _ni_corr else None
+        if sp_cfg.get("project_rule") == "protocol-or-project":
+            # After the corrections, so a fixed code (1015 -> 1025, FDG -> 0522) names
+            # the project. Read by the template's `${discovered.project_name}`.
+            import ni_live_discover
+            case["discovered"]["project_name"] = ni_live_discover.live_project_name(
+                case["discovered"].get("project"))
+
         try:
             apply_registry_block(case, registry_block)
         except resolver.ResolverError as e:
@@ -802,7 +922,43 @@ def expand_batch(cfg, nas_root=None, unparsed=None):
             else:
                 print(f"[expand_batch] SKIP {match_basename}: {e}")
             continue
+        if _corr_row:
+            ni_corrections.apply_post(case, _corr_row)
         _apply_operator(case, cfg.get("operator"))
+
+        # NI per-recon fan-out — OPT-IN via ingest.per_recon_acquisitions
+        # (set only in molecubes_ni_live.yaml). One acquisition per
+        # reconstruction: each recon_<idx>/ with DICOMs becomes its own case
+        # (its own ACQ-ID + registry row + project link). Empty recons are
+        # skipped (reconstruction pending) and a later sync picks them up.
+        # Everything without the flag (archive NI, microscopy, MRI) falls
+        # through to the unchanged single-case path below.
+        if (case.get("ingest") or {}).get("per_recon_acquisitions"):
+            for rc in fanout_ni_recons(case, rel_match, derived):
+                adt_rc = (rc.get("acquisition_datetime") or "")[:10].replace("-", "")
+                if (adt_rc, rc["original_name"]) in existing_keys:
+                    print(
+                        f"[expand_batch] SKIP {rc['original_name']}: "
+                        f"already in registry (idempotent re-run)"
+                    )
+                    continue
+                d = rc.get("discovered") or {}
+                scan = ((d.get("acq_datetime_full") or "")[:14],
+                        (d.get("modality") or "").upper())
+                n = str(d.get("ni_recon_idx") or "")
+                n = str(int(n)) if n.isdigit() else n
+                if scan + (n,) in other_recons or scan in other_scans:
+                    # Same line shape as the idempotent skip above, so the
+                    # preview counts it as already-ingested (operator/preview.py
+                    # _categorize_skips keys on "already in registry").
+                    print(
+                        f"[expand_batch] SKIP {rc['original_name']}: "
+                        f"already in registry (from another source: same "
+                        f"timestamp, modality and reconstruction)"
+                    )
+                    continue
+                cases.append(rc)
+            continue
 
         # Idempotency: skip if already ingested. Key is (acq_date,
         # original_name) where original_name is the relpath set above.

@@ -1,0 +1,4 @@
+# Shell scripts run on the NI Mac (staged on gnuclear): CRLF breaks bash.
+*.sh text eol=lf
+tools/operator/ni_mac/*.conf text eol=lf
+tools/operator/ni_mac/*.py text eol=lf

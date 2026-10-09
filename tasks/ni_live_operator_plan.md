@@ -1,9 +1,54 @@
 # NI live-sync — operator hardening plan (link fallback, sync corrections, per-session metadata)
 
+> ## ⏸ RESUME HERE — where we left off (checkpoint 2026-07-03)
+>
+> **State:** all coding DONE, tested, committed, and **pushed** to
+> `origin/feat/ni-live-hardening` (**HEAD `e70ef2b`**; local == origin). **NOT merged to
+> `main`** (main is under a separate code review; this branch waits for the on-box test).
+>
+> **The ONE thing blocking merge: the on-box test hasn't run yet.** The box (a Mac) can't be
+> SSH'd, so the test is self-service: everything is staged at
+> **`S:\gnuclear\2026\Jesus\Ryan\ni-live-test\`** — a rewritten `RUN_THE_TEST.md` (the operator
+> reviewed it, "looks fine") + a fresh copy of this branch's `tools/`. **Deferred to the week of
+> 2026-07-07** (couldn't run 2026-06-30). Ryan runs the 6 steps on the Mac and drops the outputs
+> back in that folder ("What to send me back" at the bottom of RUN_THE_TEST.md).
+>
+> **NEXT ACTIONS (in order):** (1) Ryan runs the on-box test next week → sends outputs. (2) We
+> review the outputs (esp. per-recon `…/recon_N` rows, a corrected session's `session_extra`,
+> and `pending_links.csv` from the sandbox run). (3) If green → merge `feat/ni-live-hardening`
+> to `main` (open the PR: `github.com/Rtasseff/gjesus3-pilot/pull/new/feat/ni-live-hardening`).
+> (4) Only-remaining feature = **§3.6 Mac GUI** (backlogged in `tasks/BACKLOG.md`, needs
+> PyInstaller ON the Mac; do after the CLI is proven on the box).
+>
+> **The 7 commits on the branch:** `d59a101` §1 link-fallback · `3e0896d`/`adec548` §3.5
+> design+scaffold · `825868d` §2+§3.5 per-recon (Tier B) · `d5b6e92` §3.1 `--live` CLI ·
+> `53b022b` §3.2/3.3 corrections+tracer · `e70ef2b` GUI-backlog + test-folder refresh.
+>
+> **Heads-up for whoever resumes:** the working tree carries **another team's uncommitted
+> `gnuclear` files** (`tasks/tasks.md`, `equipment/historical_data_archives.md`, +
+> `equipment/nuclear-imaging/gnuclear_active_workspace_layout.md`, `tasks/ni_gnuclear_active_
+> space_plan.md`) — their work is **paused**; **do NOT stage/commit them.** Everything below is
+> the full design/history.
+
 **Branch:** `feat/ni-live-hardening` (off `main`, which already carries all NI live-sync code).
 **ALL of §1 + §2 + §3 land on THIS one branch** (user directive 2026-06-25 — not split).
-**Status:** APPROVED — building. §1 first (independent), then the unified incremental-recon
-capability (§2 + §3.4 merged), then the rest of §3, GUI last.
+**Status:** §1 DONE. §2 + §3.5 (per-recon, **Tier B**) DONE + verified. §3.1 (no-YAML operator
+CLI) DONE + verified. §3.2 + §3.3 (corrections CSV + per-session tracer metadata) DONE +
+verified end-to-end. **Only §3.6 (Mac GUI) left — explicitly last.**
+
+§3.2/§3.3 verified (synthetic tree → throwaway nas, WITH --nas-root): `--plan` wrote a 1-row
+worksheet; edited project `0324→0325` + `extra_metadata=tracer=FDG;dose=10 MBq`; `--corrections
+--go` → routed to `proj-ae-biomegune-0325` (corrected), `metadata.json.session_extra={tracer,
+dose}`, and `original_name` stayed the RAW `…/0324_m61/…/recon_0` (identity untouched → re-syncs
+still dedup). Unit tests `test_ni_corrections.py` (20) + full suite (10) green.
+
+**SCOPE NOTE (creep check, user 2026-06-25):** chose **Tier B** — per-recon acquisitions with
+NO registry mutation. Empty recons (reconstruction pending) are **skipped + logged**, picked up
+on a later sync; they are NOT registered as placeholders. The "register-before-DICOMs + in-place
+fill" option (**Tier C**) is **deferred** — its `pending_ni_recon.csv` scaffold was removed
+(revivable from commit `3e0896d`). The functional change is NI-only and opt-in (the
+`ingest.per_recon_acquisitions` flag lives in `molecubes_ni_live.yaml` alone); microscopy/MRI/
+archive-NI are untouched.
 **Origin:** Irene live-sync test run, 2026-06-25. Outputs reviewed:
 `S:\gnuclear\2026\Jesus\Ryan\p0_p2_outputs.txt` (Steps 0–2) and
 `S:\gnuclear\2026\Jesus\Ryan\ni-live-test\p_5_output.txt` (Step 5, full ingest into `J:\gjesus3-sandbox`).
@@ -151,47 +196,56 @@ then the Mac GUI **last**.)
 > in REMI), (b) per-session extra metadata (tracer) captured to the JSON, (c) correct handling
 > of new reconstructions added to already-synced sessions — all **without confusing the sync**.
 
-### 3.1 Phase A — kill the YAML: an operator CLI `tools/operator/ni_ingest.py`
-Parallel to `tools/operator/mri_ingest.py`. Builds the config **in memory** from the locked
-`tools/templates/instruments/molecubes_ni_live.yaml` (operator never sees/edits YAML).
-Inputs: `--root <box>/<user>`, the researcher folder, `--operator "<name>"`, `--nas-root`.
-Internally runs the same validated `runner.run → ingest_raw.run_batch` path. This alone
-removes the per-batch YAML hand-edit and sets up the eventual Mac GUI.
+### 3.1 Phase A — kill the YAML: a `--live` mode on `tools/operator/ni_ingest.py` — DONE
+Implemented as a **`--live` mode added to the existing `ni_ingest.py`** (not a new tool — the
+file was already scaffolded for live mode: its docstring + `_explain_live_mode` pointed here).
+`--live` bypasses the archive `.tgz`/scope path and builds the config **in memory** from the
+locked `molecubes_ni_live.yaml` (new templates key `NI_LIVE`): the operator points at their
+researcher data folder, `--operator`/`--researcher` (defaults to the folder name) are the only
+inputs, and it runs the same validated `runner.run → ingest_raw.run_batch`. No YAML. Archive
+mode is byte-for-byte unchanged. **Verified:** `--live --dry-run` and a real `--live --go`
+against the synthetic tree → CT-001(/recon_0) + CT-002(/recon_1), per-recon hard links,
+researcher=irene, Failed 0; archive mode still parses. Operator command:
+`ni-ingest <my folder> --live --operator <name>`.
 
-### 3.2 Phase B — pre-run readout the operator can correct (CSV-intermediary, recommended)
-The sync identity is **`(acq_date, original_name)`** where `original_name` is the relpath from
-the source root = **the REMI path** (`config._build_dedupe_index`, `expand_batch`). This is the
-lever that makes the user's design work:
+### 3.2/3.3 Phases B+C — pre-run corrections CSV + per-session metadata (DECISIONS LOCKED)
+One feature: a plan→edit→ingest cycle. **Decisions (user 2026-06-29):**
+- **D5 — granularity: ONE ROW PER SESSION.** A session = the subject-folder source path
+  (`<series>/<date>/<subject>`) — where the REMI mistakes (project code, session id, mouse id)
+  and the per-session tracer actually live. One edited row applies to all of that session's
+  reconstructions + PET/CT.
+- **D6 — persistence: PER-RUN FILE** the operator passes via `--corrections <file>` (NOT a
+  NAS-side auto-applied store). Simpler; the natural plan→edit→ingest cycle each sync re-surfaces
+  what's new. **Known wrinkle to document:** a *new* reconstruction of a previously-corrected
+  session, ingested on a later run *without* re-passing that session's correction row, gets the
+  *uncorrected* values. Mitigation = always run the plan step each sync (it lists what's new →
+  the operator re-enters that session's fix). Documented as a limitation, not silent.
 
-- **Step 1 — preview/plan:** emit a CSV (extends today's `ni_live_discover --csv`) with one row
-  per acquisition: the REMI `original_name` (identity, **read-only** — operator must not edit
-  it), plus the *editable value* columns (`project`, `session_id`, animal/`subject` ids,
-  `timepoint`, …) prefilled with the parsed values, plus blank `add_meta_*` columns for
-  per-session extras.
-- **Step 2 — operator edits** the value columns to fix REMI mistakes and adds tracer field/value
-  pairs. They do **not** touch `original_name`.
-- **Step 3 — ingest consumes the corrections CSV:** corrected values populate the **registry +
-  metadata.json fields only**; `original_name` (the dedup key) stays the *uncorrected* REMI
-  path. Result: a later sync sees the same identity → not "new"; the corrected metadata is
-  reproduced from the persisted corrections, not re-derived from the bad folder name.
+**The cycle:**
+1. **Plan** — `ni-ingest <folder> --live --plan out.csv` (read-only): discover, group the NEW
+   acquisitions (not yet in the registry) by session, write **one row per new session**:
+   `session_path` (READ-ONLY key = the subject-folder relpath) + parsed-value columns
+   (`project`, `session_id`, `animal_codes`, `timepoint`) prefilled + an `extra_metadata` column
+   (free-form `key=value;key=value`, e.g. `tracer=FDG`).
+2. **Edit** — operator fixes wrong values and adds tracer pairs. They never touch `session_path`.
+3. **Ingest** — `ni-ingest <folder> --live --corrections out.csv`: load → `{session_path:
+   {corrected values + extra_metadata}}`. Application point: in `expand_batch`, **after
+   `subject_parse`**, look the case's session_path up in the map and OVERRIDE `discovered.project`
+   / `discovered.animal_codes` / etc. — so the derived `project_hint`, `session_id`, `sample_id`,
+   and the **DB subject lookup** all use the corrected values downstream. `original_name` (the
+   per-recon dedup key) stays the **uncorrected REMI path** → later syncs still dedup correctly.
+   The `extra_metadata` is stashed on the case → written to a new sidecar block.
 
-**Corrections persistence (the anti-drift core).** Store corrections durably in
-`registries/ni_corrections.csv` keyed on `(acq_date, original_name)`. Every sync loads it and
-re-applies matching corrections automatically, so the human fixes a given session **once**.
-This is the mechanism that prevents the "REMI stays wrong → re-correct every time / sync thinks
-it's new" failure the user called out.
+**Per-session metadata (tracer)** rides the same CSV `extra_metadata` column → a new
+free-form `metadata.json` block (e.g. `session_extra: {tracer: "FDG", ...}`). Aligns with the
+existing NI backlog "tracer compound NOT in the data — must come from researchers/study records."
+Document the block shape in `mfb-rdm-docs/08_METADATA.md`.
 
-*Why CSV-intermediary over one-at-a-time interactive:* scales to a 127-case first load, is
-reviewable/auditable, doubles as the persistence store, and matches the "pre-run report →
-correct → run" model the user described. The interactive one-Enter-at-a-time mode is a fine
-*future* convenience for the steady-state "a few new sessions" case (Open Decision).
-
-### 3.3 Phase C — per-session additional metadata (tracer)
-The `add_meta_*` (or a `key=value;key=value`) column(s) from the corrections CSV flow into a
-new free-form block in `metadata.json` (e.g. `session_extra: {tracer: "...", ...}`), captured
-at the same time as the corrections. Aligns with the existing NI backlog item "tracer compound
-NOT in the data — must come from researchers/study records" (BACKLOG §"NI (Molecubes) — tracer
-compound…"). Document the block shape in `mfb-rdm-docs/08_METADATA.md`.
+Plumbing: the CLI loads the CSV and passes the map to the pipeline via the cfg (e.g.
+`cfg["_ni_corrections"]`); `expand_batch` applies it only when present (NI-live only — nothing
+else sets it). New module `tools/ingest/ni_corrections.py` (read/write the CSV, build the map,
+apply to a case) + tests; a `--plan` writer in `ni_ingest.py`. *(Interactive one-at-a-time
+correction stays a future convenience; CSV is the chosen path.)*
 
 ### 3.5 Phase D — INCREMENTAL RECONSTRUCTION (the core; absorbs problem 0.2 + old new-recon)
 NI data arrives in stages: **scan → folder + `recon_<idx>/` dirs created → DICOMs appear after
@@ -219,19 +273,71 @@ metadata copied from the sibling (same scan/subject/session/date) — only the r
 differs. It does **not** mutate the already-committed acquisition (acqs stay immutable once
 filled).
 
-**Why this needs a per-recon dedup key.** Dedup is `(acq_date, original_name)` where
-`original_name` = the anchor relpath. To let a later recon be a *new* acquisition under the
-*same* anchor without colliding, the NI dedup key must carry the **recon identity** — i.e.
-`original_name` becomes `<anchor-relpath>#recon=<idx-set>` (or the bundle vs. each-late-recon
-gets a distinct suffix). The captured-recon set lives in the sidecar/registry so T2 can diff
-"present now" vs "already captured." **Design carefully + test hard** — this is the subtle part.
+**D4 RESOLVED (user, 2026-06-25): ONE ACQUISITION PER RECONSTRUCTION (uniform).** Each
+`recon_<idx>/` is its own acquisition with its own ACQ-ID — from the first sync, not just
+late-added ones. This is cleaner and makes "new recon = new acquisition" fall straight out of
+normal discovery + dedup (no "diff present-vs-captured" logic). Cost: the **122 sandbox** cases
+(currently bundling recons) must be re-ingested to match — cheap, they're test data in
+`J:\gjesus3-sandbox`, not production. (The 132 NI **archive** preload already in production
+stays as-is; only future/live ingests use per-recon. Mixed granularity old-vs-new is a minor,
+acceptable wart.)
 
-**Open sub-decision D4 (granularity):** the model above keeps today's behaviour for the FIRST
-real data (all recons present at T1 = one bundled acquisition) and only splits *later-added*
-recons into new acquisitions — which matches the user's wording ("the actual acquisition"
-singular at T1; "new reconstructions … new acquisitions" at T2). The alternative (every recon
-= its own acquisition, uniformly) is cleaner but changes the 122 already-ingested cases.
-Proceeding with the bundle-first / split-late reading; confirm if the uniform model is wanted.
+**Two NI-behaviour facts CONFIRMED (user, 2026-06-25) — they pin the design:**
+- **Recon indices are append-only / never reused.** A new reconstruction always lands in a
+  new, higher-numbered `recon_<idx>/`; an existing recon folder is never overwritten with
+  different content. ⇒ `<anchor>/recon_<idx>` is a **stable per-recon dedup key**; dedup-by-path
+  is fully correct (NO content-hashing), and a later recon is automatically a new acquisition.
+  A filled recon stays correct — re-syncs skip it.
+- **The anchor may have NO `recon_<idx>/` dirs yet** at sync time (reconstruction not started).
+  ⇒ when an anchor has zero recon dirs, register NOTHING — skip with a clean message; the
+  session is captured when the first recon dir appears. (Only the recon-dirs-exist-but-empty
+  case — the 5 failures — makes a placeholder.)
+
+**Implementation (per-recon) — the 7 pieces, build incrementally + test hard:**
+
+1. **Discovery fan-out (NI-specific).** Today `expand_batch` matches the anchor
+   `<ts>_<MODALITY>` folder (one case) via `pattern:"**/"` + the anchor regex. Add an
+   NI-only fan-out (guard on `copy_strategy: ni_molecubes`): expand each matched anchor case
+   into one case **per `recon_<idx>/`**, each carrying `discovered.ni_recon_idx` and
+   `original_name = <anchor-relpath>/recon_<idx>` (the per-recon dedup key — `(acq_date,
+   original_name)` is now per-recon, so a later recon is a *new* key = a new acquisition,
+   automatically). Each recon-case then flows through the **unchanged** single-acquisition
+   pipeline (its own ACQ-ID, registry row, copy).
+2. **Copy scoping.** `copy_ni_acquisition(..., recon_idx=X)` copies only recon X's DICOMs into
+   that acquisition's `<ACQ-ID>.data/` (default `None` = all recons = current behaviour, kept
+   working until the fan-out is wired).
+3. **Empty recon → SKIP (Tier B; fixes the 5).** DONE in the fan-out: a recon dir that exists
+   but has **no DICOMs yet** is skipped with a clear log line ("reconstruction pending; will
+   pick up on a later sync") — NOT registered, NOT a failure. An anchor with no recon dirs at
+   all is likewise skipped. The fan-out reads the already-parsed sidecar to decide, so no extra
+   disk I/O. (Tier C's register-a-placeholder-now option is deferred — see scope note.)
+4. **Sidecar scoping.** `ni.reconstruction` reflects the single recon this acquisition
+   represents (anchor-level study/subject/acquisition buckets unchanged — they're shared).
+5. **Template.** `molecubes_ni_live.yaml`: add the recon to `link_filename` (today
+   `${...acq_datetime_full}` is identical across an anchor's recons → would collide) and expose
+   `ni_recon_idx`. `session_id` unchanged (PET+CT+all-recons of one visit still group).
+6. **Placeholder-fill on re-sync — DEFERRED (Tier C).** Not built. In Tier B there is nothing to
+   fill: an empty recon is simply skipped and, once its DICOMs appear, ingested fresh as its own
+   acquisition by the normal per-recon discovery (recon indices are append-only, so the
+   `<anchor>/recon_<idx>` key is stable). The early-register-then-fill option — which would need
+   an in-place registry row update under the lock — is the only part that touches the registry
+   integrity layer; deferred unless specifically wanted (scaffold removed, revivable from
+   `3e0896d`).
+
+**VERIFIED end-to-end (2026-06-25, synthetic NI tree → throwaway nas-root):** a CT scan with
+recon_0 + recon_1 filled and recon_2 empty → two acquisitions (CT-001=`/recon_0`,
+CT-002=`/recon_1`), each `.data/` holding only its own recon; the empty recon_2 + a no-recon PET
+both skipped (Total 2, **Failed 0** — the 5 fails are gone). Re-run = idempotent (0 new). Adding
+recon_2's DICOMs then re-running → exactly one new acquisition CT-003=`/recon_2`. Unit test
+`tools/test_ni_per_recon.py` (12 checks) + full suite (10 suites) green.
+7. **Tests + end-to-end:** per-recon discovery, recon-scoped copy, empty-recon placeholder,
+   placeholder→fill, new-recon→new-acquisition, idempotent re-sync. Then a sandbox re-ingest
+   of Irene's batch.
+
+### 3.5a `pending_ni_recon.py` placeholder worklist — REMOVED (Tier C only)
+Built then removed once Tier B was chosen (Tier B skips empty recons rather than registering
+placeholders, so there is nothing to queue/fill). Revivable from commit `3e0896d` if the
+register-before-DICOMs option is ever wanted.
 
 ### 3.6 Phase E — Mac-compiled GUI (LAST, explicitly deferred)
 Once the CLI flow (A–D) is solid, build the NI analogue of the HTML ingest tools, **compiled on
@@ -273,9 +379,8 @@ until A–D are proven on the box.
   worklist alone). Recommend pointer file.
 - **D3 — Scope of THIS branch:** RESOLVED — user wants §1 + §2 + §3 **all on this one branch**
   (`feat/ni-live-hardening`). Not split.
-- **D4 — Recon granularity (§3.5):** bundle-first / split-late (recommended, matches the user's
-  wording) vs. uniform per-recon acquisitions (cleaner but re-shapes the 122). Proceeding with
-  bundle-first; confirm if uniform is preferred.
+- **D4 — Recon granularity (§3.5):** RESOLVED (user 2026-06-25) — **one acquisition per
+  reconstruction** (uniform). Re-ingest the sandbox 122 to match; production archive 132 stays.
 
 ---
 

@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NI Live Sync — Project Report</title>
+<style>
+/* Print-first report (A4). CT greys for structure; the PET "hot" scale as the single accent.
+   System fonts only, so the PDF renders identically offline. */
+:root {
+  --ink: #17212a; --muted: #56636e; --line: #d5dce1; --paper: #ffffff; --wash: #f3f6f8;
+  --ct: #3d566b; --ct-soft: #e3eaf0; --hot: #c2410c; --hot-soft: #fde9d6;
+  --ok: #166534; --ok-soft: #dcf3e3; --warn: #a16207; --warn-soft: #fbf0cf; --risk: #9f1239; --risk-soft: #fbe1e6;
+  --display: "Bahnschrift", "Segoe UI Semibold", "Segoe UI", Arial, sans-serif;
+  --body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+@page { size: A4; margin: 15mm 15mm 16mm 15mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--paper); color: var(--ink); }
+body { font: 10.2pt/1.45 var(--body); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page { break-before: page; display: flex; flex-direction: column; gap: 4.2mm; }
+.page:first-of-type { break-before: auto; }
+h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.15; }
+h2 { font-size: 18pt; font-weight: 600; color: var(--ink); }
+h3 { font-size: 11.5pt; font-weight: 600; }
+p { margin: 0; }
+.kicker { font: 600 8pt var(--display); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hot); }
+.sub { color: var(--muted); }
+.head { display: flex; flex-direction: column; gap: 1.2mm; border-bottom: 1.5px solid var(--ct); padding-bottom: 2.4mm; }
+code { font: 8.6pt var(--mono); background: var(--wash); border: 1px solid var(--line); border-radius: 2px; padding: 0 2px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; align-items: start; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3.5mm; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; }
+.box { border: 1px solid var(--line); border-radius: 3px; padding: 3mm 3.5mm; display: flex; flex-direction: column; gap: 1.5mm; break-inside: avoid; }
+.box.wash { background: var(--wash); border-color: var(--wash); }
+.box.hot { background: var(--hot-soft); border-color: #f6c9a2; }
+.tile { border-top: 3px solid var(--ct); background: var(--wash); padding: 2.6mm 3mm; display: flex; flex-direction: column; gap: 0.6mm; break-inside: avoid; }
+.tile.hot { border-top-color: var(--hot); }
+.tile .n { font: 600 20pt/1 var(--display); font-variant-numeric: tabular-nums; }
+.tile .l { font-size: 8.6pt; color: var(--muted); line-height: 1.3; }
+ul { margin: 0; padding-left: 4.5mm; display: flex; flex-direction: column; gap: 1mm; }
+li { padding-left: 0.5mm; }
+table { width: 100%; border-collapse: collapse; font-size: 8.8pt; break-inside: auto; }
+th { text-align: left; font: 600 8pt var(--display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+     border-bottom: 1.5px solid var(--ct); padding: 1.6mm 2mm; }
+td { border-bottom: 1px solid var(--line); padding: 1.6mm 2mm; vertical-align: top; }
+tr { break-inside: avoid; }
+.pill { display: inline-block; font: 600 7.4pt var(--display); letter-spacing: 0.05em; text-transform: uppercase;
+        padding: 0.3mm 1.8mm; border-radius: 8px; white-space: nowrap; }
+.p-ok { background: var(--ok-soft); color: var(--ok); }
+.p-warn { background: var(--warn-soft); color: var(--warn); }
+.p-risk { background: var(--risk-soft); color: var(--risk); }
+.p-ct { background: var(--ct-soft); color: var(--ct); }
+.p-hot { background: var(--hot-soft); color: var(--hot); }
+figure { margin: 0; break-inside: avoid; display: flex; flex-direction: column; gap: 1.5mm; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { font-size: 8.4pt; color: var(--muted); }
+svg text { font-family: var(--body); }
+.s-box { fill: var(--wash); stroke: var(--ct); stroke-width: 1.2; }
+.s-ct { fill: var(--ct-soft); stroke: var(--ct); stroke-width: 1.2; }
+.s-hot { fill: var(--hot-soft); stroke: var(--hot); stroke-width: 1.5; }
+.s-ok { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 1.2; }
+.s-dash { fill: none; stroke: var(--muted); stroke-width: 1.1; stroke-dasharray: 4 3; }
+.s-line { fill: none; stroke: var(--ct); stroke-width: 1.6; }
+.s-head { fill: var(--ct); }
+.t-b { font-size: 12px; font-weight: 600; fill: var(--ink); font-family: var(--display); }
+.t-s { font-size: 10px; fill: var(--muted); }
+.t-m { font-size: 9.5px; fill: var(--ink); font-family: var(--mono); }
+.t-hot { font-size: 10px; fill: var(--hot); font-weight: 600; }
+.note { border-left: 3px solid var(--ct); padding: 1mm 3mm; color: var(--ink); background: var(--wash); }
+.note.hot { border-left-color: var(--hot); background: var(--hot-soft); }
+.foot { margin-top: auto; padding-top: 2mm; border-top: 1px solid var(--line); font-size: 7.6pt; color: var(--muted); display: flex; justify-content: space-between; }
+
+/* cover */
+.cover { min-height: 262mm; display: flex; flex-direction: column; gap: 6mm; }
+.cover .band { height: 7px; width: 70mm; background: linear-gradient(90deg, #1a0a05, #7f1d1d 18%, #c2410c 45%, #f59e0b 72%, #fef3c7); }
+.cover h1 { font-size: 34pt; font-weight: 700; letter-spacing: -0.01em; }
+.cover .lede { font-size: 13pt; color: var(--muted); max-width: 150mm; line-height: 1.4; }
+.status { display: inline-flex; gap: 2.5mm; align-items: center; font: 600 10pt var(--display); }
+.status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+.meta { margin-top: auto; display: grid; grid-template-columns: auto 1fr; gap: 1mm 6mm; font-size: 9.2pt; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 600; }
+.decide td:first-child { font-weight: 600; width: 34%; }
+.rec { color: var(--ok); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- ============================== COVER ============================== -->
+<section class="page cover">
+  <div class="band"></div>
+  <span class="kicker">gjesus3 Research Data Management · Nuclear Imaging</span>
+  <h1>NI Live Sync</h1>
+  <p class="lede">Getting Molecubes PET/SPECT/CT scans from the acquisition Mac into gjesus3, registered, checksummed and filed in the right project, without researchers carrying files by hand.</p>
+  <div class="status"><span class="dot"></span>Proven in production · ready for a supervised pilot · merge into main pending</div>
+
+  <div class="grid4" style="margin-top:4mm">
+    <div class="tile hot"><span class="n">95/95</span><span class="l">reconstructions in the first production sync (Irene, 8 Oct), 0 failed</span></div>
+    <div class="tile"><span class="n">75</span><span class="l">already-loaded reconstructions recognised and skipped: no duplicates</span></div>
+    <div class="tile"><span class="n">52</span><span class="l">CT attenuation maps filed as derived files, not raw</span></div>
+    <div class="tile"><span class="n">1,945</span><span class="l">NI acquisitions in gjesus3 production today, across all routes</span></div>
+  </div>
+
+  <figure style="margin-top:4mm">
+    <svg viewBox="0 0 720 150" role="img" aria-label="The sync in one line: scanner, researcher's folder on the box, ni-ingest on the Mac, gjesus3.">
+      <defs><marker id="a0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-head"/></marker></defs>
+      <rect x="5" y="30" width="150" height="80" rx="6" class="s-box"/><text x="80" y="64" text-anchor="middle" class="t-b">Molecubes scanner</text><text x="80" y="84" text-anchor="middle" class="t-s">acquire + reconstruct</text>
+      <rect x="190" y="30" width="160" height="80" rx="6" class="s-box"/><text x="270" y="64" text-anchor="middle" class="t-b">Researcher's folder</text><text x="270" y="84" text-anchor="middle" class="t-s">on the box · read-only</text>
+      <rect x="385" y="30" width="150" height="80" rx="6" class="s-hot"/><text x="460" y="64" text-anchor="middle" class="t-b">ni-ingest</text><text x="460" y="84" text-anchor="middle" class="t-s">2 commands on the Mac</text>
+      <rect x="570" y="30" width="145" height="80" rx="6" class="s-ct"/><text x="642" y="64" text-anchor="middle" class="t-b">gjesus3</text><text x="642" y="84" text-anchor="middle" class="t-s">raw · registry · project</text>
+      <path d="M155 70 H188" class="s-line" marker-end="url(#a0)"/><path d="M350 70 H383" class="s-line" marker-end="url(#a0)"/><path d="M535 70 H568" class="s-line" marker-end="url(#a0)"/>
+    </svg>
+  </figure>
+
+  <div class="box wash" style="margin-top:6mm">
+    <h3>Contents</h3>
+    <div class="grid2" style="gap:1mm 8mm">
+      <span>1 · Executive summary</span><span>6 · Results of the first production sync</span>
+      <span>2 · How the sync fits into gjesus3</span><span>7 · Issues and what we did about them</span>
+      <span>3 · What we built</span><span>8 · Risks and open items</span>
+      <span>4 · History, May to October</span><span>9 · Roadmap and decisions</span>
+      <span>5 · Access to the box (the tunnel)</span><span>Appendix · Terms and where things live</span>
+    </div>
+  </div>
+
+  <div class="meta">
+    <b>Prepared for</b><span>Ryan Tasseff, Data Management Lead, and the MFB data team</span>
+    <b>Prepared by</b><span>Data Office, gjesus3 RDM (feat/ni-live-hardening)</span>
+    <b>Date</b><span>9 October 2026</span>
+    <b>Status of record</b><span>tasks/STATUS.md · tasks/RESUME_ni_live.md · CHANGELOG.md</span>
+  </div>
+</section>
+
+<!-- ============================== EXEC SUMMARY ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">1 · Executive summary</span><h2>What it is, where it stands, what we need from you</h2></div>
+
+  <div class="grid2">
+    <div class="box">
+      <h3>The problem</h3>
+      <p>NI researchers run the Molecubes scanner themselves. Getting data out has meant staying in the acquisition room and copying reconstructions by hand to the <code>gnuclear</code> working space. There the same reconstruction ends up in many folders (up to 48 copies of one scan), filed by personal habit. None of it is registered, checksummed or tied to its animals and project. When the August backfill pulled that space into gjesus3, it found 2,312 acquisitions, and 673 of them still cannot be filed because no protocol code was recorded.</p>
+    </div>
+    <div class="box">
+      <h3>The solution</h3>
+      <p>A sync the researcher runs at the Mac when reconstructions finish. It is two commands: <code>--plan</code> shows what's new, then a second run syncs it. Each reconstruction is copied to gjesus3 <code>raw/</code>, checksummed, described in a metadata sidecar, registered and filed in its project. The researcher's folder on the box is only ever read. Mistyped folder names and the tracer are fixed once, in a small per-researcher corrections file.</p>
+    </div>
+  </div>
+
+  <div class="box wash">
+    <h3>Where we are</h3>
+    <ul>
+      <li><b>Proven in production on 8 Oct.</b> Irene's whole box folder: 95/95 reconstructions (6.07 GB, 25 min, Mac load ≤1.7). Every check passes: checksums 95/95, registry validator 0 errors, 95 project links as true hard links, and 145 animal records matching the animal-facility DB.</li>
+      <li><b>Access solved.</b> Since 1 Oct the Mac is operable from the Data Office through a hardened reverse SSH tunnel. Unai (NI platform manager) approved remote sync tests on 2 Oct.</li>
+      <li><b>Two serious defects caught before they reached researchers</b>, both fixed and tested: re-ingesting scans another route had already loaded (75 would have been duplicated), and a recovery tool writing one mouse's record into another's block (25 sidecars, repaired and verified the same night).</li>
+      <li><b>Ready for researchers:</b> a production copy on gnuclear, an <code>ni-ingest</code> shortcut on the Mac, and an illustrated guide. 47 automated test suites pass, and the branch merges cleanly into main.</li>
+    </ul>
+  </div>
+
+  <div class="grid2">
+    <div class="box hot">
+      <h3>Decisions needed (section 9)</h3>
+      <ul>
+        <li>Merge into main, timed with the coordinator session.</li>
+        <li>A date for Irene's first supervised sync.</li>
+        <li>Whether to recover 292 older non-NI animal records (103 already match the DB).</li>
+        <li>A go for the clean-up phase.</li>
+        <li>Re-confirm the interim use of your gjesus3 login on the Mac.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>Next two weeks</h3>
+      <ul>
+        <li>Merge; restage the production copy from main.</li>
+        <li>Irene syncs herself, supervised; then the next researcher.</li>
+        <li>A read-only <code>--plan</code> of each researcher's folder before they start.</li>
+        <li>The Data Office follow-up routine after each sync (links + animal records).</li>
+        <li>Clean-up: archive old notes and test kits; keep every working instruction.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>NI Live Sync · project report</span><span>2</span></div>
+</section>
+
+<!-- ============================== FIT IN GJESUS3 ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">2 · Context</span><h2>How the sync fits into gjesus3</h2>
+    <p class="sub">gjesus3 is the research-facing working layer: an immutable <code>raw/</code> store where every acquisition gets an ACQ-ID, registries that are the system of record, and researcher-owned project folders that link to the raw data.</p></div>
+
+  <figure>
+    <svg viewBox="0 0 720 330" role="img" aria-label="Architecture: microscopy, MRI and three NI routes feed gjesus3's raw store, registries and project folders.">
+      <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-head"/></marker></defs>
+      <text x="10" y="18" class="t-s">SOURCES</text><text x="300" y="18" class="t-s">INGEST ROUTE</text><text x="560" y="18" class="t-s">gjesus3 NAS</text>
+      <rect x="10" y="30" width="200" height="42" rx="5" class="s-box"/><text x="20" y="49" class="t-b">Microscopy</text><text x="20" y="63" class="t-s">AxioScan, LSM 900, Cell Observer</text>
+      <rect x="10" y="82" width="200" height="42" rx="5" class="s-box"/><text x="20" y="101" class="t-b">MRI</text><text x="20" y="115" class="t-s">Bruker scanners</text>
+      <rect x="10" y="134" width="200" height="186" rx="5" class="s-hot"/><text x="20" y="153" class="t-b">Nuclear Imaging (Molecubes)</text>
+      <text x="20" y="178" class="t-s">platform archive (gnuclear2$)</text>
+      <text x="20" y="226" class="t-s">researcher workspace (S:\gnuclear)</text>
+      <text x="20" y="274" class="t-s">acquisition box, live</text>
+      <rect x="250" y="30" width="230" height="42" rx="5" class="s-box"/><text x="260" y="49" class="t-b">Operator GUI / network drives</text><text x="260" y="63" class="t-s">in production</text>
+      <rect x="250" y="82" width="230" height="42" rx="5" class="s-box"/><text x="260" y="101" class="t-b">SFTP from the scanner host</text><text x="260" y="115" class="t-s">in production</text>
+      <rect x="250" y="160" width="230" height="36" rx="5" class="s-box"/><text x="260" y="176" class="t-b">Archive-mode ingest</text><text x="260" y="189" class="t-s">132 acquisitions (May–Jun)</text>
+      <rect x="250" y="208" width="230" height="36" rx="5" class="s-box"/><text x="260" y="224" class="t-b">Historical pull (one-time)</text><text x="260" y="237" class="t-s">+1,508 (Aug) · drives PET/CT (Oct)</text>
+      <rect x="250" y="256" width="230" height="40" rx="5" class="s-hot"/><text x="260" y="273" class="t-b">Live sync (this project)</text><text x="260" y="288" class="t-hot">the forward path for all new scans</text>
+      <path d="M210 51 H248" class="s-line" marker-end="url(#a1)"/><path d="M210 103 H248" class="s-line" marker-end="url(#a1)"/>
+      <path d="M210 178 H248" class="s-line" marker-end="url(#a1)"/><path d="M210 226 H248" class="s-line" marker-end="url(#a1)"/><path d="M210 274 H248" class="s-line" marker-end="url(#a1)"/>
+      <rect x="520" y="30" width="195" height="290" rx="6" class="s-ct"/>
+      <text x="532" y="54" class="t-b">raw/</text><text x="532" y="69" class="t-s">one folder per acquisition (ACQ-ID),</text><text x="532" y="82" class="t-s">checksums + metadata; immutable</text>
+      <text x="532" y="112" class="t-b">registries/</text><text x="532" y="127" class="t-s">registry_raw (35,000+ rows), subjects,</text><text x="532" y="140" class="t-s">projects, work queues (pending lists)</text>
+      <text x="532" y="170" class="t-b">projects/</text><text x="532" y="185" class="t-s">researcher-owned: raw_linked/ links,</text><text x="532" y="198" class="t-s">working/, outputs/, provenance.csv</text>
+      <text x="532" y="228" class="t-b">Finder + curated datasets</text><text x="532" y="243" class="t-s">search and long-term sets</text>
+      <rect x="532" y="262" width="172" height="46" rx="4" fill="none" stroke="var(--hot)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="540" y="280" class="t-hot">Next: Box A web app</text><text x="540" y="295" class="t-s">one place for every ingest</text>
+      <path d="M480 51 H518" class="s-line" marker-end="url(#a1)"/><path d="M480 103 H518" class="s-line" marker-end="url(#a1)"/>
+      <path d="M480 178 H518" class="s-line" marker-end="url(#a1)"/><path d="M480 226 H518" class="s-line" marker-end="url(#a1)"/><path d="M480 276 H518" class="s-line" marker-end="url(#a1)"/>
+    </svg>
+    <figcaption>NI has three routes into gjesus3. The archive and the historical pull filled the past. The live sync is how new scans arrive from now on, and it recognises what the other two already loaded.</figcaption>
+  </figure>
+
+  <table>
+    <thead><tr><th>NI route</th><th>What it covers</th><th>In production</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Archive-mode ingest</td><td>Platform's standardised archive (<code>gnuclear2$</code>)</td><td>132 acquisitions</td><td><span class="pill p-ok">done</span></td></tr>
+      <tr><td>Historical pull</td><td>Researchers' working copies on <code>S:\gnuclear</code>, 2022–2026; historical drives</td><td>1,718 acquisitions (incl. drive PET/CT)</td><td><span class="pill p-ok">done</span> 673 held back for protocol codes</td></tr>
+      <tr><td>Live sync</td><td>New scans, straight from the acquisition box</td><td>95 (first run, Irene)</td><td><span class="pill p-hot">pilot</span></td></tr>
+    </tbody>
+  </table>
+  <div class="foot"><span>NI Live Sync · project report</span><span>3</span></div>
+</section>
+
+<!-- ============================== DESIGN ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">3 · What we built</span><h2>The sync, end to end</h2></div>
+
+  <figure>
+    <svg viewBox="0 0 720 300" role="img" aria-label="Sync flow: plan, corrections, sync; outputs to gjesus3; Data Office follow-ups from Windows.">
+      <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-head"/></marker></defs>
+      <text x="10" y="16" class="t-s">AT THE MAC (researcher)</text><text x="460" y="16" class="t-s">ON gjesus3</text>
+      <rect x="10" y="26" width="130" height="58" rx="5" class="s-hot"/><text x="20" y="48" class="t-b">1 · --plan</text><text x="20" y="64" class="t-s">lists new sessions;</text><text x="20" y="76" class="t-s">copies nothing</text>
+      <rect x="160" y="26" width="140" height="58" rx="5" class="s-box"/><text x="170" y="48" class="t-b">2 · Corrections file</text><text x="170" y="64" class="t-s">fix typos once; add</text><text x="170" y="76" class="t-s">tracer (Excel, on the Mac)</text>
+      <rect x="320" y="26" width="120" height="58" rx="5" class="s-hot"/><text x="330" y="48" class="t-b">3 · Sync</text><text x="330" y="64" class="t-s">preview table,</text><text x="330" y="76" class="t-s">"Proceed? y"</text>
+      <path d="M140 55 H158" class="s-line" marker-end="url(#a2)"/><path d="M300 55 H318" class="s-line" marker-end="url(#a2)"/>
+      <rect x="460" y="26" width="255" height="40" rx="5" class="s-ct"/><text x="470" y="43" class="t-b">raw/ + registry row per reconstruction</text><text x="470" y="57" class="t-s">checksummed copy · metadata sidecar · ACQ-ID</text>
+      <rect x="460" y="74" width="255" height="40" rx="5" class="s-ct"/><text x="470" y="91" class="t-b">Attenuation maps → outputs/derived/</text><text x="470" y="105" class="t-s">derived files: no ACQ-ID, provenance row</text>
+      <rect x="460" y="122" width="255" height="40" rx="5" class="s-box"/><text x="470" y="139" class="t-b">Queued: project links</text><text x="470" y="153" class="t-s">the Mac cannot make hard links over SMB</text>
+      <rect x="460" y="170" width="255" height="40" rx="5" class="s-box"/><text x="470" y="187" class="t-b">Queued: animal records</text><text x="470" y="201" class="t-s">the Mac has no animal-DB login</text>
+      <path d="M440 55 H458" class="s-line" marker-end="url(#a2)"/><path d="M440 60 C450 60 450 94 458 94" class="s-line" marker-end="url(#a2)"/>
+      <path d="M440 64 C450 64 450 142 458 142" class="s-dash" marker-end="url(#a2)"/><path d="M440 68 C452 68 452 190 458 190" class="s-dash" marker-end="url(#a2)"/>
+      <rect x="160" y="236" width="555" height="54" rx="5" class="s-ok"/><text x="172" y="256" class="t-b">Data Office follow-up, from Windows (minutes)</text>
+      <text x="172" y="273" class="t-s">relink_pending.py → real hard links in raw_linked/ · recover_subject_metadata.py → animal records from the DB · verify</text>
+      <path d="M587 210 V234" class="s-dash" marker-end="url(#a2)"/>
+    </svg>
+    <figcaption>What a researcher does (left) and what lands on gjesus3 (right). The two queued parts are finished from the Data Office workstation, where hard links and the animal database are available.</figcaption>
+  </figure>
+
+  <div class="grid2">
+    <div class="box">
+      <h3>Design principles</h3>
+      <ul>
+        <li><b>The box is read-only.</b> The sync never moves, renames or deletes anything in a researcher's folder.</li>
+        <li><b>One acquisition per reconstruction.</b> A reconstruction that finishes weeks later becomes its own entry and inherits the session's corrections.</li>
+        <li><b>Fix once.</b> A per-researcher corrections file holds typo fixes and the tracer, permanently.</li>
+        <li><b>Nothing twice.</b> Scans loaded by another route are recognised by timestamp, modality and reconstruction number.</li>
+        <li><b>Derived is not raw.</b> CT attenuation maps go to the project as derived files, traceable to their scan.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>Rules that shaped it</h3>
+      <ul>
+        <li><b>The platform's box, the platform's terms.</b> Small CPU and I/O footprint, nothing written outside one Data Office folder, nothing deleted. Unai's concern is code nobody can read and anything that erases.</li>
+        <li><b>Demonstrable, not just readable:</b> <code>--plan</code> and <code>--dry-run</code> show every path read and written, and touch nothing.</li>
+        <li><b>Project names</b> (your rule, 8 Oct): 4 digits in the code position = <code>AE-biomaGUNE-NNNN</code>; anything else = <code>Project-&lt;code&gt;</code>. No DB check on the Mac; the later animal lookup surfaces bad codes.</li>
+        <li><b>No questions mid-sync:</b> one batch-wide answer can't be right for many studies.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>NI Live Sync · project report</span><span>4</span></div>
+</section>
+
+<!-- ============================== TIMELINE ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">4 · History</span><h2>Five months, three phases</h2></div>
+
+  <figure>
+    <svg viewBox="0 0 720 210" role="img" aria-label="Timeline from May to October 2026.">
+      <!-- scale: 113 px per month, 1 May = x 20 -->
+      <line x1="20" y1="100" x2="698" y2="100" stroke="var(--ct)" stroke-width="2"/>
+      <g class="t-s">
+        <text x="20" y="128">May</text><text x="133" y="128">Jun</text><text x="246" y="128">Jul</text><text x="359" y="128">Aug</text><text x="472" y="128">Sep</text><text x="585" y="128">Oct</text>
+      </g>
+      <g stroke="var(--ct)" stroke-width="1"><line x1="133" y1="96" x2="133" y2="104"/><line x1="246" y1="96" x2="246" y2="104"/><line x1="359" y1="96" x2="359" y2="104"/><line x1="472" y1="96" x2="472" y2="104"/><line x1="585" y1="96" x2="585" y2="104"/></g>
+      <rect x="20" y="86" width="226" height="10" fill="var(--ct-soft)"/><rect x="246" y="86" width="339" height="10" fill="var(--warn-soft)"/><rect x="585" y="86" width="113" height="10" fill="var(--hot-soft)"/>
+      <text x="22" y="82" class="t-s">foundations</text><text x="250" y="82" class="t-s">built off-box · blocked on access</text><text x="589" y="82" class="t-hot">live</text>
+      <g>
+        <circle cx="96" cy="100" r="4" fill="var(--ct)"/><line x1="96" y1="96" x2="96" y2="50" stroke="var(--line)"/><text x="100" y="34" class="t-s">22 May · archive NI</text><text x="100" y="46" class="t-s">ingest (round 8)</text>
+        <circle cx="167" cy="100" r="4" fill="var(--ct)"/><circle cx="223" cy="100" r="4" fill="var(--ct)"/><line x1="190" y1="104" x2="190" y2="146" stroke="var(--line)"/><text x="160" y="158" class="t-s">10 Jun true production;</text><text x="160" y="170" class="t-s">25 Jun first test on the Mac</text>
+        <circle cx="238" cy="100" r="4" fill="var(--hot)"/><line x1="238" y1="96" x2="238" y2="62" stroke="var(--line)"/><text x="242" y="60" class="t-s">29 Jun · corrections + --live</text>
+        <circle cx="374" cy="100" r="4" fill="var(--ct)"/><line x1="374" y1="104" x2="374" y2="146" stroke="var(--line)"/><text x="378" y="158" class="t-s">5–7 Aug · no hard links on Mac;</text><text x="378" y="170" class="t-s">tunnel half 1; one corrections file</text>
+        <circle cx="403" cy="100" r="4" fill="var(--ct)"/><line x1="403" y1="96" x2="403" y2="50" stroke="var(--line)"/><text x="407" y="34" class="t-s">13 Aug · historical pull</text><text x="407" y="46" class="t-s">132 → 1,640 NI</text>
+        <circle cx="585" cy="100" r="5" fill="var(--hot)"/><line x1="585" y1="104" x2="585" y2="186" stroke="var(--line)"/><text x="589" y="196" class="t-hot">1 Oct · tunnel live</text>
+        <circle cx="610" cy="100" r="5" fill="var(--hot)"/><line x1="610" y1="96" x2="610" y2="62" stroke="var(--line)"/><text x="714" y="34" text-anchor="end" class="t-hot">8 Oct · first</text><text x="714" y="46" text-anchor="end" class="t-hot">production sync</text>
+      </g>
+    </svg>
+  </figure>
+
+  <table>
+    <thead><tr><th style="width:22%">When</th><th>Milestone</th><th style="width:28%">Why it mattered</th></tr></thead>
+    <tbody>
+      <tr><td>22–27 May</td><td>Archive-mode NI ingest; slim layout keeps only reconstructed DICOMs</td><td>Avoided copying ~358 GB of platform raw</td></tr>
+      <tr><td>12–29 Jun</td><td>Live discovery grammar; first test on the Mac (into a sandbox); one acquisition per reconstruction; corrections + tracer; <code>--live</code> mode</td><td>The design that is in production now</td></tr>
+      <tr><td>29 Jun → 6 Aug</td><td>Two synthetic test acquisitions slipped into production through a shell setting; found in review, fully reversed</td><td>Every test since pins a scratch NAS</td></tr>
+      <tr><td>5–7 Aug</td><td>On the box: macOS cannot make hard links over SMB → links are queued and made from Windows. Tunnel workstation half built. Corrections become one file per researcher</td><td>Removed the last design blockers off-box</td></tr>
+      <tr><td>13 Aug</td><td>Historical pull from <code>S:\gnuclear</code>: +1,508; review stopped 21 fabricated projects</td><td>The past is loaded; the live sync must not duplicate it</td></tr>
+      <tr><td>1–2 Oct</td><td>Tunnel's box half installed on a site visit; Data Office can operate the Mac; Unai OKs remote tests</td><td>Ended a month without access</td></tr>
+      <tr><td>6 Oct</td><td>Caught up with main (303 commits); end-to-end test harness; all four merge gates pass on the Mac against a scratch NAS</td><td>Engine proven on the real box</td></tr>
+      <tr><td>7–8 Oct</td><td>gjesus3 kept mounted on the Mac; your hands-on test; real-folder dry runs find duplicates and attenuation maps; both fixed; <b>first production sync</b>; links + animal records; guide and production copy</td><td>Ready for a supervised pilot</td></tr>
+    </tbody>
+  </table>
+  <div class="foot"><span>NI Live Sync · project report</span><span>5</span></div>
+</section>
+
+<!-- ============================== ACCESS ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">5 · Access to the box</span><h2>The reverse tunnel, and the rules for using it</h2>
+    <p class="sub">The Molecubes Mac sits on the scanner's private network, so nobody could reach it from outside. Every test before October needed a person in the acquisition room, and access was lost for a month.</p></div>
+
+  <figure>
+    <svg viewBox="0 0 720 200" role="img" aria-label="Tunnel: the Mac dials out to the Data Office workstation; the Data Office logs back in through it.">
+      <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-head"/></marker></defs>
+      <rect x="10" y="20" width="250" height="160" rx="6" class="s-box"/><text x="22" y="42" class="t-b">Scanner network (private)</text>
+      <rect x="28" y="58" width="100" height="50" rx="4" class="s-ct"/><text x="40" y="80" class="t-b">Scanner PCs</text><text x="40" y="96" class="t-s">recon (remiW11)</text>
+      <rect x="150" y="58" width="96" height="100" rx="4" class="s-hot"/><text x="160" y="80" class="t-b">Molecubes</text><text x="160" y="94" class="t-b">Mac</text><text x="160" y="114" class="t-s">LaunchAgent</text><text x="160" y="127" class="t-s">dials out,</text><text x="160" y="140" class="t-s">reconnects</text>
+      <path d="M128 83 H148" class="s-line"/>
+      <rect x="470" y="20" width="240" height="160" rx="6" class="s-box"/><text x="482" y="42" class="t-b">Institute network</text>
+      <rect x="490" y="58" width="200" height="52" rx="4" class="s-ct"/><text x="500" y="80" class="t-b">Data Office workstation</text><text x="500" y="96" class="t-s">landing pad (WSL), port-forward only</text>
+      <rect x="490" y="122" width="200" height="40" rx="4" class="s-box"/><text x="500" y="140" class="t-b">gjesus3 NAS</text><text x="500" y="153" class="t-s">mounted on the Mac (interim)</text>
+      <path d="M246 92 H488" class="s-line" marker-end="url(#a3)"/><text x="290" y="86" class="t-s">1 · the Mac opens an outbound tunnel</text>
+      <path d="M488 102 H248" class="s-dash" marker-end="url(#a3)"/><text x="290" y="118" class="t-s">2 · Data Office logs in through it</text>
+      <path d="M246 145 C 380 175, 420 150, 488 142" class="s-dash" marker-end="url(#a3)"/><text x="300" y="168" class="t-s">3 · the sync writes to gjesus3</text>
+    </svg>
+  </figure>
+
+  <div class="grid3">
+    <div class="box"><h3>Security posture</h3><p>The Mac's tunnel key is restricted to port-forwarding; it cannot run commands on the workstation. The Data Office's login key to the Mac is recorded, and removable in one step.</p></div>
+    <div class="box"><h3>Your rules for the Mac</h3><p>Write freely only in your gnuclear folder. Every other write needs your OK. Never delete what we didn't write. Keep reads small and runs at low priority, outside acquisitions.</p></div>
+    <div class="box"><h3>Known limits</h3><p>After a Mac reboot the tunnel returns only when someone logs in (no auto-login). The gjesus3 mount uses your login for now (section 8); MacMounter re-mounts it automatically within 2 minutes.</p></div>
+  </div>
+  <div class="note">Box A, the planned server, takes over the tunnel without a site visit. The move is decided and planned make-before-break: a second connection is proven before the first is removed. Once Box A pulls data through the tunnel, the Mac needs no gjesus3 mount and no stored credentials.</div>
+  <div class="foot"><span>NI Live Sync · project report</span><span>6</span></div>
+</section>
+
+<!-- ============================== RESULTS ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">6 · Results</span><h2>The first production sync, 8 October</h2>
+    <p class="sub">Irene's whole box folder, run from the Data Office through the tunnel, at lowest priority, outside acquisitions. Before it, a read-only plan and two dry runs. After it, independent verification.</p></div>
+
+  <figure>
+    <svg viewBox="0 0 720 230" role="img" aria-label="Funnel: 222 reconstructions new to the sync, 75 already in production skipped, 52 attenuation maps to projects, 95 ingested.">
+      <text x="10" y="22" class="t-b">From folder to production</text>
+      <rect x="10" y="36" width="700" height="34" rx="3" fill="var(--ct-soft)"/><text x="20" y="58" class="t-b">222</text><text x="64" y="58" class="t-s">reconstructions in Irene's folder that the sync had never seen (920 folders scanned, 50 sessions)</text>
+      <rect x="10" y="78" width="236" height="34" rx="3" fill="var(--wash)" stroke="var(--line)"/><text x="20" y="100" class="t-b">75</text><text x="56" y="100" class="t-s">already in production → skipped</text>
+      <rect x="252" y="78" width="164" height="34" rx="3" fill="var(--ok-soft)"/><text x="262" y="100" class="t-b">52</text><text x="292" y="100" class="t-s">attenuation maps</text>
+      <rect x="422" y="78" width="288" height="34" rx="3" fill="var(--hot-soft)"/><text x="432" y="100" class="t-b">95</text><text x="462" y="100" class="t-s">reconstructions ingested (6.07 GB)</text>
+      <text x="262" y="132" class="t-s">→ projects' outputs/derived/,</text><text x="262" y="145" class="t-s">with provenance, no ACQ-ID</text>
+      <text x="432" y="132" class="t-s">→ AE-biomaGUNE-1025 ×54 · 0522 ×33 · 1125 ×8</text><text x="432" y="145" class="t-s">no project created; 5 typo sessions corrected</text>
+      <rect x="10" y="166" width="700" height="52" rx="3" fill="var(--wash)"/>
+      <text x="20" y="186" class="t-b">Same night, from Windows</text>
+      <text x="20" y="204" class="t-s">95 project hard links created · 95 animal records filled from the animal-facility DB (57 animals, 145 subject blocks)</text>
+    </svg>
+  </figure>
+
+  <div class="grid2">
+    <table>
+      <thead><tr><th>Verification (read-only, from the workstation)</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Registry rows added = live-sync rows, routed as previewed</td><td><span class="pill p-ok">95 / 95</span></td></tr>
+        <tr><td>Checksums re-verified on gjesus3</td><td><span class="pill p-ok">95 / 95</span></td></tr>
+        <tr><td>Registry validator, all of production</td><td><span class="pill p-ok">0 errors</span></td></tr>
+        <tr><td>Project links are true hard links (same file as raw)</td><td><span class="pill p-ok">95 / 95</span></td></tr>
+        <tr><td>Attenuation maps placed, each with a provenance row tied to real ACQ-IDs</td><td><span class="pill p-ok">52 / 52</span></td></tr>
+        <tr><td>Animal records equal the DB record of their own animal</td><td><span class="pill p-ok">145 / 145</span></td></tr>
+      </tbody>
+    </table>
+    <div class="box wash">
+      <h3>Footprint on the platform's Mac</h3>
+      <ul>
+        <li>Sync: 25 minutes for 95 reconstructions; system load stayed ≤1.7, and the scanner software was idle.</li>
+        <li>Read-only plan of the whole folder: 70–90 seconds.</li>
+        <li>Nothing written on the box's data; every test write landed in one Data Office folder, proven by before/after snapshots.</li>
+      </ul>
+      <h3 style="margin-top:2mm">Typo caught by the process</h3>
+      <p>Five sessions were typed <code>1015_m…</code> under series <code>1025</code>, and the folder date was a year off. Irene's own gnuclear copy had the same animals under 1025, so they were corrected in her corrections file before the sync.</p>
+    </div>
+  </div>
+  <div class="foot"><span>NI Live Sync · project report</span><span>7</span></div>
+</section>
+
+<!-- ============================== ISSUES ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">7 · Issues</span><h2>What went wrong, and what we did about it</h2>
+    <p class="sub">Most of these were found by the project's own checks before they could affect researchers. One wrote bad data into production: it was found and repaired within the hour, and is reported in full.</p></div>
+  <table>
+    <thead><tr><th style="width:20%">Issue</th><th style="width:30%">Impact</th><th>Resolution</th><th style="width:12%">Status</th></tr></thead>
+    <tbody>
+      <tr><td>No access to the box</td><td>A month without access; every test needed a visit</td><td>Reverse SSH tunnel, hardened; remote tests approved by the platform</td><td><span class="pill p-ok">resolved</span></td></tr>
+      <tr><td>macOS cannot hard-link over SMB</td><td>Project links can't be made from the Mac</td><td>Links are queued and made from Windows in minutes (95 done 8 Oct)</td><td><span class="pill p-ok">by design</span></td></tr>
+      <tr><td>No animal-DB login on the Mac</td><td>Animal details missing at sync time</td><td>Queued and filled from the workstation; the recovery tool was fixed (below)</td><td><span class="pill p-ok">by design</span></td></tr>
+      <tr><td>gjesus3 mount kept dropping</td><td>The sync's destination unavailable</td><td>Cause: no saved password. Interim: your login, kept up by MacMounter; a race between its three copies was found and fixed</td><td><span class="pill p-warn">interim</span></td></tr>
+      <tr><td>Duplicates across routes</td><td>28 of 54 sessions were already loaded by the August pull; 75 reconstructions would have been copied again</td><td>Reused the existing cross-route guard, per reconstruction; verified on real data</td><td><span class="pill p-ok">fixed</span></td></tr>
+      <tr><td>Attenuation maps looked like reconstructions</td><td>52 derived files would have become raw acquisitions</td><td>Your ruling: derived. They go to the project's <code>outputs/derived/</code> with provenance</td><td><span class="pill p-ok">fixed</span></td></tr>
+      <tr><td>Batch-wide question mid-sync</td><td>One <code>is_control</code> answer applied to many studies</td><td>Found in your hands-on test; live mode never asks; a test now simulates a person at a terminal</td><td><span class="pill p-ok">fixed</span></td></tr>
+      <tr><td><b>Recovery wrote the wrong animal</b></td><td>25 two-mouse sidecars got the second mouse's sex, date of birth and procedures</td><td>Backed up, confirmed, reset and re-recovered with a fixed per-animal tool. All 145 blocks verified against the DB. It never reached the subjects table</td><td><span class="pill p-ok">repaired</span></td></tr>
+      <tr><td>Recovery couldn't find sidecars from Windows</td><td>No animal record had ever been recovered from Windows</td><td>Paths are now resolved under the NAS root; 292 older non-NI rows await your call</td><td><span class="pill p-warn">your call</span></td></tr>
+      <tr><td>Corrections file read-only from Windows</td><td>Researchers can't fix codes from their desks</td><td>Edit on the Mac (Excel is there); a web form on Box A later</td><td><span class="pill p-ct">accepted</span></td></tr>
+      <tr><td>Folder-name typos invent projects</td><td>e.g. <code>1015</code> would create a fake project</td><td>Your naming rule, and the later DB lookup flags bad codes; corrections fix them before syncing</td><td><span class="pill p-ct">managed</span></td></tr>
+      <tr><td>Synthetic test data in production (June)</td><td>2 test acquisitions in true production</td><td>Fully reversed on 6 Aug; every test since pins a scratch NAS</td><td><span class="pill p-ok">resolved</span></td></tr>
+    </tbody>
+  </table>
+  <div class="note hot"><b>Lesson recorded:</b> a clean dry run of an older tool is not proof that it suits new data. Before applying a repair tool to production, check how it handles this data's shapes (several animals per scan), back up what it touches, and verify every written record against an independent source.</div>
+  <div class="foot"><span>NI Live Sync · project report</span><span>8</span></div>
+</section>
+
+<!-- ============================== RISKS ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">8 · Risks and open items</span><h2>What could still bite, and the mitigation in place</h2></div>
+  <table>
+    <thead><tr><th style="width:26%">Risk</th><th style="width:11%">Likelihood</th><th style="width:11%">Impact</th><th>Mitigation / plan</th></tr></thead>
+    <tbody>
+      <tr><td>Your gjesus3 login is used on a shared Mac account (superuser rights, password in its keychain)</td><td><span class="pill p-warn">medium</span></td><td><span class="pill p-risk">high</span></td><td>Mount hidden from Finder; QNAP snapshots allow recovery from deletions. IT declined a dedicated account. Retired when Box A pulls through the tunnel; undo script ready.</td></tr>
+      <tr><td>A researcher sync overlaps a Data Office batch (both write the registry)</td><td><span class="pill p-warn">medium</span></td><td><span class="pill p-warn">medium</span></td><td>Files stay consistent (locking), but batch checks stop. Interim: researchers sync outside announced windows. A "batch running" flag is in the BACKLOG at moderate priority.</td></tr>
+      <tr><td>Folder-name mistakes in other researchers' trees</td><td><span class="pill p-risk">high</span></td><td><span class="pill p-ct">low</span></td><td>Naming rule + corrections file; a read-only <code>--plan</code> of each researcher's folder before onboarding; DB lookup flags bad codes later.</td></tr>
+      <tr><td>Follow-ups (links, animal records) forgotten after researcher syncs</td><td><span class="pill p-warn">medium</span></td><td><span class="pill p-ct">low</span></td><td>Data is safe either way; a manual routine for now; a scheduled checker for all three work queues is in the BACKLOG.</td></tr>
+      <tr><td>Losing the platform's trust (footprint, unreadable code, anything that erases)</td><td><span class="pill p-ct">low</span></td><td><span class="pill p-risk">high</span></td><td>Your rules for the Mac, low-priority runs, read-only on the box, approved remote tests. Long-term the Mac runs nothing (Box A).</td></tr>
+      <tr><td>Mac reboot leaves the tunnel down until someone logs in</td><td><span class="pill p-ct">low</span></td><td><span class="pill p-ct">low</span></td><td>Researchers log in to scan anyway; the field card covers recovery.</td></tr>
+      <tr><td>Two folders named <code>new recon</code> are not parsed (Irene)</td><td><span class="pill p-ct">known</span></td><td><span class="pill p-ct">low</span></td><td>Reported in every sync summary; BACKLOG item.</td></tr>
+    </tbody>
+  </table>
+  <div class="grid2">
+    <div class="box wash"><h3>Parked by design (BACKLOG)</h3><ul>
+      <li>Researcher name casing (<code>Irene</code> / <code>irene</code>): the group decides the convention first.</li>
+      <li>Per-session <code>is_control</code>: a field on the Box A corrections form.</li>
+      <li><code>session_id</code> semantics (ISA study level): a design review.</li>
+      <li>673 historical NI acquisitions waiting for protocol codes.</li></ul></div>
+    <div class="box wash"><h3>Clean-up phase (after the pilot)</h3><ul>
+      <li>Keep every working instruction (Box A repeats the setup): field card, tunnel notes, mount kit.</li>
+      <li>Archive superseded plans; shorten the RESUME to a current-state page.</li>
+      <li>Remove test kits and scratch NAS copies from the gnuclear Data Office folder.</li></ul></div>
+  </div>
+  <div class="foot"><span>NI Live Sync · project report</span><span>9</span></div>
+</section>
+
+<!-- ============================== ROADMAP + DECISIONS ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">9 · Where we go next</span><h2>Roadmap and decisions</h2></div>
+
+  <figure>
+    <svg viewBox="0 0 720 196" role="img" aria-label="Roadmap: now, next, later.">
+      <rect x="5" y="10" width="230" height="180" rx="6" class="s-hot"/><text x="18" y="34" class="t-b">NOW · this week</text>
+      <text x="18" y="58" class="t-s">• Merge into main (with coordinator)</text><text x="18" y="76" class="t-s">• Restage production copy from main</text><text x="18" y="94" class="t-s">• Irene's first supervised sync</text><text x="18" y="112" class="t-s">• Follow-ups: links + animal records</text><text x="18" y="130" class="t-s">• Share the researcher guide</text>
+      <rect x="245" y="10" width="230" height="180" rx="6" class="s-ct"/><text x="258" y="34" class="t-b">NEXT · Oct–Nov</text>
+      <text x="258" y="58" class="t-s">• Onboard researchers one by one</text><text x="266" y="76" class="t-s">(read-only plan of each folder first)</text><text x="258" y="94" class="t-s">• Data Office follow-up routine</text><text x="258" y="112" class="t-s">• Clean-up phase</text><text x="258" y="130" class="t-s">• Batch-window flag (moderate)</text><text x="258" y="148" class="t-s">• 292 older animal records (if approved)</text>
+      <rect x="485" y="10" width="230" height="180" rx="6" class="s-box"/><text x="498" y="34" class="t-b">LATER · Box A</text>
+      <text x="498" y="58" class="t-s">• Port gjesus3 production to Box A</text><text x="498" y="76" class="t-s">• Move the tunnel, no site visit</text><text x="498" y="94" class="t-s">• One ingest web app for all instruments</text><text x="498" y="112" class="t-s">• Box A pulls NI scans: researchers leave</text><text x="506" y="130" class="t-s">the room when the scan ends</text><text x="498" y="148" class="t-s">• Corrections as a web form; Mac runs nothing</text>
+    </svg>
+  </figure>
+
+  <table class="decide">
+    <thead><tr><th>Decision for you</th><th>Options</th><th>Recommendation</th></tr></thead>
+    <tbody>
+      <tr><td>Merge into main</td><td>Now (merges cleanly) vs after the pilot</td><td class="rec">Now, timed with the coordinator. Merging deploys nothing; researchers run the staged copy.</td></tr>
+      <tr><td>Irene's supervised first sync</td><td>Pick a slot after the coordinator's MRI work</td><td class="rec">Early next week, at the Mac with the guide, Data Office watching through the tunnel.</td></tr>
+      <tr><td>292 older non-NI pending animal records (103 match the DB)</td><td>Recover now with the fixed tool / leave</td><td class="rec">Recover, scoped and verified like the NI 95; check multi-animal cases first.</td></tr>
+      <tr><td>Clean-up phase</td><td>Go after the pilot / now</td><td class="rec">After the pilot, so nothing is removed that the pilot still needs.</td></tr>
+      <tr><td>Interim credentials on the Mac</td><td>Keep until Box A / revisit with IT</td><td class="rec">Keep, with the risk noted. Ask IT again before onboarding all researchers.</td></tr>
+    </tbody>
+  </table>
+  <p class="sub">Decided in this cycle (no action needed): the cross-route duplicate guard, attenuation maps as derived files, the project-naming rule, and the batch-window flag as a moderate BACKLOG item.</p>
+  <div class="foot"><span>NI Live Sync · project report</span><span>10</span></div>
+</section>
+
+<!-- ============================== APPENDIX ============================== -->
+<section class="page">
+  <div class="head"><span class="kicker">Appendix</span><h2>Terms and where things live</h2></div>
+  <div class="grid2">
+    <table>
+      <thead><tr><th style="width:34%">Term</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Acquisition / ACQ-ID</td><td>One registered unit in <code>raw/</code>; for NI, one reconstruction. ID like <code>ACQ-20260522-CT-002</code>.</td></tr>
+        <tr><td>Reconstruction</td><td>An image the scanner software computes from a scan (<code>recon_&lt;n&gt;/</code>); a scan can have several, added later.</td></tr>
+        <tr><td>Session</td><td>One animal (or group) in one sitting: <code>series/date/subject</code> on the box.</td></tr>
+        <tr><td>Sidecar</td><td><code>metadata.json</code> next to each acquisition: scan, animal and processing details.</td></tr>
+        <tr><td>Corrections file</td><td>Per-researcher CSV on gnuclear: typo fixes and the tracer, applied by every sync.</td></tr>
+        <tr><td>Derived file</td><td>Made from an acquisition (e.g. a CT attenuation map); lives in the project, not <code>raw/</code>.</td></tr>
+        <tr><td>Work queues</td><td>Pending lists for links and animal records, finished from Windows.</td></tr>
+        <tr><td>Tunnel</td><td>Outbound SSH from the Mac that lets the Data Office operate it.</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th style="width:38%">What</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>Researchers' copy of the sync</td><td><code>S:\gnuclear\2026\Jesus\_gjesus3_sync\</code></td></tr>
+        <tr><td>Researcher guide</td><td><code>…\_gjesus3_sync\NI_SYNC_GUIDE.html</code></td></tr>
+        <tr><td>Command on the Mac</td><td><code>ni-ingest &lt;folder&gt; --plan</code>, then <code>ni-ingest &lt;folder&gt;</code></td></tr>
+        <tr><td>Code + history</td><td>branch <code>feat/ni-live-hardening</code> (pushed), merging into <code>main</code></td></tr>
+        <tr><td>Current state, next steps</td><td><code>tasks/RESUME_ni_live.md</code>, <code>tasks/STATUS.md</code></td></tr>
+        <tr><td>Tunnel record</td><td><code>equipment/nuclear-imaging/live_machine_remote_access.md</code></td></tr>
+        <tr><td>Sync rules + layout</td><td><code>equipment/nuclear-imaging/live_machine_data_layout_and_sync_rules.md</code></td></tr>
+        <tr><td>Data Office runbook</td><td><code>tools/operator/NI_LIVE_RUNBOOK.md</code></td></tr>
+        <tr><td>Later work</td><td><code>tasks/BACKLOG.md</code> (Box A, web app, flag, …)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="box wash">
+    <h3>People</h3>
+    <p><b>Ryan Tasseff</b>, Data Management Lead (owner) · <b>Unai</b>, NI platform manager (owns the acquisition Mac; approved remote tests) · <b>Irene</b>, NI researcher (first production sync, pilot user) · <b>Coordinator session</b>, sequences registry writes across the Data Office's parallel work.</p>
+  </div>
+  <div class="foot"><span>NI Live Sync · project report · 9 October 2026</span><span>11</span></div>
+</section>
+
+</body>
+</html>

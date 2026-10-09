@@ -71,6 +71,42 @@ def _near_miss(a, b):
     return len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1
 
 
+def live_project_code(subject, parent_series):
+    """The code in a subject folder's CODE POSITION, for the live sync (Ryan, 2026-10-08).
+
+    - 3-4 digits before the animal list (`1025_m1`, `324_m61`)  -> those digits
+    - another word in that position (`FDG_m3`, `ctrl_m2`)        -> that word
+    - no code at all (`m61`): the series folder when its whole name is four digits
+      (often the protocol, e.g. irene's 1025/...; sometimes a funding number, 1207)
+    - a phantom, or nothing usable                               -> ""
+    The live sync never checks a code against the animal-facility DB (the Mac has no
+    login). Every animal is queued pending-db, and the data office's later lookup
+    is where a wrong code surfaces.
+    """
+    s = (subject or "").strip()
+    if not s or "phantom" in s.lower():
+        return ""
+    m = PROJECT_PREFIX_RE.match(s)
+    if m:
+        return m.group(1)
+    first = re.split(r"[_-]", s)[0]
+    if first and not ANIMAL_RE.match(first):
+        return first
+    # Only a series folder that IS four digits: the leading digits of `260302` are a
+    # date, not a code (a date folder once became a fake protocol project, 2026-08-13).
+    series = (parent_series or "").strip()
+    return series if re.fullmatch(r"\d{4}", series) else ""
+
+
+def live_project_name(code):
+    """`1025` -> `AE-biomaGUNE-1025` (four digits = an animal protocol); any other code
+    -> `Project-<code>` as written (05_PROJECTS §2a.7); no code -> "" (no project)."""
+    code = (code or "").strip()
+    if re.fullmatch(r"\d{4}", code):
+        return f"AE-biomaGUNE-{code}"
+    return f"Project-{code}" if code else ""
+
+
 def parse_subject(subject, parent_series):
     """subject folder -> {phantom, project, animals[], timepoint, flags[]}.
 
@@ -201,16 +237,48 @@ def iter_from_listing(path, prefix, folders):
                 yield segs
 
 
+def resolve_root(root, folders):
+    """Accept EITHER the parent of the researcher folder(s) OR the folder itself.
+
+    `--root .../data irene` and `--root .../data/irene irene` both work now. The
+    tool used to require the parent (it appends `who`), and the wrong form hit the
+    silent `continue` below — walking nothing, exiting 0, and writing a
+    header-only CSV that looked like "this researcher has no data". That cost a
+    slot at the box on 2026-08-05. Returns the corrected root.
+    """
+    root = os.path.abspath(os.path.expanduser(root))
+    if any(os.path.isdir(os.path.join(root, f)) for f in folders):
+        return root
+    # Pointed AT a researcher folder? Step up so relpaths stay <who>/<series>/...
+    if os.path.basename(root.rstrip("/\\")) in folders:
+        parent = os.path.dirname(root.rstrip("/\\"))
+        if any(os.path.isdir(os.path.join(parent, f)) for f in folders):
+            return parent
+    return root
+
+
 def iter_from_root(root, folders):
+    walked = 0
     for folder in sorted(folders):
         base = os.path.join(root, folder)
         if not os.path.isdir(base):
             continue
+        walked += 1
         for dirpath, dirnames, _files in os.walk(base):
             if ANCHOR_RE.match(os.path.basename(dirpath)):
                 rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
                 yield rel.split("/")
                 dirnames[:] = []  # an anchor's children are recon_N/... — don't descend
+    if not walked:
+        # Fail loudly. Silently walking nothing and reporting success is the worst
+        # possible outcome — it reads as "no data" rather than "wrong path".
+        raise SystemExit(
+            f"ERROR: found none of {sorted(folders)} under {root}\n"
+            f"  --root takes the folder holding the researcher folders, or a "
+            f"researcher folder itself.\n"
+            f"  e.g.  --root .../remiW11/data irene\n"
+            f"    or  --root .../remiW11/data/irene irene"
+        )
 
 
 def main(argv):
@@ -237,7 +305,7 @@ def main(argv):
         ap.error("give a researcher folder or --all")
 
     src_iter = (iter_from_listing(args.from_listing, args.prefix, folders) if args.from_listing
-                else iter_from_root(args.root, folders))
+                else iter_from_root(resolve_root(args.root, folders), folders))
     rows = [build_row(segs) for segs in src_iter]
     rows.sort(key=lambda r: (r["researcher"], r["machine_date"], r["modality"]))
 

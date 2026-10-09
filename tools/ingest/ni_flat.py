@@ -35,6 +35,10 @@ deliberately coarser than the acquisition key, because the 132 archive rows
 predate the per-reconstruction model and carry no recon index. Coarser means we
 may decline to add a second reconstruction of an already-loaded scan; the
 alternative — a duplicate row for the same scan — is far worse.
+
+The live-box sync uses the same guard, at reconstruction grain
+(`registered_recons`, below), so a scan this source already loaded is not
+loaded again from the box (2026-10-08).
 """
 import csv
 import os
@@ -48,11 +52,10 @@ if _TOOLS not in sys.path:
 import ni_gnuclear_discover as nd  # noqa: E402  (shared path/subject grammar)
 
 
-def _registered_scans(registry_path):
-    """{(ts14, instrument)} already in the registry — the cross-source guard."""
-    keys = set()
+def _ni_registry_rows(registry_path):
+    """Yield (ts14, instrument, original_name) for every NI row in the registry."""
     if not registry_path or not os.path.exists(registry_path):
-        return keys
+        return
     try:
         with open(registry_path, newline="", encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
@@ -62,10 +65,53 @@ def _registered_scans(registry_path):
                 digits = "".join(c for c in (row.get("acquisition_datetime") or "")
                                  if c.isdigit())[:14]
                 if len(digits) == 14:
-                    keys.add((digits, inst))
+                    yield digits, inst, (row.get("original_name") or "").strip()
     except Exception as e:  # noqa: BLE001 — a readable registry is not guaranteed
         print(f"[ni_flat] WARN: could not read {registry_path}: {e}")
-    return keys
+
+
+def _registered_scans(registry_path):
+    """{(ts14, instrument)} already in the registry — the cross-source guard."""
+    return {(ts, inst) for ts, inst, _name in _ni_registry_rows(registry_path)}
+
+
+# The reconstruction number an NI row's original_name carries, by source:
+#   live box     <series>/<date>/<subject>/<ts>_<MOD>/recon_<n>
+#   flat pulls   <ts>_<MOD>_<ALGO>_<n>      (S:\gnuclear, the historical drives)
+# Platform-archive rows (molecubes_ni.yaml) are one bundle per scan and carry none.
+# Verified 2026-10-08 that the flat `_<n>` IS the box's `recon_<n>`: on the box,
+# recon_0/ and recon_1/ of 20260522095612_CT hold `..._CT_ISRA_0.dcm` and `_1.dcm`.
+_RECON_IN_NAME = (
+    re.compile(r"(?:^|/)\d{14}_[A-Za-z]+/recon_(\d+)$"),
+    re.compile(r"^\d{14}_[A-Za-z]+_[A-Za-z0-9]+_(\d+)$"),
+)
+
+
+def registered_recons(registry_path):
+    """The same cross-source guard, one notch finer, for the live-box sync.
+
+    Returns (recons, whole_scans):
+      recons       {(ts14, instrument, n)} from rows that name their reconstruction
+      whole_scans  {(ts14, instrument)}    from rows that don't (platform-archive
+                   bundles, which hold every reconstruction of the scan)
+
+    A box reconstruction is already in the registry if its (ts, inst, n) is in
+    `recons` or its (ts, inst) is in `whole_scans`. Finer than _registered_scans
+    because a researcher often copied only SOME reconstructions to gnuclear (the
+    box had ISRA_0, ISRA_1 and an attenuation map where the pull took ISRA_0), and
+    the box must still deliver the rest — but never a second copy of one already
+    loaded (Ryan, 2026-10-08).
+    """
+    recons, whole_scans = set(), set()
+    for ts, inst, name in _ni_registry_rows(registry_path):
+        for pat in _RECON_IN_NAME:
+            m = pat.search(name)
+            if m:
+                recons.add((ts, inst, str(int(m.group(1)))))
+                break
+        else:
+            whole_scans.add((ts, inst))
+    return recons, whole_scans
 
 
 def dst_basename(filename, recon_idx):

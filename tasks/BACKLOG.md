@@ -85,6 +85,26 @@ a DPA reference.** That gives a validator rule: human ⇒ DPA present.
   and README in `/raw/` (the recovery pattern), plus the agreement details for each cohort from
   Ryan.
 
+## 🔺 HIGH — 292 `pending-db` subject rows that were never recoverable (found 2026-10-08)
+
+`registries/pending_subject_metadata.csv` holds 292 non-NI rows (MRI and microscopy) that have
+never been recovered.
+- **Why:** `recover_subject_metadata.py` used each row's NAS-relative `sidecar_path` as-is, so
+  from Windows every DB hit failed with "sidecar not found".
+- **Status:** fixed on `feat/ni-live-hardening` 2026-10-08, along with a multi-animal bug that
+  wrote one animal's record into another animal's block (08_METADATA §4.4.6).
+- **Scale:** a dry run that day found **103 of the 292 already have DB hits**.
+- **Before any `--apply`:**
+  - check whether any of them are multi-animal scans;
+  - dry-run with the fixed tool;
+  - verify each block against its own animal's DB record afterwards, as was done for the NI rows.
+- Then refresh the subjects table with `backfill_subjects_table.py --acq-ids` for the recovered
+  acquisitions.
+- **Design gap behind the bug:** `pending.append_pending` is idempotent on `acq_id`, so a
+  multi-animal scan's row names only the last animal queued. The fixed tool no longer relies on
+  it, but the row is misleading to a reader.
+- Ryan's call; nothing was done to these rows.
+
 ## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
 
 Found by stream F while previewing the first m12 study of 2026-07-10.
@@ -207,6 +227,36 @@ anticipates for the GUI exes ("redesigned as one web app and the exes retire").
   new, higher-numbered `recon_<idx>/`. So "the scan ended" does not mean "the data is complete".
   The live sync's one-acquisition-per-reconstruction model already absorbs late arrivals; a
   server-side pull could reuse it, and a scheduled sweep might replace "pull now".
+
+**🕗 Decided for the app (Ryan, 2026-10-08): Box A pulls NI data through the tunnel, and the Mac
+stops mounting gjesus3.**
+- Until Box A, the Mac mounts gjesus3 with Ryan's login, kept up by MacMounter
+  (`tools/operator/ni_mac/`; IT will not provide an account). That puts superuser rights and a
+  saved password on a shared machine, which is accepted only as an interim.
+- After the tunnel moves (B2), Box A's `localhost:2222` is the Mac's sshd. Box A reads the
+  researcher folders (`~/Documents/volumes/remiW11/data/<researcher>`) over SFTP/rsync, read-only.
+  It runs the same per-reconstruction ingest locally and writes to gjesus3 with its own setup.
+- Gains:
+  - The Mac runs only sshd: no Python, no NAS credentials, no mount.
+  - Hard links work (Box A runs Windows).
+  - Nobody has to be at the Mac.
+- Then `ni_mac/gjesus3_mount_undo.sh` removes the interim mount and the password.
+- Open:
+  - Through the Mac, or past it? The data path is remiW11 → Mac (sshfs) → tunnel → Box A. A
+    `ProxyJump` through the Mac straight to remiW11 (192.168.0.246) would spare the Mac, but needs
+    a key on the scanner PC, the platform's machine.
+  - Pull timing: see "When does the app pull an NI session?" above.
+
+**🕗 Decided for the app (Ryan, 2026-10-07): NI corrections become a form in the app.** It is
+how a researcher fixes a wrong project or mouse id, or adds the tracer, from any computer, and it
+retires the per-researcher corrections CSV. Until then the CSV stays on gnuclear and is **edited
+on the Mac**. A file the Mac creates there is read-only from Windows, because it is owned by
+`nuclearuser` and the group has read-only access. The options considered are in
+`tasks/RESUME_ni_live.md` §0 step 3, on `feat/ni-live-hardening`. The form must keep the
+sync-safety invariant: a correction changes the metadata values, never the session key or
+`original_name`. **It is also the natural home for per-session `is_control`.** Since 2026-10-08
+the live sync no longer asks it once per batch, because one answer cannot cover a multi-study
+sync. So today it stays null unless set later.
 
 ---
 
@@ -513,6 +563,28 @@ Supersedes the live-mode items previously tracked in `STATUS.md` §0 / §4.7
 (`molecubes_ni_live.yaml`, the Unai naming-convention question). Archive-vs-live
 design context: `equipment/nuclear-imaging/internal_ni_data_handling_workflow_notes.md`.
 
+## NI live-sync — Mac-compiled GUI (deferred 2026-06-29, branch `feat/ni-live-hardening`)
+
+**The CLI live-sync is DONE** (branch `feat/ni-live-hardening`: `ni-ingest --live`,
+one-acquisition-per-reconstruction, the corrections/tracer plan→edit→sync cycle, the
+hard-link-fallback worklist — see [`tasks/ni_live_operator_plan.md`](ni_live_operator_plan.md)
+§§1–3.3). **§3.6 — a simple browser GUI for the live sync, for operators who won't use the
+terminal — is the one remaining piece and is explicitly LAST** (user 2026-06-29: "hold it").
+
+- **What:** the NI analogue of the microscopy/MRI operator GUI (`tools/operator/gui/`, a small
+  Flask app) — a deliberately-simple page over the **same** validated `--live` path (point at
+  the researcher folder → preview the per-recon table + the per-session corrections worksheet
+  inline → sync). NOT the microscopy recipe/builder UI.
+- **Why deferred + why it needs a Mac:** the NI box is a **Mac**, so this GUI must be frozen
+  with **PyInstaller on macOS** (the microscopy/MRI `.exe` was frozen on Windows — same
+  approach, different OS). It can't be built/smoke-tested from the Windows workstation, so it's
+  naturally done *after* the CLI is proven on the box. The Flask page itself can be written from
+  anywhere; only the freeze + smoke-test need the Mac.
+- **Reuse:** the MRI GUI page (`tools/operator/gui/templates/mri.html` + `static/mri.js`) is the
+  closest model (simple single-page ingest, no builder). The corrections worksheet maps to an
+  editable table in the page. Bundle `ni_corrections` + the live template; no paramiko (NI live
+  is local, not SFTP).
+
 ## Independent / second-stage tooling (moved from tasks.md 2026-06-10)
 
 Tooling that improves the system but is **not** required for the operator
@@ -797,6 +869,29 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
     file: a human/privacy-restricted registry flag, and a DPA reference on every external dataset.
     (a), (b) and (d) are not re-decided here; with no additional institute policy, today's practice
     stands.
+
+## 🔸 MODERATE — a published "batch window" flag, so researcher syncs never overlap a Data Office batch (2026-10-08)
+
+**Why.** Once NI researchers run the live sync themselves (`ni-ingest` on the Molecubes Mac),
+registry writes happen at times nobody schedules. The Data Office's batch runs (drive ingests, the
+MRI archive, retirements) have freshness guards that stop when another writer touches the registry
+mid-run. Their dedup catalogs and before/after proofs would also go stale. Row-level safety is
+already there (`registry_lock`); this is about the "one registry writer at a time" rule.
+
+**The proposal** (the coordinator session `gj3-handoff`'s preference, recorded 2026-10-08; Ryan:
+backlog, moderate, do not build yet):
+- A flag file under `registries/` names the writer, the start and the expected end.
+- The Data Office batch tools set it at start and clear it at the end.
+- A **stale-flag timeout**, plus clear-on-crash, so a dead batch cannot block researchers forever.
+- `ni-ingest` checks the flag before writing. If it is set, it waits or exits with "a Data Office
+  batch is running until HH:MM, try later". The end time is shown, because batches can run for
+  hours.
+
+**Rejected:** letting the guards ignore appended NI rows. That weakens checks whose job is to
+notice the unexpected.
+
+**Interim, until built:** researchers sync only outside announced batch windows. See
+`tasks/RESUME_ni_live.md` §0 step 3c (on `feat/ni-live-hardening` until merged).
 
 ## 🔸 MODERATE — closed projects should be MOVED, not deleted: a `projects_closed\` tier and a "close a project" action (Ryan, 2026-09-30)
 

@@ -67,7 +67,8 @@ def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None
             blocks (08_METADATA §4.4–4.6), built by ingest/enrichment.py for
             organism/tissue acquisitions. Each is added only when not None,
             keeping the key order acq_id .. discovered, subject, subjects,
-            condition, anatomy, user_provided_metadata, <ecosystem_section>
+            condition, anatomy, session_extra, user_provided_metadata,
+            <ecosystem_section>
             (08_METADATA §4.3).
         subjects: OPTIONAL list of subject blocks for a multi-animal NI scan
             (NI-LIVE-08) — written as the `subjects:[]` array alongside the
@@ -100,6 +101,13 @@ def build_sidecar(acq_id, cfg, ecosystem_section_name="", ecosystem_section=None
         sidecar["condition"] = condition
     if anatomy is not None:
         sidecar["anatomy"] = anatomy
+    # Per-session operator-supplied metadata (e.g. tracer/compound) from the NI
+    # corrections CSV's extra_metadata column (ni_corrections.apply_post stashes
+    # it on the case). Only added when present, so every other sidecar is
+    # byte-for-byte unchanged. Free-form key:value (08_METADATA §4.3).
+    session_extra = cfg.get("session_extra")
+    if session_extra:
+        sidecar["session_extra"] = dict(session_extra)
     if user_provided_metadata:
         sidecar["user_provided_metadata"] = user_provided_metadata
     if ecosystem_section_name:

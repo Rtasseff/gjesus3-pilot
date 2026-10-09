@@ -735,9 +735,28 @@ The genuinely in-flight items (kept tight — everything else is in
     ([`03_RAW_STORAGE`](../mfb-rdm-docs/03_RAW_STORAGE.md) permission model), so a
     researcher's sync would run with Full rights on `raw/` rather than an operator's
     write-but-not-modify.
-  - ⚠️ **The branch is 111 commits behind `main`** (2026-10-01). A dry-run merge conflicts in 7
-    files, including `tools/ingest_raw.py` and `tools/ingest/metadata_sidecar.py`. Catch up
-    before any new sync work.
+  - ✅ **The branch caught up with `main` on 2026-10-06** (a merge of 303 commits, not a
+    rebase; 7 files conflicted and were resolved by hand). **The same day, merge gates 1–4
+    passed ON THE MAC** over the tunnel, against a scratch NAS in Ryan's gnuclear folder with
+    synthetic data. Next: the `gjesus3` mount (down at a 2026-10-06 check; no saved
+    credentials; needs the dedicated account Ryan called for in August), then real-data runs,
+    under Ryan's rules for working on the Mac (`RESUME_ni_live.md`, top).
+  - ✅ **2026-10-08: the first production sync from the Mac. Irene's whole box folder: 95 of
+    95 reconstructions, 6.07 GB, 25 min, 0 failed.** Checksums re-verified 95/95.
+    - The **gjesus3 mount** is kept up on the Mac with Ryan's login. It is an interim, until
+      Box A pulls through the tunnel; IT declined an account.
+    - The sync **no longer re-ingests scans another source loaded**: 75 were skipped as
+      already in production from the August `S:\gnuclear` pull.
+    - **CT attenuation maps are derived files**: 52 went to the projects' `outputs/derived/`
+      with a provenance row.
+    - 5 typo sessions (`1015` for `1025`) were fixed through Irene's corrections file.
+    - **Still to do, each needing Ryan's go and a window free of other registry writers:**
+      - draining the 95 queued project links from Windows (`relink_pending.py`);
+      - recovering the 95 `pending-db` subjects;
+      - the clean-up phase;
+      - choosing the production home of the sync code;
+      - merging the branch into `main` (it merges cleanly).
+    - Detail: `RESUME_ni_live.md` §0 steps 3a/3b.
   - **After the sync (Ryan, 2026-10-01): one ingest web app on Box A** for every instrument. It
     pulls NI data through the tunnel, so operators can leave the room when the scan ends. The
     tunnel moves to Box A without a visit (B2 decided). See [`BACKLOG.md`](BACKLOG.md)

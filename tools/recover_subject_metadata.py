@@ -48,6 +48,7 @@ against the DB; controlled-write against /raw sidecars + the pending list only.
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -266,21 +267,53 @@ def _write_sidecar(path, sidecar, newline=None):
     os.replace(tmp_path, path)
 
 
+def _subject_blocks(sidecar):
+    """Every subject block of a sidecar, labelled: the primary `subject` and, for a
+    multi-animal scan, each entry of `subjects[]` (which repeats the primary animal)."""
+    out = []
+    if isinstance(sidecar.get("subject"), dict):
+        out.append(("subject", sidecar["subject"]))
+    for i, b in enumerate(sidecar.get("subjects") or []):
+        if isinstance(b, dict):
+            out.append((f"subjects[{i}]", b))
+    return out
+
+
 def _verify_after_write(path, updates):
     """Re-read the sidecar from disk; confirm every update landed. Returns
-    (ok: bool, detail: str)."""
+    (ok: bool, detail: str).
+
+    `updates` is {block label: {field: value}} (labels `subject`, `subjects[<i>]`),
+    or the older flat {field: value} for the primary `subject` block, which
+    recover_subject_ids*.py still pass."""
+    if updates and not all(re.fullmatch(r"subject(s\[\d+\])?", str(k)) for k in updates):
+        updates = {"subject": updates}
     try:
         fresh = _read_sidecar(path)
     except Exception as e:
         return False, f"could not re-read sidecar: {e}"
-    subj = fresh.get("subject") or {}
-    for field, val in updates.items():
-        if subj.get(field) != val:
-            return False, f"field {field!r} = {subj.get(field)!r}, expected {val!r}"
+    blocks = dict(_subject_blocks(fresh))
+    for label, fields in updates.items():
+        blk = blocks.get(label) or {}
+        for field, val in fields.items():
+            if blk.get(field) != val:
+                return False, f"{label}.{field} = {blk.get(field)!r}, expected {val!r}"
     return True, "all fields confirmed"
 
 
-def recover_one(row, *, apply, lookup_fn, log=log):
+def resolve_sidecar_path(path, nas_root):
+    """The pending list stores `sidecar_path` NAS-RELATIVE: ingest Step 8.4 writes
+    `canonical_path + "/metadata.json"`, i.e. `/raw/.../<ACQ-ID>/metadata.json`.
+    Resolve that under `nas_root`. A path that already exists as given (an older
+    absolute row) is used unchanged. Before 2026-10-08 the path was used as-is, so
+    from Windows every row looked for `J:\\raw\\...` and failed "sidecar not found",
+    and every DB hit stayed pending."""
+    if not path or not nas_root or os.path.isfile(path):
+        return path
+    return os.path.join(nas_root, *path.replace("\\", "/").strip("/").split("/"))
+
+
+def recover_one(row, *, apply, lookup_fn, log=log, nas_root=None):
     """Process a single pending row. Pure w.r.t. the pending list (returns a
     status dict; the caller mutates + persists the list).
 
@@ -298,7 +331,7 @@ def recover_one(row, *, apply, lookup_fn, log=log):
     """
     acq_id = row.get("acq_id", "")
     fa_id = row.get("facility_animal_id", "")
-    sidecar_path = row.get("sidecar_path", "")
+    sidecar_path = resolve_sidecar_path(row.get("sidecar_path", ""), nas_root)
     status = (row.get("status") or "").strip().lower()
     result = {"acq_id": acq_id, "facility_animal_id": fa_id,
               "outcome": "", "updates": {}, "skipped": [], "detail": ""}
@@ -312,22 +345,7 @@ def recover_one(row, *, apply, lookup_fn, log=log):
         result["detail"] = f"status={status!r} (not 'pending'); skipping"
         return result
 
-    # Parse the facility animal id into the DB join key.
-    try:
-        alias, code = animal_db.parse_subject_id(fa_id)
-    except ValueError as e:
-        result["outcome"] = "still-pending"
-        result["detail"] = f"unparseable facility_animal_id: {e}"
-        return result
-
-    res = lookup_fn(alias, code)
-    if res.status != "found":
-        result["outcome"] = "still-pending"
-        result["detail"] = (f"DB {res.status} (reason={res.reason}): "
-                            f"{res.detail} — left pending")
-        return result
-
-    # Load the /raw sidecar.
+    # Load the /raw sidecar first: the DB lookups are per ANIMAL BLOCK, not per row.
     if not sidecar_path or not os.path.isfile(sidecar_path):
         result["outcome"] = "error"
         result["detail"] = f"sidecar not found at {sidecar_path!r}"
@@ -338,35 +356,67 @@ def recover_one(row, *, apply, lookup_fn, log=log):
         result["outcome"] = "error"
         result["detail"] = f"could not read sidecar: {e}"
         return result
-
-    subject = sidecar.get("subject")
-    if not isinstance(subject, dict):
+    blocks = _subject_blocks(sidecar)
+    if not blocks:
         result["outcome"] = "error"
         result["detail"] = "sidecar has no subject block to fill"
         return result
 
+    # Every block is filled from ITS OWN animal's record (2026-10-08). The pending
+    # row names ONE animal per acquisition (append_pending is idempotent on acq_id,
+    # so a multi-animal scan keeps the LAST animal queued). Filling the primary
+    # block from the row's animal wrote another animal's sex/DOB/procedures into 25
+    # NI sidecars. So: look up each block's own id, refuse a record for another
+    # id, and write only when EVERY animal of the scan was found.
     acq_for_age = find_acquisition_datetime(sidecar)
-    updates, skipped = plan_subject_fill(subject, res.subject, acq_for_age)
+    found = {}
+    plan = []
+    for label, block in blocks:
+        fid = (block.get("facility_animal_id") or fa_id or "").strip()
+        if fid not in found:
+            try:
+                alias, code = animal_db.parse_subject_id(fid)
+            except ValueError as e:
+                result["outcome"] = "still-pending"
+                result["detail"] = f"{label}: unparseable facility_animal_id {fid!r}: {e}"
+                return result
+            found[fid] = lookup_fn(alias, code)
+        res = found[fid]
+        if res.status != "found":
+            result["outcome"] = "still-pending"
+            result["detail"] = (f"{label} ({fid}): DB {res.status} (reason={res.reason}): "
+                                f"{res.detail} — left pending")
+            return result
+        got = ((res.subject or {}).get("facility_animal_id") or "").strip()
+        if got and got != fid:
+            result["outcome"] = "error"
+            result["detail"] = (f"{label}: the DB answered {got!r} for {fid!r}; refusing "
+                                f"to write another animal's record")
+            return result
+        upd, skp = plan_subject_fill(block, res.subject, acq_for_age)
+        plan.append((label, block, upd, skp))
+
+    updates = {label: upd for label, _blk, upd, _skp in plan if upd}
     result["updates"] = updates
-    result["skipped"] = skipped
+    result["skipped"] = [item for _l, _b, _u, skp in plan for item in skp]
 
     if not updates:
         # Nothing to do — already complete (e.g. recovered out-of-band). Treat
         # as idempotent already-recovered so the caller can flip the stale row.
         result["outcome"] = "already-recovered" if apply else "would-recover"
-        result["detail"] = "subject already fully populated; nothing to write"
+        result["detail"] = "every subject block already fully populated; nothing to write"
         return result
 
+    what = "; ".join(f"{label}: {sorted(f)}" for label, f in updates.items())
     if not apply:
         result["outcome"] = "would-recover"
-        result["detail"] = (f"would fill {sorted(updates)} "
-                            f"(acq_date_for_age={acq_for_age or 'none'})")
+        result["detail"] = f"would fill {what} (acq_date_for_age={acq_for_age or 'none'})"
         return result
 
     # --- controlled write ---
-    backup = dict(subject)  # shallow snapshot for rollback on verify failure.
-    for field, val in updates.items():
-        subject[field] = val
+    backups = [(blk, dict(blk)) for _l, blk, upd, _s in plan if upd]
+    for _l, blk, upd, _s in plan:
+        blk.update(upd)
     try:
         _write_sidecar(sidecar_path, sidecar)
     except Exception as e:
@@ -377,7 +427,9 @@ def recover_one(row, *, apply, lookup_fn, log=log):
     ok, vdetail = _verify_after_write(sidecar_path, updates)
     if not ok:
         # Roll back the in-file change and leave the row pending.
-        sidecar["subject"] = backup
+        for blk, snap in backups:
+            blk.clear()
+            blk.update(snap)
         try:
             _write_sidecar(sidecar_path, sidecar)
         except Exception:
@@ -387,23 +439,28 @@ def recover_one(row, *, apply, lookup_fn, log=log):
         return result
 
     result["outcome"] = "recovered"
-    result["detail"] = f"filled {sorted(updates)}; verify OK"
+    result["detail"] = f"filled {what}; verify OK"
     return result
 
 
-def recover_all(registries_dir, *, apply=False, lookup_fn=None, log=log):
+def recover_all(registries_dir, *, apply=False, lookup_fn=None, log=log, only=None):
     """Walk the pending list and recover what we can.
 
     Args:
         registries_dir: the NAS registries/ directory holding the pending list.
+            Its parent is the NAS root that row sidecar paths are relative to.
         apply: write changes (default False = dry-run, touches nothing).
         lookup_fn: injectable animal lookup (defaults to animal_db.lookup);
             takes (project_alias, animal_code) -> LookupResult.
+        only: optional set of ACQ-IDs. When given, rows outside it are neither
+            looked up nor touched (their status, sidecar and position stay as
+            they are).
 
     Returns a summary dict with per-row results + counts.
     """
     if lookup_fn is None:
         lookup_fn = animal_db.lookup
+    nas_root = os.path.dirname(os.path.normpath(registries_dir))
 
     path = pending.pending_path(registries_dir)
     rows = pending.read_pending(path)
@@ -411,8 +468,11 @@ def recover_all(registries_dir, *, apply=False, lookup_fn=None, log=log):
     any_recovered = False
 
     for row in rows:
+        if only is not None and row.get("acq_id", "") not in only:
+            continue
         try:
-            r = recover_one(row, apply=apply, lookup_fn=lookup_fn, log=log)
+            r = recover_one(row, apply=apply, lookup_fn=lookup_fn, log=log,
+                            nas_root=nas_root)
         except Exception as e:
             # Defense-in-depth: a single unexpected row error must never abort
             # the whole walk — that would leave sidecars already written this
@@ -485,6 +545,11 @@ def main(argv=None):
         action="store_true",
         help="Write changes. Without this flag the tool is a no-op preview.",
     )
+    p.add_argument(
+        "--acq-ids", metavar="FILE",
+        help="Only these acquisitions: a text file with one ACQ-ID per line "
+             "('#' comments allowed). Other pending rows are left untouched.",
+    )
     args = p.parse_args(argv)
 
     # Keep accented procedure / strain names legible on the Windows console;
@@ -510,7 +575,13 @@ def main(argv=None):
     if not args.apply:
         log("*** DRY-RUN MODE - no changes will be made (use --apply to write) ***")
 
-    summary = recover_all(registries_dir, apply=args.apply)
+    only = None
+    if args.acq_ids:
+        with open(args.acq_ids, encoding="utf-8-sig") as f:
+            only = {ln.split("#", 1)[0].strip() for ln in f} - {""}
+        log(f"scope: {len(only)} ACQ-ID(s) from {args.acq_ids}; other pending rows untouched")
+
+    summary = recover_all(registries_dir, apply=args.apply, only=only)
     _print_summary(summary)
 
     # Non-zero exit only on hard errors (sidecar missing / verify failure),

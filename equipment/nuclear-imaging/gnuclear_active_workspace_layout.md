@@ -31,7 +31,10 @@ in the agent harness — use Git Bash POSIX paths). Years **2022–2026** each c
 | 2023 | `Aitor_Herraiz`, `Ermal`, `Irati`, `Kepa`, `Libe`, `MJ`, `Marina` — **plus loose `*_CT_ISRA_0.dcm` files at the `Jesus\` root** |
 | 2024 | `Alba`, `CarlottaS`, `Claire`, `Ermal`, `Irati`, `Irene`, `Itziar`, `MJ`, `Marina` |
 | 2025 | `Carlotta`, `Claudia`, `Irene`, `Itziar` |
-| 2026 | `Ekine`, `Itziar`, `Jordi`, `Ryan`, `irene` (lowercase) |
+| 2026 | `Claudia`, `Ekine`, `Itziar`, `Jordi`, `Ryan`, `irene` (lowercase) |
+
+*(2026 re-checked 2026-08-07: `Claudia` was added on 2026-06-26, the day after this survey
+was captured. The rest are unchanged.)*
 
 Notes:
 - **Folder names are Capitalized and broader** than the box roster (which used lowercase
@@ -108,6 +111,14 @@ the table already collapses those to distinct acquisitions.)
    stays the full source of truth (all recons + raw). Provenance records read source = `S:\gnuclear`.
 5. **Open scope questions:** the `Jesus\`-as-scope vs allow-list question (§1), and whether to also
    capture the co-located analysis **derivatives** into the project workspace (a fast-follow).
+6. **This tree is no longer read-only for us (2026-08-07).** The live-box NI sync now keeps each
+   researcher's corrections file here — `<year>\<group>\<user>\ni_corrections_<user>.csv` (see
+   [`live_machine_data_layout_and_sync_rules.md`](live_machine_data_layout_and_sync_rules.md) and
+   `tools/ingest/ni_corrections.py`). It is a small operator-owned CSV, **not** acquisition data:
+   a historical ingest of this workspace must **ignore** it. Harmless today — discovery matches
+   `*.dcm` by the filename anchor (§3), which no `.csv` can satisfy — but worth stating so a later
+   "sweep everything in the user folder" change doesn't swallow it. It also means a `<user>\` folder
+   may now exist here for someone with no analysis data at all.
 
 ## 6. How this was measured (reproducible, read-only)
 
