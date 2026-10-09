@@ -34,7 +34,9 @@ printed PASS/FAIL per check. Exit 1 on any unexplained mismatch.
   5 projects         only the profile's one new project may be created (drive 3: none); every other exists
   6 subjects         none on (A)-held / (C) / no-claim rows; each present one re-resolves in the facility
                      DB, in its own protocol, to itself
-  7 XMIC             drives 1+2: 338 rows, instrument_model "Axio Imager.Z2", the chosen data_source
+  7 XMIC             the profile's count, model and data_source: drives 1+2 338 rows, "Axio Imager.Z2",
+                     collaborator:Charite; drive 3's Biodonostia Axioscan (drive3x_2026-10): "Axioscan 7",
+                     collaborator:Biodonostia
   8 link names       drive 3: every planned link name is unique in its project and free in the project's
                      live raw_linked\\ (the engine's 2026-10-05 pre-check refuses a taken one at run time)
 """
@@ -212,9 +214,11 @@ def main():
     derived = collections.defaultdict(dict)
     if decide:
         for r in P.rcsv(P.A1_FILES):
-            if r["ext"].lower() == ".czi" and r["czi_class"] == "czi-raw" and r["instrument"] in P.INSTRUMENTS:
-                if r["sha256"] not in prod and r["sha256"] not in gopt:
-                    derived[P.INSTRUMENTS[r["instrument"]]][r["sha256"]] = int(r["size"])
+            if r["ext"].lower() != ".czi" or r["czi_class"] != "czi-raw":
+                continue
+            inst = P.a1_instrument(r)          # the XMIC profile: the current reference over A1's own fingerprint
+            if inst in P.INSTRUMENTS and r["sha256"] not in prod and r["sha256"] not in gopt:
+                derived[P.INSTRUMENTS[inst]][r["sha256"]] = int(r["size"])
     else:
         for r in P.rcsv(os.path.join(P.CAT, "files.csv")):
             if r["ext"].lower() == ".czi" and r["class"] == "czi-raw" and r["instrument"] in P.INSTRUMENTS:

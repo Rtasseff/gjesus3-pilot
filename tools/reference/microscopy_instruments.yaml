@@ -42,6 +42,14 @@ instruments:
     serials: ["784053"]          # stand key: Upright. 338 files, all under ...\Ferritas\Charite\,
                                  # acquired 2024-09-27 .. 2024-10-11. Ryan 2026-09-29: enters as
                                  # external data with its own X-code (not yet named).
+  - code: "EXTERNAL:Axioscan7-Biodonostia"
+    name: ZEISS Axioscan 7 (whole-slide scanner), external, at Biodonostia (San Sebastian)
+    external: true
+    serials: ["4661000340"]      # stand keys: Pollux, UprightFixedStage; stand name "Axioscan 7" --
+                                 # the same model as our ZWSI (4661000718), told apart ONLY by this
+                                 # serial. 144 copies (116 distinct) on M. Jesus's drive (drive 3),
+                                 # acquired 2024-10-24 .. 2025-02-19. Irene, 2026-10-08: scanned at
+                                 # Biodonostia (no formal collaboration). Enters as XMIC.
   - code: CELL
     name: ZEISS Cell Observer (Axio Observer.Z1 / 7, widefield)
     no_serials: true             # the Cell Observer writes NO device serial

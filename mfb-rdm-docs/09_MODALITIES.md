@@ -2,7 +2,7 @@
 
 **Parent:** [Documentation Index](00_INDEX.md)  
 **Status:** ⚠️ Gaps identified
-**Last Updated:** 2026-10-04 — ✅ the line on what is registered for platform data: a reconstructed image stored as DICOM, or not at all (§1 "Two Categories of ‘Raw’ Data"). Prior: 2026-09-30 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `XMIC` code for an external microscope's `.czi` (§1.6, first use the Charité Axio Imager.Z2); `discovered.czi_*` / `discovered.mri_*` field tables re-verified against `tools/ingest/czi_metadata.py` and `tools/ingest/paravision_metadata.py` `EXPOSED_FIELDS` (in sync — 21 CZI + 22 MRI fields); `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
+**Last Updated:** 2026-10-08 — 🔶 §1.6 `XMIC`'s second instance (Biodonostia's Axioscan 7, gated, not yet ingested). Prior: 2026-10-04 — ✅ the line on what is registered for platform data: a reconstructed image stored as DICOM, or not at all (§1 "Two Categories of ‘Raw’ Data"). Earlier: 2026-09-30 — one-line summary; full dated history in [CHANGELOG.md](../CHANGELOG.md). Recent: `XMIC` code for an external microscope's `.czi` (§1.6, first use the Charité Axio Imager.Z2); `discovered.czi_*` / `discovered.mri_*` field tables re-verified against `tools/ingest/czi_metadata.py` and `tools/ingest/paravision_metadata.py` `EXPOSED_FIELDS` (in sync — 21 CZI + 22 MRI fields); `condition:` written for `sample_type = cells`; animal-DB `subject:` lookup is live (not blocked on IT); registry `subject_ids` column (added S1 as `subject_id`, renamed packed `subject_ids` 2026-06-12, NI-LIVE-08).
 
 ---
 
@@ -296,8 +296,9 @@ The structured form of all the above plus DICOM header summaries + parsed XML au
 |-----------|-------|
 | **Code** | `XMIC` (ecosystem `MICROSCOPY`, primary = the single `.czi`, like §1.1–1.3) |
 | **First instance** | Zeiss **Axio Imager.Z2** (device serial `784053`) at Charité, Berlin: 338 `.czi` of the `Ferritas` project, acquired 2024-09-27 → 2024-11-07, found on the historical drives (`tasks/drives_catalog_findings.md`). The same project's local histology is `CELL`. |
-| **How it is recognised** | By the `.czi`'s own device serial, never its folder: `tools/reference/microscopy_instruments.yaml` fingerprints it as `EXTERNAL:AxioImagerZ2`, which the ingest maps to `XMIC`. |
-| **Registry** | `instrument_model` written literally (`Axio Imager.Z2`, the value the file carries); `data_source` = `collaborator:<origin>` — `collaborator:Charite` for the first batch. |
+| **Second instance** | 🔶 Gated 2026-10-08, ingested on Ryan's go: Zeiss **Axioscan 7** (device serial `4661000340`) at Biodonostia, San Sebastián — the same model as our `ZWSI` (`4661000718`), told apart only by the serial: 83 whole-slide scans of 2024-10 → 2025-02 on M. Jesús's drive (`tasks/drive3_foreign_raw_gate.md`). |
+| **How it is recognised** | By the `.czi`'s own device serial, never its folder: `tools/reference/microscopy_instruments.yaml` fingerprints it as `EXTERNAL:AxioImagerZ2` (Charité) or `EXTERNAL:Axioscan7-Biodonostia`, which the ingest maps to `XMIC`. |
+| **Registry** | `instrument_model` written literally (`Axio Imager.Z2`, `Axioscan 7`: the value the file carries); `data_source` = `collaborator:<origin>` — `collaborator:Charite` for the first batch, `collaborator:Biodonostia` for the second (the origin of the acquisition, whether or not a formal collaboration exists; the registry notes say which). |
 | **Embedded metadata** | The same 21 `discovered.czi_*` fields as §1.1 (same extractor). |
 | **Status** | ✅ Code live in `tools/ingest/config.py` (2026-09-30). Operators do not ingest external data, so the operator GUI does not offer it; a Data-Office config does. |
 
