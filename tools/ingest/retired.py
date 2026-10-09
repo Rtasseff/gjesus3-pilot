@@ -11,6 +11,10 @@ folder whose registry row was never written. v2 (2026-10-02) adds an
 EQUIVALENT duplicate (a .czi re-save: same information, different container)
 and a REIDENTIFIED acquisition (a wrong instrument code, so a wrong ACQ-ID: the
 same file re-registered in place under a new id, which is its superseded_by).
+2026-10-08 adds NO-DICOM: a platform acquisition registered as an empty
+placeholder (no image) before the 2026-10-04 line (09_MODALITIES: registered only
+with a reconstructed image stored as DICOM); its folder's files move to its
+project as other data, and nothing supersedes it.
 Its row LEAVES registry_raw.csv and is appended here, verbatim, with the reason
 and what happened to the bytes.
 
@@ -23,7 +27,8 @@ Rules this file carries:
     (it is also the signature of a retire run that crashed mid-commit — re-run
     the tool to finish it).
   - `superseded_by` names a LIVE acquisition (the surviving duplicate, or the
-    derivative's original). Blank only for an orphan.
+    derivative's original). Blank only for an orphan or a no-dicom placeholder
+    (NO_SUPERSEDER).
   - Rows are permanent. Nothing deletes or edits a tombstone.
 
 Ryan expects to revisit a `status` column in registry_raw.csv instead (BACKLOG,
@@ -46,14 +51,16 @@ RETIRED_FILENAME = "retired_acquisitions.csv"
 RETIRED_FIELDS = [
     "acq_id",            # the retired id (unique key)
     "retired_at",        # ISO-8601 UTC of the commit
-    "disposition",       # duplicate | derivative | orphan | equivalent | reidentified
+    "disposition",       # duplicate | derivative | orphan | equivalent | reidentified | no-dicom
     "superseded_by",     # the live acquisition it duplicates / derives from / was re-identified
-                         #   as ("" for orphan)
+                         #   as ("" for orphan and no-dicom)
     "reason",            # free text, required; v2 appends " || evidence: {json}" (EVIDENCE_SEP)
     "bytes_fate",        # deleted | moved  (what happened to the /raw/ bytes)
-    "moved_to",          # NAS-relative path of the bytes' new home (derivative), else ""
+    "moved_to",          # NAS-relative path of the bytes' new home (derivative; no-dicom: the
+                         #   folder, trailing "/"), else ""
     "sha256",            # SHA-256 of the primary, hashed fresh from disk at retirement
-                         #   (folder primary: SHA-256 of the sorted "relpath<TAB>sha256\n" list)
+                         #   (folder primary: SHA-256 of the sorted "relpath<TAB>sha256\n" list;
+                         #   no-dicom: that list over the files moved, the primary being empty)
     "original_canonical_path",  # where the acquisition lived in /raw/
     "retired_by",        # who ran the retirement (Data Office) -- NOT the equipment operator
     "run_id",            # the retire run that wrote this row (links to its report + backup)
@@ -69,8 +76,13 @@ DISPOSITIONS = ("duplicate", "derivative", "orphan",
                 # v2 (2026-10-02): a .czi re-save that is information-identical to the survivor but
                 # not byte-identical; and a mis-coded acquisition re-registered in place under the
                 # right instrument code (superseded_by = its new id). 06_REGISTRIES §2.9.
-                "equivalent", "reidentified")
+                "equivalent", "reidentified",
+                # 2026-10-08: a platform acquisition registered as an empty placeholder (no DICOM
+                # image) before the 2026-10-04 line; its files move to its project as other data.
+                "no-dicom")
 BYTES_FATES = ("deleted", "moved")
+# Dispositions with nothing that supersedes them (superseded_by blank). Shared with the validator.
+NO_SUPERSEDER = ("orphan", "no-dicom")
 
 # v2: the tool's own evidence is appended to the operator's `reason`, after this separator, as one
 # compact JSON object (no schema change: the tombstone file's header stays as v1 created it).
@@ -143,7 +155,7 @@ def append_retired(path, row):
     """Append one tombstone row. The CALLER must hold the registry lock.
 
     Validates the row first: a known disposition and bytes fate, a reason, and a
-    superseded_by for every disposition except orphan. Creates the file (with
+    superseded_by for every disposition except NO_SUPERSEDER. Creates the file (with
     its header) on first use. CRLF line endings and no BOM, like every other
     registry file (csv.writer's default terminator is CRLF).
     """
@@ -158,7 +170,7 @@ def append_retired(path, row):
                            f"not in {BYTES_FATES}")
     if not (row.get("reason") or "").strip():
         raise RuntimeError("append_retired: a reason is required")
-    if row["disposition"] != "orphan" and not (row.get("superseded_by") or "").strip():
+    if row["disposition"] not in NO_SUPERSEDER and not (row.get("superseded_by") or "").strip():
         raise RuntimeError("append_retired: superseded_by is required for "
                            f"disposition {row['disposition']!r}")
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)

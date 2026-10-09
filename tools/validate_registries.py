@@ -48,7 +48,8 @@ WHAT IT CHECKS
       (same original_name and acquisition_datetime, a different instrument). ERROR.
     - no id is both live (registry_raw) and retired. ERROR -- also the signature of a
       retire run that crashed mid-commit: re-run retire_acquisition.py to finish it.
-    - every superseded_by (blank only for an orphan) names a LIVE acquisition. ERROR.
+    - every superseded_by (blank only for an orphan or a no-dicom placeholder,
+      ingest.retired.NO_SUPERSEDER) names a LIVE acquisition. ERROR.
     - no curated dataset (registry_datasets.csv + the text files under
       curated_datasets/) cites a retired id. ERROR.
     - a retired id's /raw/ folder no longer exists. ERROR -- a retire run that
@@ -417,7 +418,7 @@ def check_retired(nas_root, registries_dir, live_ids, issues, live_rows=None):
         if sup and sup not in live_ids:
             issues.error(f"retired, superseded_by {sup}, which is not a live acquisition"
                          + (" (it is retired too)" if sup in tombs else ""), acq)
-        elif not sup and disp != "orphan":
+        elif not sup and disp not in retired.NO_SUPERSEDER:
             issues.error(f"retired as {t.get('disposition')!r} with no superseded_by", acq)
         elif disp == "reidentified" and live_rows is not None and sup in live_rows:
             # A re-identified id's superseded_by is the SAME acquisition under another instrument code.
