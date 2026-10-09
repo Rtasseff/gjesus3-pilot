@@ -2375,6 +2375,16 @@ mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadat
 
 - [ ] A path-level mapping in `nonraw_placement.py remap` (with a test), then move the 165.
 
+## 🔹 LOW — the claim workbook still lists the 464 retired placeholders (2026-10-09)
+
+`_MRI sessions - who ran them.xlsx` lists 23,590 acquisitions; 23,126 are still held `pending-claim`. The difference is
+the 464 DICOM-less placeholders retired on 2026-10-09 (`no-dicom`), whose rows were appended before the retirement. A
+claim on one is harmless (it is simply not applied). Also: the workbook's headers are what `claim_workbooks.py` keys on;
+a user overwrote one on 10-09 (restored).
+
+- [ ] When the answers are joined back (the 2b-style run), skip retired ACQ-IDs and report them; optionally mark their rows
+  "retired" in the workbook with an append-only note column.
+
 ## 🔹 LOW — the MRI archive's 233 unregistered exams: place them, or leave them on the platform (2026-10-09)
 
 The archive ingest's hand-over list (`ar_15_lists.py`, 2026-10-09) names 233 exams (+ 7 reconstruction sets) it did not
