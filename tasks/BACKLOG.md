@@ -870,6 +870,29 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
     (a), (b) and (d) are not re-decided here; with no additional institute policy, today's practice
     stands.
 
+## 🔸 MODERATE — a published "batch window" flag, so researcher syncs never overlap a Data Office batch (2026-10-08)
+
+**Why.** Once NI researchers run the live sync themselves (`ni-ingest` on the Molecubes Mac),
+registry writes happen at times nobody schedules. The Data Office's batch runs (drive ingests, the
+MRI archive, retirements) have freshness guards that stop when another writer touches the registry
+mid-run. Their dedup catalogs and before/after proofs would also go stale. Row-level safety is
+already there (`registry_lock`); this is about the "one registry writer at a time" rule.
+
+**The proposal** (the coordinator session `gj3-handoff`'s preference, recorded 2026-10-08; Ryan:
+backlog, moderate, do not build yet):
+- A flag file under `registries/` names the writer, the start and the expected end.
+- The Data Office batch tools set it at start and clear it at the end.
+- A **stale-flag timeout**, plus clear-on-crash, so a dead batch cannot block researchers forever.
+- `ni-ingest` checks the flag before writing. If it is set, it waits or exits with "a Data Office
+  batch is running until HH:MM, try later". The end time is shown, because batches can run for
+  hours.
+
+**Rejected:** letting the guards ignore appended NI rows. That weakens checks whose job is to
+notice the unexpected.
+
+**Interim, until built:** researchers sync only outside announced batch windows. See
+`tasks/RESUME_ni_live.md` §0 step 3c (on `feat/ni-live-hardening` until merged).
+
 ## 🔸 MODERATE — closed projects should be MOVED, not deleted: a `projects_closed\` tier and a "close a project" action (Ryan, 2026-09-30)
 
 Ryan's direction, made with the CoS hub over the M. Jesús drive (its `HANDOFF.md` §7.3; STATUS §2):
