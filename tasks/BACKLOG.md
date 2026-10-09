@@ -2363,6 +2363,16 @@ mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadat
 
 - [ ] A path-level mapping in `nonraw_placement.py remap` (with a test), then move the 165.
 
+## 🔹 LOW — the MRI archive's 233 unregistered exams: place them, or leave them on the platform (2026-10-09)
+
+The archive ingest's hand-over list (`ar_15_lists.py`, 2026-10-09) names 233 exams (+ 7 reconstruction sets) it did not
+register under the DICOM-only line — spectroscopy/calibration and 16 failed conversions: 3,119 files, 0.37 GB (k-space
+0.16 GB), for `0118`, `1116`, `0618`, `0619` … and holding. The plan was an optional placement batch (P2's pattern). The
+local extract was deleted on 2026-10-09, so placing them now needs a night-time re-fetch of those studies from the
+platform archive (`tools/mri_archive.py fetch`, read-only there).
+
+- [ ] Ryan: place them (re-fetch + a placement batch), or leave them on the platform's archive (the default; the DICOM-only line).
+
 ## 🔸 MODERATE — 231 placed MetaImage headers name a `.raw` the path budget renamed (2026-10-08)
 
 The drive-3 close-out read every affected `.mhd`: **231 placed `.mhd` headers** (225 from drive 1, 6 from drive 3, all in
