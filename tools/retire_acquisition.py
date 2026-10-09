@@ -3,16 +3,19 @@
 
     python tools/retire_acquisition.py --nas-root "J:\\gjesus3-data" --acq-id ACQ-... --reason "..." \\
         (--duplicate-of ACQ-... | --equivalent-of ACQ-... | --derivative-of ACQ-... --to-project <name>
-         [--subfolder outputs\\derived] | --orphan | --reidentify-as <CODE> [--instrument-model "..."])
+         [--subfolder outputs\\derived] | --orphan | --reidentify-as <CODE> [--instrument-model "..."]
+         | --no-dicom [--to-project <name>] [--subfolder working\\mri_not_registered] [--see-also <path>])
         [--execute]
     python tools/retire_acquisition.py --nas-root "J:\\gjesus3-data" --list retire_list.csv [--execute]
+    python tools/retire_acquisition.py --nas-root "J:\\gjesus3-data" --build-no-dicom-lists <dir>
 
 The default is a DRY RUN: it checks every precondition (hashing from disk) and prints exactly what
-would change. Nothing is written without --execute.
+would change. Nothing is written without --execute. --build-no-dicom-lists only reads the NAS and writes
+the no-dicom retire lists (one per kind of destination) into <dir>.
 
 WHAT "RETIRED" MEANS (Ryan, 2026-10-01; 06_REGISTRIES §2.9, 10_TOOLS §3.9). The acquisition's row LEAVES
 registry_raw.csv and is appended, verbatim, to registries/retired_acquisitions.csv (the tombstone), with
-the reason and what became of the bytes. The id is never reused. Five dispositions:
+the reason and what became of the bytes. The id is never reused. Six dispositions:
   duplicate   a second registration of bytes another LIVE acquisition (the survivor) already holds.
               Every file is re-hashed from disk on BOTH sides (checksums.json is never trusted alone: a
               production primary was found truncated with a checksums.json that matched the truncation).
@@ -34,6 +37,16 @@ the reason and what became of the bytes. The id is never reused. Five dispositio
               the instrument (ingest/reidentify.py); the old folder is then removed. The file's OWN device
               fingerprint must name the new code. superseded_by = the new id. No re-ingest, so the ingest's
               dedup index is never consulted (and the source stays blocked from a re-ingest afterwards).
+  no-dicom    (2026-10-08) a platform acquisition registered as an EMPTY placeholder before Ryan's line of
+              2026-10-04 (09_MODALITIES: registered only with a reconstructed image stored as DICOM): its
+              primary holds no file and its pending_dicom_regen row is terminal (not-applicable =
+              spectroscopy / calibration; no-source = no reconstruction to convert). Every file its /raw/
+              folder holds (metadata.json, checksums.json, README.txt, any other) is hard-linked into
+              <project>\\working\\mri_not_registered\\<study>\\<exam>\\ (no project: a holding folder under
+              staging\\) beside a README_not_registered.txt, verified by SHA-256, and only then leaves
+              /raw/. Its project link (an EMPTY folder) is removed; a link name that holds files belongs to
+              another acquisition and is left alone. superseded_by is blank. Nothing is deleted but the
+              empty folders.
 
 ORDER (a crash at any point is finished by re-running the same command; a re-run after success is a no-op):
   0. window: refuse while registries/.registry.lock exists or registry_raw.csv changed in the last 15 min
@@ -42,10 +55,12 @@ ORDER (a crash at any point is finished by re-running the same command; a re-run
   1. plan (read-only): classify each id (fresh / commit-interrupted / committed); check preconditions;
      hash; work out every link, row and file action. Any refusal stops the whole run before a write.
   2. backup: a FRESH dated off-NAS directory -- every registry CSV + .acq_id_seq.json, each retiree's
-     metadata.json / checksums.json / README.txt, each touched project's provenance.csv (an orphan's whole
-     folder) -- each copy verified by SHA-256. A duplicate's bytes are not backed up (verified identical to
-     the survivor); a derivative's are moved, not lost; a re-identified file is never removed at all.
+     metadata.json / checksums.json / README.txt, each touched project's provenance.csv (an orphan's or a
+     no-dicom placeholder's whole folder) -- each copy verified by SHA-256. A duplicate's bytes are not
+     backed up (verified identical to the survivor); a derivative's are moved, not lost; a re-identified
+     file is never removed at all.
   3. derivative only: hard-link the primary into the project subfolder; verify by identity + SHA-256.
+     no-dicom: the same for every file of the folder, plus the README_not_registered.txt.
   4. COMMIT, under the registry lock: append the tombstone (carrying every row about to be removed,
      verbatim); remove the registry_raw row; remove its ingest_manifest / pending_* rows. Every removal
      is byte-exact (all other bytes, line endings and quoting kept) and atomic (temp + os.replace), and
@@ -101,6 +116,12 @@ RECENT_WRITE_WINDOW_S = 15 * 60
 ORPHAN_MAX_BYTES = 50 * 1024 * 1024
 DEFAULT_BACKUP_ROOT = r"C:\Users\rtasseff\temp"
 DEFAULT_SUBFOLDER = "outputs/derived"
+# no-dicom (2026-10-08): where a placeholder's files go -- in its project, or (no project) under staging/.
+NO_DICOM = "no-dicom"
+NO_DICOM_SUBFOLDER = "working/mri_not_registered"
+NO_DICOM_HOLDING = "staging/mri_not_registered"
+NO_DICOM_STATUSES = ("not-applicable", "no-source")   # the terminal no-image pending_dicom_regen statuses
+NOTREG_README = "README_not_registered.txt"
 FAIL_AFTER = os.environ.get("RETIRE_FAIL_AFTER", "")
 # acq_id-keyed bookkeeping an ingest writes (10_TOOLS §2.1 side-effect inventory #4, #6 + the two queues).
 QUEUE_FILES = ("ingest_manifest.csv", pending.PENDING_FILENAME,
@@ -406,6 +427,9 @@ class Run:
         self.projects = projects_registry.read_projects(projects_registry.projects_registry_path(self.nas))
         self.citations = retired.curated_citations(self.nas)
         self.prov = provenance_index(self.nas)
+        self.pdicom = {(r.get("acq_id") or "").strip(): r for r in
+                       pending_dicom.read_pending_dicom(pending_dicom.pending_dicom_path(self.reg_dir))}
+        self.retirees = set()
 
     def preview_new_id(self, date, code):
         """The id a re-identify WOULD get (dry run): live + tombstoned + reserved high-water, plus one per
@@ -433,28 +457,37 @@ def load_items(args):
         items = []
         with open(args.list, "r", encoding="utf-8-sig", newline="") as f:
             for i, r in enumerate(csv.DictReader(f), start=2):
+                disp = (r.get("disposition") or "").strip().lower()
                 items.append({
                     "acq_id": (r.get("acq_id") or "").strip(),
-                    "disposition": (r.get("disposition") or "").strip().lower(),
+                    "disposition": disp,
                     "target": (r.get("target_acq_id") or "").strip(),
                     "to_project": (r.get("to_project") or "").strip(),
-                    "subfolder": (r.get("subfolder") or "").strip() or DEFAULT_SUBFOLDER,
+                    "subfolder": (r.get("subfolder") or "").strip() or default_subfolder(disp, r.get("to_project")),
                     "dest_name": (r.get("dest_name") or "").strip(),
                     "new_instrument": (r.get("new_instrument") or "").strip(),
                     "instrument_model": (r.get("instrument_model") or "").strip(),
+                    "see_also": (r.get("see_also") or "").strip(),
                     "reason": (r.get("reason") or "").strip(),
                     "line": i,
                 })
         return items
     disp = "duplicate" if args.duplicate_of else "equivalent" if args.equivalent_of else \
         "derivative" if args.derivative_of else "orphan" if args.orphan else \
-        "reidentified" if args.reidentify_as else ""
+        "reidentified" if args.reidentify_as else NO_DICOM if args.no_dicom else ""
     return [{"acq_id": args.acq_id, "disposition": disp,
              "target": args.duplicate_of or args.equivalent_of or args.derivative_of or "",
-             "to_project": args.to_project or "", "subfolder": args.subfolder or DEFAULT_SUBFOLDER,
+             "to_project": args.to_project or "",
+             "subfolder": args.subfolder or default_subfolder(disp, args.to_project),
              "dest_name": args.dest_name or "", "new_instrument": args.reidentify_as or "",
-             "instrument_model": args.instrument_model or "",
+             "instrument_model": args.instrument_model or "", "see_also": args.see_also or "",
              "reason": (args.reason or "").strip(), "line": None}]
+
+
+def default_subfolder(disp, to_project):
+    if disp == NO_DICOM:
+        return NO_DICOM_SUBFOLDER if (to_project or "").strip() else NO_DICOM_HOLDING
+    return DEFAULT_SUBFOLDER
 
 
 def find_project(run, name_or_id):
@@ -534,6 +567,8 @@ def plan_item(run, it, run_retirees, run_targets):
         if disp == "reidentified" and target:
             raise Refused(f"{acq}: a re-identify takes the new instrument code (new_instrument / "
                           f"--reidentify-as), not a target_acq_id")
+        if disp == NO_DICOM and target:
+            raise Refused(f"{acq}: nothing supersedes a no-dicom placeholder; leave target_acq_id blank")
         p["row"] = run.live.get(acq, {})
 
     # ---- references that must not break ----
@@ -550,6 +585,11 @@ def plan_item(run, it, run_retirees, run_targets):
         return plan_orphan(run, p, tomb)
     if p["disposition"] == "reidentified":
         plan_reidentify(run, p, it, tomb, quick)
+        plan_links(run, p)
+        plan_rows(run, p)
+        return p
+    if p["disposition"] == NO_DICOM:
+        plan_no_dicom(run, p, it, tomb, quick)
         plan_links(run, p)
         plan_rows(run, p)
         return p
@@ -788,6 +828,206 @@ def plan_orphan(run, p, tomb):
     return p
 
 
+# ---- no-dicom (2026-10-08) ------------------------------------------------------------------------
+
+def _safe_rel(rel, what):
+    rel = (rel or "").replace("\\", "/").strip("/")
+    parts = [x for x in rel.split("/") if x]
+    if not parts or any(x in (".", "..") for x in parts) or ":" in rel:
+        raise Refused(f"{what} {rel!r} is not a safe relative path")
+    return "/".join(parts)
+
+
+def exam_name(row):
+    """`<study>/<exam>`: the exam's own identity on the platform (its original_name's last two parts)."""
+    on = (row.get("original_name") or "").replace("\\", "/").strip("/")
+    return "/".join(on.split("/")[-2:])
+
+
+def _primary_holds_files(p):
+    return isfile(p["primary"]) or (isdir(p["primary"]) and bool(tree_files(p["primary"])))
+
+
+def plan_no_dicom(run, p, it, tomb, quick):
+    """A DICOM-less placeholder: an empty primary; every file of its folder moves to its project."""
+    acq, row = p["acq_id"], p["row"]
+    if not row:
+        raise Refused(f"{acq}: its registry row cannot be read back from the tombstone -- fix by hand")
+    p["acq_dir"] = nas_abs(run.nas, row.get("canonical_path", ""))
+    p["primary"] = raw_primary_path(run.nas, row)
+    p["raw_present"] = isdir(p["acq_dir"])
+    if tomb:
+        moved = (tomb.get("moved_to") or "").strip()
+        _r, ev = retired.split_evidence(tomb.get("reason", ""))
+        if not moved or not isinstance(ev, dict) or not isinstance(ev.get("files"), dict):
+            raise Refused(f"{acq}: tombstoned as no-dicom without moved_to or its file list -- fix by hand")
+        p["evidence"], p["files"] = ev, ev["files"]
+        p["dest"] = nas_abs(run.nas, moved)
+        parts = moved.strip("/").split("/")
+        p["to_project"] = (project_of_folder(run, nas_abs(run.nas, "/".join(parts[:2])))
+                           if parts[0] == "projects" else None)
+    else:
+        pd = run.pdicom.get(acq) or {}
+        status = (pd.get("status") or "").strip()
+        if status not in NO_DICOM_STATUSES:
+            raise Refused(f"{acq}: its pending_dicom_regen status is {status or 'missing'!r}, not "
+                          f"{' / '.join(NO_DICOM_STATUSES)} (a 'pending' exam can still get its DICOM)")
+        if (row.get("primary_kind") or "").strip() != "folder" or (row.get("file_count") or "").strip() != "0":
+            raise Refused(f"{acq}: the registry does not record an empty folder primary "
+                          f"({row.get('primary_kind')}, file_count {row.get('file_count')!r})")
+        if it["to_project"]:
+            proj = find_project(run, it["to_project"])
+            if not proj:
+                raise Refused(f"{acq}: --to-project {it['to_project']!r} is not in registry_projects.csv")
+            if (proj.get("status") or "").strip() == "closed":
+                raise Refused(f"{acq}: project {proj['name']} is closed. Projects are reopened case by case "
+                              f"(tools/reopen_project.py); then re-run")
+            base = nas_abs(run.nas, proj.get("folder_location", ""))
+            if not isdir(base):
+                raise Refused(f"{acq}: project folder {base} does not exist")
+            if proj["project_id"] not in pids.split_project_ids(row.get("project_id")):
+                p["warnings"].append(f"{proj['project_id']} is not the acquisition's own project "
+                                     f"({row.get('project_id') or 'none'})")
+            sub = safe_subfolder(it["subfolder"])
+            p["to_project"] = proj
+        else:
+            if pids.split_project_ids(row.get("project_id")):
+                raise Refused(f"{acq}: it belongs to {row.get('project_id')}: give to_project (a holding "
+                              f"folder is for a placeholder with no project)")
+            sub = _safe_rel(it["subfolder"], "subfolder")
+            if not sub.startswith("staging/"):
+                raise Refused(f"{acq}: with no project the files go to a holding folder under staging/, "
+                              f"not {sub!r}")
+            base, p["to_project"] = run.nas, None
+        name = _safe_rel(it["dest_name"] or exam_name(row), "dest_name")
+        p["dest"] = os.path.join(base, *sub.split("/"), *name.split("/"))
+        see = []
+        for s in [x.strip() for x in (it.get("see_also") or "").split(";") if x.strip()]:
+            rel = _safe_rel(s, "see_also")
+            if not exists(nas_abs(run.nas, rel)):
+                raise Refused(f"{acq}: see_also {s!r} does not exist on the NAS")
+            see.append("/" + rel)
+        p["evidence"] = {"method": "no-dicom/1", "pending_dicom_status": status,
+                         "nonimage_marker": (pd.get("nonimage_marker") or "").strip(), "see_also": see}
+        p["files"] = None
+    if not p["raw_present"]:
+        p["info"].append("/raw/ folder already deleted")
+        missing = [k for k in p["files"] if not isfile(os.path.join(p["dest"], *k.split("/")))]
+        if missing:
+            raise Refused(f"{acq}: its /raw/ folder is gone and {missing} are missing from {p['dest']} -- "
+                          f"investigate (backup: {tomb.get('backup_dir')})")
+        return
+    if _primary_holds_files(p):
+        raise Refused(f"{acq}: its primary {p['primary']} holds files: not an empty placeholder")
+    files = tree_files(p["acq_dir"])
+    if not files:
+        raise Refused(f"{acq}: its /raw/ folder holds no file at all -- investigate")
+    if p["files"] is not None and set(files) - set(p["files"]):
+        raise Refused(f"{acq}: its /raw/ folder holds files its tombstone does not list: "
+                      f"{sorted(set(files) - set(p['files']))}")
+    if quick:
+        p["info"].append(f"QUICK: {len(files)} file(s) NOT hashed")
+    else:
+        h = {k: sha256(v) for k, v in files.items()}
+        if p["files"] is not None and any(p["files"][k] != h[k] for k in h):
+            raise Refused(f"{acq}: a file changed since it was tombstoned")
+        p["files"] = p["files"] or h
+        p["evidence"]["files"] = p["files"]
+        p["sha256"] = tree_digest(p["files"])
+        p["hashes_verified"] = True
+    for rel, src in files.items():
+        d = os.path.join(p["dest"], *rel.split("/"))
+        if exists(d) and not samefile(d, src) and (quick or sha256(d) != p["files"][rel]):
+            raise Refused(f"{acq}: {d} already exists and is not this file")
+    if isdir(p["dest"]):
+        extra = sorted(set(tree_files(p["dest"])) - set(files) - set(p["files"] or {}) - {NOTREG_README})
+        if extra:
+            raise Refused(f"{acq}: {p['dest']} already holds other files {extra[:3]} -- pick another dest_name")
+    if all(exists(os.path.join(p["dest"], *k.split("/"))) for k in files):
+        p["info"].append(f"already placed at {nas_rel(run.nas, p['dest'])}")
+    else:
+        p["actions"].append(f"hard-link {len(files)} file(s) ({', '.join(sorted(files))}) to "
+                            f"{nas_rel(run.nas, p['dest'])}/ and verify; write {NOTREG_README}")
+    p["actions"].append(f"delete /raw/ folder {p['acq_dir']} (its primary is empty)")
+
+
+def _winrel(nas_rel_path):
+    return nas_rel_path.strip("/").replace("/", "\\")
+
+
+def notreg_readme(p):
+    """The README beside a no-dicom placeholder's files (plain language; deterministic, so a re-run
+    rewrites nothing)."""
+    row, ev, acq = p["row"], p.get("evidence") or {}, p["acq_id"]
+    marker = ev.get("nonimage_marker") or "non-image"
+    if ev.get("pending_dicom_status") == "not-applicable":
+        why = [f"it is spectroscopy or calibration ({marker}), not an image."]
+        later = ["Spectroscopy and calibration scans are not registered in gjesus3; the MRI",
+                 "platform keeps its own records of them."]
+    else:
+        why = ["the scanner kept no reconstructed image of it that could be converted to",
+               "DICOM (only its parameters, or raw scanner data), so there is nothing to register."]
+        later = ["If someone later produces DICOM images from this exam, it CAN be registered",
+                 "then: ask the Data Office."]
+    links = sorted(L["output_path"] for L in p.get("links", []) if L.get("done_as", L["action"]) in ("remove", "done"))
+    lines = ["NOT REGISTERED IN gjesus3 -- KEPT HERE AS OTHER DATA",
+             "====================================================", "",
+             "This folder holds what gjesus3 kept of one MRI exam. The exam was registered as",
+             f"{acq} with no image, before the Data Office rule of 2026-10-04: an MRI scan",
+             "is registered only with a reconstructed image stored as DICOM. It was then",
+             "retired from the registry (registries\\retired_acquisitions.csv); nothing was deleted.", "",
+             f"  Exam (ParaVision study\\exam):  {(row.get('original_name') or '').replace('/', chr(92))}",
+             f"  Registered as (now retired):  {acq}"]
+    lines += [f"  Its project link {_winrel(x)} was an empty folder and was removed." for x in links]
+    lines += ["", "Why it is not registered:"] + [("  - " if i == 0 else "    ") + w for i, w in enumerate(why)]
+    lines += ["", "The files here are byte-for-byte the ones gjesus3 held for it:",
+              "  metadata.json    the exam's parameters, as gjesus3 read them from the scanner's files",
+              "  checksums.json, README.txt    the registration's own records (they name the retired id)"]
+    others = sorted(k for k in (p.get("files") or {}) if k not in SIDECARS)
+    if others:
+        lines.append(f"  also: {', '.join(others)}")
+    if ev.get("see_also"):
+        lines += ["", "Other files of this exam, copied from the lab's historical drives, are in:"]
+        lines += [f"  {_winrel(s)}" for s in ev["see_also"]]
+    lines += [""] + later + [""]
+    return "\r\n".join(lines).encode("utf-8")
+
+
+def place_no_dicom(run, p):
+    """Hard-link every file of the placeholder's folder into its destination, verify each by SHA-256,
+    write the README; then the project's provenance event (before the commit, like a derivative's)."""
+    if not p["raw_present"]:
+        return
+    for rel, src in sorted(tree_files(p["acq_dir"]).items()):
+        d = os.path.join(p["dest"], *rel.split("/"))
+        if not exists(d):
+            os.makedirs(lp(os.path.dirname(d)), exist_ok=True)
+            os.link(lp(src), lp(d))
+        if sha256(d) != p["files"][rel]:
+            raise RuntimeError(f"{p['acq_id']}: placed {d} does not hash as {rel} ({p['files'][rel][:12]})")
+    os.makedirs(lp(p["dest"]), exist_ok=True)
+    wrote = write_verified(os.path.join(p["dest"], NOTREG_README), notreg_readme(p))
+    run.log(f"  placed {len(p['files'])} file(s) at {nas_rel(run.nas, p['dest'])}/ (SHA-256-verified); "
+            f"{NOTREG_README} {'written' if wrote else 'already in place'}")
+    if p.get("to_project"):
+        prov = os.path.join(nas_abs(run.nas, p["to_project"]["folder_location"]), "provenance.csv")
+        provenance.append_entry(prov, moved_event(p), unique_on=("output_path", "notes"))
+
+
+def _other_claimant(run, pdir, out, acq):
+    """A live acquisition (not retired in this run) whose own provenance names the same link entry."""
+    if not hasattr(run, "_by_out"):
+        run._by_out = {}
+        for a, refs in run.prov.items():
+            for d, _prov, r in refs:
+                o = (r.get("output_path") or "").strip().replace("\\", "/")
+                if o.startswith("raw_linked/") and not (r.get("file_type") or "").startswith("hardlink-removed"):
+                    run._by_out.setdefault((os.path.normcase(d), o), set()).add(a)
+    others = sorted(a for a in run._by_out.get((os.path.normcase(pdir), out), ())
+                    if a != acq and a in run.live and a not in run.retirees)
+    return others[0] if others else None
+
+
 # ---- re-identify (v2) -----------------------------------------------------------------------------
 
 def _set_new_paths(run, p):
@@ -989,6 +1229,16 @@ def plan_links(run, p):
                     L["action"], L["why"] = "replace", f"re-point at the survivor {p['target']} ({what})"
             else:
                 L["action"], L["why"] = "foreign", "the file there is not this acquisition's bytes; left alone"
+        elif disp == NO_DICOM:
+            held = tree_files(path) if isdir(path) else {"": path}
+            other = None if held else _other_claimant(run, pdir, out, acq)
+            if held:
+                L["action"], L["why"] = "foreign", (f"holds {len(held)} file(s): another acquisition's link "
+                                                    f"under this name; left alone")
+            elif other:
+                L["action"], L["why"] = "foreign", f"also the link entry of the live {other}; left alone"
+            else:
+                L["action"], L["why"] = "remove", "an empty folder (the placeholder never had an image)"
         else:
             if p["raw_present"] and tree_identity(path, p["primary"]) == "same":
                 L["action"], L["why"] = "remove", f"now lives at {nas_rel(run.nas, p['dest'])}"
@@ -1072,7 +1322,7 @@ def missing_events(p):
             ev = event_row(p, L)
             if ev and not prov_has(L["prov"], ev):
                 out.append((L["prov"], ev))
-    if p["disposition"] == "derivative" and p.get("to_project"):
+    if p["disposition"] in ("derivative", NO_DICOM) and p.get("to_project"):
         prov = os.path.join(nas_abs(p["_nas"], p["to_project"]["folder_location"]), "provenance.csv")
         ev = moved_event(p)
         if not prov_has(prov, ev):
@@ -1117,19 +1367,35 @@ def event_row(p, L):
         what = (f"retired as a {'content-equivalent ' if disp == 'equivalent' else ''}duplicate of {tgt}, "
                 f"which is already linked in this project"
                 if disp in DUPLICATE_LIKE
+                else f"retired as no-dicom (an MRI placeholder with no DICOM image); this link was an empty "
+                     f"folder; what gjesus3 kept of the exam is at {nas_rel(p['_nas'], p['dest'])}"
+                if disp == NO_DICOM
                 else f"retired as a derivative of {tgt}; moved to {nas_rel(p['_nas'], p['dest'])}")
         return dict(base, file_type="hardlink-removed", input_refs=acq, notes=_tag(p, "link-removed"),
                     process_description=f"Removed by retire_acquisition.py: {acq} {what}")
     if done_state == "absent":
         return dict(base, file_type="hardlink-removed", input_refs=acq, notes=_tag(p, "retired"),
-                    process_description=f"{acq} retired by retire_acquisition.py ({disp} of "
-                                        f"{tgt}); this link was already gone (removed or renamed in the "
-                                        f"project) and was not touched")
+                    process_description=f"{acq} retired by retire_acquisition.py ({disp}"
+                                        f"{' of ' + tgt if tgt else ''}); this link was already gone "
+                                        f"(removed or renamed in the project) and was not touched")
     return None
 
 
 def moved_event(p):
     rel = os.path.relpath(p["dest"], nas_abs(p["_nas"], p["to_project"]["folder_location"])).replace(os.sep, "/")
+    if p["disposition"] == NO_DICOM:
+        ev = p.get("evidence") or {}
+        kind = (f"spectroscopy / calibration ({ev.get('nonimage_marker') or 'non-image'})"
+                if ev.get("pending_dicom_status") == "not-applicable" else "no reconstruction to convert")
+        return {"output_path": rel, "output_name": os.path.basename(p["dest"]), "file_type": "folder",
+                "date_created": p["_today"], "creator": p["_by"], "input_refs": p["acq_id"],
+                "process_description": f"Moved out of /raw/ by retire_acquisition.py: {p['acq_id']} was an MRI "
+                                       f"placeholder with no DICOM image ({kind}) and was retired (no-dicom, "
+                                       f"the 2026-10-04 line); its files "
+                                       f"({', '.join(sorted(p.get('files') or {}))}) now live here as other "
+                                       f"data, with {NOTREG_README}",
+                "software_version": provenance.software_version_string("retire_acquisition.py"),
+                "parameters_ref": p["_run_id"], "lab_notebook_ref": "", "notes": _tag(p, "moved-to")}
     return {"output_path": rel, "output_name": os.path.basename(p["dest"]),
             "file_type": os.path.splitext(p["dest"])[1] or "folder",
             "date_created": p["_today"], "creator": p["_by"], "input_refs": p["target"],
@@ -1163,7 +1429,7 @@ def take_backup(run, plans):
     provs = set()
     for p in plans:
         acq_dir = p.get("acq_dir")
-        if p["disposition"] == "orphan" and acq_dir and isdir(acq_dir):
+        if p["disposition"] in ("orphan", NO_DICOM) and acq_dir and isdir(acq_dir):
             for rel, s in tree_files(acq_dir).items():
                 pairs.append((s, os.path.join(bk, "acquisitions", p["acq_id"], *rel.split("/"))))
         elif acq_dir and isdir(acq_dir):
@@ -1225,8 +1491,9 @@ def _tombstone_row(run, p, raw_rec, others, **over):
         "acq_id": p["acq_id"], "retired_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "disposition": p["disposition"], "superseded_by": p["target"],
         "reason": retired.with_evidence(p["reason"], p.get("evidence")),
-        "bytes_fate": "moved" if p["disposition"] in ("derivative", "reidentified") else "deleted",
-        "moved_to": nas_rel(run.nas, p["dest"]) if p["disposition"] == "derivative" else "",
+        "bytes_fate": "moved" if p["disposition"] in ("derivative", "reidentified", NO_DICOM) else "deleted",
+        "moved_to": (nas_rel(run.nas, p["dest"]) if p["disposition"] == "derivative" else
+                     nas_rel(run.nas, p["dest"]) + "/" if p["disposition"] == NO_DICOM else ""),
         "sha256": p.get("sha256", ""),
         "original_canonical_path": (p["row"].get("canonical_path") if p["row"]
                                     else nas_rel(run.nas, p["acq_dir"]) + "/"),
@@ -1412,6 +1679,11 @@ def do_links(run, p):
     event that already describes it -- so the record never says "a researcher removed it" when this
     tool did. A re-identified acquisition's links are left as they are (same file): events only."""
     for L in p["links"]:
+        if L["action"] == "remove" and p["disposition"] == NO_DICOM:
+            if not exists(L["path"]):      # an empty entry two retirees shared: the other one removed it
+                L["action"], L["why"] = "absent", "already removed in this run (an entry another retiree shared)"
+            elif not isdir(L["path"]) or tree_files(L["path"]):
+                raise RuntimeError(f"{L['path']} is no longer an empty folder -- NOT removed (re-run to re-plan)")
         if L["action"] in ("replace", "remove", "keep"):
             ev = event_row(p, dict(L, done_as=L["action"]))
             provenance.append_entry(L["prov"], ev, unique_on=("output_path", "notes"))
@@ -1460,6 +1732,16 @@ def do_bytes(run, p):
         if tree_identity(p["dest"], p["primary"]) != "same" or \
                 tree_digest(tree_hashes(p["dest"])) != p["sha256"]:
             raise RuntimeError(f"{acq}: {p['dest']} does not verify -- /raw/ NOT deleted")
+    elif p["disposition"] == NO_DICOM:
+        if _primary_holds_files(p):
+            raise RuntimeError(f"{acq}: its primary now holds files -- /raw/ NOT deleted")
+        unlisted = sorted(set(tree_files(p["acq_dir"])) - set(p["files"]))
+        bad = [k for k, h in p["files"].items()
+               if not isfile(os.path.join(p["dest"], *k.split("/")))
+               or sha256(os.path.join(p["dest"], *k.split("/"))) != h]
+        if unlisted or bad:
+            raise RuntimeError(f"{acq}: unlisted {unlisted} / not verified at the destination {bad} -- "
+                               f"/raw/ NOT deleted")
     elif p["disposition"] == "reidentified":
         remove_old_folder(run, p)
         fail_point("bytes")
@@ -1573,6 +1855,13 @@ def self_check(run, plans):
                 problems.append(f"{acq}: moved file missing or not the tombstoned SHA-256")
         if p["disposition"] == "reidentified" and t:
             problems += _self_check_reidentified(p, t, live)
+        if p["disposition"] == NO_DICOM and t:
+            got = {k: sha256(os.path.join(p["dest"], *k.split("/")))
+                   for k in p["files"] if isfile(os.path.join(p["dest"], *k.split("/")))}
+            if set(got) != set(p["files"]) or tree_digest(got) != t.get("sha256"):
+                problems.append(f"{acq}: the moved files are missing or not the tombstoned SHA-256")
+            if not isfile(os.path.join(p["dest"], NOTREG_README)):
+                problems.append(f"{acq}: {NOTREG_README} missing at {p['dest']}")
         if missing_events(p):
             problems.append(f"{acq}: provenance events missing")
     return problems
@@ -1601,6 +1890,102 @@ def _self_check_reidentified(p, t, live):
     except (OSError, ValueError) as ex:
         out.append(f"{acq}: the new sidecars cannot be read: {ex}")
     return out
+
+
+# ---- no-dicom list builder (read-only) -----------------------------------------------------------
+
+LIST_FIELDS = ["acq_id", "disposition", "target_acq_id", "to_project", "subfolder", "dest_name", "see_also",
+               "reason", "project_id", "pending_status", "nonimage_marker", "original_name"]
+
+
+def _placed_exam_copies(nas, wanted):
+    """{(study, exam): [NAS-relative folders]} of exam folders the historical-drives placements hold
+    (every project's working/historical_drives/_INDEX.csv, and the holding folder's manifest.csv)."""
+    out = {}
+    sources = [(p, "/".join(os.path.relpath(os.path.dirname(p), nas).split(os.sep)))
+               for p in sorted(glob.glob(os.path.join(nas, "projects", "*", "working", "historical_drives",
+                                                      "_INDEX.csv")))]
+    hold = os.path.join(nas, "staging", "historical_drives_unassigned", "manifest.csv")
+    if os.path.exists(hold):
+        sources.append((hold, "staging/historical_drives_unassigned"))
+    for path, root in sources:
+        with open(path, "r", encoding="utf-8-sig", errors="replace", newline="") as f:
+            for r in csv.DictReader(f):
+                parts = (r.get("new_path") or "").replace("\\", "/").split("/")
+                for i in range(len(parts) - 1):
+                    if (parts[i], parts[i + 1]) in wanted:
+                        folder = f"{root}/" + "/".join(parts[: i + 2])
+                        lst = out.setdefault((parts[i], parts[i + 1]), [])
+                        if folder not in lst:
+                            lst.append(folder)
+    return out
+
+
+def no_dicom_reason(status, marker):
+    if status == "not-applicable":
+        return (f"MRI {marker or 'non-image'} exam: spectroscopy or calibration, no image "
+                f"(pending_dicom_regen not-applicable); not registered under the 2026-10-04 line "
+                f"(09_MODALITIES); an empty placeholder retired on Ryan's ruling of 2026-10-08")
+    return ("MRI exam with no reconstruction that can be converted to DICOM: the platform kept no 2dseq "
+            "(pending_dicom_regen no-source); not registered under the 2026-10-04 line (09_MODALITIES); an "
+            "empty placeholder retired on Ryan's ruling of 2026-10-08")
+
+
+def build_no_dicom_lists(nas, out_dir):
+    """Write no_dicom_<group>.csv (open / closed / no_project) for every live acquisition whose
+    pending_dicom_regen status is not-applicable or no-source. Reads the NAS only."""
+    reg_dir = os.path.join(nas, "registries")
+    live = read_live(nas)
+    pend = pending_dicom.read_pending_dicom(pending_dicom.pending_dicom_path(reg_dir))
+    projects = {p["project_id"]: p for p in
+                projects_registry.read_projects(projects_registry.projects_registry_path(nas))}
+    todo = [r for r in pend if (r.get("status") or "").strip() in NO_DICOM_STATUSES]
+    gone = [r["acq_id"] for r in todo if r["acq_id"] not in live]
+    todo = [r for r in todo if r["acq_id"] in live]
+    wanted = {tuple(exam_name(live[r["acq_id"]]).split("/")) for r in todo}
+    placed = _placed_exam_copies(nas, wanted)
+    groups, dest_seen, problems = {"open": [], "closed": [], "no_project": []}, {}, []
+    for r in sorted(todo, key=lambda x: x["acq_id"]):
+        row = live[r["acq_id"]]
+        name = exam_name(row)
+        pidl = pids.split_project_ids(row.get("project_id"))
+        proj = projects.get(pidl[0]) if pidl else None
+        if pidl and not proj:
+            problems.append(f"{r['acq_id']}: project {pidl[0]} is not in registry_projects.csv")
+            continue
+        group = "no_project" if not proj else "closed" if (proj.get("status") or "").strip() == "closed" else "open"
+        key = (proj["name"] if proj else "", name)
+        if key in dest_seen:
+            problems.append(f"{r['acq_id']}: same destination {key} as {dest_seen[key]}")
+            continue
+        dest_seen[key] = r["acq_id"]
+        status, marker = (r.get("status") or "").strip(), (r.get("nonimage_marker") or "").strip()
+        groups[group].append({
+            "acq_id": r["acq_id"], "disposition": NO_DICOM, "target_acq_id": "",
+            "to_project": proj["name"] if proj else "",
+            "subfolder": NO_DICOM_SUBFOLDER if proj else NO_DICOM_HOLDING, "dest_name": name,
+            "see_also": ";".join(placed.get(tuple(name.split("/")), [])),
+            "reason": no_dicom_reason(status, marker), "project_id": pidl[0] if pidl else "",
+            "pending_status": status, "nonimage_marker": marker, "original_name": row.get("original_name", "")})
+    os.makedirs(out_dir, exist_ok=True)
+    lines = [f"no-dicom lists from {nas} at {dt.datetime.now().isoformat(timespec='seconds')}",
+             f"pending_dicom_regen rows {len(pend)}; not-applicable / no-source live: {len(todo)}; "
+             f"not live (already retired?): {len(gone)} {gone[:5]}"]
+    for g, rows in groups.items():
+        path = os.path.join(out_dir, f"no_dicom_{g}.csv")
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=LIST_FIELDS)
+            w.writeheader()
+            w.writerows(rows)
+        c = Counter((x["pending_status"], x["nonimage_marker"]) for x in rows)
+        lines.append(f"{g}: {len(rows)} -> {path}  {dict(sorted(c.items()))}  "
+                     f"projects {dict(sorted(Counter(x['to_project'] for x in rows).items()))}  "
+                     f"with see_also {sum(1 for x in rows if x['see_also'])}")
+    lines += [f"PROBLEM: {m}" for m in problems]
+    with open(os.path.join(out_dir, "no_dicom_lists_summary.txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    print("\n".join(lines))
+    return 2 if problems else 0
 
 
 # ---- main ----------------------------------------------------------------------------------------
@@ -1685,6 +2070,9 @@ def execute_one(run, p):
     if p["disposition"] == "derivative":
         place_derivative(run, p)
         fail_point("placed")
+    elif p["disposition"] == NO_DICOM:
+        place_no_dicom(run, p)
+        fail_point("placed")
     if p["state"] != "committed" or p["rows"]:
         commit(run, p)
     do_links(run, p)
@@ -1704,13 +2092,21 @@ def main(argv=None):
     g.add_argument("--derivative-of", metavar="ACQ-ID", help="the original (live) acquisition")
     g.add_argument("--orphan", action="store_true", help="a /raw/ folder with no registry row")
     g.add_argument("--reidentify-as", metavar="CODE", help="re-identify under this instrument code")
+    g.add_argument("--no-dicom", action="store_true",
+                   help="an empty DICOM-less MRI placeholder (pending_dicom_regen not-applicable / no-source)")
     ap.add_argument("--instrument-model", help="re-identify: also set instrument_model (default: keep it)")
-    ap.add_argument("--to-project", help="derivative: the project (name or PROJ-ID) to move it into")
-    ap.add_argument("--subfolder", default=DEFAULT_SUBFOLDER, help="derivative: inside the project")
-    ap.add_argument("--dest-name", help="derivative: file name in the subfolder (default: its original name)")
+    ap.add_argument("--to-project", help="derivative / no-dicom: the project (name or PROJ-ID) to move it into")
+    ap.add_argument("--subfolder", help=f"derivative: inside the project (default {DEFAULT_SUBFOLDER}); "
+                                        f"no-dicom: default {NO_DICOM_SUBFOLDER}, no project {NO_DICOM_HOLDING}")
+    ap.add_argument("--dest-name", help="derivative: file name in the subfolder (default: its original name); "
+                                        "no-dicom: folder (default: <study>/<exam> from its original_name)")
+    ap.add_argument("--see-also", help="no-dicom: NAS-relative path(s), ';'-separated, of other files of "
+                                       "the exam (named in its README)")
     ap.add_argument("--reason")
     ap.add_argument("--list", help="CSV: acq_id,disposition,target_acq_id,to_project,reason"
-                                   "[,subfolder,dest_name,new_instrument,instrument_model]")
+                                   "[,subfolder,dest_name,new_instrument,instrument_model,see_also]")
+    ap.add_argument("--build-no-dicom-lists", metavar="DIR",
+                    help="read-only: write the no-dicom retire lists for every DICOM-less placeholder to DIR")
     ap.add_argument("--execute", action="store_true", help="write (default: dry run)")
     ap.add_argument("--quick", action="store_true", help="dry run only: compare sizes, skip hashing")
     ap.add_argument("--retired-by", default=getpass.getuser(), help="who is running this (Data Office)")
@@ -1723,11 +2119,14 @@ def main(argv=None):
             s.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):
             pass
+    if args.build_no_dicom_lists:
+        return build_no_dicom_lists(os.path.normpath(args.nas_root), args.build_no_dicom_lists)
     if bool(args.list) == bool(args.acq_id):
         ap.error("give exactly one of --acq-id or --list")
     if args.acq_id and not (args.duplicate_of or args.equivalent_of or args.derivative_of or args.orphan
-                            or args.reidentify_as):
-        ap.error("--acq-id needs --duplicate-of, --equivalent-of, --derivative-of, --orphan or --reidentify-as")
+                            or args.reidentify_as or args.no_dicom):
+        ap.error("--acq-id needs --duplicate-of, --equivalent-of, --derivative-of, --orphan, --reidentify-as "
+                 "or --no-dicom")
     if args.instrument_model and not args.reidentify_as:
         ap.error("--instrument-model goes with --reidentify-as (in a --list, use its instrument_model column)")
     if args.execute and args.quick:
@@ -1753,6 +2152,7 @@ def main(argv=None):
         run.log(f"REFUSED: listed more than once: {dupes}")
         return 2
     run_retirees = set(ids)
+    run.retirees = run_retirees
     plans, refusals = [], []
     for it in items:
         try:
