@@ -1,0 +1,60 @@
+None of these could be found: `smb://GJESUS3.cicbiomagune.int/gjesus3` (or `smb://10.10.1.73/gjesus3`)
+
+
+For some reason it already appeared under network in the finder window, however.
+I had to connect, not sure why my rtasseff login worked without any domain or CICBIOMAGUNE. And it worked with my normal password.
+I will need to get a login specifically for this account on this Mac user account, molecubes.  It is not safe to login with my account which has full permissions on gjesus3.
+
+ls /Volumes/gjesus3/ 
+Worked 
+
+Hardlink failed as expected:
+molecubess-iMac:ni-live-test molecubes$ mkdir -p "/Volumes/gjesus3/gjesus3-sandbox/_oslink_scratch"
+molecubess-iMac:ni-live-test molecubes$ PYTHONPATH=tools python3 tools/diagnostics/test_oslink.py "/Volumes/gjesus3/gjesus3-sandbox/_oslink_scratch"
+
+os.link diagnostic on: /Volumes/gjesus3/gjesus3-sandbox/_oslink_scratch
+python 3.10.5  |  platform darwin
+
+  [FAIL] os.link  -> OSError ENOTSUP: Operation not supported
+
+VERDICT: FAIL — hard links do NOT work on this mount. Options:
+         (a) run ingest from a Windows machine that mounts the share (hard
+             links are proven there) and reach the data remotely;
+         (b) SFTP-stage the source to that Windows machine (tools/ftp_mirror.py)
+             and ingest there;
+         (c) NAS-side `cp --reflink` if the volume is ZFS/btrfs;
+         (d) fall back to the legacy .lnk shortcut path (linker.create_lnk).
+         Report the FAIL lines above; choose per instrument (do not guess).
+
+We will need to make something that looks for missing hard links to rerun those hard links at another time.  Right now we have two things being tracked using a similar pattern: DICOMs that need generating and animal facility DB updates to metadata that need backfilled.  Maybe there is a skarterway to address all these partial ingest issues that fall back to RDM?  Eventually we will run from a new dedicated server so the single environment should allow us to fix all these issues but for now we need a smooth way to manage all these.  At a minimum good documentation, but given the similar pattern I think there is something more orginized that can be done along with documentation.  We should, for example, be able to write a script that runs from my RDM machine on a cron or other schedular (windows) to periodically check for these backfill jobs on all these partal ingests with (right now) three possible distinct causes: Dicom (no linux or no software installed), hardlink (no windows), DB (bad creds).
+
+Continuing,
+
+Created review_irene.csv
+
+
+Step 2 is messy and is different syntax because you point at Irene's folder not root.  Are we going to clean this up in production? 
+Also, what's the point of the review that we just made in step one? Should we not be able to edit the review?  Why are we calling the full ingest script just to make the corrections csv?
+
+Now I ran it and note more issues.
+When I did step two it prompted:
+is_control (true=control / false=case):     
+is_whole_body (true=whole-body / false=region of interest): 
+
+Since we are working on a live sync of everything, these become kinda useless, while the control question does because there is no constant, the is whole body may actually apply to all things from NI.  in any case a user would not need to enter values in a workflow designed specifically for NI on the NI machine.  Maybe when we finalise this all, a wrapper will help us resolve this.
+
+Now I am looking at the corrections sheet and see more issues:
+The session_id was not captured. For example in one,  session path listed: 1207/250304/0522_129 - that 1207 should be the session.  Check the GJesus3 documentation, particularly for the NI platform, I thought we captured the structure? Actually we may need to revisit this whole thing. That first one might be study_id which is technically what the project office calls the project ID because it is the project funding it.  In NI they call it study id, and what we (gjesus3 rdm) should call it is the investigation id (for the ISA, investigation-study-assay, convention).  Not sure why we have session id eve listed here now that I think about it?  Maybe it is needed for the DICOM convention.  Maybe that is what it is expecting and what is used in servers like XNAT that we may eventually shift to. But we need to figure this out. 
+
+What is sample Id supposed to be in this corrections csv?  I thought for NI and MRI since it is animals we already settled this? Subject, animal and sample id for in vivo preclinical work was all the same I thought?  Check the gjesus3 documentation.
+
+Finally for this doc, why does it have 45 scans showing but the review csv has like 145?
+
+I did the local dry run and it ran fine.  I was running out of time so I skipped step 5 and went right to step 6 to test on the sandbox.  It seemed to work:
+[16:41:45] INFO: building preview (read-only)...
+[16:43:46] INFO: wrote 75 session row(s) to corrections_irene_sandbox.csv. Edit the values / add extra_metadata (e.g. tracer=FDG), then re-run with --corrections corrections_irene_sandbox.csv.
+
+
+Then I had to leave.  Could not do the comparing. But since it is on the sandbox, I figure we can compare from here?
+
+

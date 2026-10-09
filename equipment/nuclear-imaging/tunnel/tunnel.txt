@@ -1,0 +1,311 @@
+===========================================================
+ REVERSE SSH TUNNEL - INSTRUCTIONS AT THE MOLECUBES BOX
+ Updated: 2026-08-06 rev4  (replaces all earlier versions)
+===========================================================
+
+READ THIS FIRST - HOW THIS IS ORDERED AND WHY
+
+  You get ONE entry to this room. You cannot step out and
+  come back, and there is nobody at the other end to confirm
+  anything for you. So:
+
+  * Every check below is done FROM THIS MACHINE. Nothing
+    asks you to go and look at the workstation.
+  * The PROVEN method (a manual tunnel) is set up FIRST, in
+    STEP 6, and verified. From that point on the trip has
+    already succeeded.
+  * The convenient method (LaunchAgent, auto-restarts and
+    survives reboot) is attempted SECOND, in STEP 7, and it
+    is UNTESTED. If it misbehaves you fall back to STEP 6's
+    tunnel and walk out with working access anyway - which
+    also lets the LaunchAgent be debugged remotely, later,
+    through the very tunnel you just made.
+
+  Never leave this room without a working tunnel from either
+  STEP 6 or STEP 7.
+
+PURPOSE
+  This machine cannot be reached from outside - it sits behind
+  its own router. So it dials OUT to the Data Office
+  workstation and holds that connection open, and we ride it
+  backward to get in. This is so that work needing a shell
+  here (Gate-0 hard-link check, refreshing the data-path dump)
+  stops costing a visit.
+
+  Nothing here touches acquisition, acquisition data, or the
+  box's own software.
+
+WHAT IS ALREADY KNOWN GOOD (verified 2026-08-05/06)
+  - This box CAN reach 10.10.2.195 on port 2200. Firewall and
+    routing are settled questions.
+  - Username here is  molecubes .
+  - pmset shows sleep 0 - this box already never idle-sleeps,
+    so NO caffeinate is used and power settings are untouched.
+  - The reverse-forwarding mechanism is proven end to end at
+    the workstation, including that it survives being idle.
+
+  NOT yet proven: this box running it, and the LaunchAgent.
+
+-----------------------------------------------------------
+ FACTS (nothing else to look up)
+-----------------------------------------------------------
+  Workstation address .... 10.10.2.195
+  Port .................... 2200        (fallback: 8000)
+  Login user there ........ rtasseff
+  This box ................ 192.168.0.180 / user molecubes
+
+  *** PASSWORDS ***
+  Ubuntu/WSL password for rtasseff  -> asked ONCE, in STEP 5.
+      NOT the Windows login password.
+  This Mac's own password           -> asked in STEP 2 and
+      when coming back through the tunnel in STEP 6c.
+
+  *** THE PORT ***
+  Every ssh to 10.10.2.195 needs  -p 2200 . Without it you get
+  port 22, where nothing listens, and it hangs.
+
+  *** THE OTHER PORT (easy to get wrong) ***
+  In the -R option, use  localhost:22  -- port 22, this Mac's
+  own SSH server. If you see  localhost:2200  anywhere in an
+  -R option, it is WRONG: that is the workstation's number,
+  not this machine's. It will appear to work and then fail.
+
+
+-----------------------------------------------------------
+ STEP 1 - Confirm username
+-----------------------------------------------------------
+    whoami
+
+Expected:  molecubes
+Anything else: the LaunchAgent file has that name baked in.
+Write down what it says, use it everywhere below, and expect
+STEP 7 to fail (STEP 6 will still work).
+
+
+-----------------------------------------------------------
+ STEP 2 - Confirm this Mac's own SSH server is on
+-----------------------------------------------------------
+    ssh localhost whoami
+
+Type  yes  if asked, then this Mac's password.
+
+  Prints  molecubes  -> already on. CHANGE NOTHING. Go to 3.
+  "Connection refused" -> Remote Login is off.
+
+*** Turning Remote Login ON is the ONLY change here that
+    PERSISTS after a reboot. On a live acquisition machine
+    that is a real decision. It is also unavoidable - the
+    tunnel cannot work without it.
+      System Settings > General > Sharing > Remote Login
+    (needs admin). Then run the command again.
+    WRITE DOWN that it was off and you turned it on.
+
+
+-----------------------------------------------------------
+ STEP 3 - Confirm the workstation is ready
+-----------------------------------------------------------
+DO NOT use  nc -vz  here. It reports success even when the
+far end is only half working - that wasted a whole trip on
+2026-08-05. Use this, which demands a real reply:
+
+    nc -w 3 10.10.2.195 2200 < /dev/null | head -1
+
+  Prints  SSH-2.0-OpenSSH...   -> good, go to STEP 4.
+
+  Anything else -> try the fallback port:
+
+    nc -w 3 10.10.2.195 8000 < /dev/null | head -1
+
+  If 8000 gives the SSH- line, use 8000 instead of 2200
+  EVERYWHERE below.
+
+  If NEITHER gives the SSH- line: the workstation end is not
+  running and it cannot be fixed from this room. Nothing
+  further will work. Note the exact output and leave; this
+  is the one failure with no recovery from here.
+
+
+-----------------------------------------------------------
+ STEP 4 - Make a key on this box
+-----------------------------------------------------------
+The private key never leaves this machine. Only the public
+half is sent. ONE line:
+
+    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_molecubes_tunnel -N "" -C "molecubes-box"
+
+  "already exists? (y/n)" -> answer  n  ; the existing key is
+  fine, carry on.
+
+The filename must be exactly this - STEP 7 looks for it.
+
+
+-----------------------------------------------------------
+ STEP 5 - Send the public half over
+-----------------------------------------------------------
+    ssh-copy-id -i ~/.ssh/id_ed25519_molecubes_tunnel.pub -p 2200 rtasseff@10.10.2.195
+
+Type  yes  if asked, then the UBUNTU/WSL password.
+This is the ONLY time that password is needed.
+
+Success:  Number of key(s) added: 1
+
+  "Permission denied" -> wrong password (it is the Ubuntu
+  one). It allows three tries, then just run it again.
+
+Check the key works, with no password:
+
+    ssh -i ~/.ssh/id_ed25519_molecubes_tunnel -o IdentitiesOnly=yes -p 2200 rtasseff@10.10.2.195 hostname
+
+Must print  bmg-rtasseff  with NO password prompt.
+If it asks for a password, STEP 5 did not take - repeat it.
+
+
+-----------------------------------------------------------
+ STEP 6 - THE PROVEN TUNNEL (do this before anything fancy)
+-----------------------------------------------------------
+6a. Start it, detached so it survives closing the window:
+
+    nohup ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519_molecubes_tunnel -R 2222:localhost:22 -p 2200 rtasseff@10.10.2.195 > ~/tunnel-manual.log 2>&1 &
+
+    (note: -R 2222:localhost:22  -- twenty-two, this Mac.)
+
+Press Return, then Return again to get your prompt back.
+
+6b. Confirm the process exists:
+
+    pgrep -fl "ssh -N"
+
+Should list one ssh with  -R 2222:localhost:22  in it.
+If nothing is listed:
+    cat ~/tunnel-manual.log
+and read the error.
+
+  "remote port forwarding failed for listen port 2222"
+      Something already holds 2222 at the far end. Use 2333
+      instead - change BOTH numbers:
+        ... -R 2333:localhost:22 ...
+      and remember you used 2333 (STEP 6c changes too).
+
+6c. *** PROVE THE WHOLE LOOP, from this keyboard ***
+This is the real test. Hop to the workstation and come back
+into this Mac through the tunnel you just made:
+
+    ssh -i ~/.ssh/id_ed25519_molecubes_tunnel -o IdentitiesOnly=yes -p 2200 rtasseff@10.10.2.195
+
+You are now on the workstation's Linux side (prompt looks
+like  rtasseff@bmg-rtasseff:~$ ). From THERE, run:
+
+    ssh -p 2222 molecubes@localhost hostname
+
+Accept the host key with  yes , enter THIS MAC's password.
+
+  It prints this Mac's hostname  -> THE TUNNEL WORKS.
+      The trip has succeeded. Type  exit  to return here.
+      Now go to STEP 7 (optional improvement, safe to skip).
+
+  It refuses or hangs -> the tunnel is not carrying traffic.
+      Type  exit , then re-read 6b's log. If you cannot fix
+      it, note the exact errors from ~/tunnel-manual.log and
+      leave - we debug from the notes.
+
+6d. Leave STEP 6's tunnel running unless STEP 7 replaces it.
+    It survives closing Terminal and locking the screen.
+    It does NOT survive logout or reboot.
+
+
+-----------------------------------------------------------
+ STEP 7 - THE LAUNCHAGENT (untested - optional upgrade)
+-----------------------------------------------------------
+Only attempt this after STEP 6c has passed. Its only benefit
+is surviving reboot and auto-restarting after a drop.
+
+7a. Stop the manual tunnel so the two do not fight over 2222:
+
+    pkill -f "ssh -N"
+    pgrep -fl "ssh -N"      (should print nothing)
+
+7b. Install and load. In Finder open the folder this file
+came from. In Terminal type  cd  and a SPACE, then DRAG that
+folder onto the Terminal window and press Return. Then:
+
+    mkdir -p ~/Library/LaunchAgents
+    cp eus.biomagune.mfb.tunnel.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
+
+No output means loaded.
+
+7c. Check it started:
+
+    sleep 5 ; pgrep -fl "ssh -N"
+    cat ~/Library/Logs/molecubes-tunnel.log
+
+Want: one ssh process with -R 2222:localhost:22, quiet log.
+
+7d. PROVE IT, the same way as 6c:
+
+    ssh -i ~/.ssh/id_ed25519_molecubes_tunnel -o IdentitiesOnly=yes -p 2200 rtasseff@10.10.2.195
+
+then from the workstation prompt:
+
+    ssh -p 2222 molecubes@localhost hostname
+
+  Prints this Mac's hostname -> DONE. Best possible outcome.
+      Type  exit . Nothing needs to stay open.
+
+  *** ANYTHING ELSE -> ROLL BACK TO STEP 6, do not fight it ***
+
+    launchctl unload ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
+    rm ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
+
+  then redo STEP 6a and re-verify with 6c. Copy whatever
+  ~/Library/Logs/molecubes-tunnel.log said into a note. With
+  STEP 6's tunnel live we can debug the LaunchAgent remotely
+  and have it ready for your next visit - that is a good
+  outcome, not a failure.
+
+
+-----------------------------------------------------------
+ STEP 8 - Before leaving the room
+-----------------------------------------------------------
+  1. Run  pgrep -fl "ssh -N"  ONE more time. If it prints an
+     ssh line, you have a tunnel. If it prints nothing, you
+     do not - go back to STEP 6a.
+  2. Note which you left running: STEP 6 (manual) or STEP 7
+     (LaunchAgent). This decides what happens after a reboot.
+  3. Screen may lock. Do NOT log out - it kills a STEP 6
+     tunnel.
+  4. If you left STEP 7 running: after a reboot the tunnel
+     returns when user molecubes LOGS IN, not at the login
+     window. If this box does not log in automatically, note
+     that.
+
+
+-----------------------------------------------------------
+ AFTERWARDS (at the workstation, not here)
+-----------------------------------------------------------
+The key pushed in STEP 5 is currently UNRESTRICTED - that is
+deliberate, it is what makes the 6c/7d self-check possible.
+Lock it down from the workstation once back:
+
+    wsl -d Ubuntu -- bash "/mnt/c/Users/rtasseff/OneDrive - CIC biomaGUNE/WorkstationOps/setup/harden-tunnel-key.sh"
+
+Then re-check the tunnel still works:
+
+    ssh -p 2222 molecubes@localhost
+
+Doing this after leaving is intentional: if the restrictions
+break anything, it is fixable from the workstation alone.
+
+
+-----------------------------------------------------------
+ REMOVING ALL OF THIS LATER
+-----------------------------------------------------------
+    launchctl unload ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist 2>/dev/null
+    rm -f ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
+    rm -f ~/.ssh/id_ed25519_molecubes_tunnel*
+    pkill -f "ssh -N"
+
+Then drop the matching line from the workstation's WSL
+authorized_keys, after which the key is dead everywhere.
+Turn Remote Login back off only if it was off before STEP 2.
+===========================================================

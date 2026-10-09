@@ -1,0 +1,107 @@
+sRan tunnel.txt on 20260805
+
+whoami - molecubes 
+
+
+Step 2 worked:
+molecubess-iMac:Ryan molecubes$ nc -vz 10.10.2.195 2200
+Connection to 10.10.2.195 port 2200 [tcp/ici] succeeded!
+
+Step 3 unexpected issue
+molecubess-iMac:Ryan molecubes$ ssh -p 2200 rtasseff@10.10.2.195
+kex_exchange_identification: read: Connection reset by peer
+
+Continued with system config check 
+molecubess-iMac:Ryan molecubes$ pmset -g | grep -E " sleep| displaysleep| disksleep"
+ displaysleep         25
+ sleep                0
+ disksleep            0
+
+Retested the ssh same error, when not using port different error:
+molecubess-iMac:Ryan molecubes$ ssh rtasseff@10.10.2.195
+ssh: connect to host 10.10.2.195 port 22: Connection refused
+
+
+20261001
+
+Step one.  Works: molecubes
+Step 2: already on
+Step 3: nc -w 3 10.10.2.195 2200 < /dev/null | head -1 --> printed nothing
+nc -w 3 10.10.2.195 8000 < /dev/null | head -1 --> printed nothing
+
+For both of those if I try to open up a webpage from this I get cancelled load from ... because it is using http/0.9, not a page not found.  I think my machine is running an image server on 8000.
+
+Even though I think this will not work, I am moving forward.
+
+Step 4: Generating public/private ed25519 key pair.
+Your identification has been saved in /Users/molecubes/.ssh/id_ed25519_molecubes_tunnel.
+Your public key has been saved in /Users/molecubes/.ssh/id_ed25519_molecubes_tunnel.pub.
+The key fingerprint is:
+SHA256:AWKNXDQaryGKDthfAxzyq2N88BcBPUmT5/d7QGh55jQ molecubes-box
+The key's randomart image is:
++--[ED25519 256]--+
+|  ..*BBo         |
+|   =oB*+.        |
+|  . * o+.  o     |
+|oo . = ...= E    |
+|= o o + So B .   |
+|o. = . o    +    |
+| .= + .      o   |
+| . o .      . .  |
+|             .   |
++----[SHA256]-----+
+Step 5: worked!
+It said to ssh in so I did
+
+molecubess-iMac:~ molecubes$ ssh -p 2200 rtasseff@10.10.2.195
+rtasseff@10.10.2.195's password: 
+Welcome to Ubuntu 24.04.3 LTS
+It worked with the password
+
+Then the check
+
+molecubess-iMac:~ molecubes$ ssh -i ~/.ssh/id_ed25519_molecubes_tunnel -o IdentitiesOnly=yes -p 2200 rtasseff@10.10.2.195 hostname
+bmg-rtasseff
+molecubess-iMac:~ molecubes$ 
+
+Worked without password
+
+Step 6: 
+molecubess-iMac:~ molecubes$ nohup ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519_molecubes_tunnel -R 2222:localhost:22 -p 2200 rtasseff@10.10.2.195 > ~/tunnel-manual.log 2>&1 &
+[1] 29948
+molecubess-iMac:~ molecubes$ 
+
+molecubess-iMac:~ molecubes$ pgrep -fl "ssh -N"
+29948 ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o IdentitiesOnly=yes -i /Users/molecubes/.ssh/id_ed25519_molecubes_tunnel -R 2222:localhost:22 -p 2200 rtasseff@10.10.2.195
+
+In part C I got an error, I was on my end but could not come back:
+rtasseff@bmg-rtasseff:~$ ssh -p 2222 molecubes@localhost hostname
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+It is also possible that a host key has just been changed.
+The fingerprint for the ED25519 key sent by the remote host is
+SHA256:EAfNEV4TsBCUK22crq2CtMdZuZ1OvAw6H02A+2DKZrw.
+Please contact your system administrator.
+Add correct host key in /home/rtasseff/.ssh/known_hosts to get rid of this message.
+Offending ED25519 key in /home/rtasseff/.ssh/known_hosts:11
+  remove with:
+  ssh-keygen -f '/home/rtasseff/.ssh/known_hosts' -R '[localhost]:2222'
+Host key for [localhost]:2222 has changed and you have requested strict checking.
+Host key verification failed.
+rtasseff@bmg-rtasseff:~$ 
+
+It was a stale entry, I updated it, re ran and it worked.
+
+Step 7: everything worked
+
+Step 8
+molecubess-iMac:Ryan molecubes$ pgrep -fl "ssh -N"
+30262 /usr/bin/ssh -N -i /Users/molecubes/.ssh/id_ed25519_molecubes_tunnel -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -R 2222:localhost:22 -p 2200 rtasseff@10.10.2.195
+molecubess-iMac:Ryan molecubes$ 
+
+
+
+

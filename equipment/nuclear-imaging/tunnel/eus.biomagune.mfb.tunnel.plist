@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Molecubes -> Data Office workstation reverse SSH tunnel.
+
+  Install to:  ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
+  Load with:   launchctl load ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
+  Remove with: launchctl unload ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
+               rm ~/Library/LaunchAgents/eus.biomagune.mfb.tunnel.plist
+
+  This starts NOTHING on the acquisition side and touches no acquisition data. It
+  holds one outbound SSH connection open so the Data Office can reach this machine.
+
+  KeepAlive restarts it whenever it exits (network blip, workstation reboot), with a
+  30s throttle so a persistent failure does not spin.
+
+  NOTE: a LaunchAgent runs in the LOGIN session, so after a reboot the tunnel comes
+  back when this user logs in -- not at the login window. If the box does not auto
+  log in, the tunnel is down until someone logs in. That is deliberate: a
+  LaunchDaemon would start at boot but must run as root, which is a bigger change
+  than remote access warrants on a live acquisition machine.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>eus.biomagune.mfb.tunnel</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/ssh</string>
+        <string>-N</string>
+        <string>-i</string>
+        <string>/Users/molecubes/.ssh/id_ed25519_molecubes_tunnel</string>
+        <string>-o</string>
+        <string>IdentitiesOnly=yes</string>
+        <string>-o</string>
+        <string>BatchMode=yes</string>
+        <string>-o</string>
+        <string>StrictHostKeyChecking=accept-new</string>
+        <string>-o</string>
+        <string>ExitOnForwardFailure=yes</string>
+        <string>-o</string>
+        <string>ServerAliveInterval=30</string>
+        <string>-o</string>
+        <string>ServerAliveCountMax=3</string>
+        <string>-R</string>
+        <string>2222:localhost:22</string>
+        <string>-p</string>
+        <string>2200</string>
+        <string>rtasseff@10.10.2.195</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/molecubes/Library/Logs/molecubes-tunnel.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/molecubes/Library/Logs/molecubes-tunnel.log</string>
+</dict>
+</plist>

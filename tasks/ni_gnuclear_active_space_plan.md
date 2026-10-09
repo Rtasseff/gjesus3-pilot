@@ -402,7 +402,7 @@ clean set makes the rest harder later, because dedup is on the machine timestamp
 **The live path is design-of-record in** `equipment/nuclear-imaging/live_machine_data_layout_and_sync_rules.md`
 (§2A roster, §3A subject grammar, §3B one-entry-per-scan, §4 R1–R10 rules). `S:\gnuclear` *is* the
 tree that doc was reverse-engineered from (its evidence snapshot
-`S:\gnuclear\2026\Jesus\Ryan\datapath.txt` is a dump of the box `/data/` root).
+`S:\gnuclear\2026\Jesus\Ryan\_archive_ni_live_2026\2026-06_box_listing\datapath.txt` is a dump of the box `/data/` root).
 
 ---
 
