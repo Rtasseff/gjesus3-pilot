@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-10-08
+**Last Updated:** 2026-10-09
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -129,6 +129,17 @@ your recommendations."*
 **Where the SegBioMed conversation lives:** the full exchange with the SegBioMed project is appended to
 `projects\Imaging\SegBioMed\harvest\MEMO_for_gjesus3_agent.md` (REPLY 7 carries the 2026-10-05
 rulings). Read it if D2's or the SegBioMed items' context is needed.
+
+### 0.7 NI live sync: one decision (2026-10-09)
+
+- **Recover 103 older `pending-db` animal records?** A read-only dry run on 2026-10-09 found 103 of
+  the 291 non-NI rows in `pending_subject_metadata.csv` recoverable from the animal DB: 96 MRI and
+  7 slide-scanner (ZWSI) acquisitions, all from 2026, **all single-animal** (the multi-animal shape
+  behind the 2026-10-08 bug does not occur). On a go: tell the coordinator, back up the 103
+  sidecars, `--apply` scoped with `--acq-ids`, check every animal block against its own DB record,
+  then refresh the subjects table. The other 188 are not in the animal DB under their project and
+  stay queued ([`BACKLOG.md`](BACKLOG.md), "292 `pending-db` subject rows").
+- Irene's supervised first sync is Ryan's and Irene's to schedule; nothing waits on it.
 
 ### Re-verifying this page before you trust it
 
@@ -714,50 +725,24 @@ The genuinely in-flight items (kept tight — everything else is in
   needs, per operator machine: the SFTP credential file `~/.ssh/gjesus3_mri.cred`
   (data office, out-of-band — the one prerequisite that blocks MRI on a fresh
   machine), reachability of the scanner host, and the NAS mount.
-- **NI live-box sync — the next NI step.** The goal: researchers who operate the Molecubes
-  scanner themselves ingest as close to acquisition as possible, with as few extra steps as
-  possible. The first strategy is a sync command they run on the acquisition Mac. The code is
-  built on branch **`feat/ni-live-hardening`** (not merged; its entry point is
-  `tasks/RESUME_ni_live.md` **on that branch**) and waits on on-box merge gates. Archive-mode NI
-  is already done and is the durable source of truth; live sync is the forward path for active
-  project data. **Hard links on the Mac are settled:** the old "Gate-0" was answered `ENOTSUP`
-  on the box, and those links are deferred to `pending_links.csv` / `relink_pending.py`, both on
-  `main`.
-  - ✅ **The Mac can be operated from the Data Office since 2026-10-01.** The reverse SSH tunnel
-    is LaunchAgent-driven and hardened, and `wsl -d Ubuntu -- ssh -p 2222 molecubes@localhost`
-    logs in without a password. So the gates can be developed and run from here, not in the
-    acquisition room. See
-    [`../equipment/nuclear-imaging/live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md).
-  - ⚠️ **The Mac's `gjesus3` mount does not stay up** (Ryan, 2026-10-01; cause unknown). It is
-    the sync's destination, so it must stay mounted before researchers can sync from the Mac.
-    Diagnose over the tunnel. One lead, not a diagnosis: it is mounted by the Bonjour name
-    `GJESUS3._smb._tcp.local`, while both `gnuclear` mounts use an IP or DNS name. **Also
-    decide whose credentials it uses.** Today it is Ryan's personal account, a superuser
-    ([`03_RAW_STORAGE`](../mfb-rdm-docs/03_RAW_STORAGE.md) permission model), so a
-    researcher's sync would run with Full rights on `raw/` rather than an operator's
-    write-but-not-modify.
-  - ✅ **The branch caught up with `main` on 2026-10-06** (a merge of 303 commits, not a
-    rebase; 7 files conflicted and were resolved by hand). **The same day, merge gates 1–4
-    passed ON THE MAC** over the tunnel, against a scratch NAS in Ryan's gnuclear folder with
-    synthetic data. Next: the `gjesus3` mount (down at a 2026-10-06 check; no saved
-    credentials; needs the dedicated account Ryan called for in August), then real-data runs,
-    under Ryan's rules for working on the Mac (`RESUME_ni_live.md`, top).
-  - ✅ **2026-10-08: the first production sync from the Mac. Irene's whole box folder: 95 of
-    95 reconstructions, 6.07 GB, 25 min, 0 failed.** Checksums re-verified 95/95.
-    - The **gjesus3 mount** is kept up on the Mac with Ryan's login. It is an interim, until
-      Box A pulls through the tunnel; IT declined an account.
-    - The sync **no longer re-ingests scans another source loaded**: 75 were skipped as
-      already in production from the August `S:\gnuclear` pull.
-    - **CT attenuation maps are derived files**: 52 went to the projects' `outputs/derived/`
-      with a provenance row.
-    - 5 typo sessions (`1015` for `1025`) were fixed through Irene's corrections file.
-    - **Still to do, each needing Ryan's go and a window free of other registry writers:**
-      - draining the 95 queued project links from Windows (`relink_pending.py`);
-      - recovering the 95 `pending-db` subjects;
-      - the clean-up phase;
-      - choosing the production home of the sync code;
-      - merging the branch into `main` (it merges cleanly).
-    - Detail: `RESUME_ni_live.md` §0 steps 3a/3b.
+- ✅ **NI live-box sync — IN TRUE PRODUCTION since 2026-10-08; merged into `main` 2026-10-09
+  (`3127ad0`).** Researchers who run the Molecubes scanner sync from the acquisition Mac with two
+  commands (`ni-ingest <folder> --plan`, then `ni-ingest <folder>`). Their copy of the code is staged
+  from `main` at `S:\gnuclear\2026\Jesus\_gjesus3_sync\`, with an illustrated guide; the Data Office
+  runbook is [`../tools/operator/NI_LIVE_RUNBOOK.md`](../tools/operator/NI_LIVE_RUNBOOK.md). Entry
+  point: [`RESUME_ni_live.md`](RESUME_ni_live.md) (current state; the full history is archived).
+  - **First sync, 2026-10-08:** Irene's whole box folder, 95/95 reconstructions (6.07 GB), 75
+    skipped as already loaded by the August pull, 52 CT attenuation maps filed as derived files.
+    Links and animal records were finished from Windows the same night; every check passed.
+  - **The Mac is operated from the Data Office** through the reverse SSH tunnel (since
+    2026-10-01; [`live_machine_remote_access.md`](../equipment/nuclear-imaging/live_machine_remote_access.md)).
+    **Interim:** its gjesus3 mount uses Ryan's login until Box A pulls through the tunnel (IT
+    declined an account).
+  - **Clean-up phase done 2026-10-09:** the RESUME cut to a current-state page, the plans and the
+    full RESUME archived, the tunnel field card, plist and visit notes moved into the repo, the
+    staging scripts made one tool (`tools/operator/stage_ni_gnuclear.py`), and the test kits and
+    scratch copies removed from Ryan's gnuclear folder after their evidence was archived.
+  - **Waiting on Ryan:** the 103 recoverable older animal records (§0.7).
   - **After the sync (Ryan, 2026-10-01): one ingest web app on Box A** for every instrument. It
     pulls NI data through the tunnel, so operators can leave the room when the scan ends. The
     tunnel moves to Box A without a visit (B2 decided). See [`BACKLOG.md`](BACKLOG.md)

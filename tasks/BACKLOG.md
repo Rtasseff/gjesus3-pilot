@@ -91,10 +91,22 @@ a DPA reference.** That gives a validator rule: human ⇒ DPA present.
 never been recovered.
 - **Why:** `recover_subject_metadata.py` used each row's NAS-relative `sidecar_path` as-is, so
   from Windows every DB hit failed with "sidecar not found".
-- **Status:** fixed on `feat/ni-live-hardening` 2026-10-08, along with a multi-animal bug that
-  wrote one animal's record into another animal's block (08_METADATA §4.4.6).
-- **Scale:** a dry run that day found **103 of the 292 already have DB hits**.
-- **Before any `--apply`:**
+- **Status:** fixed on `feat/ni-live-hardening` 2026-10-08 (on `main` since 2026-10-09), along
+  with a multi-animal bug that wrote one animal's record into another animal's block
+  (08_METADATA §4.4.6).
+- **Scale, re-checked 2026-10-09** (read-only dry run on `main`, after the MRI placeholder
+  retirement): **291** non-NI rows remain.
+  - **103 recoverable now:** 96 MRI and 7 slide-scanner (ZWSI), all from 2026. **Every one has
+    a single animal block**, checked in each sidecar, so the multi-animal shape behind the bug
+    does not occur.
+  - **188 not recoverable by tool:** each fails with "no animal N in project N", i.e. the
+    animal is not in the DB under that project.
+    - 136 are 2022 MRI scans under protocol `0721`;
+    - 33 are slide-scanner sections under `CERDOS`, a pig study with no AE number;
+    - 19 are scattered across `1022`, `0219`, `0324`, `0423` and others.
+    - These need someone who knows the studies, not a tool.
+- **Around any `--apply`** (the first two were done for the 103 on 2026-10-09; the third follows
+  the write):
   - check whether any of them are multi-animal scans;
   - dry-run with the fixed tool;
   - verify each block against its own animal's DB record afterwards, as was done for the NI rows.
@@ -103,7 +115,7 @@ never been recovered.
 - **Design gap behind the bug:** `pending.append_pending` is idempotent on `acq_id`, so a
   multi-animal scan's row names only the last animal queued. The fixed tool no longer relies on
   it, but the row is misleading to a reader.
-- Ryan's call; nothing was done to these rows.
+- Ryan's call (STATUS §0.7); nothing was done to these rows.
 
 ## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
 
@@ -252,7 +264,7 @@ how a researcher fixes a wrong project or mouse id, or adds the tracer, from any
 retires the per-researcher corrections CSV. Until then the CSV stays on gnuclear and is **edited
 on the Mac**. A file the Mac creates there is read-only from Windows, because it is owned by
 `nuclearuser` and the group has read-only access. The options considered are in
-`tasks/RESUME_ni_live.md` §0 step 3, on `feat/ni-live-hardening`. The form must keep the
+`tasks/archive/RESUME_ni_live_2026-10-09.md` §0 step 3. The form must keep the
 sync-safety invariant: a correction changes the metadata values, never the session key or
 `original_name`. **It is also the natural home for per-session `is_control`.** Since 2026-10-08
 the live sync no longer asks it once per batch, because one answer cannot cover a multi-study
@@ -567,7 +579,7 @@ design context: `equipment/nuclear-imaging/internal_ni_data_handling_workflow_no
 
 **The CLI live-sync is DONE** (branch `feat/ni-live-hardening`: `ni-ingest --live`,
 one-acquisition-per-reconstruction, the corrections/tracer plan→edit→sync cycle, the
-hard-link-fallback worklist — see [`tasks/ni_live_operator_plan.md`](ni_live_operator_plan.md)
+hard-link-fallback worklist — see [`tasks/archive/ni_live_operator_plan.md`](archive/ni_live_operator_plan.md)
 §§1–3.3). **§3.6 — a simple browser GUI for the live sync, for operators who won't use the
 terminal — is the one remaining piece and is explicitly LAST** (user 2026-06-29: "hold it").
 
@@ -891,7 +903,7 @@ backlog, moderate, do not build yet):
 notice the unexpected.
 
 **Interim, until built:** researchers sync only outside announced batch windows. See
-`tasks/RESUME_ni_live.md` §0 step 3c (on `feat/ni-live-hardening` until merged).
+`tasks/archive/RESUME_ni_live_2026-10-09.md` §0 step 3c.
 
 ## 🔸 MODERATE — closed projects should be MOVED, not deleted: a `projects_closed\` tier and a "close a project" action (Ryan, 2026-09-30)
 

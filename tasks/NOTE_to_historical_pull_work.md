@@ -44,7 +44,7 @@ Your `tasks/ni_gnuclear_active_space_plan.md` predates both.
 
 The historical pull was deprioritised in favour of getting live reads working, and that is
 still where things stand. The live work is close but **not merged**: the operator flow is
-the last substantive piece (see `tasks/ni_live_operator_flow_plan.md`), and the
+the last substantive piece (see `tasks/archive/ni_live_operator_flow_plan.md`), and the
 2026-08-05 on-box test stopped at a read-only step, so no ingest has yet been proven on the
 box.
 

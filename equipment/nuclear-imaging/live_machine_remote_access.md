@@ -3,7 +3,7 @@
 **Status:** ✅ **IN USE since 2026-10-01** — both halves are installed. The box dials out through its
 LaunchAgent, and the Data Office logs into it from the workstation without a password (§2,
 "Operating the box from here"). Individual sections keep their own markers.
-**Last updated:** 2026-10-01 — box half installed in one visit: the manual tunnel was proven from the
+**Last updated:** 2026-10-09 — the field card, the LaunchAgent plist and the visit notes are now in the repo ([`tunnel/`](tunnel/README.md)), with the card staged at `S:\gnuclear\2026\Jesus\Ryan\tunnel\`. Prior: 2026-10-01 — box half installed in one visit: the manual tunnel was proven from the
 box first, then replaced by the LaunchAgent, also proven from the box. Afterwards, from the
 workstation, the box's key was hardened and a Data Office key was added to the box. Visit record
 §9; moving the landing pad to Box A without a visit §10. (First version 2026-08-06; the box's key
@@ -27,10 +27,10 @@ NI work that requires running commands **on the acquisition box itself**, not on
 data:
 
 - **Developing and testing the NI live sync on the box** — the sync command researchers will run
-  there (branch `feat/ni-live-hardening`, not yet merged; its on-box merge gates are listed in that
-  branch's `tasks/RESUME_ni_live.md` §4). Before 2026-10-01 every such run cost a physical visit.
+  there (branch `feat/ni-live-hardening`, merged into `main` on 2026-10-09; its on-box merge gates are
+  recorded in `tasks/archive/RESUME_ni_live_2026-10-09.md` §4). Before 2026-10-01 every such run cost a physical visit.
 - **Refreshing the evidence base** — `live_machine_data_layout_and_sync_rules.md` rests entirely on
-  `S:\gnuclear\2026\Jesus\Ryan\datapath.txt`, a 295,538-line recursive dump of the box's data root
+  `S:\gnuclear\2026\Jesus\Ryan\_archive_ni_live_2026\2026-06_box_listing\datapath.txt`, a 295,538-line recursive dump of the box's data root
   captured during a physical visit. Until the tunnel, every re-check of that layout cost another visit.
 - **Later: the server pulls NI data itself.** The planned single ingest app on Box A reaches the box
   through this tunnel, so operators can leave the room as soon as the scan is done (§10;
@@ -120,7 +120,7 @@ Two consequences worth knowing before debugging anything:
 | Half | Repo | Contents |
 |---|---|---|
 | Workstation (WSL keepalive, forwarder, ports, health, logs) | `WorkstationOps` | operation `molecubes-tunnel` — run `.\ops status molecubes-tunnel` |
-| Domain (what the box is, why we reach it, the operator procedure) | this repo | this document + `S:\gnuclear\2026\Jesus\Ryan\tunnel.txt` (field card) |
+| Domain (what the box is, why we reach it, the operator procedure) | this repo | this document + [`tunnel/`](tunnel/README.md) (field card + LaunchAgent; staged at `S:\gnuclear\2026\Jesus\Ryan\tunnel\`) |
 
 This mirrors the `finder-refresh` split, where the generator lives here and the schedule/health live
 in WorkstationOps.
@@ -202,8 +202,8 @@ and would report a healthy path when every forwarder is dead).
 **The box half was installed with this procedure on 2026-10-01 (§9).** It is now needed only to
 re-install from scratch. Moving the landing pad to Box A does **not** need it, or a visit (§10).
 
-The authoritative, self-contained field card is **`S:\gnuclear\2026\Jesus\Ryan\tunnel.txt`** — kept
-on the NAS deliberately, because it is reachable from the box when nothing else is. Take that, not
+The authoritative, self-contained field card is **`S:\gnuclear\2026\Jesus\Ryan\tunnel\tunnel.txt`** (source: [`tunnel/tunnel.txt`](tunnel/tunnel.txt), restaged with
+`python tools/operator/stage_ni_gnuclear.py tunnel-card`) — kept on the NAS deliberately, because it is reachable from the box when nothing else is. Take that, not
 this document, to the machine.
 
 Shape of the visit:
@@ -367,8 +367,8 @@ Other posture notes:
 
 ## 9. Install visit — 2026-10-01
 
-Ryan, in the acquisition room, following field card rev4. His step-by-step notes are on the NAS
-next to the card (`S:\gnuclear\2026\Jesus\Ryan\tunnel_notes.txt`, which also records the failed
+Ryan, in the acquisition room, following field card rev4. His step-by-step notes are kept verbatim
+in [`tunnel/visit_notes_2026-10-01.txt`](tunnel/visit_notes_2026-10-01.txt) (they also record the failed
 2026-08-05 attempt).
 
 | Step | Result |

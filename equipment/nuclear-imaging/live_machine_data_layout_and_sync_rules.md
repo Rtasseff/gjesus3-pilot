@@ -14,7 +14,7 @@ vetoed); the scan→animal link is the packed `subject_ids` column, and per-(sca
 MFB-group scope/roster (§2A), the validated subject grammar + DB-as-validator (§3A), the
 one-entry-per-animal multi-animal decision (§3B), the subject-data storage split (§3C), and the
 two-program strategy (§7).
-**Evidence:** `S:\gnuclear\2026\Jesus\Ryan\datapath.txt` — a full recursive path dump
+**Evidence:** `S:\gnuclear\2026\Jesus\Ryan\_archive_ni_live_2026\2026-06_box_listing\datapath.txt` — a full recursive path dump
 (295,538 lines) of the Molecubes box data root `/Users/molecubes/Documents/volumes/remiW11/data/`.
 All counts below are from that snapshot.
 
@@ -671,7 +671,7 @@ is shared and mostly **already exists**.
 - `tools/operator/ni_ingest.py`, `tools/operator/metadata_prompt.py` — operator front-end to extend.
 - `tools/ingest_raw.py::copy_ni_acquisition`, `tools/ingest/ni_metadata.py` — slim-copy + metadata internals (reused unchanged).
 - `tasks/archive/correction_pass_handoff.md` items (4)/(6)/(11) — idempotency, empty-folder guard, and the `os.link` diagnostic that this live path also depends on.
-- Evidence snapshot: `S:\gnuclear\2026\Jesus\Ryan\datapath.txt` (295,538-line recursive listing).
+- Evidence snapshot: `S:\gnuclear\2026\Jesus\Ryan\_archive_ni_live_2026\2026-06_box_listing\datapath.txt` (295,538-line recursive listing).
 
 **Field-practice references (multi-mouse + DICOM one-patient, for §3B):**
 - "Design and Implementation of the Pre-Clinical DICOM Standard in Multi-Cohort Murine Studies" — the split-routine + new-UID + reference-original practice. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7934703/
