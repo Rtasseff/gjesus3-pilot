@@ -59,7 +59,7 @@ for the coordinator's gate and then Ryan's go. **Nothing was written to producti
    validator green (`pending-claim` 15,963), the six live checks, case tables identical to the commit, 313 subject ids,
    bytes 0, **18 + 1 dry runs: 7,627 listed = the case tables, 0 failed, 0 disagreements, registries unchanged**. Its
    snapshot lets the morning's `write` start without re-running it (§7).
-7. **Rehearsal of the script itself** on a D: root built from production at 35,791 rows: **7,627 / 7,627 / 0** (18 batches, 72 min, alongside the production pre-flight's dry runs), each batch verified 18/18 PASS against its own backup; W5 `pending-claim` 23,590 = 15,963 + 7,627, 0 findings on the new rows; the claim workbook (a copy) appended 627 sessions / 7,627 acquisition rows with every existing cell unchanged; ⟨POSTSUM⟩.
+7. **Rehearsal of the script itself** on a D: root built from production at 35,791 rows: **7,627 / 7,627 / 0** (18 batches, 72 min, alongside the production pre-flight's dry runs), each batch verified 18/18 PASS against its own backup; W5 `pending-claim` 23,590 = 15,963 + 7,627, 0 findings on the new rows; the claim workbook (a copy) appended 627 sessions / 7,627 acquisition rows with every existing cell unchanged; `post`: the full re-hash verify **18/18 PASS** (212,098 files) and the idempotent dry runs **19 × total 0** (9,966 = 7,627 + 2,339 skipped as already registered)..
 8. **Run time on the NAS: about 3 to 3.5 hours** for `write` (§7). It fits 07:00–10:30 only if it starts on time; it can start as soon
    as the go comes.
 
@@ -193,7 +193,11 @@ as expected (W5 now reads the validator's output once instead of running it twic
 files; ACQ-IDs `ACQ-20190128-MRI-001` (AR01) … `ACQ-20221221-MRI-008` (AR07); production gives the same IDs only if no other
 MRI row lands on these days first.
 
-⟨POSTTAB⟩
+| `post` | Result |
+|---|---|
+| Q1 `ar_12_verify.py` of all 18 batches against `bk1`, every file re-hashed | **18/18 PASS**: 35,791 → 43,418 rows, old bytes a prefix; 212,098 files == `checksums.json` == the extracted file (== the tarball-time hash for the scanner's); 6,320 exact hard-link folders; subjects 1,468 → 1,697 (313 ids, 229 new); `pending_subject_metadata`, `registry_projects`, `retired_acquisitions`, `registry_datasets`, `pending_dicom_regen` unchanged (53 min on local disk) |
+| Q2 the 18 configs and the dedup proof, dry runs | **every total 0**: 7,627 skipped "already in registry"; the dedup proof unchanged (2,339) (22 min) |
+| Q3 the lists | as §8 |
 
 ---
 
@@ -255,16 +259,17 @@ rehearsal), its baseline `bk_<batch>` is reused, and its verify covers the whole
 
 The whole run: the same, every batch, against `bk0`.
 
-**`post`** (read-only, after the window): `ar_12_verify.py` of every batch against `bk1` with every file re-hashed; the
-idempotent dry runs (every total 0; the dedup proof unchanged); `ar_15_lists.py` with the ACQ-IDs.
+**`post`** (read-only, after the window; on local disk 75 min, on the NAS expect 2–3 h): `ar_12_verify.py` of every batch
+against `bk1` with every file re-hashed; the idempotent dry runs (every total 0; the dedup proof unchanged);
+`ar_15_lists.py` with the ACQ-IDs.
 
 ## 8. The lists (plan only; `ar_15_lists.py`)
 
 | File (`D:\…\out\`) | For |
 |---|---|
 | `for_claim_workbook.csv` | what `claims-append` adds (W6/W7): 628 sessions, 7,627 acquisitions (the `m131` session is listed already) |
-| `for_assign_workbook.csv` | the 107 no-project studies with an exam (AR13 40, AR14 67), with their claim and DB evidence (Q4). `claim_workbooks.py assign-append` reads drive-3 paths only (§9 AR-c) |
-| `for_placement.csv` | a placement batch: the not-registered exams and `2dseq`-only reconstructions, with tarball and member prefix (k-space is in the tarballs), to the study's project or holding |
+| `for_assign_workbook.csv` | **107 no-project studies with an exam, 1,307 acquisitions** (AR13 40, AR14 67), with their claim and DB evidence (Q4). `claim_workbooks.py assign-append` reads drive-3 paths only (§9 AR-c) |
+| `for_placement.csv` | a placement batch: **240 rows (233 exams, 7 `2dseq`-only reconstruction sets), 3,119 files, 0.37 GB** (k-space 0.16 GB), with tarball and member prefix (k-space is in the tarballs), to the study's project or holding (79 rows) |
 
 ## 9. Decided, and still open
 
