@@ -24,7 +24,7 @@ This repo deliberately separates **rules** (specs / conventions / schemas) from 
 | [`tasks/STATUS.md`](tasks/STATUS.md) | Operational state — a lean current-state snapshot: what's live, what's in flight, open questions, per-round detail trails. | Permanent rules (→ `mfb-rdm-docs/`); per-instrument workflow notes (→ `equipment/`); **later improvements** (→ `tasks/BACKLOG.md`). |
 | [`tasks/BACKLOG.md`](tasks/BACKLOG.md) | **Later improvements** — refinements and second-/third-stage features not required for the hand-off. Promote to `STATUS.md` when an item becomes a delivery blocker. | Anything required for users/operators to start (that's `STATUS.md`). |
 | `tasks/archive/` | Superseded handoffs and old planning notes, kept for historical context. | **Never edit** — these are a historical record. Write new state in `STATUS.md`. |
-| [`equipment/`](equipment/) | Per-instrument workflow notes, platform descriptions, observed user behaviour, systematic naming conventions. The bridge between abstract specs and concrete instrument reality. [`equipment/INDEX.md`](equipment/INDEX.md) is the map. | System-wide specs / schemas (those belong in `mfb-rdm-docs/`). |
+| [`equipment/`](equipment/) | **The platform's own reality:** the equipment itself, and the processes the *platforms* follow — per-instrument workflow notes, platform descriptions, observed user behaviour, systematic naming conventions. Things outside our control, that persist regardless of what we build. The bridge between abstract specs and concrete instrument reality. [`equipment/INDEX.md`](equipment/INDEX.md) is the map. | System-wide specs / schemas (→ `mfb-rdm-docs/`); **our own RDM procedures, however much they are *about* an instrument's data** (a rule → `mfb-rdm-docs/`; a tool's usage → `tools/`; a work trail → `tasks/`). See *Equipment reference* below for the test. |
 | [`tools/`](tools/) | Implementation + tool docs. Top-level CLIs (`ingest_raw.py`, `create_project.py`) + `ingest/` modules + `operator/` front-ends + `templates/` + `configs/` + standalone utilities. [`tools/INDEX.md`](tools/INDEX.md) is the master tool map; [`tools/INGEST_CLI.md`](tools/INGEST_CLI.md) the CLI reference; [`tools/FINDER.md`](tools/FINDER.md) the Finder; [`tools/FAQ.md`](tools/FAQ.md) the researcher FAQ; [`tools/OPERATOR_FAQ.md`](tools/OPERATOR_FAQ.md) the operator FAQ. | Spec documentation (point at `mfb-rdm-docs/` from inline docstrings instead). |
 | [`CHANGELOG.md`](CHANGELOG.md) | The single narrative, dated history of design + tooling decisions. | Current-state snapshots (→ `tasks/STATUS.md`); permanent rules (→ `mfb-rdm-docs/`). **Append new entries only; never rewrite history.** |
 
@@ -119,6 +119,17 @@ The system is in **TRUE PRODUCTION** since the 2026-06-10 restart. The earlier q
 - [`equipment/INDEX.md`](equipment/INDEX.md) is the starting point for in-scope imaging instruments.
 - Two categories: **microscopes** (raw = direct instrument output) and **platform instruments** (raw = reconstructed images provided by the platform).
 - Each instrument's folder may include a `*_data_handling_workflow_notes.md` describing the operator workflow + systematic naming convention. These notes are the **source of truth** for what `discovered.*` fields a per-instrument template can expose.
+
+**The boundary rule (Ryan, 2026-07-16; written down 2026-10-10).** `equipment/` is for the **platform's own reality**: the equipment itself, and the processes the *platforms* follow — things outside our control, that persist regardless of what we build. **Our RDM's own procedures do not belong there**, however much they are *about* an instrument's data. The test for a paragraph: *would this still be true if gjesus3 did not exist?* If yes (the scanner's folder layout, the platform's retention, how researchers name their sessions, what the console lets them type), it is platform reality and stays. If no (how *we* pull from the scanner, our sync rules, our regeneration step, our validate step), it is ours: the rule goes to `mfb-rdm-docs/`, the tool's usage to `tools/` (or `10_TOOLS`), the work trail to `tasks/`. A doc that fails the test *in part* is one doc doing two jobs: **split it rather than move it**, and leave a pointer each way.
+
+**Audit against the rule — pending (issue #20).** The 2026-07-16 runbook (`mri_no_dicom_regeneration_runbook.md`) was the clearest case and was moved to `tasks/archive/` the same day. Still to judge, none of them urgent and none to move blind (each carries inbound links; `equipment/INDEX.md` follows whatever moves):
+
+| Doc | What the test says |
+|---|---|
+| `mri-platform/mri_data_access_strategy.md` | "how **we** reach the platform" is our strategy; the platform's access constraints (read-only, SFTP-only) are theirs. Split candidate. |
+| `nuclear-imaging/live_machine_data_layout_and_sync_rules.md` | the **layout** half is platform reality and belongs; the **sync rules** half is ours. Split candidate. |
+| `mri-platform/internal_mri_data_handling_workflow_notes.md` | self-describes as "the full MRI workflow **+ gjesus3 integration**", i.e. explicitly both. Split candidate. |
+| `historical_data_archives.md` | borderline: *where the platforms keep their data* is their reality; *our plan to ingest it* is not. Probably stays, with the plan parts pointed at `tasks/`. |
 
 ---
 

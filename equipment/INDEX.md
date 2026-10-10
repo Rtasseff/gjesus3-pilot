@@ -1,12 +1,14 @@
 # Equipment Index
 
-**Last Updated:** 2026-09-30
+**Last Updated:** 2026-10-10 (the folder's boundary rule, one line below; the rule itself and the pending audit live in [`CONTRIBUTING-docs.md`](../CONTRIBUTING-docs.md#equipment-reference)) · Prior: 2026-09-30
 
 This folder contains reference documentation for all imaging equipment whose data is in scope for the gjesus3 archival system. It is the map between the abstract system specs in [`mfb-rdm-docs/`](../mfb-rdm-docs/00_INDEX.md) and the concrete reality of each instrument: what its "raw" data looks like, how operators name and stage it, and how it reaches gjesus3.
 
 > **Researchers:** to *find and use* your data (rather than understand the instruments), start at [`RESEARCHER_GUIDE.md`](../RESEARCHER_GUIDE.md). The one thing on this page that matters most to you is your instrument's **naming convention** — see the [naming quick-reference](#naming-convention-quick-reference) below.
 >
 > **Where the source/historical data lives** for each instrument (the archives we ingest *from*) is catalogued separately in [`historical_data_archives.md`](./historical_data_archives.md).
+>
+> **What belongs in this folder** (Ryan, 2026-07-16): the platform's own reality — the equipment, and the processes the *platforms* follow; things that would still be true if gjesus3 did not exist. Our own RDM procedures (how *we* pull, sync, regenerate, validate) go to `mfb-rdm-docs/`, `tools/` or `tasks/`, even when they are about an instrument's data. The test and the pending audit: [`CONTRIBUTING-docs.md` → Equipment reference](../CONTRIBUTING-docs.md#equipment-reference).
 
 ---
 
