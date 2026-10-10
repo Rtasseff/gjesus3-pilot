@@ -128,6 +128,7 @@ The system is in **TRUE PRODUCTION** since the 2026-06-10 restart. The earlier q
 - **Stage specific files** rather than using `git add -A`.
 - The repo contains large binary files (xlsx, docx) and `contacts.xlsx` — **avoid staging these unless asked.**
 - One commit per logical unit of work; prefer multiple small commits over one giant atomic dump.
+- **Run the suites before merging a code branch:** `python tools/run_tests.py` (every `tools/**/test_*.py`, one line each; `--only <substr>` for a subset). A suite that needs the production workstation (Windows long paths, the animal-facility DB login, a network drive) fails elsewhere with a telling last line; compare against `main` on the same machine before reading a failure as a regression.
 
 ---
 
