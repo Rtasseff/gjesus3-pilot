@@ -289,6 +289,24 @@ def _preview_acq_id(acq_date, instrument, registry_path, seq_seen, warnings):
             )
             # ACQ-YYYYMMDD-INST-SEQ -> trailing seq int.
             seq = int(generated.rsplit("-", 1)[-1])
+            # generate_acq_id reads the registry (and the tombstones) only.
+            # The real run allocates max(registry, reservation) + 1, where the
+            # reservation is the high-water mark in registries/.acq_id_seq.json
+            # -- ids handed out that never got a row (a failed or rolled-back
+            # ingest) stay reserved. Read it here too, without writing, so the
+            # preview shows the ids the run will really mint (BACKLOG "the
+            # dry-run preview ignores .acq_id_seq.json": it showed -001..-017
+            # where the run allocated -018..-034).
+            prefix = f"ACQ-{acq_date}-{instrument}-"
+            reservations = acq_id_mod._read_reservations(
+                os.path.dirname(os.path.abspath(registry_path)))
+            try:
+                reserved = int(reservations.get(prefix, 0))
+            except (TypeError, ValueError):
+                reserved = 0
+            if reserved >= seq:
+                seq = reserved + 1
+                generated = f"{prefix}{seq:03d}"
             seq_seen[key] = seq
             return generated
         seq_seen[key] += 1

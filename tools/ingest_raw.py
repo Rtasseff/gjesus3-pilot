@@ -147,6 +147,70 @@ def _rollback_uncommitted(dest_dir, log_fn=log):
         log_fn(f"Could not roll back {dest_dir}: {e}", "WARN")
 
 
+def _resolve_acq_date(acq_dt_iso, summary, ingest_block, log_fn=log):
+    """Step 3: the YYYYMMDD date behind the ACQ-ID prefix and the registry date.
+
+    Returns ``(acq_date, acq_date_is_real, backfill_iso)`` -- ``backfill_iso``
+    is the ISO date to write back into ``acquisition_datetime`` when the date
+    came from the DICOM headers (else None) -- or **None when the case must be
+    refused** because no date is known.
+
+    Order: (1) the config's ``acquisition_datetime`` (a literal, a
+    ``discovered.<x>`` value, or NA; the resolver normalized it to ISO at
+    expand-batch time); (2) the DICOM ``StudyDate`` the summarizer read from
+    the headers -- collaborator / external DICOM carries the real acquisition
+    date in the data, not the filename, so its configs can legitimately set
+    ``acquisition_datetime: NA`` (caveat: such a batch keys its registry rows
+    off the discovered date while expand_batch's idempotency check keys off the
+    empty config value, so a re-run will not dedupe them; supply an explicit
+    ``acquisition_datetime`` for strict idempotency); (3) nothing.
+
+    (3) used to mean "today, with a WARN". It no longer does: a 2019 exam was
+    committed as ``ACQ-20260812-...`` under ``/raw/DICOM/2026/2026-08/`` with
+    the wrong date baked into its project link name, and the batch still
+    exited 0 (CHANGELOG 2026-08-13; BACKLOG "Misc"). A wrong acquisition date
+    is a silently wrong identity; a refused case is a visible one. An MRI exam
+    reaches (3) when it has no ``visu_pars`` -- an aborted exam with no
+    reconstructed image, which the 2026-10-04 line says is not registered
+    anyway. The old behaviour stays reachable, deliberately, through
+    ``ingest.allow_unknown_acquisition_date: true``; enrichment then withholds
+    the placeholder date from age_at_acquisition (``acq_date_is_real``).
+    """
+    if acq_dt_iso and len(acq_dt_iso) >= 10:
+        return acq_dt_iso[:10].replace("-", ""), True, None
+    study_date = ((summary or {}).get("study_date") or "").strip()
+    if len(study_date) == 8 and study_date.isdigit():
+        log_fn(
+            f"acquisition_datetime not provided; using DICOM StudyDate "
+            f"({study_date}) as ACQ-ID prefix and registry date."
+        )
+        return (study_date, True,
+                f"{study_date[:4]}-{study_date[4:6]}-{study_date[6:8]}")
+    if (ingest_block or {}).get("allow_unknown_acquisition_date"):
+        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        log_fn(
+            f"acquisition_datetime not provided and no usable DICOM "
+            f"StudyDate; using today ({today}) as ACQ-ID prefix because "
+            f"ingest.allow_unknown_acquisition_date is set. Backfill the "
+            f"registry acquisition_datetime when known. age_at_acquisition "
+            f"will be left blank (no real date to measure to).",
+            "WARN",
+        )
+        return today, False, None
+    log_fn(
+        "acquisition_datetime not provided and no DICOM instance in the source "
+        "carries a StudyDate: the case is REFUSED, not dated to today (a wrong "
+        "acquisition date is a silently wrong identity). Set "
+        "`acquisition_datetime` in the config (or a discovered.<field>; for "
+        "an MRI exam, no visu_pars usually means an aborted exam with no "
+        "reconstructed image, which is not registered), or set "
+        "`ingest.allow_unknown_acquisition_date: true` to accept today's date "
+        "knowingly.",
+        "ERROR",
+    )
+    return None
+
+
 def _raw_primary_path(cfg_single, raw_acq_dir, acq_id_str):
     """The raw primary a project link points at (ingest Step 12's dispatch).
 
@@ -911,54 +975,20 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     cfg_single["data_ecosystem"] = data_ecosystem
 
     # --- Step 3: Resolve ACQ-ID date prefix from acquisition_datetime ---
-    # acquisition_datetime is now provided via the YAML registry: block
-    # (literal, discovered.<x>, or NA). The resolver normalized it to ISO
-    # ("YYYY-MM-DDT...") at expand-batch time.
+    # The config's acquisition_datetime (literal / discovered.<x> / NA, ISO-
+    # normalized by the resolver at expand-batch time), else the DICOM
+    # StudyDate, else the case is refused -- the rules and the reasons are in
+    # _resolve_acq_date. acq_date_is_real tells enrichment whether acq_date
+    # may feed age_at_acquisition (False only on the opt-in today placeholder).
     acq_dt_iso = cfg_single.get("acquisition_datetime", "")
-    # Does acq_date below carry a REAL acquisition date, or the today() placeholder?
-    # The ACQ-ID prefix tolerates the placeholder (it only has to be unique and
-    # roughly right), but enrichment uses acq_date to derive age_at_acquisition —
-    # and an age measured to the *ingest* date is not a missing value, it is a
-    # plausible wrong one that reads as DB-sourced truth. Track the distinction here
-    # because it is unrecoverable downstream: both branches produce a bare YYYYMMDD.
-    acq_date_is_real = True
-    if acq_dt_iso and len(acq_dt_iso) >= 10:
-        acq_date = acq_dt_iso[:10].replace("-", "")
-    else:
-        # No acquisition_datetime supplied by the config. Before defaulting
-        # to today, fall back to the DICOM StudyDate the summarizer read
-        # from the headers — collaborator / external DICOM carries the real
-        # acquisition date in the data, not the filename (so the config can
-        # legitimately set `acquisition_datetime: NA`). We also backfill
-        # cfg_single["acquisition_datetime"] so the registry column and the
-        # metadata sidecar reflect the real date instead of being left
-        # blank. Caveat: a config that relies on this fallback keys its
-        # registry rows off the discovered StudyDate while expand_batch's
-        # idempotency check keys off the (empty) config value — so a re-run
-        # won't dedupe these rows. That's acceptable for one-time external
-        # DICOM deposits; supply an explicit acquisition_datetime to keep
-        # strict idempotency.
-        study_date = (summary.get("study_date") or "").strip()
-        if len(study_date) == 8 and study_date.isdigit():
-            acq_date = study_date
-            cfg_single["acquisition_datetime"] = (
-                f"{study_date[:4]}-{study_date[4:6]}-{study_date[6:8]}"
-            )
-            log(
-                f"acquisition_datetime not provided; using DICOM StudyDate "
-                f"({acq_date}) as ACQ-ID prefix and registry date."
-            )
-        else:
-            acq_date = datetime.now(timezone.utc).strftime("%Y%m%d")
-            acq_date_is_real = False
-            log(
-                f"acquisition_datetime not provided and no usable DICOM "
-                f"StudyDate; using today ({acq_date}) as ACQ-ID prefix. "
-                f"Backfill the registry acquisition_datetime when known. "
-                f"age_at_acquisition will be left blank (no real date to "
-                f"measure to).",
-                "WARN",
-            )
+    resolved_date = _resolve_acq_date(acq_dt_iso, summary, ingest_block, log)
+    if resolved_date is None:
+        return None, False
+    acq_date, acq_date_is_real, backfill_iso = resolved_date
+    if backfill_iso:
+        # So the registry column and the sidecar carry the real date instead
+        # of being left blank.
+        cfg_single["acquisition_datetime"] = backfill_iso
 
     # --- Step 4: Generate ACQ-ID ---
     # Allocate under the registry lock with a durable high-water reservation so

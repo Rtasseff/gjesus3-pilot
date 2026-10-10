@@ -360,17 +360,30 @@ def _scanner_model(md):
 
     PRIMARY: acqp `ACQ_station` is the literal Bruker system name — e.g.
     'Biospec 70/30' (7.0T / 30cm bore) or 'Biospec 117/16' (11.7T). The leading
-    number is the field strength x10. FALLBACK: derive the field strength from
-    the 1H reference frequency (Larmor ~42.577 MHz/T) and snap it to a known
-    BioSpec value. High-confidence only — anything unrecognised returns ''
-    (the registry then keeps the placeholder / WARNs, never guesses).
+    number is the field strength x10 -- EXCEPT on the 11.7T, whose station
+    reads 'BIOSPEC 500': the 1H frequency in MHz (500 / 42.577 = 11.7T), not
+    a field x10 (which gave the nonsense "Bruker BioSpec 50T"; BACKLOG "the
+    drives' DICOM stream: follow-ups", 2026-10-04). A leading number of 200 or
+    more is therefore read as MHz and snapped to a known field strength.
+    FALLBACK: derive the field strength from the 1H reference frequency
+    (Larmor ~42.577 MHz/T) and snap it to a known BioSpec value.
+    High-confidence only — anything unrecognised returns '' (the registry then
+    keeps the placeholder / WARNs, never guesses).
     """
     acqp = md.get("acqp", {})
     station = str(acqp.get("ACQ_station", "") or "").strip()
     if "biospec" in station.lower():
         m = re.search(r"(\d{2,3})", station)
         if m:
-            return f"Bruker BioSpec {_field_strength_label(int(m.group(1)) / 10.0)}"
+            n = int(m.group(1))
+            if n >= 200:
+                # A 1H frequency in MHz ('BIOSPEC 500' = 11.7T), snapped.
+                field_t = n / _GYRO_1H_MHZ_PER_T
+                for known in _KNOWN_BIOSPEC_FIELD_T:
+                    if abs(field_t - known) < 0.25:
+                        return f"Bruker BioSpec {_field_strength_label(known)}"
+                return ""
+            return f"Bruker BioSpec {_field_strength_label(n / 10.0)}"
     # Fallback: 1H reference frequency -> field strength, snapped to a known value.
     method = md.get("method", {})
     nucleus = str(method.get("PVM_Nucleus1", "")).strip()

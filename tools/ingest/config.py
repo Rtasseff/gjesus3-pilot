@@ -694,6 +694,11 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
         case["original_name"] = rel_match
         if is_file:
             discovered["filename"] = match_basename
+            # The name without its extension, for configs that want a
+            # sample_id or link name free of ".czi" (the best-guess
+            # microscopy configs used ${discovered.filename} and so wrote
+            # "X.czi" into sample_id; BACKLOG "Legacy Zeiss microscopy").
+            discovered["filename_stem"] = os.path.splitext(match_basename)[0]
         else:
             discovered["folder_name"] = match_basename
 

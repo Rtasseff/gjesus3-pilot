@@ -52,11 +52,11 @@ registry:
   modalities_in_study:  NA
   researcher:           "NA"
   data_source:          internal
-  sample_id:            "${{discovered.filename}}"
+  sample_id:            "${{discovered.filename_stem}}"
   sample_type:          "NA"
   acquisition_datetime: discovered.czi_acquisition_datetime
   project_name:         "{project_slug}"
-  notes:                "BEST-GUESS / LOW-CONFIDENCE — legacy {instrument}, no naming standard; project = source folder '{folder}', sample_id = filename; sample_type/anatomy guessed post-ingest. Verify before scientific reuse."
+  notes:                "BEST-GUESS / LOW-CONFIDENCE — legacy {instrument}, no naming standard; project = source folder '{folder}', sample_id = filename without extension; sample_type/anatomy guessed post-ingest. Verify before scientific reuse."
 
 operator: "${{discovered.czi_user}}"
 

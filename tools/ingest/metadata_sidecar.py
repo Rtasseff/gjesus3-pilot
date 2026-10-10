@@ -121,7 +121,16 @@ def write_sidecar(folder, sidecar_dict):
     Returns the absolute path written.
     """
     path = os.path.join(folder, SIDECAR_FILENAME)
-    with open(path, "w") as f:
+    # Pinned LF + UTF-8 so a sidecar's bytes describe the data, not which
+    # machine ran the ingest. Text mode without `newline=` writes CRLF on
+    # Windows and LF in WSL, which is how /raw/ ended up byte-inconsistent
+    # (314 LF / 130 CRLF measured 2026-08-16; BACKLOG "metadata.json sidecars
+    # carry platform-dependent line endings"). The existing sidecars are left
+    # as they are: rewriting immutable files for something no reader notices
+    # is not worth the churn, and would also mean recomputing checksums.
+    # Tools that REWRITE a sidecar in place must preserve its existing
+    # terminator instead (recover_subject_metadata._existing_newline).
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(sidecar_dict, f, indent=2)
         f.write("\n")
     return path
