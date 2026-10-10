@@ -126,6 +126,33 @@ def copy_files(src_dir, dst_dir):
     return count
 
 
+class DuplicateAtCommit(RuntimeError):
+    """Raised under the registry lock, at the commit point, when another run has
+    registered this case's (acq_date, original_name) since expand_batch built
+    its dedup snapshot. The case fails and its copy is rolled back; the id it
+    reserved stays unused (ids are never reused; a gap is harmless)."""
+
+
+def _refuse_if_registered_meanwhile(acq_dt_iso, original_name, registry_path):
+    """The commit-time dedup re-check. MUST be called under locking.registry_lock.
+
+    Raises DuplicateAtCommit when ``(acq_date, original_name)`` -- the same key
+    expand_batch deduplicates on (config._build_dedupe_index) -- is already in
+    the registry or retired. The key is read fresh here, under the lock, because
+    the batch's snapshot predates this case's copy. A blank original_name is
+    never keyed (legacy rows), as in the index itself.
+    """
+    key = ((acq_dt_iso or "").strip()[:10].replace("-", ""),
+           (original_name or "").strip())
+    if key[1] and key in config._build_dedupe_index(registry_path):
+        raise DuplicateAtCommit(
+            f"(acq_date, original_name) = {key} is already in the registry (or "
+            f"retired) -- registered by another run after this batch's dedup "
+            f"snapshot was taken; not appending a second row. The copy is rolled "
+            f"back; re-run the batch and this case is skipped as already ingested."
+        )
+
+
 def _rollback_uncommitted(dest_dir, log_fn=log):
     """Remove a partially-written acquisition folder after a pre-commit failure.
 
@@ -1603,6 +1630,16 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt,
                                  anatomy=anatomy_block, subjects=subjects_list)
         with locking.registry_lock(registries_dir):
+            # Re-check the dedup key UNDER the lock (review 2026-07-08 §3.1 #1;
+            # issue #14). expand_batch built its (acq_date, original_name) index
+            # before the batch started, outside any lock, and this case's copy
+            # took minutes since: a second launch of the same batch, or a
+            # concurrent ingest of the same source, can have committed this key
+            # meanwhile, and the snapshot cannot see it. One registry read,
+            # the same cost the ACQ-ID allocation already pays under this lock.
+            # Retired rows count too, as in expand_batch (06_REGISTRIES §2.9).
+            _refuse_if_registered_meanwhile(
+                cfg_single.get("acquisition_datetime"), original_name, registry_path)
             registry.append_row(registry_path, row)
             # The row is now written — THIS is the commit point (F item 5). Set
             # `committed` here, inside the lock and BEFORE the non-blocking
