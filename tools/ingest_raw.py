@@ -11,6 +11,7 @@ See 10_TOOLS.md and 03_RAW_STORAGE.md for full specification.
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -124,6 +125,32 @@ def copy_files(src_dir, dst_dir):
         count += 1
 
     return count
+
+
+# An `# EDIT:` placeholder a template ships in a person field, e.g.
+# "<REQUIRED - set via mri-ingest --operator, or replace here>". The validator
+# refuses it in ANY column (validate_registries.TEMPLATE_RESIDUE_RE); this is
+# the same shape, checked at ingest time so it never reaches the registry.
+_PLACEHOLDER_RE = re.compile(r"<[^<>\n]*>|\$\{[^}]*\}|\{\{[^}]*\}\}")
+
+
+def _unreplaced_placeholders(cfg_single):
+    """[(field, value)] for every registry value, and the top-level operator,
+    that still holds an unreplaced template placeholder.
+
+    `mri-ingest --operator` fills `researcher` and `operator` on the CLI path,
+    but a direct `ingest_raw.py --config` run with the template's
+    `researcher: "<REQUIRED ...>"` left in place used to write the instruction
+    text into production (10,314 rows, 2026-08-20; BACKLOG "Person/role rename
+    -- residual cleanup"). Every registry column is checked, not only the
+    person fields: the instrument_model incident was the same shape.
+    """
+    found = []
+    for field in dict.fromkeys(list(registry.REGISTRY_FIELDS) + ["operator"]):
+        value = cfg_single.get(field)
+        if isinstance(value, str) and _PLACEHOLDER_RE.search(value):
+            found.append((field, value))
+    return found
 
 
 def _rollback_uncommitted(dest_dir, log_fn=log):
@@ -909,6 +936,23 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     # Resolve ecosystem
     data_ecosystem = config.resolve_ecosystem(instrument)
     cfg_single["data_ecosystem"] = data_ecosystem
+
+    # --- Step 2b: refuse an unreplaced template placeholder ---
+    # Before anything is allocated or copied: a person field (or any registry
+    # value) still holding the template's "<REQUIRED ...>" instruction is a
+    # config that was never edited, not a value (issue #15).
+    placeholders = _unreplaced_placeholders(cfg_single)
+    if placeholders:
+        for field, value in placeholders:
+            log(f"{field} still holds the template placeholder {value!r}", "ERROR")
+        log(
+            "Case REFUSED: replace the placeholder(s) in the config (for MRI, "
+            "`mri-ingest --operator <name>` sets researcher and operator), or "
+            "leave the field blank if the value is genuinely unknown. Nothing "
+            "was allocated or copied.",
+            "ERROR",
+        )
+        return None, False
 
     # --- Step 3: Resolve ACQ-ID date prefix from acquisition_datetime ---
     # acquisition_datetime is now provided via the YAML registry: block
