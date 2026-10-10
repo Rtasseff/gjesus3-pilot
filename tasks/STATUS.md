@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-10-09
+**Last Updated:** 2026-10-10
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -257,6 +257,16 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 The genuinely in-flight items (kept tight — everything else is in
 [`BACKLOG.md`](BACKLOG.md)):
 
+- **The backlog is triaged into GitHub issues (2026-10-10), ahead of the Box A port.** 39 issues
+  (#2–#40, plus #1) at <https://github.com/Rtasseff/gjesus3-pilot/issues>, one per branch-sized unit,
+  labelled by priority / area / status and sorted into milestones **M1 before the port, M2 the port,
+  M3 after, Held**. The pre-port push works from M1, in the order given in
+  [`backlog_triage_2026-10-10.md`](backlog_triage_2026-10-10.md) (the ingest-engine branches #7 → #6 →
+  #5 → #14 → #15 one at a time, then one exe redeploy #23; everything else beside them). No code was
+  started. Decisions the M1 issues wait on, for Ryan: #2 (the privacy column and the DPA block's
+  strictness), #4 (the backup purchase), #9 (the NI animal token), #10 (`projects_closed\` and what
+  `closed` does), #12 (the go for the 103), #13 (the claim window's end), #21 (the `contacts.xlsx`
+  purge), #25 (odds and ends).
 - **The M. Jesús drive (third historical drive): 🔶 ASSESSED 2026-10-06 (read-only; merge `d659270`). Production work is next.**
   - **What it is:** M. Jesús's own working drive (`MJesus-MFB-biomaGUNE`, WD serial `WX22D623YP29`), on loan on 2026-09-29 and since returned to her. The CoS hub staged it to `J:\_staging_drive3_MJ\drive3_MJesus_WX22D623YP29\`, outside `gjesus3-data`: **621,969 files, 1,681 GB (1,565.8 GiB), 0 read errors, and a clean verify.** The 7 verify failures are AppleDouble `._.DS_Store` files that the NAS rewrites; each was re-read from the drive and matched. The hub's brief and evidence are in `...\DataInfra\gjesus3-archive\historical-mjesus-drive\` (`HANDOFF.md`, `records\`); a snapshot is on `D:\projects\gjesus3\drive3_analysis\hub_records_snapshot_20261006\`. The staged copy is one of two copies (the owner has the drive), so it stays until ingest checksums match its manifest.
   - **Ryan's rulings of 2026-09-30, made with the hub** (recorded here so that they outlive its brief):

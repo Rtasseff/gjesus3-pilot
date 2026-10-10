@@ -13,6 +13,14 @@ pilot). Rule of thumb:
 
 When a backlog item becomes a blocker for delivery, promote it to `STATUS.md`.
 
+> **📋 Triaged 2026-10-10 into GitHub issues.** Every open item below is grouped into a branch-sized
+> unit and posted at <https://github.com/Rtasseff/gjesus3-pilot/issues> with a priority, an area, a
+> milestone (M1 before the Box A port, M2 the port, M3 after, Held) and the decisions it waits on.
+> **The issues are the working list for the pre-port push; this file keeps the evidence and the
+> reasoning.** The section → issue map, the ordering and the branch names are in
+> [`backlog_triage_2026-10-10.md`](backlog_triage_2026-10-10.md). When an issue closes, tick its
+> items here and add the CHANGELOG row as usual.
+
 ---
 
 ## 🔺 HIGH (top) — a registry flag for human, privacy-restricted data (2026-10-02)
