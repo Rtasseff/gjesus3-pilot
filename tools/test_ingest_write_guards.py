@@ -45,15 +45,20 @@ def write_registry(path, rows):
     with open(path, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(registry.REGISTRY_FIELDS)
-        for acq, adt, oname in rows:
+        for r in rows:
+            acq, adt, oname = r[:3]
             row = dict.fromkeys(registry.REGISTRY_FIELDS, "")
             row.update({"acq_id": acq, "acquisition_datetime": adt, "original_name": oname})
+            if len(r) > 3:
+                row.update(r[3])
             w.writerow([row[c] for c in registry.REGISTRY_FIELDS])
 
 
-def raises_dup(*args):
+def raises_dup(acq_dt_iso, original_name, registry_path, **extra):
+    """The helper takes the case dict; most checks exercise the (date, name) key only."""
+    case = {"acquisition_datetime": acq_dt_iso, "original_name": original_name, **extra}
     try:
-        ingest_raw._refuse_if_registered_meanwhile(*args)
+        ingest_raw._refuse_if_registered_meanwhile(case, registry_path)
     except ingest_raw.DuplicateAtCommit:
         return True
     return False
@@ -79,7 +84,19 @@ def test_commit_recheck():
               "the same name on another date passes (the key is the pair)")
         check(not raises_dup("2026-07-10", "", reg), "a blank original_name never keys")
         check(not raises_dup("", "MFB_AUA_1123_ID12_PR_10x.czi", reg),
-              "a different staging-relative name is a different key (the known gap, issue #5)")
+              "a different staging-relative name alone is a different (date, name) key")
+        # the content key (issue #5): same instrument, timestamp and file name under another
+        # staging root is the SAME acquisition, so it is refused at commit too
+        write_registry(reg, [
+            ("ACQ-20260304-ZWSI-001", "2026-03-04T09:00:00Z", "20260304/MFB_AUA_1123_ID12_PR_10x.czi",
+             {"data_ecosystem": "MICROSCOPY", "instrument": "ZWSI"}),
+        ])
+        check(raises_dup("2026-03-04T09:00:00Z", "MFB_AUA_1123_ID12_PR_10x.czi", reg,
+                         data_ecosystem="MICROSCOPY", instrument="ZWSI"),
+              "the content key (instrument, timestamp, file name) catches the same .czi from another root")
+        check(not raises_dup("2026-03-04T09:00:00Z", "MFB_AUA_1123_ID12_PR_10x_scene2.czi", reg,
+                             data_ecosystem="MICROSCOPY", instrument="ZWSI"),
+              "a different file name at the same second (a scene split) is not refused")
 
         # a retired row keeps blocking (as expand_batch does)
         tomb = retired.retired_path(regs)

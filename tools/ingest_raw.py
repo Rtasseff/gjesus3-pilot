@@ -136,24 +136,28 @@ class DuplicateAtCommit(RuntimeError):
     reserved stays unused (ids are never reused; a gap is harmless)."""
 
 
-def _refuse_if_registered_meanwhile(acq_dt_iso, original_name, registry_path):
+def _refuse_if_registered_meanwhile(cfg_single, registry_path):
     """The commit-time dedup re-check. MUST be called under locking.registry_lock.
 
-    Raises DuplicateAtCommit when ``(acq_date, original_name)`` -- the same key
-    expand_batch deduplicates on (config._build_dedupe_index) -- is already in
-    the registry or retired. The key is read fresh here, under the lock, because
-    the batch's snapshot predates this case's copy. A blank original_name is
-    never keyed (legacy rows), as in the index itself.
+    Raises DuplicateAtCommit when ANY of the case's dedup keys
+    (config.dedupe_keys_for: the (acq_date, original_name) key, and for a
+    microscopy .czi the content key (instrument, acquisition timestamp, file
+    name), 06_REGISTRIES §2.10) is already in the registry or retired. The
+    index is read fresh here, under the lock, because the batch's snapshot
+    predates this case's copy. A blank original_name never keys (legacy rows),
+    as in the index itself.
     """
-    key = ((acq_dt_iso or "").strip()[:10].replace("-", ""),
-           (original_name or "").strip())
-    if key[1] and key in config._build_dedupe_index(registry_path):
+    keys = config.dedupe_keys_for(cfg_single)
+    hits = keys & config._build_dedupe_index(registry_path)
+    if hits:
         raise DuplicateAtCommit(
-            f"(acq_date, original_name) = {key} is already in the registry (or "
+            f"dedup key(s) {sorted(hits, key=str)} already in the registry (or "
             f"retired) -- registered by another run after this batch's dedup "
             f"snapshot was taken; not appending a second row. The copy is rolled "
             f"back; re-run the batch and this case is skipped as already ingested."
         )
+
+
 # An `# EDIT:` placeholder a template ships in a person field, e.g.
 # "<REQUIRED - set via mri-ingest --operator, or replace here>". The validator
 # refuses it in ANY column (validate_registries.TEMPLATE_RESIDUE_RE); this is
@@ -1722,8 +1726,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             # meanwhile, and the snapshot cannot see it. One registry read,
             # the same cost the ACQ-ID allocation already pays under this lock.
             # Retired rows count too, as in expand_batch (06_REGISTRIES §2.9).
-            _refuse_if_registered_meanwhile(
-                cfg_single.get("acquisition_datetime"), original_name, registry_path)
+            _refuse_if_registered_meanwhile(cfg_single, registry_path)
             registry.append_row(registry_path, row)
             # The row is now written — THIS is the commit point (F item 5). Set
             # `committed` here, inside the lock and BEFORE the non-blocking
