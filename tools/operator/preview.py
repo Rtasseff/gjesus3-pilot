@@ -70,6 +70,9 @@ class PreviewResult:
                                                        # folder) whose name matched no filename_parse
                                                        # rule: {"target", "target_path", "source", "rule",
                                                        # "reason", "n_matches", "n_exam_folders"}
+    unseen: list = field(default_factory=list)         # dot-named entries the glob never returns, one per
+                                                       # entry: {"kind": "hidden"|"appledouble", "target",
+                                                       # "target_path", "matches": [staging-relative path], ...}
     n_new: int = 0                                     # cases that would ingest
     blocking_errors: list = field(default_factory=list)
     derived: list = field(default_factory=list)       # NI live: derived files (attenuation maps) for
@@ -180,8 +183,10 @@ def preview_batch(cfg, nas_root, count_matches=True):
     # not by re-parsing the text) and tag the per-exam drops that belong to one,
     # so a front-end can show "1 study NOT PARSED (15 exam folders)" instead of
     # 15 look-alike lines (or, on the MRI page, "housekeeping").
-    result.unparsed = unparsed_mod.public(unparsed_records)
-    unparsed_reasons = {r["reason"] for r in unparsed_records}
+    parse_records, unseen_records = unparsed_mod.split(unparsed_records)
+    result.unparsed = unparsed_mod.public(parse_records)
+    result.unseen = unparsed_mod.public(unseen_records)
+    unparsed_reasons = {r["reason"] for r in parse_records}
     for d in dropped:
         d["unparsed"] = d["reason"] in unparsed_reasons
     result.n_already_ingested = already

@@ -91,6 +91,27 @@ them.
 | [#39](https://github.com/Rtasseff/gjesus3-pilot/issues/39) | MILabs VECTor onboarding + the 2026 lung study identities | D8: pull, after the cardiac pipeline |
 | [#40](https://github.com/Rtasseff/gjesus3-pilot/issues/40) | The cardiac MRI segmentation pipeline; mint `SegBioMed` | D8 / D6 |
 
+## Work started while Ryan was away (2026-10-10) — branches awaiting review
+
+Ryan (away 2026-10-12 → 10-18) asked for progress where no ruling was needed. Seven branches were built in a
+Linux cloud container, each pushed and **not merged**; each issue carries a comment with what landed, what was
+deliberately left, and a merge checklist. Nothing touched production, the NAS, or `main`'s code.
+
+| Branch | Issue | Commit | Needs from Ryan before merge |
+|---|---|---|---|
+| `fix/ingest-small-fixes` | #7 | `257ef7d` | **Confirm one behaviour change:** a case with no known acquisition date is now refused, never dated to today (`ingest.allow_unknown_acquisition_date: true` keeps the old way). |
+| `feat/validator-signal` | #8 | `b1af4a9` | The three new classes are WARN not ERROR; `pending-db` left the warning stream; one production run with `--examples all` to see the real counts. |
+| `docs/pre-port-sweep` | #20 | `5afb3a7` | Nothing; the audit *moves* themselves are still yours. |
+| `fix/ingest-write-guards` | #14 | `38a122a` | Nothing for what landed; the production `--nas-root` guard needs a design call (proposal in the comment). |
+| `feat/person-attribution` | #15 | `aa994cd` | Nothing for the placeholder refusal; the rest of #15 waits on the person-home decision. |
+| `feat/czi-truncation-audit` | #17 | `8bac7c0` | Run it against production (read-only); the repairs are yours. |
+| `chore/test-runner` | #22 | `039aa4c` | Nothing. `python tools/run_tests.py` runs every suite. |
+| **`integration/pre-port-2026-10-10`** | all seven | `a8c7c4b` | **The one branch to review and merge if the above are accepted:** the seven merged in order with the three recurring conflicts resolved (10_TOOLS' *Last Updated* line, the helper insertions in `ingest_raw.py`, the `tools/INDEX.md` rows). Suites on it: 45 pass; the 11 that fail are the Windows-only suites, which fail identically on `main` in that container. |
+
+**At merge:** run the suites on Windows; one CHANGELOG row per branch (or one for the integration branch); tick
+the BACKLOG items each issue comment lists; `STATUS.md` "Re-verifying" block (the validator's full-run output
+changes); the operator GUI only picks up #7/#14/#15 at the next exe rebuild (#23).
+
 ## Where every `BACKLOG.md` section went
 
 | `BACKLOG.md` section | Issue(s) | Note |

@@ -301,11 +301,18 @@ def print_preview_table(result):
     # folders whose NAME matched no naming rule. None of their exams is in the
     # table above, and before 2026-10-05 they showed only as per-exam lines in
     # the notes (STATUS §0 D3).
-    if getattr(result, "unparsed", None):
+    parse_recs, unseen_recs = unparsed_mod.split(getattr(result, "unparsed", None) or [])
+    if parse_recs:
         print()
-        print(f"!! {unparsed_mod.headline(result.unparsed)}")
+        print(f"!! {unparsed_mod.headline(parse_recs)}")
         print("!! NOTHING under them will be ingested. Tell the Data Office:")
-        for line in unparsed_mod.detail_lines(result.unparsed):
+        for line in unparsed_mod.detail_lines(parse_recs):
+            print(f"   {line}")
+    if unseen_recs:
+        print()
+        print(f"!! {unparsed_mod.unseen_headline(unseen_recs)}")
+        print("!! NOT ingested (AppleDouble ._* files are safe to ignore):")
+        for line in unparsed_mod.unseen_detail_lines(unseen_recs):
             print(f"   {line}")
 
 
