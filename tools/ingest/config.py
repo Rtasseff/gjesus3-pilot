@@ -244,12 +244,123 @@ def _extract_date_from_name(name):
     return None
 
 
-def _build_dedupe_index(registry_path):
-    """Build a set of (acq_date, original_name) keys from registry_raw.csv.
+_SERIAL_TO_INSTRUMENT = None
 
-    Skipped if the registry doesn't exist yet. Uses date prefix from
-    acquisition_datetime (YYYYMMDD), and falls back to "" when missing.
-    Empty-string original_name rows are skipped (legacy data).
+
+def _instrument_by_serial(serials):
+    """The in-house instrument code the .czi's device serials name, or "".
+
+    tools/reference/microscopy_instruments.yaml is the device fingerprint the
+    drives catalog established (2026-09-29). Only `serials:` count here, and
+    only for in-house entries: external serials are registered as XMIC, not
+    under their EXTERNAL:* label. Serials naming two codes -> "" (no guess).
+    """
+    global _SERIAL_TO_INSTRUMENT
+    if _SERIAL_TO_INSTRUMENT is None:
+        from . import resources
+        table = {}
+        try:
+            with open(resources.resource_path("reference", "microscopy_instruments.yaml"),
+                      encoding="utf-8") as f:
+                for ent in (yaml.safe_load(f) or {}).get("instruments") or []:
+                    if ent.get("external"):
+                        continue
+                    for s in ent.get("serials") or []:
+                        table[str(s)] = ent["code"]
+        except (OSError, yaml.YAMLError):
+            pass   # no map -> the configured instrument code alone keys the case
+        _SERIAL_TO_INSTRUMENT = table
+    codes = {_SERIAL_TO_INSTRUMENT[s] for s in serials if s in _SERIAL_TO_INSTRUMENT}
+    return codes.pop() if len(codes) == 1 else ""
+
+
+def _czi_device_serials(raw):
+    """Every non-empty Device @SerialNumber under any HardwareSetting of a parsed
+    .czi Metadata dict (czi_metadata._xml_to_dict shape). There are several
+    HardwareSetting elements (the device list and presets): union over all."""
+    serials = set()
+
+    def collect(o, tag=""):
+        # Device elements only, as drive_staging/catalog.py parse_czi_xml does.
+        if isinstance(o, dict):
+            s = ((o.get("@attrs") or {}).get("SerialNumber") or "").strip() if tag == "Device" else ""
+            if s:
+                serials.add(s)
+            for k, v in o.items():
+                if k != "@attrs":
+                    collect(v, k)
+        elif isinstance(o, list):
+            for i in o:
+                collect(i, tag)
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k == "HardwareSetting":
+                    collect(v)
+                elif k != "@attrs":
+                    walk(v)
+        elif isinstance(o, list):
+            for i in o:
+                walk(i)
+
+    walk(raw)
+    return serials
+
+
+def dedupe_keys_for(rec):
+    """Every dedup key of one registry row OR one expand_batch case (06 §2.10).
+
+    A case is already ingested when ANY of its keys is in the index, and the
+    index is the union of these keys over every live and retired row:
+
+      * (YYYYMMDD, original_name) -- the original key, always present (unless
+        original_name is blank), kept as a plain 2-tuple so code that tests
+        `(date, name) in index` keeps working.
+      * ("czi", instrument, timestamp[:19], file name lower-cased) -- MICROSCOPY
+        .czi only: the acquisition identity the drives gate used (ingest_plan
+        resave_key). It survives a different staging root (the 22 ZWSI twins)
+        and a ZEN re-save (the 206 byte-different copies). Not made when the
+        timestamp has no time of day (00:00:00 = a folder-dated row): two
+        different `Image 1.czi` of one day would otherwise collide.
+        For a case, also keyed under the instrument its device serial names
+        when that differs from the configured code (the mis-coded 2026-09-29
+        rows); a row has no parsed .czi, so it keys its registry code only.
+    """
+    keys = set()
+    oname = (rec.get("original_name") or "").strip()
+    if not oname:
+        return keys
+    adt = (rec.get("acquisition_datetime") or "").strip()
+    keys.add((adt[:10].replace("-", "") if adt else "", oname))
+
+    base = oname.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    ts = adt[:19]
+    if ((rec.get("data_ecosystem") or "").strip().upper() != "MICROSCOPY"
+            or not base.endswith(".czi")
+            or len(ts) < 19 or ts[10] != "T" or ts[11:] == "00:00:00"):
+        return keys
+    instruments = {(rec.get("instrument") or "").strip()}
+    raw = (rec.get("ecosystem_section") or {}).get("_raw_metadata")
+    if isinstance(raw, dict):
+        instruments.add(_instrument_by_serial(_czi_device_serials(raw)))
+    for inst in instruments - {""}:
+        keys.add(("czi", inst, ts, base))
+    return keys
+
+
+def _note_already(already, name):
+    if already is not None:
+        already.append(name)
+
+
+def _build_dedupe_index(registry_path):
+    """Build the set of dedup keys (dedupe_keys_for) of registry_raw.csv + tombstones.
+
+    Skipped if the registry doesn't exist yet. The original key uses the date
+    prefix of acquisition_datetime (YYYYMMDD), "" when missing. Empty-string
+    original_name rows are skipped (legacy data). The content key (2026-10-17,
+    issue #5) is documented on dedupe_keys_for.
 
     The dedup key relies on original_name being unique within an
     acquisition date. expand_batch sets original_name to the relative
@@ -274,12 +385,7 @@ def _build_dedupe_index(registry_path):
                              for t in tombs.values()]
     keys = set()
     for r in rows:
-        oname = (r.get("original_name") or "").strip()
-        if not oname:
-            continue
-        adt = (r.get("acquisition_datetime") or "").strip()
-        date_key = adt[:10].replace("-", "") if adt else ""
-        keys.add((date_key, oname))
+        keys |= dedupe_keys_for(r)
     return keys
 
 
@@ -463,7 +569,7 @@ def _note_unparsed(groups, rule, pattern, err, parse_target, parse_source,
     )
 
 
-def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
+def expand_batch(cfg, nas_root=None, unparsed=None, derived=None, already=None):
     """Expand a batch config into a list of validated, registry-resolved cases.
 
     `unparsed` (optional, a list): when given, one record per parse TARGET whose
@@ -474,6 +580,9 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
     `[expand_batch] NOT PARSED: ...` line on stdout when any target was dropped.
     `derived` (optional, a list): NI-live only -- one item per recon folder that is a
     derived file (an attenuation map), never a case; see ingest/ni_derived.py.
+    `already` (optional, a list): the name of every match skipped as already
+    ingested (each `SKIP ... already in registry` line), so a caller can report
+    the count without parsing stdout (the GUI ingest result, issue #5).
 
     Schema:
 
@@ -941,6 +1050,7 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
                         f"[expand_batch] SKIP {rc['original_name']}: "
                         f"already in registry (idempotent re-run)"
                     )
+                    _note_already(already, rc["original_name"])
                     continue
                 d = rc.get("discovered") or {}
                 scan = ((d.get("acq_datetime_full") or "")[:14],
@@ -956,20 +1066,35 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
                         f"already in registry (from another source: same "
                         f"timestamp, modality and reconstruction)"
                     )
+                    _note_already(already, rc["original_name"])
                     continue
                 cases.append(rc)
             continue
 
-        # Idempotency: skip if already ingested. Key is (acq_date,
-        # original_name) where original_name is the relpath set above.
-        # No more "name alone" fallback (see _build_dedupe_index for
-        # the rationale).
+        # Idempotency: skip if already ingested -- when ANY of the case's
+        # keys (dedupe_keys_for) is in the index. The original key is
+        # (acq_date, original_name) where original_name is the relpath set
+        # above; no more "name alone" fallback (see _build_dedupe_index).
+        # A .czi also has a content key that survives another staging root
+        # or a ZEN re-save (issue #5). The first SKIP wording is unchanged:
+        # the GUI preview and the drives tooling key on it.
         adt = (case.get("acquisition_datetime") or "")[:10].replace("-", "")
         if (adt, rel_match) in existing_keys:
             print(
                 f"[expand_batch] SKIP {rel_match}: "
                 f"already in registry (idempotent re-run)"
             )
+            _note_already(already, rel_match)
+            continue
+        hit = sorted(k for k in dedupe_keys_for(case) & existing_keys if k[0] == "czi")
+        if hit:
+            _czi, inst, ts, base = hit[0]
+            print(
+                f"[expand_batch] SKIP {rel_match}: "
+                f"already in registry (same acquisition: {inst}, .czi "
+                f"timestamp {ts}, file name {base})"
+            )
+            _note_already(already, rel_match)
             continue
 
         cases.append(case)

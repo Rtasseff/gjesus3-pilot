@@ -568,8 +568,12 @@ with tempfile.TemporaryDirectory() as tmp:
     check(rc == 0, f"execute rc=0 (got {rc}) without ever consulting the ingest dedup index: a re-identify "
                    f"cannot be blocked by its own tombstone")
     keys_after = cfg_mod._build_dedupe_index(os.path.join(reg_dir, "registry_raw.csv"))
-    check(("20240625", R[LSM2]["original_name"]) in keys_before and keys_after == keys_before,
-          "the dedup index is unchanged by the run: the source stays blocked, nothing else is unblocked")
+    # The original (date, name) keys are unchanged; the .czi content key (issue #5) gains the new
+    # instrument code beside the old one (the tombstone keeps it), so the set may only grow.
+    check(("20240625", R[LSM2]["original_name"]) in keys_before
+          and {k for k in keys_after if k[0] != "czi"} == {k for k in keys_before if k[0] != "czi"}
+          and keys_before <= keys_after,
+          "the dedup index loses nothing in the run: the source stays blocked, nothing else is unblocked")
     bad = end_state_reidentified(nas, R, LSM2, NEW2, [("itziar", "LSM9_CS_fijadas_cell obs_2.czi"),
                                                        ("other", "shared_obs_2.czi")])
     check(not bad, f"re-identified with both links kept, one event each {bad or ''}")
