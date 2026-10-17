@@ -108,6 +108,18 @@ deliberately left, and a merge checklist. Nothing touched production, the NAS, o
 | `chore/test-runner` | #22 | `039aa4c` | Nothing. `python tools/run_tests.py` runs every suite. |
 | **`integration/pre-port-2026-10-10`** | all seven | `a8c7c4b` | **The one branch to review and merge if the above are accepted:** the seven merged in order with the three recurring conflicts resolved (10_TOOLS' *Last Updated* line, the helper insertions in `ingest_raw.py`, the `tools/INDEX.md` rows). Suites on it: 45 pass; the 11 that fail are the Windows-only suites, which fail identically on `main` in that container. |
 
+**Five more, built 2026-10-17 by sibling cloud sessions (Sonnet / Opus) on Ryan's go**, each pushed, not merged, with a
+closing comment on its issue:
+
+| Branch | Issue | Commit | Needs from Ryan before merge |
+|---|---|---|---|
+| `feat/ingest-skip-reporting` | #6 (the no-decision half) | `c50de14` | Two calls to confirm: only dot-named entries the pattern would have matched are reported (not every non-matching file); an unknown `filename_parse.source` is now an error, not a silent fallback to `name`. |
+| `feat/project-lifecycle` | #10 (the code half) | `db43732` | Four calls to confirm (only a *registered* acquisition widens a project's dates, not a shared one; `_project.yaml` dates set at creation only; an undated auto-created project still gets today; a cp1252 file edited in the GUI is saved as UTF-8). Two production runs are his: `fix_project_yaml_encoding.py` (the 10 files) and `recompute_project_dates.py` (after the drives), dry run first. |
+| `feat/dedup-key` | #5 | `b36d146` | Read `tasks/dedup_key_design.md` first (§7 open questions with recommendations, §8 the read-only production dry run); 06 gains a 🔶 DRAFT §2.10 to rule on; `test_retire_acquisition_v2` had one assertion adjusted and must run on Windows. |
+| `docs/web-app-design` | #28 | `53386f9` | A note only: `tasks/web_app_design_options.md`, eight decisions in order; the DPO conversation has the longest lead time. |
+| `docs/metadata-db-design` | #29 | `cfc8d9b` | A note only: `tasks/metadata_db_design_options.md`, nine decisions in order; the access layer in front of the CSVs is the one build that needs no decision. |
+| **`integration/pre-port-2026-10-17`** | all twelve | head as pushed | **Supersedes `integration/pre-port-2026-10-10`:** that branch plus the five above, merged without conflict, plus one commit wiring the commit-time dedup re-check (#14) to the content-anchored keys (#5). Suites in the Linux container: 47 pass; the 11 Windows-only suites fail as on `main`. |
+
 **At merge:** run the suites on Windows; one CHANGELOG row per branch (or one for the integration branch); tick
 the BACKLOG items each issue comment lists; `STATUS.md` "Re-verifying" block (the validator's full-run output
 changes); the operator GUI only picks up #7/#14/#15 at the next exe rebuild (#23).
