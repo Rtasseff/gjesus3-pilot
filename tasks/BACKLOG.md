@@ -2383,6 +2383,18 @@ mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadat
 
 - [ ] A path-level mapping in `nonraw_placement.py remap` (with a test), then move the 165.
 
+## 🔸 MODERATE — 52 drive-3 Cell Observer slides are dated before their animals were born (2026-10-17)
+
+Found by the read-only run of the validator's new *acquired before birth* class (`feat/validator-signal`, #8; report
+`…\gjesus3-archive\reports\2026-10-19_pre-port_review\DRY_RUNS.md`): **57** rows, of which 5 are the known `1321` CT
+rows and **52** are `ACQ-20240826-CELL-*` in `AE-biomaGUNE-1123`. These are Cell Observer slides from the M. Jesús drive
+(stream C, registered 2026-10-07), with subjects decided per file at ingest. The `.czi` files carry 2024-08-26, but the
+assigned animals (98–101, 104–108 of `1123`) were born 2025-01-02 or 2025-01-30: 4–5 months later. Not a typo-sized gap.
+
+- [ ] Find out whether the slide IDs name another cohort (an earlier `1123` series, or another protocol), or whether a
+  date is wrong (the scope's clock, or the facility DB). Check against the slide labels and the facility DB's procedure
+  dates. Repair the subject ids with the recovery pattern if they are wrong.
+
 ## 🔹 LOW — the claim workbook still lists the 464 retired placeholders (2026-10-09)
 
 `_MRI sessions - who ran them.xlsx` lists 23,590 acquisitions; 23,126 are still held `pending-claim`. The difference is
