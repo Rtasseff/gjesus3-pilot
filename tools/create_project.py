@@ -58,12 +58,12 @@ def log(msg, level="INFO"):
 
 def load_template(template_path):
     """Load the project.yaml template."""
-    with open(template_path, "r") as f:
+    with open(template_path, "r", encoding="utf-8") as f:
         return f.read()
 
 
 def create_project(name, description, owner, nas_root, dry_run=False, notes="",
-                   _hold_lock=True):
+                   _hold_lock=True, start_date=None):
     """Create a new project workspace.
 
     Args:
@@ -77,6 +77,11 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes="",
         _hold_lock: take the registry lock ourselves (the default). Pass False
             ONLY from a caller that already holds it — `registry_lock` is not
             reentrant.
+        start_date: the project's first ACQUISITION date (`YYYY-MM-DD`), written
+            as both `start_date` and `last_activity` (06_REGISTRIES §4: they are
+            acquisition dates, not creation dates). Ingest's auto-create passes
+            the acquisition's date. Omitted, blank or not a usable date: today,
+            as before (a project created by hand has no acquisition yet).
 
     CONCURRENCY. "Read the registry, pick the next PROJ id and check the name is
     free" and "append the row that claims them" are ONE critical section: two
@@ -104,6 +109,8 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes="",
 
     registries_dir = os.path.join(nas_root, "registries")
     registry_path = projects_registry.projects_registry_path(nas_root)
+    first_date = (projects_registry.acquisition_date(start_date)
+                  or datetime.now(timezone.utc).strftime("%Y-%m-%d"))
 
     if dry_run:
         # Read-only preview: no lock needed, and the reported id is a
@@ -116,16 +123,16 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes="",
         log(f"Generated project ID: {project_id}")
         _log_summary(name, description, owner, project_id,
                      os.path.join(nas_root, "projects", project_folder_name(name)),
-                     datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+                     first_date)
         log("[DRY RUN] Would create folder and registry entry. Skipping.")
         return project_id, True
 
     if _hold_lock:
         with locking.registry_lock(registries_dir):
             return _create_locked(name, description, owner, nas_root,
-                                  registry_path, notes)
+                                  registry_path, notes, first_date)
     return _create_locked(name, description, owner, nas_root, registry_path,
-                          notes)
+                          notes, first_date)
 
 
 def _log_summary(name, description, owner, project_id, project_dir, today):
@@ -137,7 +144,8 @@ def _log_summary(name, description, owner, project_id, project_dir, today):
     log(f"  Start Date:  {today}")
 
 
-def _create_locked(name, description, owner, nas_root, registry_path, notes):
+def _create_locked(name, description, owner, nas_root, registry_path, notes,
+                   first_date):
     """The critical section of `create_project` — caller holds the lock."""
     # --- Check registry ---
     rows = projects_registry.read_projects(registry_path)
@@ -153,9 +161,8 @@ def _create_locked(name, description, owner, nas_root, registry_path, notes):
     # --- Determine paths (folder == name, verbatim) ---
     project_dir = os.path.join(nas_root, "projects", project_folder_name(name))
     canonical_path = project_folder_location(name)
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    _log_summary(name, description, owner, project_id, project_dir, today)
+    _log_summary(name, description, owner, project_id, project_dir, first_date)
 
     # --- Create directory structure ---
     # The recommended subfolders (05_PROJECTS §3): raw_linked/ working/
@@ -180,7 +187,7 @@ def _create_locked(name, description, owner, nas_root, registry_path, notes):
         content = content.replace("{name}", name)
         content = content.replace("{description}", description)
         content = content.replace("{owner}", owner)
-        content = content.replace("{start_date}", today)
+        content = content.replace("{start_date}", first_date)
     else:
         # Fallback: generate inline
         content = (
@@ -189,8 +196,8 @@ def _create_locked(name, description, owner, nas_root, registry_path, notes):
             f'description: "{description}"\n'
             f"status: active\n"
             f"owner: {owner}\n"
-            f"start_date: {today}\n"
-            f"last_activity: {today}\n"
+            f"start_date: {first_date}\n"
+            f"last_activity: {first_date}\n"
             f"closed_date: null\n"
             f"outcome: null\n"
             f"promoted_to: null\n"
@@ -201,8 +208,11 @@ def _create_locked(name, description, owner, nas_root, registry_path, notes):
     yaml_path = os.path.join(project_dir, "_project.yaml")
     # Atomic write: write to a sibling .tmp then os.replace, so a crash
     # mid-write can't truncate / corrupt the target.
+    # UTF-8 with LF line endings, whatever the platform: the Windows default
+    # (cp1252) stored accented descriptions in a form a UTF-8 reader rejects
+    # (10 of 65 production files, 2026-10-07; fix_project_yaml_encoding.py).
     tmp_path = yaml_path + ".tmp"
-    with open(tmp_path, "w") as f:
+    with open(tmp_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(content)
     os.replace(tmp_path, yaml_path)
     log("Wrote _project.yaml")
@@ -221,9 +231,9 @@ def _create_locked(name, description, owner, nas_root, registry_path, notes):
         "name": name,
         "description": description,
         "owner": owner,
-        "start_date": today,
+        "start_date": first_date,
         "status": "active",
-        "last_activity": today,
+        "last_activity": first_date,
         "folder_location": canonical_path,
         "notes": notes,
     })
