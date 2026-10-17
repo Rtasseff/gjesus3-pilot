@@ -426,6 +426,35 @@ Like every registry file: UTF-8, no BOM, CRLF line endings.
   citation, a researcher's notes, an old provenance row. `find_acq.py <ACQ-ID>` reports a retired id and
   what replaced it.
 
+### 2.10 Dedup identity — what "already ingested" means (2026-10-17)
+
+> **🔶 DRAFT until Ryan rules** (issue #5; design and evidence: [`tasks/dedup_key_design.md`](../tasks/dedup_key_design.md)).
+> Built on branch `feat/dedup-key`. Nothing here changes the ✅ DECIDED rules above; it says which keys the
+> ingest compares.
+
+**The rule.** A case is **already ingested** when **any** of its dedup keys is among the keys of the
+registry: every live row of `registry_raw.csv` **and every retired row** of `retired_acquisitions.csv`
+(§2.9.2, "Re-ingest stays blocked"). An already-ingested case is skipped before anything is copied or an
+ACQ-ID is allocated. One function computes the keys of a row and of a case, so the two sides cannot drift
+(`tools/ingest/config.py::dedupe_keys_for`; the index is `_build_dedupe_index`).
+
+| Ecosystem | Dedup keys |
+|---|---|
+| **All** | `(acquisition date YYYYMMDD, original_name)`. The original key, always present when `original_name` is set. `original_name` is the path relative to the batch staging folder (for the NI flat pull, the machine-issued acquisition key). |
+| **Microscopy `.czi`** | also `(instrument, acquisition_datetime to the second, file name)`: the file name is the last component of `original_name`, compared case-insensitively. **Not made** when the timestamp has no time of day (`00:00:00`, a folder-dated row). For an incoming case, the instrument is the configured code, and also the code its device serial names in `tools/reference/microscopy_instruments.yaml` when that differs (in-house instruments only). |
+| **MRI (ParaVision)** | the original key only; `original_name` is the instrument's own `<study folder>/<exam>`. |
+| **NI (live box)** | the original key per reconstruction (`<anchor>/recon_<idx>`), plus the cross-source guard on `(timestamp, modality, reconstruction)` already described in [10_TOOLS §2.1](10_TOOLS.md) ("NI cross-source dedup"). |
+
+**Why the `.czi` key.** The staging-relative path changes with where the operator points the ingest (22
+AxioScan files were registered twice that way, 2026-09-29), and the bytes change when ZEN re-saves a file
+(206 re-saved copies, 2026-09-30). The acquisition timestamp is written at acquisition and survives both.
+**A file with the same timestamp under another name is not a duplicate** (a scene split, stitched copy or
+region extract): it is ingested.
+
+**For future instruments.** Give each ecosystem an instrument-native identity here (an exam id, a
+reconstruction id, an embedded acquisition timestamp) as an extra key; never replace the original key, so
+nothing that deduplicates today stops doing so.
+
 ---
 
 ## 3. Publications Registry

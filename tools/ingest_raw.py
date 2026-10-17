@@ -1977,7 +1977,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
 
 
 def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
-              unparsed_report=None):
+              unparsed_report=None, stats=None):
     """Run batch ingestion from a batch config.
 
     `unparsed_report`: optional path. Every parse target (for MRI: every study
@@ -1986,10 +1986,18 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
     Written in --dry-run too; it is a plain file at the path given, never a
     registry. The BATCH SUMMARY lists the same targets either way.
 
+    `stats`: optional dict; filled with `n_already_ingested` (the matches skipped
+    as already in the registry or retired), so a caller such as the operator GUI
+    can show the skip count beside the results (issue #5).
+
     Returns list of (acq_id, success) tuples.
     """
     unparsed_records = []
-    cases = config.expand_batch(cfg, nas_root=nas_root, unparsed=unparsed_records)
+    already = []
+    cases = config.expand_batch(cfg, nas_root=nas_root, unparsed=unparsed_records,
+                                already=already)
+    if stats is not None:
+        stats["n_already_ingested"] = len(already)
     # Stamp ingest_config onto every case (set in main()).
     ingest_config_path = cfg.get("_ingest_config_path", "")
     for case in cases:
@@ -2052,6 +2060,9 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
     print(f"  Total:    {len(results)}")
     print(f"  Success:  {n_ok}")
     print(f"  Failed:   {n_fail}")
+    if already:
+        # Not in Total: these never became cases (issue #5).
+        print(f"  Already ingested (not copied again): {len(already)}")
     if n_fail > 0:
         print("  Failed cases:")
         for i, (aid, ok) in enumerate(results):

@@ -20,6 +20,13 @@ function esc(s) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// The matches the run skipped because they are already in the registry (or
+// retired): the same figure the preview shows, now on the result too (#5).
+function alreadyNote(r) {
+  const n = r.n_already_ingested || 0;
+  return n ? `${n} already ingested (skipped, not copied again). ` : "";
+}
+
 async function postJSON(url, body) {
   const r = await fetch(url, {
     method: "POST",
@@ -569,10 +576,11 @@ async function ingest() {
       if (r.dry_run) {
         resEl.className = "summary dry-done";
         resEl.innerHTML = `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the RDM System.</strong> ` +
-          `${r.ok}/${r.total} scans WOULD be ingested. Uncheck “Dry-run” and run again to ingest for real.`;
+          `${r.ok}/${r.total} scans WOULD be ingested. ` + alreadyNote(r) +
+          `Uncheck “Dry-run” and run again to ingest for real.`;
       } else {
         resEl.className = "summary live-done";
-        resEl.innerHTML = `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} scans written</strong> to ${esc(nasInput.value) || "the RDM System"}.`;
+        resEl.innerHTML = `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} scans written</strong> to ${esc(nasInput.value) || "the RDM System"}. ` + alreadyNote(r);
         // A real ingest also raises an unmissable completion modal. Skip a 0-scan run.
         if (r.total > 0 && window.showCompletionModal) {
           showCompletionModal({
@@ -581,6 +589,7 @@ async function ingest() {
             rows: [
               { label: "Destination", value: nasInput.value || "the RDM System" },
               { label: "Project", value: projectDestLabel() },
+              { label: "Already ingested (skipped)", value: String(r.n_already_ingested || 0) },
             ],
           });
         }

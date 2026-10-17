@@ -33,7 +33,7 @@ python tools/ingest_raw.py -c tools/configs/<your_config>.yaml
 python tools/ingest_raw.py -i
 ```
 
-The script is idempotent: re-running the same config skips acquisitions already in the registry (matched by `acquisition_date` + `original_name`). Safe to re-run after a partial failure.
+The script is idempotent: re-running the same config skips acquisitions already in the registry (matched by `acquisition_date` + `original_name`). Safe to re-run after a partial failure. A microscopy `.czi` is also matched by instrument + its embedded acquisition timestamp + file name, so the same file staged from a different folder, or re-saved by ZEN, is skipped as well (`SKIP … already in registry (same acquisition: …)`; 🔶 2026-10-17, [06_REGISTRIES §2.10](../mfb-rdm-docs/06_REGISTRIES.md)). Retired acquisitions count as ingested. The BATCH SUMMARY ends with `Already ingested (not copied again): N` when anything was skipped this way.
 
 By default a CLI ingest does **not** touch the researcher Finder. The global `registries/index.html` is kept fresh by a **scheduled job**, and each project's `index.html` is refreshed when an ingest writes into it (see [`tools/FINDER.md`](FINDER.md) → *Keeping it fresh*). Pass **`--refresh-index projects`** to regenerate only the project(s) this run touched, or **`--refresh-index full`** to rebuild the global index + every per-project index at the end of a successful (non-dry-run) batch. The refresh is **non-fatal** (a failure logs a WARN but never fails the ingest), and you can always rebuild by hand with `tools/generate_index.py`.
 
