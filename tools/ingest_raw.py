@@ -22,6 +22,8 @@ from ingest import (
     metadata_sidecar, provenance, resolver, enrichment, locking,
     subjects_table, project_naming, user_tables, unparsed,
 )
+# Aliased: inside ingest_single `projects_registry` is the CSV's path.
+from ingest import projects_registry as projects_reg
 import create_project as create_project_mod
 import animal_db
 
@@ -796,6 +798,41 @@ def copy_paravision_exam(source_path, dest_dir, reconstructions, log_fn):
     return checksums
 
 
+def _widen_project_dates(nas_root, project_id, acq_datetime, log_fn=log):
+    """Step 11b: stretch a project's start_date / last_activity over one date.
+
+    Post-commit and non-fatal, like the link step: any failure WARNs and the
+    ingest carries on (the acquisition is registered; a later
+    recompute_project_dates.py run repairs the range). The unlocked read first
+    skips the lock when the range already covers the date, the common case in a
+    batch; the locked write re-reads, so a concurrent change is never lost.
+    Returns the applied {field: value} ({} when nothing moved).
+    """
+    if not projects_reg.acquisition_date(acq_datetime):
+        return {}
+    path = projects_reg.projects_registry_path(nas_root)
+    try:
+        row = projects_reg.find_project(projects_reg.read_projects(path), project_id)
+        if row is not None and projects_reg.widened(
+                row.get("start_date"), row.get("last_activity"), [acq_datetime]
+        ) == ((row.get("start_date") or ""), (row.get("last_activity") or "")):
+            return {}
+        with locking.registry_lock(os.path.join(nas_root, "registries")):
+            found, applied = projects_reg.widen_dates(path, project_id, [acq_datetime])
+        if not found:
+            log_fn(f"project {project_id} not in registry_projects.csv; its dates "
+                   f"were not widened", "WARN")
+        elif applied:
+            log_fn(f"Project {project_id} dates widened: "
+                   + ", ".join(f"{k}={v}" for k, v in sorted(applied.items())))
+        return applied
+    except Exception as e:  # noqa: BLE001 -- non-fatal by contract
+        log_fn(f"Could not widen project {project_id}'s dates (non-fatal — the "
+               f"registry row is committed; recompute_project_dates.py repairs "
+               f"it): {e}", "WARN")
+        return {}
+
+
 def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_source=False,
                   planned_links=None):
     """Run the ingestion workflow for a single acquisition.
@@ -1542,10 +1579,15 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                         )
 
                     log(f"Auto-creating project: name='{project_name}', owner='{owner}'")
+                    # Dated by THIS acquisition, not today (06_REGISTRIES §4:
+                    # start_date / last_activity are acquisition dates). With no
+                    # real date, create_project falls back to today.
                     new_id, ok = create_project_mod.create_project(
                         project_name, desc, owner, nas_root,
                         dry_run=False,
                         notes=notes_for_proj,
+                        start_date=(cfg_single.get("acquisition_datetime", "")
+                                    if acq_date_is_real else ""),
                     )
                     if ok and new_id:
                         cfg_single["project_id"] = new_id
@@ -1627,6 +1669,15 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
             f"committed): {e}",
             "WARN",
         )
+
+    # --- Step 11b: Widen the project's dates (post-commit; non-fatal) ---
+    # The row just committed names this project, so the project's
+    # start_date / last_activity (its first / newest ACQUISITION date,
+    # 06_REGISTRIES §4) must cover this acquisition's date. Never moves a date
+    # inward; a blank date (or the today() placeholder) widens nothing.
+    if acq_date_is_real and cfg_single.get("project_id", "").strip():
+        _widen_project_dates(nas_root, cfg_single["project_id"].strip(),
+                             cfg_single.get("acquisition_datetime", ""), log)
 
     # --- Step 12: Project hard link (if the project resolved at Step 9.5) ---
     # Replaces the legacy .lnk shortcut (2026-06-02): the project copy is a

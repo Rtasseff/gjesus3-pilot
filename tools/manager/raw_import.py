@@ -37,7 +37,7 @@ import os
 import sys
 from datetime import datetime, timezone
 
-from ingest import linker, locking, pending_links, provenance, registry
+from ingest import linker, locking, pending_links, projects_registry, provenance, registry
 from ingest import project_ids as pids
 
 # Illegal in a single Windows/SMB path component. A link name comes from
@@ -208,7 +208,8 @@ def _write_standin(raw_linked_dir, link_name, acq_id, raw_primary_rel):
         pass  # the worklist is the durable record; the pointer is cosmetic
 
 
-def _record_project_when_unassigned(nas_root, acq_ids, project_id, log):
+def _record_project_when_unassigned(nas_root, acq_ids, project_id, log,
+                                    dates_out=None):
     """Set `project_id` on each acquisition that does not have one — ONE pass.
 
     **Write-once policy** (✅ DECIDED 2026-08-12, 06_REGISTRIES §2.3b): an
@@ -229,7 +230,9 @@ def _record_project_when_unassigned(nas_root, acq_ids, project_id, log):
     rewrite it twenty times over SMB. This is a single locked read-modify-write
     that publishes all of them atomically.
 
-    Returns the number of rows actually changed.
+    Returns the number of rows actually changed. When `dates_out` is a list, the
+    `acquisition_datetime` of each changed row is appended to it (the caller
+    widens the project's dates over exactly the acquisitions registered here).
     """
     import csv
     want = {a for a in acq_ids if a}
@@ -249,6 +252,8 @@ def _record_project_when_unassigned(nas_root, acq_ids, project_id, log):
             if did:
                 row["project_id"] = cell
                 changed += 1
+                if dates_out is not None:
+                    dates_out.append(row.get("acquisition_datetime", ""))
         if not changed:
             # Nothing to publish — every acquisition already had a project. Not an
             # error; skip the rewrite entirely rather than rewriting 13,800 rows
@@ -379,10 +384,13 @@ def import_acquisitions(nas_root, project, rows, creator, link_names=None,
         results.append({**item, "outcome": "linked"})
 
     registered = 0
+    registered_dates = []
     if associate:
         registered = _record_project_when_unassigned(
-            nas_root, associate, project_id, log
+            nas_root, associate, project_id, log, dates_out=registered_dates
         )
+    if registered_dates:
+        _widen_project_dates(nas_root, project_id, registered_dates, log)
     # `registered` is normally 0 and that is the expected, correct outcome — see
     # _record_project_when_unassigned. Surfaced so the UI can say what happened
     # rather than leaving the researcher to infer it from silence.
@@ -390,6 +398,28 @@ def import_acquisitions(nas_root, project, rows, creator, link_names=None,
 
     return {**counts, "results": results, "project_id": project_id,
             "registered": registered, "shared": shared}
+
+
+def _widen_project_dates(nas_root, project_id, acq_dates, log):
+    """Widen the project's start_date / last_activity over newly registered dates.
+
+    Only the acquisitions that GAINED this project in `registry_raw.project_id`
+    count: the project's dates are the dates of its registered acquisitions
+    (06_REGISTRIES §4), which is also what `recompute_project_dates.py` reads,
+    so a shared acquisition (linked here, registered elsewhere) moves nothing.
+    Never moves a date inward. Non-fatal, like the ingest's Step 11b: the links
+    and the registry association are already written.
+    """
+    try:
+        with locking.registry_lock(os.path.join(nas_root, "registries")):
+            _found, applied = projects_registry.widen_dates(
+                projects_registry.projects_registry_path(nas_root),
+                project_id, acq_dates)
+        if applied:
+            log("Project dates widened: "
+                + ", ".join(f"{k}={v}" for k, v in sorted(applied.items())))
+    except Exception as e:  # noqa: BLE001 -- non-fatal by contract
+        log(f"Could not widen the project's dates (non-fatal): {e}", "WARN")
 
 
 def _queue(nas_root, registries_dir, raw_linked, acq_id, project_id, link_name,
