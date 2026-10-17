@@ -1,10 +1,12 @@
 """Read and write `registries/registry_projects.csv` — the projects registry.
 
 The sibling of `registry.py` (which owns `registry_raw.csv`): one home for the
-projects-registry column order, the id/uniqueness rules, and the two write
-paths. It exists because `create_project.py` was the only writer and did its
-append with a bare `csv_safe.ensure_trailing_newline` + `open(..., "a")` — no
-header check, no lock, no atomic rewrite. That was tolerable while one Data
+projects-registry column order, the id/uniqueness rules, the two write
+paths, and the acquisition-date rules for `start_date` / `last_activity`
+(`widen_dates`, `acquisition_date_ranges`; bottom of this file). It exists
+because `create_project.py` was the only writer and did its append with a
+bare `csv_safe.ensure_trailing_newline` + `open(..., "a")` — no header check,
+no lock, no atomic rewrite. That was tolerable while one Data
 Office person ran it from a shell. The Project Manager GUI puts it in front of
 several students at once, where an unguarded read-modify-write on a 52-row CSV
 over SMB is a lost update waiting to happen.
@@ -29,8 +31,11 @@ that schema's integrity mirror.
 
 import csv
 import os
+import re
+from datetime import date
 
 from . import csv_safe
+from . import project_ids as pids
 
 PROJECTS_FILENAME = "registry_projects.csv"
 
@@ -61,6 +66,12 @@ STATUS_VALUES = ["active", "paused", "closed"]
 # `start_date` / `last_activity` mean ACQUISITION dates, not edit dates
 # (production update 2026-07-14/15), so an edit must never touch them.
 EDITABLE_FIELDS = ["description", "owner", "status", "notes"]
+
+# The two derived date columns. Only the ingest's widening step, the recompute
+# and `reopen_project.py` write them — never an edit (see EDITABLE_FIELDS).
+DATE_FIELDS = ["start_date", "last_activity"]
+
+_ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 
 
 def projects_registry_path(nas_root):
@@ -252,3 +263,102 @@ def update_row(path, project_id, updates, allowed=None):
             writer.writerow({k: row.get(k, "") for k in PROJECT_REGISTRY_FIELDS})
     os.replace(tmp, path)
     return found, applied
+
+
+# --- Project dates = acquisition dates (06_REGISTRIES §4, 2026-07-14) ---------
+#
+# `start_date` / `last_activity` are the project's first and newest ACQUISITION
+# dates. Two operations keep them so, and both live here so they agree on what a
+# usable date is:
+#   * widen_dates            — an ingest (or a raw import) registered an
+#                              acquisition into the project: stretch the range to
+#                              cover it, never move a date inward;
+#   * acquisition_date_ranges — recompute from scratch over registry_raw.csv
+#                              (reopen_project.py, recompute_project_dates.py).
+
+
+def acquisition_date(value):
+    """`YYYY-MM-DD` from an `acquisition_datetime` value, or "" if unusable.
+
+    Blank, `NA`, a bare year, or anything that is not a real calendar date
+    yields "" — such an acquisition widens nothing and is left out of a
+    recompute. (The ingest leaves the registry cell blank when it fell back to
+    today's date for the ACQ-ID prefix, so the placeholder never reaches here.)
+    """
+    m = _ISO_DATE.match((value or "").strip())
+    if not m:
+        return ""
+    y, mo, d = (int(g) for g in m.groups())
+    if not 1900 < y < 2100:
+        return ""
+    try:
+        date(y, mo, d)
+    except ValueError:
+        return ""
+    return m.group(0)
+
+
+def acquisition_date_ranges(raw_rows):
+    """{project_id: (start, last, n_rows, n_undated)} over registry_raw rows.
+
+    `raw_rows` are the live rows of `registry_raw.csv` (retired acquisitions
+    have left that file for the tombstone file, 06 §2.9, so every row counts).
+    A row whose `project_id` cell lists several projects counts for each.
+    `start` / `last` are the min / max usable acquisition date, or "" / "" when
+    the project has rows but none carries a date.
+    """
+    acc = {}
+    for row in raw_rows:
+        day = acquisition_date(row.get("acquisition_datetime"))
+        for pid in pids.split_project_ids(row.get("project_id")):
+            lo, hi, n, undated = acc.get(pid, ("", "", 0, 0))
+            n += 1
+            if not day:
+                undated += 1
+            else:
+                lo = day if not lo or day < lo else lo
+                hi = day if not hi or day > hi else hi
+            acc[pid] = (lo, hi, n, undated)
+    return acc
+
+
+def recompute_dates(raw_rows, project_id):
+    """(start, last, n_rows, n_undated) for one project — see acquisition_date_ranges."""
+    return acquisition_date_ranges(raw_rows).get(project_id, ("", "", 0, 0))
+
+
+def widened(current_start, current_last, acq_dates):
+    """The (start, last) that cover `acq_dates`, never narrower than the current.
+
+    A current value that is blank or not a date is replaced outright; a usable
+    one only ever moves outward (start earlier, last later). Unusable entries
+    in `acq_dates` are ignored, so a list of only blanks returns the current
+    values unchanged.
+    """
+    days = [d for d in (acquisition_date(v) for v in acq_dates) if d]
+    start, last = current_start or "", current_last or ""
+    if not days:
+        return start, last
+    lo, hi = min(days), max(days)
+    cs, cl = acquisition_date(start), acquisition_date(last)
+    new_start = lo if not cs or lo < cs else start
+    new_last = hi if not cl or hi > cl else last
+    return new_start, new_last
+
+
+def widen_dates(path, project_id, acq_dates):
+    """Widen ONE project's dates to cover `acq_dates`. CALLER MUST HOLD the lock.
+
+    The write path for "an acquisition was registered into this project": reads
+    the row, applies `widened`, and rewrites through `update_row` (atomic, a
+    no-op when nothing moved). Returns (found, applied) like `update_row`.
+    """
+    rows = read_projects(path)
+    row = next((r for r in rows
+                if (r.get("project_id") or "").strip() == project_id), None)
+    if row is None:
+        return False, {}
+    start, last = widened(row.get("start_date"), row.get("last_activity"), acq_dates)
+    return update_row(path, project_id,
+                      {"start_date": start, "last_activity": last},
+                      allowed=DATE_FIELDS)
