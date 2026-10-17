@@ -1835,9 +1835,13 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
     for case in cases:
         case["ingest_config"] = ingest_config_path
     log(f"Batch: {len(cases)} cases discovered")
-    if unparsed_records:
-        log(f"{unparsed.headline(unparsed_records)}; NOTHING under them will be "
+    parse_recs, unseen_recs = unparsed.split(unparsed_records)
+    if parse_recs:
+        log(f"{unparsed.headline(parse_recs)}; NOTHING under them will be "
             f"ingested (listed in the BATCH SUMMARY).", "WARN")
+    if unseen_recs:
+        log(f"{unparsed.unseen_headline(unseen_recs)} (listed in the BATCH "
+            f"SUMMARY).", "WARN")
     if unparsed_report:
         n_rows = unparsed.write_csv(unparsed_records, unparsed_report)
         log(f"Unparsed report: {n_rows} row(s) -> {unparsed_report}")
@@ -1901,13 +1905,21 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
         print(f"  Registered WITHOUT a project link (name taken): {len(refused)}")
         for aid, why in refused:
             print(f"    {aid}: {why}")
-    if unparsed_records:
+    if parse_recs:
         # Not counted in Total/Failed above: these never became cases. Loud on
         # purpose -- before 2026-10-05 they left only per-exam SKIP lines.
-        print(f"  {unparsed.headline(unparsed_records)}")
+        print(f"  {unparsed.headline(parse_recs)}")
         print("  NOTHING under them was ingested:")
-        for line in unparsed.detail_lines(unparsed_records):
+        for line in unparsed.detail_lines(parse_recs):
             print(f"    {line}")
+    if unseen_recs:
+        # Names the glob never returns (leading '.'): before 2026-10 these left
+        # no trace at all.
+        print(f"  {unparsed.unseen_headline(unseen_recs)}")
+        print("  NOT ingested (AppleDouble ._* files are safe to ignore):")
+        for line in unparsed.unseen_detail_lines(unseen_recs):
+            print(f"    {line}")
+    if unparsed_records:
         if unparsed_report:
             print(f"  Full list (paths, reasons): {unparsed_report}")
         else:

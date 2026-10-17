@@ -72,7 +72,7 @@ The run now says so in three places, `--dry-run` included:
       jrc260709_phantom   2 exam folders
   ```
 
-- with **`--unparsed-report <file.csv>`**, the full list as a CSV, one row per study folder. Its columns: `target` (the study folder name), `n_exam_folders`, `n_matches`, `target_path`, `source`, `rule`, `reason`, `pattern`, `config`, `staging_dir`, `matches` (the dropped `<study>/<exam>` names) and `reported_at`. It is written right after discovery, so it survives a batch that fails later. There is no default location: put it beside your batch notes (for example `D:\projects\gjesus3\<batch>\unparsed.csv`), never in the NAS `registries\` folder.
+- with **`--unparsed-report <file.csv>`**, the full list as a CSV, one row per study folder. Its columns: `kind` (`parse` for a NOT PARSED study, `hidden` / `appledouble` for a NOT SEEN name), `target` (the study folder name), `n_exam_folders`, `n_matches`, `target_path`, `source`, `rule`, `reason`, `pattern`, `config`, `staging_dir`, `matches` (the dropped `<study>/<exam>` names) and `reported_at`. It is written right after discovery, so it survives a batch that fails later. There is no default location: put it beside your batch notes (for example `D:\projects\gjesus3\<batch>\unparsed.csv`), never in the NAS `registries\` folder.
 
 The operator front-ends show the same list. The MRI page of the ingest GUI names each study folder with its exam count, apart from the harmless housekeeping folders, and `mri-ingest` prints the block last, at the confirm prompt.
 
@@ -80,8 +80,24 @@ The operator front-ends show the same list. The MRI page of the ingest GUI names
 
 **What this report does not cover:**
 - a `filter:` miss (a deliberate exclusion), a `path_parse` depth mismatch and a non-scan sibling folder: each keeps its own SKIP line;
-- a name starting with `.`: the glob never returns it at all;
-- a study nested as `<study>\Other data\<exam>`: it is reported, but under the name `Other data` (its `target_path` names the real study).
+- a study nested as `<study>\Other data\<exam>`, unless the config says `source: grandparent_name`: with `parent_name` it is reported under the name `Other data` (its `target_path` names the real study). Set `filename_parse.source: grandparent_name` (and a `pattern` that reaches the exams, e.g. `*/Other data/[0-9]*`) and the rule runs on the study folder instead.
+
+### Names the glob never returns (`NOT SEEN`)
+
+Python's `glob` never returns a name starting with `.`, so such a file used to leave **no trace** (a 61 MB `.LS-SPN-20x-8.czi` was only found because an independent plan listed it). After the glob, `expand_batch` now walks the staging area at the pattern's depth and reports every dot-named entry the pattern would otherwise have matched. They are **not ingested** (`include_hidden` stays off, since it would ingest macOS `._*` files). The report shows up in the same places as `NOT PARSED`, in its own block:
+
+```
+  NOT SEEN: 2 name(s) starting with '.' (1 macOS AppleDouble, ignorable) never reached the ingest (glob does not return them)
+  NOT ingested (AppleDouble ._* files are safe to ignore):
+    .A_op_s2.czi    hidden name (never globbed)
+    ._A_op_s1.czi   macOS AppleDouble file (ignorable)
+```
+
+- an `[expand_batch] NOT SEEN: …` line after discovery, a matching `WARN` from `ingest_raw.py`, and a block in the BATCH SUMMARY;
+- rows in the `--unparsed-report` CSV, told apart by the new `kind` column (`parse`, `hidden` or `appledouble`); `matches` holds the staging-relative path;
+- the GUI preview (`unseen` list) and `mri-ingest`, last, at the confirm prompt.
+
+A `._*` file is the macOS AppleDouble companion of the real file next to it and can be ignored. Any other `hidden` entry is a real file or folder that was **not** loaded: rename it (drop the leading `.`) and re-run, or tell the Data Office. A hidden *folder* is listed once, its contents not. Entries the pattern excludes for other reasons (another extension, a file where `*/` wants folders) are not reported.
 
 ---
 
@@ -92,7 +108,7 @@ Every config has up to four top-level blocks (three required + one optional, plu
 | Block | Required? | Purpose |
 |-------|-----------|---------|
 | `ingest:` | Yes | Pipeline control flags. Not registry columns. Keys: `delete_source_after_ingest`, `auto_create_projects`, `acquisition_layout` (`file` \| `archive` \| `folder`; round-6 added — `archive` implemented 2026-06-02 to store the source `.zip`/`.rar` as the primary), `archive_primary_from` (directory of source archives; required with `acquisition_layout: archive`; 2026-06-02), `reconstructions` (`all` \| int \| list; MRI-specific), `copy_strategy` (`mri_paravision_v2` \| `ni_molecubes` \| legacy `paravision_exam`; round-6 v2 added), `auto_regenerate_dicom` (`true` \| `false`, MRI-specific Phase 2 2026-06-01 — see [Dicomifier opt-in](#dicomifier-opt-in-for-no-dicom-mri-exams) below). |
-| `auto_discover:` | Yes | How to find cases inside `staging_dir` and what variables to extract. Supports `filename_parse:` (positional `separator:` + `fields:` OR named-group `regex:`; optional `source: name \| parent_name`), `path_parse:` (named path levels between staging_dir and the match) and `case_table:` (a CSV keyed on `original_name` whose columns become per-file `discovered.<column>` values — [below](#per-file-values-from-a-table--case_table)). Each case's parsed values land in `discovered.<name>`. |
+| `auto_discover:` | Yes | How to find cases inside `staging_dir` and what variables to extract. Supports `filename_parse:` (positional `separator:` + `fields:` OR named-group `regex:`; optional `source: name \| parent_name \| grandparent_name`), `path_parse:` (named path levels between staging_dir and the match) and `case_table:` (a CSV keyed on `original_name` whose columns become per-file `discovered.<column>` values — [below](#per-file-values-from-a-table--case_table)). Each case's parsed values land in `discovered.<name>`. |
 | `registry:` | Yes | Explicit per-column mapping. Values: literal (`MFB`), bare reference (`discovered.operator`), interpolation (`"${discovered.stain} at ${discovered.czi_objective_mag}x"`), or `NA`. New DRAFT columns since round 6: `session_id` (ISA "study" grouping) and `primary_kind` (auto, set by pipeline). |
 | `auto_create_project:` | Optional | First-time project-creation metadata (owner / description / notes), resolver-evaluated. First-write-wins. |
 | `link_filename:` (top-level string, NEW 2026-05-22) | Optional | Template for the project link name placed under `/projects/<proj>/raw_linked/` (a hard link since 2026-06-02 — used verbatim, no extension). Context = `discovered.*` + resolved registry fields + `${acq_id}` + `${acq_date}`. Per-instrument templates ship recommended defaults. Falls back to `original_name` when unset (backward-compatible with rounds 1-2/4/5). See [10_TOOLS §2.1.5](../mfb-rdm-docs/10_TOOLS.md). |

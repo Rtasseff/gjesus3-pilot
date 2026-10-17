@@ -372,7 +372,7 @@ function unparsedLabel(u) {
   return `${ex} exam folder(s)` + (other > 0 ? ` + ${other} other entr${other === 1 ? "y" : "ies"}` : "");
 }
 
-function renderDropped(dropped, unparsed) {
+function renderDropped(dropped, unparsed, unseen) {
   const box = $("#dropped");
   const studies = unparsed || [];
   const housekeeping = (dropped || []).filter((d) => !d.unparsed);
@@ -383,6 +383,17 @@ function renderDropped(dropped, unparsed) {
       `naming rule, so NONE of their ${nEx} exam folder(s) will be ingested. ` +
       `Tell the Data Office:</h4><ul>` +
       studies.map((u) => `<li><code>${esc(u.target)}</code> — ${esc(unparsedLabel(u))}</li>`).join("") +
+      "</ul>");
+  }
+  const hidden = unseen || [];
+  if (hidden.length) {
+    const nAd = hidden.filter((u) => u.kind === "appledouble").length;
+    parts.push(`<h4>⚠ ${hidden.length} name(s) starting with "." NOT SEEN by the ingest ` +
+      `(the glob never returns them)` +
+      (nAd ? ` — ${nAd} macOS AppleDouble file(s), safe to ignore` : "") +
+      `. Tell the Data Office if any is a real file:</h4><ul>` +
+      hidden.map((u) => `<li><code>${esc((u.matches || [u.target])[0])}</code> — ` +
+        `${u.kind === "appledouble" ? "macOS AppleDouble (ignorable)" : "hidden name"}</li>`).join("") +
       "</ul>");
   }
   if (housekeeping.length) {
@@ -447,7 +458,7 @@ async function preview() {
     }
     renderProjectSummary(lastCases);
     renderCollisions(d.collisions, d.existing_targets);
-    renderDropped(d.dropped, d.unparsed);
+    renderDropped(d.dropped, d.unparsed, d.unseen);
     renderTable(lastCases);
 
     const unparsed = d.unparsed || [];
@@ -458,6 +469,8 @@ async function preview() {
       const nEx = unparsed.reduce((n, u) => n + (u.n_exam_folders || 0), 0);
       s += `; <strong>⚠ ${unparsed.length} study folder(s) NOT PARSED (${nEx} exam folder(s) NOT ingested)</strong>`;
     }
+    const nHidden = (d.unseen || []).length;
+    if (nHidden) s += `; <strong>⚠ ${nHidden} name(s) starting with "." NOT SEEN</strong>`;
     if (nHousekeeping) s += `; ${nHousekeeping} non-scan folder(s) skipped`;
     s += `; ${d.n_matched} scanned.`;
     $("#summary").innerHTML = s;

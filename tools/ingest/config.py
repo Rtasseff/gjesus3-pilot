@@ -455,7 +455,9 @@ def _note_unparsed(groups, rule, pattern, err, parse_target, parse_source,
     unparsed_mod.note(
         groups, target=parse_target,
         target_path=(str(Path(match_path).parent)
-                     if parse_source == "parent_name" else match_path),
+                     if parse_source == "parent_name"
+                     else str(Path(match_path).parent.parent)
+                     if parse_source == "grandparent_name" else match_path),
         source=parse_source, rule=rule, pattern=pattern, reason=str(err),
         original_name=original_name,
         is_exam=bool(is_dir) and _is_paravision_exam(match_path),
@@ -528,7 +530,13 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
     # `source: name` (default — match basename) | `source: parent_name`
     # (parent folder of the match — useful when the meaningful name is
     # one level up, as for Bruker ParaVision exam folders).
+    # `source: grandparent_name` = the folder two levels up, for exams nested as
+    # <study>/Other data/<exam> (parent_name would read "Other data").
     parse_source = parse_cfg.get("source", "name")
+    if parse_source not in ("name", "parent_name", "grandparent_name"):
+        raise ValueError(
+            f"filename_parse.source {parse_source!r} is not one of "
+            f"name, parent_name, grandparent_name")
 
     # Parse targets the filename_parse rule could not parse, grouped (one
     # record per target, e.g. per study folder). Always collected so the
@@ -536,6 +544,7 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
     # `unparsed` list at the end. See ingest/unparsed.py.
     unparsed_groups = {}
     unparsed_config = cfg.get("_ingest_config_path") or ""
+    unseen_records = []     # dot-named entries the glob passed over (non-flat only)
 
     # path_parse: free-form named levels between staging_dir and the file.
     # Each level becomes a discovered.<name>. Requires a recursive glob
@@ -629,8 +638,15 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
     else:
         search = os.path.join(staging_dir, pattern)
         matches = sorted(globmod.glob(search, recursive=True))
+        # glob never returns a name starting with '.', so such a file would
+        # vanish without a trace. Find them by walking, not by widening the glob
+        # (include_hidden would ingest macOS ._* files).
+        unseen_records = unparsed_mod.find_unseen(
+            staging_dir, pattern, config=unparsed_config)
         if not matches:
-            raise ValueError(f"No matches for {search}")
+            hint = (f" ({len(unseen_records)} name(s) starting with '.' exist "
+                    f"but the glob never returns them)" if unseen_records else "")
+            raise ValueError(f"No matches for {search}{hint}")
 
     cases = []
     for match_path in matches:
@@ -717,6 +733,8 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
         # is in the study folder name).
         if parse_source == "parent_name":
             parse_target = Path(match_path).parent.name
+        elif parse_source == "grandparent_name":
+            parse_target = Path(match_path).parent.parent.name
         else:
             parse_target = match_basename
 
@@ -990,8 +1008,15 @@ def expand_batch(cfg, nas_root=None, unparsed=None, derived=None):
             f", ... (+{len(names) - 10} more)" if len(names) > 10 else "")
         print(f"[expand_batch] {unparsed_mod.headline(unparsed_records)} -- "
               f"nothing under them is ingested: {shown}")
+    if unseen_records:
+        names = sorted(r["matches"][0] for r in unseen_records)
+        shown = ", ".join(names[:10]) + (
+            f", ... (+{len(names) - 10} more)" if len(names) > 10 else "")
+        print(f"[expand_batch] {unparsed_mod.unseen_headline(unseen_records)}: "
+              f"{shown}")
     if unparsed is not None:
         unparsed.extend(unparsed_records)
+        unparsed.extend(unseen_records)
 
     if not cases:
         print(
