@@ -152,10 +152,13 @@ def main(argv=None):
 
     registry = RL.load_registry_index(nas)
     acqs = [r for r in registry.values() if pids.has_project_id(r.get("project_id"), pid)]
-    dates = sorted(r["acquisition_datetime"][:10] for r in acqs if len(r["acquisition_datetime"]) >= 10)
-    start, last = (dates[0], dates[-1]) if dates else (proj["start_date"], proj["last_activity"])
+    # The shared recompute (projects_registry.recompute_dates): min/max of the usable acquisition
+    # dates, blanks excluded; a project with no dated acquisition keeps its current dates.
+    start, last, _n, undated = projects_registry.recompute_dates(acqs, pid)
+    if not start:
+        start, last = proj["start_date"], proj["last_activity"]
     print(f"{tag}{len(acqs)} acquisitions in production; acquisition dates {start} .. {last} "
-          f"({len(acqs) - len(dates)} without a date, excluded)")
+          f"({undated} without a date, excluded)")
 
     # --- 2. backup -------------------------------------------------------------------------------
     prov_path = os.path.join(folder, "provenance.csv")
@@ -207,7 +210,7 @@ def main(argv=None):
         project_layout.ensure_subfolders(folder)
         if content is not None:
             tmp = yaml_path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
+            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
                 f.write(content)
             os.replace(tmp, yaml_path)
         if not os.path.isfile(prov_path):

@@ -534,6 +534,7 @@ One acquisition touches all of the following. Everything up to the registry appe
 | 11 | `registries/pending_dicom_regen.csv` — one worklist row | Step 8 (folder copy) | **only** an MRI exam ingested with no DICOM where Dicomifier was unavailable (the no-DICOM placeholder) | remove the `acq_id` row |
 | 12 | `registries/pending_links.csv` — one row (+ a `.PENDING-LINK.txt` stand-in in `raw_linked/`) | Step 12 | **only** when `os.link` is unsupported on the ingesting mount (the NI Mac) | remove the `acq_id` row |
 | 10 | **NEW** `projects/<name>/` folder + `_project.yaml` + a `registry_projects.csv` row | Step 9.5 | first ingest only, **and** `registry.project_name` names a **non-existent** project **and** `ingest.auto_create_projects` is on | remove the folder + the `registry_projects` row (a much larger side effect — avoid it by targeting an existing project) |
+| 13 | `registries/registry_projects.csv` — the project's `start_date` / `last_activity` **widened** to cover this acquisition's date (never moved inward; a no-op, and no lock taken, when the range already covers it). A project auto-created at #10 is dated by the acquisition, not today | Step 11b (after the manifest row; post-commit, non-fatal) | the acquisition registers into a project **and** has a usable acquisition date (blank / `NA` / the today() placeholder widen nothing). The Project Manager's raw import does the same for an acquisition that **gains** the project in `registry_raw.project_id` (not for a shared one) | no per-acquisition undo: after removing the acquisition's row, run `recompute_project_dates.py` (dry run, then `--apply --backup-dir`), or restore the two cells from a backup |
 
 The **global** `registries/index.html` is **not** written per-ingest — a scheduled job owns it ([`tools/FINDER.md`](../tools/FINDER.md)). `--delete-source` (opt-in, post-commit) removes the *staging source*, not a NAS write.
 
@@ -816,6 +817,7 @@ log_activity \
 - Short name (folder name)
 - Description
 - Owner (initials)
+- Optional `start_date` (function argument only): the project's first acquisition date, written as both `start_date` and `last_activity`; ingest's auto-create passes the acquisition's date. Omitted or unusable: today (2026-10, issue #10)
 
 **Actions** — steps 1–7 run inside ONE `locking.registry_lock` hold (see below):
 1. Normalize + validate the name (`ingest/project_naming.py`; spaces → hyphens)
