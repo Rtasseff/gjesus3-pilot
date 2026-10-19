@@ -107,6 +107,16 @@ never been recovered.
   - **103 recoverable now:** 96 MRI and 7 slide-scanner (ZWSI), all from 2026. **Every one has
     a single animal block**, checked in each sidecar, so the multi-animal shape behind the bug
     does not occur.
+    - **Corrected 2026-10-19: the 96 MRI rows are NOT recoverable.** They are 5 animals of
+      project 0525 (49 to 53), scanned 2026-05-21 and queued `db-miss` at the 2026-06-13 ingest.
+      The DB's animals 49 to 53 of 0525 entered the facility on 2026-09-10 and were born
+      2026-07-16, after the scans, so they are different animals under reused codes. The dry run
+      still said "would recover" (it dropped only `age_at_acquisition`, because
+      `animal_db.age_iso8601` returns None when the scan precedes birth).
+    - The 7 ZWSI rows (project 1321, animals 65 and 70, born 2023-06-08, sections scanned
+      2026-06-22) were queued `no-credentials`, not as misses, and remain plausible. For tissue,
+      `age_at_acquisition` would be the age at slide scanning, which is meaningless; leave it
+      blank.
   - **188 not recoverable by tool:** each fails with "no animal N in project N", i.e. the
     animal is not in the DB under that project.
     - 136 are 2022 MRI scans under protocol `0721`;
@@ -124,6 +134,30 @@ never been recovered.
   multi-animal scan's row names only the last animal queued. The fixed tool no longer relies on
   it, but the row is misleading to a reader.
 - Ryan's call (STATUS §0.7); nothing was done to these rows.
+
+## 🔺 HIGH — Reused animal codes: subject records from the wrong animal (found 2026-10-19)
+
+The facility DB reuses `animal_code` within a project over time, so `(project, animal_code)`
+does not identify one animal for all time. A lookup can return a later animal with the same code.
+- **Found while re-checking the 103 above:** see that item's 2026-10-19 correction.
+- **Already in production:** 57 acquisitions are linked (`registry_raw.subject_ids` →
+  `registry_subjects.csv`, all `source: animal-facility-db`) to an animal born after the scan.
+  - 52 CELL scans under `AE-biomaGUNE-1123` (`PROJ-0014`): nine animals (98 to 101, 104 to
+    108), all scanned 2024-08-26, born 2025-01-02 or 2025-01-30.
+  - 5 CT scans of 2023-08-07 under `AE-biomaGUNE-1321` (`PROJ-0018`): animals 73 to 77, born
+    2023-08-10. Three days apart, so a DB date error is possible as well as a reused code.
+  - The NI live sync's 95 (2026-10-08) are not among them.
+  - Read-only check: compare each linked subject's `date_of_birth` with the date in its ACQ-ID.
+- **This check is partial:** a reused code whose two animals were both born before the scan
+  passes it. A stronger check uses the DB's `animals.date_of_entry` (arrival) against the scan
+  date for in-vivo scans.
+- **To do:**
+  - [ ] Code: `ingest/enrichment.py` (ingest time) and `recover_subject_metadata.py` refuse the
+    whole DB record, not just the age, when the scan precedes birth (and, for in-vivo, entry).
+    Queue it as a miss.
+  - [ ] Decide what to do with the 57: blank their subject records back to `pending-db`, or
+    confirm them with the researchers.
+  - [ ] Run the `date_of_entry` check over all DB-linked subjects.
 
 ## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
 

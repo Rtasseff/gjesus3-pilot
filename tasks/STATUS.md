@@ -132,13 +132,16 @@ rulings). Read it if D2's or the SegBioMed items' context is needed.
 
 ### 0.7 NI live sync: one decision (2026-10-09)
 
-- **Recover 103 older `pending-db` animal records?** A read-only dry run on 2026-10-09 found 103 of
-  the 291 non-NI rows in `pending_subject_metadata.csv` recoverable from the animal DB: 96 MRI and
-  7 slide-scanner (ZWSI) acquisitions, all from 2026, **all single-animal** (the multi-animal shape
-  behind the 2026-10-08 bug does not occur). On a go: tell the coordinator, back up the 103
-  sidecars, `--apply` scoped with `--acq-ids`, check every animal block against its own DB record,
-  then refresh the subjects table. The other 188 are not in the animal DB under their project and
-  stay queued ([`BACKLOG.md`](BACKLOG.md), "292 `pending-db` subject rows").
+- **Recover 103 older `pending-db` animal records? Do NOT approve as first written (corrected
+  2026-10-19).** The 2026-10-09 dry run called 103 of the 291 non-NI rows recoverable. A re-check on
+  2026-10-19 found that **96 of them (MRI, project 0525, animals 49 to 53, scanned May 2026) would
+  get the records of different animals**: the DB's animals 49 to 53 of 0525 entered the facility on
+  2026-09-10 and were born 2026-07-16, after the scans. The animal codes were reused, and
+  `recover_subject_metadata.py` does not catch it (it only leaves the age blank). Only the 7
+  slide-scanner rows (project 1321, animals 65 and 70, queued for missing DB credentials) remain
+  plausible. No recovery until the tool refuses an animal born after the scan. The same check
+  found 57 production acquisitions already linked to an animal born after the scan
+  ([`BACKLOG.md`](BACKLOG.md), "Reused animal codes").
 - Irene's supervised first sync is Ryan's and Irene's to schedule; nothing waits on it.
 
 ### Re-verifying this page before you trust it
@@ -752,7 +755,8 @@ The genuinely in-flight items (kept tight — everything else is in
     full RESUME archived, the tunnel field card, plist and visit notes moved into the repo, the
     staging scripts made one tool (`tools/operator/stage_ni_gnuclear.py`), and the test kits and
     scratch copies removed from Ryan's gnuclear folder after their evidence was archived.
-  - **Waiting on Ryan:** the 103 recoverable older animal records (§0.7).
+  - **The 103 older animal records (§0.7): corrected 2026-10-19,** 96 of them would get a
+    different animal's record; nothing is recovered until the tool is fixed.
   - **After the sync (Ryan, 2026-10-01): one ingest web app on Box A** for every instrument. It
     pulls NI data through the tunnel, so operators can leave the room when the scan ends. The
     tunnel moves to Box A without a visit (B2 decided). See [`BACKLOG.md`](BACKLOG.md)
