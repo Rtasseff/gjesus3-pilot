@@ -103,7 +103,9 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
 2. **Each new researcher:** run a read-only `--plan` of their folder first, and fix bad codes in
    their corrections file before their first sync.
 3. **291 older `pending-db` animal records (MRI and microscopy):**
-   - 103 can be recovered now, and all 103 are single-animal. They wait for Ryan's go.
+   - 103 looked recoverable on 2026-10-09. **Corrected 2026-10-19:** 96 of them would get a
+     different animal's record (reused animal codes; BACKLOG "Reused animal codes"). Only 7 remain
+     plausible, and nothing is recovered until the tool refuses an animal born after the scan.
    - The other 188 are not in the animal DB under their project.
    - Details are in the BACKLOG.
 4. **Box A, later:**
