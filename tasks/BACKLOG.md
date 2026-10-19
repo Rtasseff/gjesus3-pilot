@@ -117,6 +117,7 @@ never been recovered.
       2026-06-22) were queued `no-credentials`, not as misses, and remain plausible. For tissue,
       `age_at_acquisition` would be the age at slide scanning, which is meaningless; leave it
       blank.
+  - **Correction 2026-10-19: 140 of these 188 are recoverable** through the DB's transfer fields (`0721` → `0821` 136, `0324` → `0721` 4); see the HIGH item "Subject records from the wrong animal".
   - **188 not recoverable by tool:** each fails with "no animal N in project N", i.e. the
     animal is not in the DB under that project.
     - 136 are 2022 MRI scans under protocol `0721`;
@@ -135,29 +136,35 @@ never been recovered.
   it, but the row is misleading to a reader.
 - Ryan's call (STATUS §0.7); nothing was done to these rows.
 
-## 🔺 HIGH — Subject records from the wrong animal: "reused animal codes" UNVERIFIED, possibly a gjesus3 join-key error (found 2026-10-19)
+## 🔺 HIGH — Subject records from the wrong animal: gjesus3's date-blind lookup and two label errors (found 2026-10-19; cause verified the same day)
 
-The facility DB reuses `animal_code` within a project over time, so `(project, animal_code)`
-does not identify one animal for all time. A lookup can return a later animal with the same code.
-- **Found while re-checking the 103 above:** see that item's 2026-10-19 correction.
-- **Already in production:** 57 acquisitions are linked (`registry_raw.subject_ids` →
-  `registry_subjects.csv`, all `source: animal-facility-db`) to an animal born after the scan.
-  - 52 CELL scans under `AE-biomaGUNE-1123` (`PROJ-0014`): nine animals (98 to 101, 104 to
-    108), all scanned 2024-08-26, born 2025-01-02 or 2025-01-30.
-  - 5 CT scans of 2023-08-07 under `AE-biomaGUNE-1321` (`PROJ-0018`): animals 73 to 77, born
-    2023-08-10. Three days apart, so a DB date error is possible as well as a reused code.
-  - The NI live sync's 95 (2026-10-08) are not among them.
-  - Read-only check: compare each linked subject's `date_of_birth` with the date in its ACQ-ID.
-- **This check is partial:** a reused code whose two animals were both born before the scan
-  passes it. A stronger check uses the DB's `animals.date_of_entry` (arrival) against the scan
-  date for in-vivo scans.
+**The facility does not reuse codes while an animal holds them** (verified read-only, `…\gjesus3-archive\reports\2026-10-19_animal_code_check\FINDINGS.md`). The DB's only true
+key is `animals.id`; `(protocol, code)` is unique **at a point in time** (19,709 pairs / 19,710 rows; the one exception
+is a 2013–15 legacy protocol gjesus3 cannot look up). When an animal **changes protocol**, the DB records it
+(`old_project`, `old_project_animal_code`, `project_change_date`, exit cause "Change of project") and may later give the
+old code to a new animal (201 times since 2018, always after the move). **gjesus3's lookup** (`tools/animal_db.py`,
+`id_project = P AND animal_code = c LIMIT 1`) reads current codes only and ignores both time and transfers.
+
+- **Not yet written, would be wrong:** the 96 `0525` #49–53 MRI (2026-05-21): those animals moved to `1025` #1–5 that
+  day (DB ids 18522–18526; DICOM birth date 2026-03-05 matches); codes 49–53 later went to a September group. The
+  2026-10-09 dry run would have written the September animals. Data Office call: keep `49..53-AE-biomaGUNE-0525` filled
+  from ids 18522–18526, or relink to `1..5-AE-biomaGUNE-1025` (35 rows already there).
+- **Already in production, wrong (80, +5 uncertain), all from researcher/scanner LABEL errors, not the DB:**
+  - all **75** Cell Observer slides of 2024-08-26 under `AE-biomaGUNE-1123` (the validator saw 52): the folder names the
+    wrong protocol; the animals are almost certainly `1321` #15–17, 26, 98–101, 104–108 (dose-to-sampling 9 and 20–21
+    days match the folders' "10 days" / "Dia 21"). For the drive-3 owner to confirm.
+  - **5** CT of 2023-08-07 under `AE-biomaGUNE-1321` (73–77; +5 uncertain, 68–72): the DB records CT that day on #63–72
+    only; the scanner labels are off.
+- **Recoverable that the tool cannot reach today:** **140** `pending-db` links (`0721` → `0821` 136, `0324` → `0721` 4)
+  are in the DB under a later protocol; a transfer-aware lookup recovers them (they are 140 of the "188 not recoverable").
 - **To do:**
-  - [ ] Code: `ingest/enrichment.py` (ingest time) and `recover_subject_metadata.py` refuse the
-    whole DB record, not just the age, when the scan precedes birth (and, for in-vivo, entry).
-    Queue it as a miss.
-  - [ ] Decide what to do with the 57: blank their subject records back to `pending-db`, or
-    confirm them with the researchers.
-  - [ ] Run the `date_of_entry` check over all DB-linked subjects.
+  - [ ] A **date-aware, transfer-aware lookup** (the holder of `(protocol, code)` on the scan date, following
+    `old_project` / `project_change_date`), storing the DB's **`animals.id`** beside the canonical id; refuse when no
+    holder fits the date. Keep the before-birth / before-entry guard (it catches label errors no join can fix).
+  - [ ] Repair the 80 (+5) label-error rows: the `1123` slides → `1321` animals after the owner confirms; the `1321` CT
+    73–77 (and decide on 68–72). Recovery pattern, Ryan's go.
+  - [ ] The 96 `0525` rows: Ryan's call (keep the scan-time code, or relink to `1025`), then recover with the new lookup.
+  - [ ] Not investigated: 159 in-vivo links fall after the animal's DB exit date (90 within 2–7 days).
 
 ## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
 
@@ -2418,6 +2425,8 @@ mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadat
 - [ ] A path-level mapping in `nonraw_placement.py remap` (with a test), then move the 165.
 
 ## 🔸 MODERATE — 52 drive-3 Cell Observer slides are dated before their animals were born (2026-10-17)
+
+**Resolved as to cause, 2026-10-19:** a label error, not a DB or clock error: all 75 slides of that day name the wrong protocol (the animals are `1321`'s). Tracked in the HIGH item "Subject records from the wrong animal"; this item is superseded by it.
 
 Found by the read-only run of the validator's new *acquired before birth* class (`feat/validator-signal`, #8; report
 `…\gjesus3-archive\reports\2026-10-19_pre-port_review\DRY_RUNS.md`): **57** rows, of which 5 are the known `1321` CT
