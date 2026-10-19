@@ -135,7 +135,7 @@ never been recovered.
   it, but the row is misleading to a reader.
 - Ryan's call (STATUS §0.7); nothing was done to these rows.
 
-## 🔺 HIGH — Reused animal codes: subject records from the wrong animal (found 2026-10-19)
+## 🔺 HIGH — Subject records from the wrong animal: "reused animal codes" UNVERIFIED, possibly a gjesus3 join-key error (found 2026-10-19)
 
 The facility DB reuses `animal_code` within a project over time, so `(project, animal_code)`
 does not identify one animal for all time. A lookup can return a later animal with the same code.
