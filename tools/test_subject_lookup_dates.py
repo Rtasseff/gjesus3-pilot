@@ -523,6 +523,21 @@ def test_relink():
         again = relink.plan(tmp, wl, lookup_fn=LOOKUP)
         check(all(i["already"] for i in again), "a second run finds everything done")
 
+        # An unlinked row can be relinked later (old_id blank): the field is found by
+        # position, not by searching for ",<old>," (",," is everywhere on a line).
+        late = [{"acq_id": "ACQ-20230807-CT-006", "old_id": "", "new_id": "98-AE-biomaGUNE-1321",
+                 "new_db_id": "", "evidence": "test"}]
+        items = relink.plan(tmp, late, lookup_fn=lambda a, c, **k: look("1321", 98, "2023-10-25"))
+        for i in items:
+            relink.write_sidecar(i)
+        n = relink.rewrite_registry_raw(raw, items)
+        row = {r["acq_id"]: r for r in registry.read_registry(raw)}["ACQ-20230807-CT-006"]
+        check(n == 1 and row["subject_ids"] == "98-AE-biomaGUNE-1321",
+              "a blank subject_ids cell is relinked in place")
+        check(relink._field_span('a,"x,y",,z\r\n', 2) == (8, 8)
+              and relink._field_span('a,"x,y",,z\r\n', 3) == (9, 10),
+              "field spans honour quotes and the line ending")
+
 
 def main():
     for fn in (test_dates, test_0525_transfer_and_reissue, test_0721_zero_change_date,

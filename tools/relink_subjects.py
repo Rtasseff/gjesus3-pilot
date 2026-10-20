@@ -199,13 +199,30 @@ def write_sidecar(item):
         raise RuntimeError(f"{item['acq_id']}: verify-after-write failed: {detail}")
 
 
+def _field_span(text, col):
+    """(start, end) of the col-th field of one CSV line, honouring quotes."""
+    start, n, quoted = 0, 0, False
+    for i, ch in enumerate(text):
+        if ch == '"':
+            quoted = not quoted
+        elif ch == "," and not quoted:
+            if n == col:
+                return start, i
+            n, start = n + 1, i + 1
+    if n == col:
+        end = len(text.rstrip("\r\n"))
+        return start, end
+    raise RuntimeError(f"line has no field {col}")
+
+
 def rewrite_registry_raw(path, items):
     """Change ONLY the subject_ids field of the named rows, in BYTES.
 
     The live file has no BOM and CRLF endings; a csv round-trip would re-quote
     and re-terminate 40k rows. Each target line is parsed to find the field,
-    the comma-delimited old value replaced once, and the line parsed again to
-    prove that nothing else moved. Returns the number of lines changed."""
+    whose exact span is replaced (an id never needs quoting, so a quoted cell
+    is refused), and the line is parsed again to prove that nothing else
+    moved. Returns the number of lines changed."""
     by_acq = {i["acq_id"]: i for i in items if not i["already"]}
     with open(path, "rb") as f:
         lines = f.readlines()
@@ -221,10 +238,10 @@ def rewrite_registry_raw(path, items):
         before = next(csv.reader(io.StringIO(text)))
         if before[col] != item["old_id"]:
             raise RuntimeError(f"{acq}: subject_ids is {before[col]!r}, expected {item['old_id']!r}")
-        old = "," + item["old_id"] + ","
-        if text.count(old) != 1:
-            raise RuntimeError(f"{acq}: delimited old id appears {text.count(old)}x on its line")
-        text = text.replace(old, "," + item["new_id"] + ",")
+        s, e = _field_span(text, col)
+        if text[s:e] != item["old_id"]:
+            raise RuntimeError(f"{acq}: subject_ids cell is {text[s:e]!r} in the file - refusing")
+        text = text[:s] + item["new_id"] + text[e:]
         after = next(csv.reader(io.StringIO(text)))
         expect = list(before)
         expect[col] = item["new_id"]
