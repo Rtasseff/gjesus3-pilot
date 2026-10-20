@@ -441,6 +441,15 @@ def test_backfill_and_audit():
                        ("ACQ-20260522-PET-001", "unchanged")},
               f"each case lands in its audit category (got {sorted(cats)})")
 
+        rec.recover_all(reg, apply=True, lookup_fn=LOOKUP, log=quiet)
+        side = os.path.join(tmp, "raw", "X", "ACQ-20221015-MRI-001", "metadata.json")
+        blk = json.load(open(side, encoding="utf-8"))["subject"]
+        subjects_table.upsert_subjects(reg, [subjects_table.row_from_subject_block(blk)], now="T5")
+        after = {r["acq_id"]: r["category"] for r in audit.audit(reg, IDX)}
+        check(after["ACQ-20221015-MRI-001"] == "unchanged",
+              "after its recovery a transferred animal's link audits as unchanged, "
+              "not as another animal (its code has no current holder)")
+
 
 def test_relink():
     print("relink_subjects: relink and unlink, bytes, idempotency, refusal")

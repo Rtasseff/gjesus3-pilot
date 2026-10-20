@@ -15,8 +15,10 @@ Each link gets one category:
                           that day (or the date precedes the animal's birth): the
                           record in production belongs to an animal that cannot
                           be the one acquired. A label error; no join can fix it.
-  wrong:other-animal      the record came from the DB, from the code's current
-                          holder, but on that day another animal held the code.
+  wrong:other-animal      the record came from the DB, but names another animal
+                          than the one that held the code that day (the subjects
+                          table's facility_db_id when it has one, else the code's
+                          current holder, which the old lookup returned).
   recoverable:reissued    pending; the dated lookup finds the animal through a
                           transfer, and the code has since gone to ANOTHER animal
                           (the old lookup would have written that one).
@@ -83,7 +85,10 @@ def classify(link, index, table_row, pending_row):
     pstatus = (pending_row or {}).get("status", "")
     is_pending = source == "pending-db" or pstatus == "pending"
     new = res.subject or {}
-    old_id = blind["id"] if blind else ""
+    # The animal the record names: its stored DB id when the subjects table has
+    # one (after 2026-10-20), else what the date-blind lookup would have given.
+    stored = str((table_row or {}).get("facility_db_id") or "").strip()
+    old_id = int(stored) if stored.isdigit() else (blind["id"] if blind else "")
     new_id = new.get("facility_db_id", "")
 
     if source in ("animal-facility-db",) and not is_pending:
