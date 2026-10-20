@@ -40,7 +40,7 @@ _DB_SUBJECT = {
 
 
 def make_lookup(status):
-    def _fn(alias, code):
+    def _fn(alias, code, **_dated):
         if status == "found":
             return animal_db.LookupResult("found", subject=dict(_DB_SUBJECT),
                                           detail=_DB_SUBJECT["facility_animal_id"])

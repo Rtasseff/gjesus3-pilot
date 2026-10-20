@@ -186,7 +186,8 @@ auto_discover:
 
 - `subject_from_db` (bool, default off): when true, the ingest queries the animal-facility DB and writes the `subject:` block (species / strain / sex / DOB→age / procedures) automatically.
 - `subject_lookup.project_alias` + `subject_lookup.animal_code`: the two resolver-evaluated keys that form the lookup. Needs DB credentials at `~/.my.cnf` on the ingest machine and on-network access.
-- On a miss / no-creds it stays non-blocking: the acq ingests with a `source: "pending-db"` placeholder `subject:` block and is queued to `registries/pending_subject_metadata.csv` for later recovery (08_METADATA §4.4.6). Uses `tools/animal_db.py` under the hood.
+- The lookup is dated: it takes the animal that held that code on the acquisition day (an animal that changed protocol may have passed its old code to another animal). If no animal fits the day, or the scan predates the animal's birth, the record is withheld and the WARN says why (reason `db-date-conflict`); check the label's protocol and number.
+- On a miss / no-creds / date conflict it stays non-blocking: the acq ingests with a `source: "pending-db"` placeholder `subject:` block and is queued to `registries/pending_subject_metadata.csv` for later recovery (08_METADATA §4.4.6). Uses `tools/animal_db.py` under the hood.
 
 **2. Top-level `condition:` / `anatomy:` / `subject:` blocks** — set once per batch, inherited by every acquisition the batch produces:
 

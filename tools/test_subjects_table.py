@@ -32,6 +32,11 @@ def _row(fid, source="animal-facility-db", **kw):
     return r
 
 
+def _counts(s):
+    """The three merge counts (the stats also carry conflict counts)."""
+    return {k: s[k] for k in ("inserted", "updated", "unchanged")}
+
+
 def _read(d):
     return st.read_subjects(st.subjects_path(d))
 
@@ -43,7 +48,7 @@ def test_insert_and_idempotent():
     s = st.upsert_subjects(d, [_row(fid, species="Mus musculus", sex="M",
                                     animal_code="13", project_alias="0525",
                                     strain="C57BL/6")], now="T1")
-    check(s == {"inserted": 1, "updated": 0, "unchanged": 0}, "first upsert inserts")
+    check(_counts(s) == {"inserted": 1, "updated": 0, "unchanged": 0}, "first upsert inserts")
     t = _read(d)
     check(len(t) == 1, "one row on disk")
     r = t[fid]
@@ -54,7 +59,7 @@ def test_insert_and_idempotent():
     s2 = st.upsert_subjects(d, [_row(fid, species="Mus musculus", sex="M",
                                      animal_code="13", project_alias="0525",
                                      strain="C57BL/6")], now="T2")
-    check(s2 == {"inserted": 0, "updated": 0, "unchanged": 1}, "re-upsert is a no-op")
+    check(_counts(s2) == {"inserted": 0, "updated": 0, "unchanged": 1}, "re-upsert is a no-op")
     check(_read(d)[fid]["last_updated"] == "T1", "last_updated NOT bumped on no-op")
 
 
@@ -153,7 +158,7 @@ def test_no_pk_skipped():
     print("rows without a facility_id are skipped, not fatal:")
     d = tempfile.mkdtemp()
     s = st.upsert_subjects(d, [{"source": "unknown", "species": "x"}], now="T1")
-    check(s == {"inserted": 0, "updated": 0, "unchanged": 0}, "no-PK row skipped")
+    check(_counts(s) == {"inserted": 0, "updated": 0, "unchanged": 0}, "no-PK row skipped")
     check(not os.path.exists(st.subjects_path(d)), "no file written when nothing to write")
 
 

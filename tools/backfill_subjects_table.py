@@ -15,17 +15,28 @@ Reuses, with NO parallel write path:
   - ingest.subjects_table.plan_upserts              (dry-run preview = the real merge)
   - ingest.subjects_table.upsert_subjects           (the write, under the lock)
 
+--with-db (2026-10-20) also fills `facility_db_id`, the facility DB's own key
+for the animal (06_REGISTRIES §2.8.1). Every (acquisition, subject) link is put
+through the DATED lookup (animal_db: the animal that held the code on the
+acquisition day, following transfers), with the DB read once, read-only. A
+DB-sourced row gets the id only when all its links agree on ONE animal; links
+the lookup refuses, and ids behind which two animals stand, are reported and
+leave the column blank. Rows not yet filled from the DB (`pending-db`) are left
+to the recovery tool, which writes the id into the sidecar.
+
 Usage:
   PYTHONPATH=tools python tools/backfill_subjects_table.py --nas-root J:/gjesus3-data --dry-run
   PYTHONPATH=tools python tools/backfill_subjects_table.py --nas-root J:/gjesus3-data --apply
+  PYTHONPATH=tools python tools/backfill_subjects_table.py --nas-root J:/gjesus3-data --dry-run --with-db
 """
 import argparse
 import json
 import os
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
+import animal_db
 from ingest import registry, subjects_table
 
 
@@ -141,6 +152,51 @@ def collect_rows(nas_root, log, limit=0, only=None):
     return [best[fid] for fid in order], stats
 
 
+def resolve_link_db_ids(acqs, index, only=None):
+    """Every (acquisition, subject) link through the dated lookup.
+
+    Returns (by_id, refused): by_id maps a facility id to {db id: [acq ids]};
+    refused lists (acq_id, facility_id, reason, detail) for links the lookup
+    would not answer (no animal held the code that day, the date precedes the
+    birth, or no animal ever)."""
+    by_id = defaultdict(lambda: defaultdict(list))
+    refused = []
+    for r in acqs:
+        acq = r.get("acq_id", "")
+        if only is not None and acq not in only:
+            continue
+        in_vivo = (r.get("sample_type") or "").strip().lower() != "tissue"
+        day = animal_db.acq_id_day(acq)
+        for fid in (x.strip() for x in (r.get("subject_ids") or "").split(";")):
+            try:
+                animal_db.parse_subject_id(fid)
+            except ValueError:
+                continue  # blank, or not a facility id (e.g. a collaborator's DICOM subject)
+            res = animal_db.lookup_by_subject_id(fid, on_date=day, in_vivo=in_vivo, index=index)
+            if res.status == "found":
+                by_id[fid][res.subject["facility_db_id"]].append(acq)
+            else:
+                refused.append((acq, fid, res.reason, res.detail))
+    return by_id, refused
+
+
+def apply_db_ids(rows, by_id):
+    """Set `facility_db_id` on DB-sourced rows whose links name ONE animal.
+    Returns the facility ids behind which the links name several animals,
+    as {facility id: {db id: [acq ids]}} (left blank, for a person)."""
+    split = {}
+    for row in rows:
+        fid = row.get("facility_id", "")
+        found = by_id.get(fid) or {}
+        if len(found) > 1:
+            split[fid] = found
+            continue
+        if found and (row.get("source") or "") == "animal-facility-db" \
+                and not (row.get("facility_db_id") or "").strip():
+            row["facility_db_id"] = str(next(iter(found)))
+    return split
+
+
 def main(argv):
     ap = argparse.ArgumentParser(
         description="Back-fill registry_subjects.csv from existing acquisitions.")
@@ -151,6 +207,9 @@ def main(argv):
     ap.add_argument("--limit", type=int, default=0, help="cap acqs scanned (debug)")
     ap.add_argument("--acq-ids", metavar="FILE",
                     help="only these acquisitions: one ACQ-ID per line ('#' comments allowed)")
+    ap.add_argument("--with-db", action="store_true",
+                    help="also fill facility_db_id through the dated lookup "
+                         "(reads the facility DB once, read-only; needs ~/.my.cnf)")
     args = ap.parse_args(argv[1:])
 
     def log(m, level="INFO"):
@@ -173,12 +232,36 @@ def main(argv):
     print(f"distinct subjects    : {len(rows)}  (thin fallback rows: {stats['thin_fallback_rows']})")
     print("by source            :", dict(Counter(r.get("source", "") for r in rows)))
 
+    if args.with_db:
+        conn = animal_db.get_connection()
+        try:
+            index = animal_db.HolderIndex.from_connection(conn)
+        finally:
+            conn.close()
+        acqs = registry.read_registry(os.path.join(registries_dir, "registry_raw.csv"))
+        by_id, refused = resolve_link_db_ids(acqs, index, only=only)
+        split = apply_db_ids(rows, by_id)
+        n_links = sum(len(a) for ids in by_id.values() for a in ids.values())
+        print(f"\nDB links resolved    : {n_links}  (refused: {len(refused)}, "
+              f"by reason {dict(Counter(x[2] for x in refused))})")
+        print(f"rows given a DB id   : {sum(1 for r in rows if r.get('facility_db_id'))}")
+        for acq, fid, reason, detail in refused[:200]:
+            print(f"  REFUSED {acq} {fid}: {reason}: {detail}")
+        if len(refused) > 200:
+            print(f"  ... and {len(refused) - 200} more refused link(s)")
+        for fid, ids in split.items():
+            print(f"  SPLIT   {fid}: links name several animals "
+                  f"{ {k: len(v) for k, v in ids.items()} } - left blank")
+
     # Preview the merge against whatever is already on disk using the SAME merge
     # the writer uses (plan_upserts) — so the dry-run delta == the apply delta.
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     existing = subjects_table.read_subjects(subjects_table.subjects_path(registries_dir))
     _, plan = subjects_table.plan_upserts(existing, rows, now)
+    conflicts = plan.pop("conflicts")
     print(f"vs existing table    : {dict(plan)}  (existing rows: {len(existing)})")
+    for fid, have, got in conflicts:
+        print(f"  CONFLICT {fid}: the table names DB animal {have}, this run {got} - not merged")
     print("\nsample rows:")
     for r in rows[:8]:
         print(f"  {r['facility_id']:<26} {r.get('species', ''):<14} "

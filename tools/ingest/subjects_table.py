@@ -49,6 +49,7 @@ SUBJECT_FIELDS = [
     "facility_id",       # PK — canonical <animal_code>-AE-biomaGUNE-<NNNN>
     "animal_code",       # the leading integer, e.g. "13"
     "project_alias",     # the NNNN animal-protocol alias, e.g. "0525"
+    "facility_db_id",    # the facility DB's animals.id (its only true key), or ""
     "species",           # binomial, e.g. "Mus musculus"
     "strain",
     "sex",               # M | F | unknown
@@ -60,10 +61,16 @@ SUBJECT_FIELDS = [
     "last_updated",      # ISO timestamp the row last changed
 ]
 
+# The header before `facility_db_id` was added (2026-10-20). A table in this
+# exact shape is read with the column blank and rewritten in the current shape
+# on its next write: the one known older layout, upgraded by adding an empty
+# column. Any OTHER header still fails loud.
+LEGACY_SUBJECT_FIELDS = [f for f in SUBJECT_FIELDS if f != "facility_db_id"]
+
 # Static descriptor fields that participate in the merge (everything except the
 # PK, the provenance source label, and the two timestamps).
-_VALUE_FIELDS = ["animal_code", "project_alias", "species", "strain", "sex",
-                 "date_of_birth", "genotype", "cohort_id"]
+_VALUE_FIELDS = ["animal_code", "project_alias", "facility_db_id", "species", "strain",
+                 "sex", "date_of_birth", "genotype", "cohort_id"]
 
 # Provenance confidence. A strictly higher-ranked source may overwrite a real
 # value; a lower-or-equal source only fills gaps. Equal rank keeps the existing
@@ -127,10 +134,12 @@ def row_from_subject_block(block):
     except Exception:
         pass  # non-canonical id — keep the PK, leave the parsed parts blank
     dob = block.get("date_of_birth")
+    db_id = block.get("facility_db_id")
     return {
         "facility_id": fa,
         "animal_code": code,
         "project_alias": alias,
+        "facility_db_id": "" if db_id in (None, "") else str(db_id),
         "species": block.get("species", "") or "",
         "strain": block.get("strain", "") or "",
         "sex": block.get("sex", "") or "",
@@ -151,6 +160,18 @@ def _new_row(incoming, now):
     row["first_registered"] = now
     row["last_updated"] = now
     return row
+
+
+def db_id_conflict(existing, incoming):
+    """True when both rows name a facility DB animal and they differ.
+
+    One facility id can name two animals over time: a code given to a new
+    animal after the first moved to another protocol (06_REGISTRIES §2.3.1).
+    Merging the second into the first's row would mix two animals' records,
+    so such an upsert is refused (plan_upserts) and left for a person."""
+    a = str(existing.get("facility_db_id") or "").strip()
+    b = str(incoming.get("facility_db_id") or "").strip()
+    return bool(a and b and a != b)
 
 
 def _merge(existing, incoming, now):
@@ -188,7 +209,8 @@ def _merge(existing, incoming, now):
 
 
 def assert_header_compatible(path):
-    """Raise RuntimeError if an existing table's header != SUBJECT_FIELDS.
+    """Raise RuntimeError if an existing table's header is neither
+    SUBJECT_FIELDS nor LEGACY_SUBJECT_FIELDS.
 
     No-op when the file is absent (a fresh write creates the correct header).
     BOM-tolerant via csv_safe.read_header so an Excel "Save As CSV UTF-8" BOM
@@ -197,7 +219,7 @@ def assert_header_compatible(path):
     if not os.path.exists(path):
         return
     existing = csv_safe.read_header(path)
-    if existing != SUBJECT_FIELDS:
+    if existing not in (SUBJECT_FIELDS, LEGACY_SUBJECT_FIELDS):
         raise RuntimeError(
             f"registry_subjects header mismatch in {path}\n"
             f"  file has {len(existing)} columns: {existing}\n"
@@ -256,9 +278,14 @@ def plan_upserts(table, rows, now):
     shared by upsert_subjects (which then writes the result) and any dry-run /
     back-fill preview (which only reports the stats) — so the preview delta can
     never diverge from what the write actually does.
+
+    An incoming row whose `facility_db_id` differs from the existing row's is
+    NOT merged (db_id_conflict): the row is left as it is and counted under
+    "conflict"; `conflicts` lists (facility_id, existing db id, incoming db id).
     """
     table = dict(table)
-    stats = {"inserted": 0, "updated": 0, "unchanged": 0}
+    stats = {"inserted": 0, "updated": 0, "unchanged": 0, "conflict": 0}
+    conflicts = []
     for incoming in rows:
         fid = (incoming.get("facility_id") or "").strip()
         if not fid:
@@ -266,9 +293,14 @@ def plan_upserts(table, rows, now):
         if fid not in table:
             table[fid] = _new_row(incoming, now)
             stats["inserted"] += 1
+        elif db_id_conflict(table[fid], incoming):
+            stats["conflict"] += 1
+            conflicts.append((fid, table[fid].get("facility_db_id"),
+                              incoming.get("facility_db_id")))
         else:
             table[fid], changed = _merge(table[fid], incoming, now)
             stats["updated" if changed else "unchanged"] += 1
+    stats["conflicts"] = conflicts
     return table, stats
 
 
@@ -305,4 +337,7 @@ def upsert_subjects(registries_dir, rows, now=None, log=None, _hold_lock=True):
         stats = _do()
     log(f"subjects table: {stats['inserted']} inserted, {stats['updated']} "
         f"updated, {stats['unchanged']} unchanged ({path})")
+    for fid, have, got in stats["conflicts"]:
+        log(f"subjects table: {fid} already names facility DB animal {have}; "
+            f"refusing to merge animal {got} into it (left for a person)", "WARN")
     return stats

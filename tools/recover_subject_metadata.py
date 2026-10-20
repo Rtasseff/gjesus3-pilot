@@ -11,10 +11,14 @@ subject fields into the immutable /raw sidecar IN PLACE.
 
 WHAT IT DOES (per pending row with status=="pending")
     1. parse facility_animal_id -> (project_alias, animal_code)  [animal_db]
-    2. animal_db.lookup(alias, code)
+    2. animal_db.lookup(alias, code, on_date=<the ACQ-ID's date>, in_vivo=...):
+       the animal that HELD the code on the acquisition day, following the
+       DB's transfer records (a code can pass to a new animal after the first
+       one changed protocol). A date no animal fits, or one before the
+       animal's birth, is refused and the row stays pending.
     3. if FOUND: open the /raw sidecar at row["sidecar_path"], fill ONLY blank/
-       placeholder subject required fields (species/strain/sex/date_of_birth/
-       procedures), set source="animal-facility-db", recompute
+       placeholder subject required fields (facility_db_id/species/strain/sex/
+       date_of_birth/procedures), set source="animal-facility-db", recompute
        age_at_acquisition from date_of_birth + the acquisition datetime found
        in the sidecar (user_supplied / ecosystem section / discovered / the
        ACQ-ID date prefix; leave "" if none), VERIFY-after-write by re-reading,
@@ -64,13 +68,14 @@ import animal_db  # noqa: E402
 # derived, not copied; source is set explicitly. facility_animal_id is the join
 # key and already present in the placeholder, so it is not in this fill set.
 SUBJECT_FILL_FIELDS = [
-    "species", "strain", "sex", "date_of_birth", "procedures",
+    "facility_db_id", "species", "strain", "sex", "date_of_birth", "procedures",
 ]
 
 # Values that count as "blank / placeholder" for the corresponding field — a
 # field holding one of these is safe to overwrite; anything else is a real
 # operator/DB value and is left untouched (controlled-write safeguard).
 _PLACEHOLDER_SENTINELS = {
+    "facility_db_id": ("", None),
     "species": ("", None),
     "strain": ("", None),
     "sex": ("", None, "unknown"),
@@ -279,6 +284,33 @@ def _subject_blocks(sidecar):
     return out
 
 
+def _in_canonical_order(block):
+    """Reorder a subject block in place to 08_METADATA §4.4.2's field order, so
+    a field added to an older sidecar (facility_db_id) lands beside its peers
+    rather than at the end. Keys outside the canonical list keep their place
+    after it."""
+    from ingest.enrichment import SUBJECT_ORDER
+    ordered = {k: block[k] for k in SUBJECT_ORDER if k in block}
+    ordered.update((k, v) for k, v in block.items() if k not in ordered)
+    block.clear()
+    block.update(ordered)
+
+
+def acquisition_day(sidecar, row_acq_id=""):
+    """The scan date the lookup uses: the ACQ-ID's date (the sidecar's, else the
+    pending row's), else the leading date of find_acquisition_datetime."""
+    return (animal_db.acq_id_day(sidecar.get("acq_id") or "")
+            or animal_db.acq_id_day(row_acq_id)
+            or animal_db.as_day(find_acquisition_datetime(sidecar)))
+
+
+def is_in_vivo(sidecar):
+    """False only for a tissue sample: a specimen may be prepared after the
+    animal left, so only the start of its tenure counts (animal_db)."""
+    st = str((sidecar.get("user_supplied") or {}).get("sample_type") or "").strip().lower()
+    return st != "tissue"
+
+
 def _verify_after_write(path, updates):
     """Re-read the sidecar from disk; confirm every update landed. Returns
     (ok: bool, detail: str).
@@ -369,6 +401,8 @@ def recover_one(row, *, apply, lookup_fn, log=log, nas_root=None):
     # NI sidecars. So: look up each block's own id, refuse a record for another
     # id, and write only when EVERY animal of the scan was found.
     acq_for_age = find_acquisition_datetime(sidecar)
+    on_date = acquisition_day(sidecar, acq_id)
+    in_vivo = is_in_vivo(sidecar)
     found = {}
     plan = []
     for label, block in blocks:
@@ -380,7 +414,7 @@ def recover_one(row, *, apply, lookup_fn, log=log, nas_root=None):
                 result["outcome"] = "still-pending"
                 result["detail"] = f"{label}: unparseable facility_animal_id {fid!r}: {e}"
                 return result
-            found[fid] = lookup_fn(alias, code)
+            found[fid] = lookup_fn(alias, code, on_date=on_date, in_vivo=in_vivo)
         res = found[fid]
         if res.status != "found":
             result["outcome"] = "still-pending"
@@ -392,6 +426,16 @@ def recover_one(row, *, apply, lookup_fn, log=log, nas_root=None):
             result["outcome"] = "error"
             result["detail"] = (f"{label}: the DB answered {got!r} for {fid!r}; refusing "
                                 f"to write another animal's record")
+            return result
+        # A block that already names a DIFFERENT DB animal is not refilled from
+        # this one: plan_subject_fill would keep its real values, but a mixed
+        # record is worse than a pending one.
+        have = block.get("facility_db_id")
+        want = (res.subject or {}).get("facility_db_id")
+        if have not in (None, "") and want not in (None, "") and str(have) != str(want):
+            result["outcome"] = "error"
+            result["detail"] = (f"{label} ({fid}): the sidecar names DB animal {have}, the "
+                                f"DB answered {want} for {on_date}; refusing to mix records")
             return result
         upd, skp = plan_subject_fill(block, res.subject, acq_for_age)
         plan.append((label, block, upd, skp))
@@ -416,7 +460,9 @@ def recover_one(row, *, apply, lookup_fn, log=log, nas_root=None):
     # --- controlled write ---
     backups = [(blk, dict(blk)) for _l, blk, upd, _s in plan if upd]
     for _l, blk, upd, _s in plan:
-        blk.update(upd)
+        if upd:
+            blk.update(upd)
+            _in_canonical_order(blk)
     try:
         _write_sidecar(sidecar_path, sidecar)
     except Exception as e:

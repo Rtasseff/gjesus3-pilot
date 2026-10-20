@@ -43,7 +43,7 @@ DB = {"species": "Mus musculus", "strain": "C57BL/6J", "sex": "F",
       "date_of_birth": "2025-01-10", "procedures": [], "source": "animal-facility-db"}
 
 
-def lookup(alias, code):
+def lookup(alias, code, **_dated):
     return animal_db.LookupResult("found", subject=dict(DB, facility_animal_id=f"{code}-AE-biomaGUNE-{alias}"),
                                   detail="fake")
 
@@ -82,7 +82,7 @@ def multi_animal():
     records = {11: dict(DB, sex="M", date_of_birth="2026-03-05"),
                12: dict(DB, sex="F", date_of_birth="2026-02-01")}
 
-    def per_animal(alias, code):
+    def per_animal(alias, code, **_dated):
         return animal_db.LookupResult("found", subject=dict(
             records[int(code)], facility_animal_id=f"{int(code)}-AE-biomaGUNE-{alias}"), detail="fake")
 
@@ -118,7 +118,7 @@ def multi_animal():
         with open(side, "w", encoding="utf-8") as f:
             json.dump({"acq_id": acq, "subject": ph(11), "subjects": [ph(11), ph(12)]}, f)
         before = sha(side)
-        wrong = lambda alias, code: animal_db.LookupResult(  # noqa: E731
+        wrong = lambda alias, code, **_dated: animal_db.LookupResult(  # noqa: E731
             "found", subject=dict(DB, facility_animal_id="99-AE-biomaGUNE-1025"), detail="fake")
         r = rec.recover_one({"acq_id": acq, "sidecar_path": rel, "facility_animal_id": "11-AE-biomaGUNE-1025",
                              "status": "pending"}, apply=True, lookup_fn=wrong, log=quiet, nas_root=nas)

@@ -90,7 +90,7 @@ def test_enrichment_stays_non_blocking():
     def _log(msg, level="INFO"):
         logged.append((level, msg))
 
-    def _miss(alias, code):
+    def _miss(alias, code, **_dated):
         return animal_db.LookupResult("not_found", reason="db-miss",
                                       detail="fake miss")
 
