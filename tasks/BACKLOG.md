@@ -138,7 +138,7 @@ never been recovered.
 
 ## 🔺 HIGH — Subject records from the wrong animal: gjesus3's date-blind lookup and two label errors (found 2026-10-19; cause verified the same day)
 
-**The facility does not reuse codes while an animal holds them** (verified read-only, `…\gjesus3-archive\reports\2026-10-19_animal_code_check\FINDINGS.md`). The DB's only true
+**The facility does not reuse codes while an animal holds them** (a Data Office read-only check, 2026-10-19; the evidence is kept outside the repo). The DB's only true
 key is `animals.id`; `(protocol, code)` is unique **at a point in time** (19,709 pairs / 19,710 rows; the one exception
 is a 2013–15 legacy protocol gjesus3 cannot look up). When an animal **changes protocol**, the DB records it
 (`old_project`, `old_project_animal_code`, `project_change_date`, exit cause "Change of project") and may later give the
@@ -165,6 +165,25 @@ old code to a new animal (201 times since 2018, always after the move). **gjesus
     73–77 (and decide on 68–72). Recovery pattern, Ryan's go.
   - [ ] The 96 `0525` rows: Ryan's call (keep the scan-time code, or relink to `1025`), then recover with the new lookup.
   - [ ] Not investigated: 159 in-vivo links fall after the animal's DB exit date (90 within 2–7 days).
+  - [ ] Proposal (2026-10-20): key `registry_subjects.csv` on the stored `facility_db_id` rather than on `(protocol, code)`.
+  - [ ] The 48 links whose animal is not in the DB at all.
+- **Status 2026-10-20: the fix is built and rehearsed on branch `fix/subject-lookup-dates`, not merged and not run.**
+  - **What it adds:** a dated, transfer-aware `tools/animal_db.py` that stores `facility_db_id`; `audit_subject_links.py`;
+    and `relink_subjects.py`. Specs 06, 08 and 10 are updated. The suite passes 59/59.
+  - **Production audit (read-only):** it reproduces the counts above. Of 31,374 links:
+    - 96 are the reissued `0525` codes;
+    - 140 are recoverable through a transfer;
+    - 7 wait on DB credentials;
+    - 61 are refused as the wrong animal (56 `1123`, 5 `1321`);
+    - 19 more `1123` slides are flagged "tissue before exit";
+    - 48 are not in the DB.
+  - **Order:** it merges after the pre-port integration branch. At the merge, restage the NI sync and redeploy the exe,
+    because `registry_subjects.csv` gains a column. Every repair then waits on Ryan's go.
+  - **Ryan's calls:**
+    - `0525`: recommended relink to `1025`. Keeping 49–53 would block the September animals from ever getting a
+      subjects row.
+    - `1123`: recommended ask the drive-3 owner before relinking (#17 does not fit the `1321` reading).
+    - `1321` 68–72: recommended unlink them too, since a uniform offset of 5 makes all ten links wrong.
 
 ## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
 
@@ -2428,8 +2447,8 @@ mapping moves whole groups. They stay in holding, listed in `CNIC-HEARDS\metadat
 
 **Resolved as to cause, 2026-10-19:** a label error, not a DB or clock error: all 75 slides of that day name the wrong protocol (the animals are `1321`'s). Tracked in the HIGH item "Subject records from the wrong animal"; this item is superseded by it.
 
-Found by the read-only run of the validator's new *acquired before birth* class (`feat/validator-signal`, #8; report
-`…\gjesus3-archive\reports\2026-10-19_pre-port_review\DRY_RUNS.md`): **57** rows, of which 5 are the known `1321` CT
+Found by the read-only run of the validator's new *acquired before birth* class (`feat/validator-signal`, #8; a read-only dry run
+on 2026-10-19): **57** rows, of which 5 are the known `1321` CT
 rows and **52** are `ACQ-20240826-CELL-*` in `AE-biomaGUNE-1123`. These are Cell Observer slides from the M. Jesús drive
 (stream C, registered 2026-10-07), with subjects decided per file at ingest. The `.czi` files carry 2024-08-26, but the
 assigned animals (98–101, 104–108 of `1123`) were born 2025-01-02 or 2025-01-30: 4–5 months later. Not a typo-sized gap.
