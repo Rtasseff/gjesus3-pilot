@@ -465,6 +465,17 @@ def test_relink():
             check(False, "an old_id that production does not hold is refused")
         except RuntimeError:
             check(True, "an old_id that production does not hold is refused")
+        spath = subjects_table.subjects_path(reg)
+        t0 = subjects_table.read_subjects(spath)
+        t0["1-AE-biomaGUNE-1025"]["facility_db_id"] = "19759"
+        subjects_table.write_subjects(spath, t0)
+        try:
+            relink.plan(tmp, [wl[2]], lookup_fn=LOOKUP)
+            check(False, "a subjects-table conflict is caught in the pre-flight")
+        except RuntimeError as e:
+            check("already names" in str(e), "a subjects-table conflict is caught in the pre-flight")
+        t0["1-AE-biomaGUNE-1025"]["facility_db_id"] = ""
+        subjects_table.write_subjects(spath, t0)
         check(open(raw, "rb").read() == before, "a refused plan writes nothing")
 
         items = relink.plan(tmp, wl, lookup_fn=LOOKUP)

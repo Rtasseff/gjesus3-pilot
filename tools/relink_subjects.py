@@ -119,6 +119,7 @@ def plan(nas_root, worklist, lookup_fn=animal_db.lookup):
     registries_dir = os.path.join(nas_root, "registries")
     reg = {r["acq_id"]: r for r in registry.read_registry(
         os.path.join(registries_dir, "registry_raw.csv"))}
+    table = subjects_table.read_subjects(subjects_table.subjects_path(registries_dir))
     items = []
     for w in worklist:
         acq, old, new = w["acq_id"].strip(), w["old_id"].strip(), (w.get("new_id") or "").strip()
@@ -166,6 +167,12 @@ def plan(nas_root, worklist, lookup_fn=animal_db.lookup):
             # The DB never supplies weight; keep whatever the operator/instrument gave.
             if current.get("weight_at_acquisition_g") is not None:
                 block["weight_at_acquisition_g"] = current["weight_at_acquisition_g"]
+            # The subjects table would refuse a second animal under this id; find
+            # out now, before anything is written, not halfway through.
+            existing = table.get(new)
+            if existing and subjects_table.db_id_conflict(existing, {"facility_db_id": got}):
+                raise RuntimeError(f"{acq}: registry_subjects.csv already names {new} as DB animal "
+                                   f"{existing.get('facility_db_id')}, not {got}")
             item["db_id"] = got
             item["warnings"] = list(res.warnings)
         else:
