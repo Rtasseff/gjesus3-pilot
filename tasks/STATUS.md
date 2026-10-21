@@ -142,6 +142,12 @@ rulings). Read it if D2's or the SegBioMed items' context is needed.
   plausible. No recovery until the tool refuses an animal born after the scan. The same check
   found 57 production acquisitions already linked to an animal born after the scan
   ([`BACKLOG.md`](BACKLOG.md), "Subject records from the wrong animal").
+- **✅ DECIDED 2026-10-21 (Ryan): the subject repairs.** Each runs from `main` after
+  `fix/subject-lookup-dates` merges, on its own go with its dry run shown.
+  - **(b)** Relink the 96 `0525` #49–53 MRI to `1..5-AE-biomaGUNE-1025`.
+  - **(c)** Relink the 75 `1123` slides of 2024-08-26 to the 13 `1321` animals now, without asking the drive-3 owner first.
+    The fix session's caveat (#17 does not fit the `1321` reading) was put to Ryan.
+  - **(d)** Unlink all ten `1321` CT of 2023-08-07 (68–77).
 - Irene's supervised first sync is Ryan's and Irene's to schedule; nothing waits on it.
 
 ### Re-verifying this page before you trust it
@@ -164,6 +170,9 @@ python -c "import csv,io,collections;print(collections.Counter(r['status'] for r
 
 # curated datasets -- should be 4 rows
 python -c "import csv,io;print(len(list(csv.DictReader(io.open(r'J:\gjesus3-data\registries\registry_datasets.csv',encoding='utf-8-sig',newline='')))))"
+
+# model shelf -- 1 row since 2026-10-21 (MDL-0001 v1, served); the zip must hash to ff20fa32...e6c0
+python -c "import csv,io;print([(r['model_id'],r['version'],r['status']) for r in csv.DictReader(io.open(r'J:\gjesus3-data\registries\registry_models.csv',encoding='utf-8-sig',newline=''))])"
 ```
 
 **Registry backups taken before the 2026-08-21 production writes** (sha256-verified byte-identical

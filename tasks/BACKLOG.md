@@ -179,11 +179,8 @@ old code to a new animal (201 times since 2018, always after the move). **gjesus
     - 48 are not in the DB.
   - **Order:** it merges after the pre-port integration branch. At the merge, restage the NI sync and redeploy the exe,
     because `registry_subjects.csv` gains a column. Every repair then waits on Ryan's go.
-  - **Ryan's calls:**
-    - `0525`: recommended relink to `1025`. Keeping 49–53 would block the September animals from ever getting a
-      subjects row.
-    - `1123`: recommended ask the drive-3 owner before relinking (#17 does not fit the `1321` reading).
-    - `1321` 68–72: recommended unlink them too, since a uniform offset of 5 makes all ten links wrong.
+  - **Ryan's calls (✅ DECIDED 2026-10-21; STATUS §0.7):** relink `0525` #49–53 to `1025`; relink the `1123` slides to
+    `1321` now, without asking the owner; unlink all ten `1321` CT (68–77).
 
 ## 🔺 HIGH — a second acquisition with an existing link name silently gets the first one's files (2026-10-04)
 
@@ -949,6 +946,36 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
     file: a human/privacy-restricted registry flag, and a DPA reference on every external dataset.
     (a), (b) and (d) are not re-decided here; with no additional institute policy, today's practice
     stands.
+
+## 🔸 MODERATE — the model shelf is in production ahead of its spec (2026-10-21)
+
+**Built 2026-10-21 on Ryan's go:** `models\MDL-NNNN\v<N>_<date>\` on the data root, and
+`registries\registry_models.csv` (24 columns, one row per version).
+- MDL-0001 v1 is deposited with status `served`:
+  - the trainer's nnU-Net export, byte for byte (sha256 `ff20fa32…e6c0`);
+  - `MODEL_CARD.md`;
+  - `training_manifest.csv` (1,214 masks, 632 located);
+  - `checksums.json`, covering every file and each zip member;
+  - an add-only `evidence\`.
+- gjesus3 stores the model and never runs it (scope rule, 2026-10-06). `folder_location` is relative to the data root,
+  as in `registry_datasets.csv`.
+- A version folder is immutable. Only `status`, `superseded_by` and `notes` change in its row, and only by the Data
+  Office. The status values are `candidate`, `validated`, `served`, `superseded` and `retired`.
+
+- **To do:**
+  - [ ] **A models spec:** a numbered doc, plus a section in 06 for `registry_models.csv`. It covers the layout, the
+    columns, the status values, the rule for a new model versus a new version, and resolve-and-verify (read the row,
+    use `folder_location`, check the zip hash). Data Office call; it lands with the first change to the shelf's
+    conventions.
+  - [ ] **The validator does not check `registry_models.csv`:** the columns, the zip hash against the row, and that
+    `folder_location` exists.
+  - [ ] **The operator app's staging clean-up guard** (`tools/operator/gui/app.py`, `_PROTECTED_DIR_NAMES`) does not
+    list `models`. Add it. Nothing is at risk today.
+  - [ ] **Not settled yet:**
+    - where researcher corrections wait before registration: a proposed unregistered pool under
+      `curated_datasets\_pool\`;
+    - the rule that every registration makes a new `DS-SEG` (never an append);
+    - the 12 / 07 gaps: a `label_origin` vocabulary, in-place correction, and a reference type for a model.
 
 ## 🔸 MODERATE — a published "batch window" flag, so researcher syncs never overlap a Data Office batch (2026-10-08)
 
