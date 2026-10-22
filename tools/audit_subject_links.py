@@ -19,10 +19,12 @@ Each link gets one category:
                           than the one that held the code that day (the subjects
                           table's facility_db_id when it has one, else the code's
                           current holder, which the old lookup returned).
-  recoverable:reissued    pending; the dated lookup finds the animal through a
-                          transfer, and the code has since gone to ANOTHER animal
-                          (the old lookup would have written that one).
-  recoverable:transfer    pending; found through a transfer, code still free.
+  recoverable:dated       pending; only the dated lookup finds the right animal,
+                          through a transfer, because the DB also lists this
+                          (protocol, code) on a LATER record (the old lookup
+                          would have written that one).
+  recoverable:transfer    pending; found through a transfer; no later record
+                          carries the code.
   recoverable             pending; found directly (the DB was just not reached).
   still-pending           pending, and the dated lookup cannot answer either.
   not-db                  the subject was not from the DB (operator-entered, ...).
@@ -106,7 +108,7 @@ def classify(link, index, table_row, pending_row):
             cat = "still-pending"
             change = "none"
         elif res.holder["kind"] == "moved-out":
-            cat = "recoverable:reissued" if blind else "recoverable:transfer"
+            cat = "recoverable:dated" if blind else "recoverable:transfer"
             change = (f"fill from DB id {new_id} (now {res.holder['current_facility_id']})"
                       + (f"; the old lookup would have written DB id {old_id}" if blind else ""))
         else:

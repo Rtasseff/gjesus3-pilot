@@ -34,16 +34,19 @@ THE JOIN (verified 2026-06-02)
     The subject id is the facility canonical `<animal_code>-AE-biomaGUNE-<NNNN>`
     (reused verbatim).
 
-(PROJECT, CODE) IS UNIQUE ONLY AT A POINT IN TIME (verified 2026-10-19)
-    The DB's only true key is `animals.id`. When an animal changes protocol the
-    DB moves its row to the new (project, code) and keeps the old pair in
-    `old_project` / `old_project_animal_code` / `project_change_date`; the old
-    code may later be given to a NEW animal (201 times since 2018, never while
-    the first one held it). So the lookup asks: which animal HELD (project,
-    code) on the acquisition date? Candidates are the current holder (from its
-    entry, or from its own change date when it moved in) and every earlier
-    holder that moved out (from its entry to its change date). Exactly one must
-    fit, else the lookup refuses (reason `db-date-conflict`). It also refuses
+(PROJECT, CODE) CAN MATCH MORE THAN ONE DB RECORD (verified 2026-10-19)
+    The DB's only true key is `animals.id`. A facility animal ID is unique by
+    law and is NEVER reused (Ryan, 2026-10-22). When an animal changes protocol
+    the DB moves its row to the new (project, code) and keeps the old pair in
+    `old_project` / `old_project_animal_code` / `project_change_date`; the DB
+    can also hold a LATER record that carries, as its current code, the same
+    (project, code) the earlier animal had before it moved (201 times since
+    2018, never while the first one held it). That is a DB record or data-entry
+    issue for the facility to explain. So the lookup asks: which animal HELD
+    (project, code) on the acquisition date? Candidates are the current record
+    (from its entry, or from its own change date when it moved in) and every
+    earlier animal that moved out (from its entry to its change date). Exactly
+    one must fit, else the lookup refuses (reason `db-date-conflict`). It also refuses
     an acquisition dated before the animal's birth: a label error no join can
     fix. The chosen animal's `animals.id` is returned as `facility_db_id`.
 
@@ -407,7 +410,7 @@ def choose_holder(holders, on_date, in_vivo=True, tolerance_days=DATE_TOLERANCE_
     `tolerance_days`; each pass must yield exactly one holder.
 
     Without a date the code must have had a single holder ever: a date-blind
-    answer is how a pre-move scan got the code's later animal.
+    answer is how a pre-move scan got the code's later DB record.
     """
     if not holders:
         return None, REASON_MISS, "no holder"
@@ -755,7 +758,8 @@ def _cmd_check():
 def _cmd_self_test():
     """Live lookups with value assertions: the known animal (0525, 13), and a
     transferred code read on two dates (0525 #49: before the 2026-05-21 move it
-    was DB id 18522, now 1025 #1; from 2026-09-10 a new animal, DB id 19759)."""
+    was DB id 18522, now 1025 #1; a later record, DB id 19759, entered
+    2026-09-10, also carries 0525 #49)."""
     clear_cache()
     res = lookup("0525", 13, on_date="2025-10-27")
     if res.status == "unreachable":

@@ -13,8 +13,8 @@ WHAT IT DOES (per pending row with status=="pending")
     1. parse facility_animal_id -> (project_alias, animal_code)  [animal_db]
     2. animal_db.lookup(alias, code, on_date=<the ACQ-ID's date>, in_vivo=...):
        the animal that HELD the code on the acquisition day, following the
-       DB's transfer records (a code can pass to a new animal after the first
-       one changed protocol). A date no animal fits, or one before the
+       DB's transfer records (the DB can also list the code on a later record
+       after the first animal changed protocol). A date no animal fits, or one before the
        animal's birth, is refused and the row stays pending.
     3. if FOUND: open the /raw sidecar at row["sidecar_path"], fill ONLY blank/
        placeholder subject required fields (facility_db_id/species/strain/sex/

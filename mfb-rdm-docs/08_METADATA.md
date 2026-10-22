@@ -583,7 +583,7 @@ Whenever `registry_raw.csv` has `sample_type ∈ {organism, tissue}` (see [06_RE
 ```json
 "subject": {
   "facility_animal_id":       "13-AE-biomaGUNE-0525",  // the SUBJECT ID — animal-facility canonical animal ID, reused verbatim (<animal_code>-AE-biomaGUNE-<NNNN>). The DB lookup key + the link every animal acquisition carries. See identity model in 06_REGISTRIES §2.3.
-  "facility_db_id":           16713,                // ADDED 2026-10-20 — the DB's own key for the animal that HELD that code on the acquisition day (animals.id; written by the DB path only, null otherwise). The code alone can name two animals over time (06_REGISTRIES §2.3.1).
+  "facility_db_id":           16713,                // ADDED 2026-10-20 — the DB's own key for the animal that HELD that code on the acquisition day (animals.id; written by the DB path only, null otherwise). The code alone can match more than one DB record (a DB record issue; animal IDs are never reused; 06_REGISTRIES §2.3.1).
   "species":                  "Mus musculus",       // REQUIRED — scientific binomial. DB stores common name ("Mouse"/"Rat" in specie.type) → writer normalizes (Mouse→Mus musculus, Rat→Rattus norvegicus).
   "strain":                   "C57BL/6J",           // REQUIRED — from strain.type (proper nomenclature, e.g. "Crl:WI(Han)"). DB also offers strain.aka (alias) + strain.tg (transgenic flag → genotype hint).
   "sex":                      "M",                  // REQUIRED — M | F | unknown. DB stores "Male"/"Female" (animals.sex) → writer normalizes.

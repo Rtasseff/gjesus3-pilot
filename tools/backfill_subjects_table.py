@@ -20,7 +20,7 @@ for the animal (06_REGISTRIES §2.8.1). Every (acquisition, subject) link is put
 through the DATED lookup (animal_db: the animal that held the code on the
 acquisition day, following transfers), with the DB read once, read-only. A
 DB-sourced row gets the id only when all its links agree on ONE animal; links
-the lookup refuses, and ids behind which two animals stand, are reported and
+the lookup refuses, and ids whose links resolve to two different DB records, are reported and
 leave the column blank. Rows not yet filled from the DB (`pending-db`) are left
 to the recovery tool, which writes the id into the sidecar.
 

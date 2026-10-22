@@ -165,10 +165,11 @@ def _new_row(incoming, now):
 def db_id_conflict(existing, incoming):
     """True when both rows name a facility DB animal and they differ.
 
-    One facility id can name two animals over time: a code given to a new
-    animal after the first moved to another protocol (06_REGISTRIES §2.3.1).
-    Merging the second into the first's row would mix two animals' records,
-    so such an upsert is refused (plan_upserts) and left for a person."""
+    One facility id can match two DB records: the DB can list the same
+    (protocol, code) on a later record after the first animal moved to another
+    protocol (a DB record issue; animal IDs are never reused, 06_REGISTRIES
+    §2.3.1). Merging the second into the first's row would mix two animals'
+    records, so such an upsert is refused (plan_upserts) and left for a person."""
     a = str(existing.get("facility_db_id") or "").strip()
     b = str(incoming.get("facility_db_id") or "").strip()
     return bool(a and b and a != b)

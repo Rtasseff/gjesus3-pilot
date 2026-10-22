@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """test_subject_lookup_dates.py -- the dated, transfer-aware subject lookup and its users.
 
-(protocol, code) names one animal only AT A POINT IN TIME (verified 2026-10-19). An
+(protocol, code) alone can match more than one DB record (verified 2026-10-19). An
 animal that changes protocol keeps its old pair in old_project /
-old_project_animal_code / project_change_date, and the old code may later go to a
-new animal. The old lookup asked for the CURRENT holder only. Each case below is
+old_project_animal_code / project_change_date, and the DB can also list that old
+(protocol, code) on a LATER record (a DB record issue; animal IDs are never reused by
+law). The old lookup asked for the CURRENT record only. Each case below is
 modelled on a real one from that check, with the DB rows reduced to what matters:
 
-  0525 #49   moved to 1025 #1 on the scan day (DB id 18522); the code went to a
-             new animal (19759) on 2026-09-10. The old lookup would write 19759.
-  0721 #45   moved to 0821 with a ZERO change date; the code is still free.
+  0525 #49   moved to 1025 #1 on the scan day (DB id 18522); a later record
+             (19759, entered 2026-09-10) also carries 0525 #49. The old lookup
+             would write 19759.
+  0721 #45   moved to 0821 with a ZERO change date; no later record carries the code.
   1123 #98   entered 2025-02-27: slides dated 2024-08-26 cannot be its tissue.
   1123 #26   born before, entered after the slide date (ex vivo: refused too).
   1123 #15   alive on the slide date: kept, flagged tissue-before-exit.
   1321 #73   born three days after its CT: refused (before birth / entry).
-  0421 #404  same-day re-issue: the move day itself is ambiguous.
+  0421 #404  same-day later record: the move day itself is ambiguous.
 
 Runs offline: the real HolderIndex over synthetic rows, the real enrichment,
 subjects table, recovery, backfill, audit and relink code on temp dirs.
@@ -78,7 +80,7 @@ def animal(id_, pid, code, entry, dob, exit_=None, old=None, old_code="", change
 
 
 ANIMALS = [
-    # 0525 #49 -> 1025 #1 on 2026-05-21; 0525 #49 re-issued 2026-09-10.
+    # 0525 #49 -> 1025 #1 on 2026-05-21; a later record (entered 2026-09-10) also carries 0525 #49.
     animal(18522, 2, 1, "2026-04-30", "2026-03-05", "2026-05-28", old=1, old_code="49",
            changed="2026-05-21"),
     animal(19759, 1, 49, "2026-09-10", "2026-07-16", "2026-09-14", sex="Female"),
@@ -92,7 +94,7 @@ ANIMALS = [
     # 1321: #73 born 2023-08-10 (CT labelled 73 on 2023-08-07); #98 for the relink.
     animal(11733, 6, 73, "2023-10-05", "2023-08-10", "2023-11-06"),
     animal(11839, 6, 98, "2023-10-20", "2023-08-01", "2023-11-28"),
-    # 0421 #404: moved 2024-12-19, the code re-issued the same day.
+    # 0421 #404: moved 2024-12-19; a later record carries 0421 #404 from the same day.
     animal(13371, 2, 77, "2024-10-01", "2024-08-01", None, old=7, old_code="404",
            changed="2024-12-19"),
     animal(14245, 7, 404, "2024-12-19", "2024-11-01", None),
@@ -123,8 +125,8 @@ def test_dates():
           "unparseable -> None")
 
 
-def test_0525_transfer_and_reissue():
-    print("0525 #49: the scan-day holder, not the code's later animal")
+def test_0525_transfer_and_later_record():
+    print("0525 #49: the animal that held the code on the scan day, not the later DB record")
     r = look("0525", 49, "2026-05-21")
     check(r.status == "found" and r.subject["facility_db_id"] == 18522,
           "MRI on the move day -> DB id 18522 (the old lookup said 19759)")
@@ -136,7 +138,7 @@ def test_0525_transfer_and_reissue():
           "the holder says where the animal is now (1025 #1)")
     r = look("0525", 49, "2026-09-12")
     check(r.status == "found" and r.subject["facility_db_id"] == 19759,
-          "a September scan -> the new animal 19759")
+          "a September scan -> the later record 19759")
     r = look("0525", 49, "2026-07-01")
     check(r.status == "not_found" and r.reason == animal_db.REASON_DATE_CONFLICT,
           "between the two holders nobody held 49: refused as db-date-conflict")
@@ -153,7 +155,7 @@ def test_0525_transfer_and_reissue():
 
 
 def test_0721_zero_change_date():
-    print("0721 #45: moved with a lost change date, code still free")
+    print("0721 #45: moved with a lost change date, no later record carries the code")
     r = look("0721", 45, "2022-10-15")
     check(r.status == "found" and r.subject["facility_db_id"] == 8500,
           "found through old_project / old_project_animal_code (whitespace in the varchar)")
@@ -195,7 +197,7 @@ def test_birth_guard_and_tolerance():
     check(got is None, "two days before does not")
     r = look("0421", 404, "2024-12-19")
     check(r.status == "not_found" and "2 animals fit" in r.detail,
-          "a same-day re-issue: the move day fits both holders exactly -> refused")
+          "a same-day later record: the move day fits both records exactly -> refused")
     r = look("0421", 404, "2024-12-20")
     check(r.status == "found" and r.subject["facility_db_id"] == 14245,
           "the day after: the exact fit (new holder) beats the tolerant one (old holder)")
@@ -237,7 +239,7 @@ def test_enrichment_dated():
         log=lambda m, level="INFO": logs.append((level, m)))
     s = subs[0]
     check(s["facility_db_id"] == 18522 and s["date_of_birth"] == "2026-03-05",
-          "the 0525 #49 MRI gets the scanned animal (18522), not the September one")
+          "the 0525 #49 MRI gets the scanned animal (18522), not the later record (19759)")
     check(list(s)[:2] == ["facility_animal_id", "facility_db_id"], "facility_db_id sits after the id")
     check(s["age_at_acquisition"] == "P11W", "age from the right birth date")
 
@@ -385,7 +387,7 @@ def test_recovery():
                             encoding="utf-8"))
         b = md["subject"]
         check(b["facility_db_id"] == 18522 and b["date_of_birth"] == "2026-03-05" and b["sex"] == "M",
-              "0525 #49 is filled from the scanned animal 18522, NOT the September 19759")
+              "0525 #49 is filled from the scanned animal 18522, NOT the later record 19759")
         check(list(b)[:3] == ["facility_animal_id", "facility_db_id", "species"],
               "the new field is placed in canonical order")
         md = json.load(open(os.path.join(tmp, "raw", "X", "ACQ-20221015-MRI-001", "metadata.json"),
@@ -433,7 +435,7 @@ def test_backfill_and_audit():
               "an id whose links name two animals is reported and left blank")
 
         cats = {(r["acq_id"], r["category"]) for r in audit.audit(reg, IDX)}
-        check(cats == {("ACQ-20260521-MRI-001", "recoverable:reissued"),
+        check(cats == {("ACQ-20260521-MRI-001", "recoverable:dated"),
                        ("ACQ-20221015-MRI-001", "recoverable:transfer"),
                        ("ACQ-20240826-CELL-001", "wrong:refused"),
                        ("ACQ-20250411-CELL-001", "unchanged"),
@@ -540,7 +542,7 @@ def test_relink():
 
 
 def main():
-    for fn in (test_dates, test_0525_transfer_and_reissue, test_0721_zero_change_date,
+    for fn in (test_dates, test_0525_transfer_and_later_record, test_0721_zero_change_date,
                test_label_errors_refused, test_birth_guard_and_tolerance, test_project_resolution,
                test_enrichment_dated, test_subjects_table, test_recovery, test_backfill_and_audit,
                test_relink):
