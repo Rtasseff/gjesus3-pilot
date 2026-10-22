@@ -18,6 +18,13 @@ things genuinely in flight. It deliberately stays short.
 
 ## 0. ⚠️ DECISIONS WAITING ON RYAN — read this first after a break
 
+**The pilot re-launch is set for 2026-11-04** (Ryan, 2026-10-22, with the PI's full backing).
+- Ryan presents the new features, then pushes adoption.
+- The claim workbook goes out then, and the claim window is set (D1(b), D1(c) below).
+- New researcher uploads follow.
+- To re-launch on the new code, these land before that date: the pre-port integration branch, then
+  `fix/subject-lookup-dates` and its decided repairs (§0.7).
+
 **Ryan ruled on every open item on 2026-10-05.** His rulings are recorded below in his words. He is
 away **2026-10-12 → 10-18**, and **nothing here needs him before 10-19.** If carrying out a ruling
 would need a new decision from him, it is written into this section and the work stops there.
