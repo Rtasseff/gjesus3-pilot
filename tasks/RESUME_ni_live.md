@@ -104,7 +104,7 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
    their corrections file before their first sync.
 3. **291 older `pending-db` animal records (MRI and microscopy):**
    - 103 looked recoverable on 2026-10-09. **Corrected 2026-10-19:** 96 of them would get a
-     different animal's record (reused animal codes; BACKLOG "Reused animal codes"). Only 7 remain
+     different animal's record (gjesus3's date-blind lookup; BACKLOG "Subject records from the wrong animal"). Only 7 remain
      plausible, and nothing is recovered until the tool refuses an animal born after the scan.
    - The other 188 are not in the animal DB under their project.
    - Details are in the BACKLOG.

@@ -142,8 +142,15 @@ rulings). Read it if D2's or the SegBioMed items' context is needed.
 - **Recover 103 older `pending-db` animal records? Do NOT approve as first written (corrected
   2026-10-19).** The 2026-10-09 dry run called 103 of the 291 non-NI rows recoverable. A re-check on
   2026-10-19 found that **96 of them (MRI, project 0525, animals 49 to 53, scanned May 2026) would
-  get the records of different animals**: the DB's animals 49 to 53 of 0525 entered the facility on
-  2026-09-10 and were born 2026-07-16, after the scans. **Verified 2026-10-19: not reused codes.** Those animals moved to `1025` on the scan day and the DB later gave their old codes to a new group; gjesus3's date-blind lookup would pick the new animals (Data Office read-only check; the evidence is kept outside the repo). **2026-10-20:** the fix and the repair dry runs are built on `fix/subject-lookup-dates`. It merges after the pre-port integration branch, each repair waits on Ryan's go, and the calls are in the BACKLOG HIGH item "Subject records from the wrong animal". The lookup picked animals born after the scans, and
+  get the records of different animals**: the DB's current records for 0525 #49 to 53 were entered on
+  2026-09-10, born 2026-07-16, after the scans. **Animal IDs are not reused: by law the full ID is
+  unique (Ryan, 2026-10-22).**
+  - The scanned animals (DB ids 18522–18526) moved to `1025` on the scan day.
+  - The DB also lists their old `(protocol, code)` on later records. That is a DB record or
+    data-entry issue for the facility to explain, not reuse. *Corrected 2026-10-22:* the earlier text
+    said the DB "gave their old codes to a new group".
+  - gjesus3's date-blind lookup would pick the later records (Data Office read-only check; the
+    evidence is kept outside the repo). **2026-10-20:** the fix and the repair dry runs are built on `fix/subject-lookup-dates`. It merges after the pre-port integration branch, each repair waits on Ryan's go, and the calls are in the BACKLOG HIGH item "Subject records from the wrong animal". The lookup picked animals born after the scans, and
   `recover_subject_metadata.py` does not catch it (it only leaves the age blank). Only the 7
   slide-scanner rows (project 1321, animals 65 and 70, queued for missing DB credentials) remain
   plausible. No recovery until the tool refuses an animal born after the scan. The same check

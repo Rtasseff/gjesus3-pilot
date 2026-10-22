@@ -109,8 +109,8 @@ never been recovered.
     does not occur.
     - **Corrected 2026-10-19: the 96 MRI rows are NOT recoverable.** They are 5 animals of
       project 0525 (49 to 53), scanned 2026-05-21 and queued `db-miss` at the 2026-06-13 ingest.
-      The DB's animals 49 to 53 of 0525 entered the facility on 2026-09-10 and were born
-      2026-07-16, after the scans, so they are different animals under reused codes. The dry run
+      The DB's current records for animals 49 to 53 of 0525 entered the facility on 2026-09-10 and were born
+      2026-07-16, after the scans, so they are not the scanned animals (see the HIGH item below). The dry run
       still said "would recover" (it dropped only `age_at_acquisition`, because
       `animal_db.age_iso8601` returns None when the scan precedes birth).
     - The 7 ZWSI rows (project 1321, animals 65 and 70, born 2023-06-08, sections scanned
@@ -138,16 +138,28 @@ never been recovered.
 
 ## 🔺 HIGH — Subject records from the wrong animal: gjesus3's date-blind lookup and two label errors (found 2026-10-19; cause verified the same day)
 
-**The facility does not reuse codes while an animal holds them** (a Data Office read-only check, 2026-10-19; the evidence is kept outside the repo). The DB's only true
-key is `animals.id`; `(protocol, code)` is unique **at a point in time** (19,709 pairs / 19,710 rows; the one exception
-is a 2013–15 legacy protocol gjesus3 cannot look up). When an animal **changes protocol**, the DB records it
-(`old_project`, `old_project_animal_code`, `project_change_date`, exit cause "Change of project") and may later give the
-old code to a new animal (201 times since 2018, always after the move). **gjesus3's lookup** (`tools/animal_db.py`,
-`id_project = P AND animal_code = c LIMIT 1`) reads current codes only and ignores both time and transfers.
+**Animal IDs are not reused.** By law the full ID `<code>-AE-biomaGUNE-<protocol>` names one animal and is never
+reused (Ryan, 2026-10-22). *Corrected 2026-10-22:* the 10-19 text here said the DB "may later give the old code to a new
+animal". That reading is withdrawn.
+
+**What the DB shows** (a Data Office read-only check, 2026-10-19; the evidence is kept outside the repo):
+- The DB's only true key is `animals.id`.
+- When an animal **changes protocol**, the DB records the move (`old_project`, `old_project_animal_code`,
+  `project_change_date`, exit cause "Change of project").
+- 201 times since 2018, a *later* record carries, as its current code, the same `(protocol, code)` an earlier animal had
+  before its move; the later record is always dated after the move.
+- Because the full ID cannot legally be reused, this is a DB record or data-entry issue. It is for the facility to
+  explain, and gjesus3 must not read it as reuse.
+- Among current codes, `(protocol, code)` is unique (19,709 pairs / 19,710 rows). The one exception is a 2013–15 legacy
+  protocol that gjesus3 cannot look up.
+
+**gjesus3's lookup** (`tools/animal_db.py`, `id_project = P AND animal_code = c LIMIT 1`) reads current codes only and
+ignores both time and transfers. It can therefore pick the later record.
 
 - **Not yet written, would be wrong:** the 96 `0525` #49–53 MRI (2026-05-21): those animals moved to `1025` #1–5 that
-  day (DB ids 18522–18526; DICOM birth date 2026-03-05 matches); codes 49–53 later went to a September group. The
-  2026-10-09 dry run would have written the September animals. Data Office call: keep `49..53-AE-biomaGUNE-0525` filled
+  day (DB ids 18522–18526; DICOM birth date 2026-03-05 matches). The DB also lists `0525` #49–53 as the current codes
+  of later records (ids 19759–19763, entered 2026-09-10, born 2026-07-16). The 2026-10-09 dry run would have written
+  those later records. Data Office call: keep `49..53-AE-biomaGUNE-0525` filled
   from ids 18522–18526, or relink to `1..5-AE-biomaGUNE-1025` (35 rows already there).
 - **Already in production, wrong (80, +5 uncertain), all from researcher/scanner LABEL errors, not the DB:**
   - all **75** Cell Observer slides of 2024-08-26 under `AE-biomaGUNE-1123` (the validator saw 52): the folder names the
@@ -171,7 +183,7 @@ old code to a new animal (201 times since 2018, always after the move). **gjesus
   - **What it adds:** a dated, transfer-aware `tools/animal_db.py` that stores `facility_db_id`; `audit_subject_links.py`;
     and `relink_subjects.py`. Specs 06, 08 and 10 are updated. The suite passes 59/59.
   - **Production audit (read-only):** it reproduces the counts above. Of 31,374 links:
-    - 96 are the reissued `0525` codes;
+    - 96 are the `0525` #49–53 scans, whose `(protocol, code)` the DB also lists on later records;
     - 140 are recoverable through a transfer;
     - 7 wait on DB credentials;
     - 61 are refused as the wrong animal (56 `1123`, 5 `1321`);
