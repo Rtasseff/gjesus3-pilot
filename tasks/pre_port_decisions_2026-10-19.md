@@ -58,3 +58,16 @@ date and fill in the notes for them. So I guess it depends on what level we are 
 **Ryan, 2026-10-23:** "I accept the recorded recommendation for (5) and (6)."
 
 **What follows:** the two 10_TOOLS lines already marked ✅ are now true; no marker changes.
+
+## Still to rule
+
+- **Decisions 7–17** (#10 project dates, #5 the dedup key, #14 the production guard, #28/#29 the design notes).
+- **Decision 1's follow-up:** its own issue, or folded into another? (BACKLOG MODERATE "an acquisition with an unknown
+  date", 2026-10-23.)
+- **18. The curated datasets' `provenance.csv` does not follow 07_PROVENANCE's ✅ schema.** 07 §3.4 (12 columns:
+  `file_id`, `output_path`, `input_refs`, …) is what every project's `provenance.csv` uses, and 12 §5.2 says a dataset
+  follows the same format. The four live datasets (read-only, 2026-10-23) each have their own, richer header, of 24 to
+  28 columns: `file_path`, `file_role`, `acq_id` + `acq_ids_all`, `subject_id`, `review_status`, `sha256`, … with no
+  `file_id`, `output_path` or `input_refs`, and the four headers differ from each other. A schema call on a ✅ spec.
+- **The subject-lookup fix:** its own GitHub issue, or folded into #12 / #18? (BACKLOG HIGH "Subject records from the
+  wrong animal".)
