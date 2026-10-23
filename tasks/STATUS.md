@@ -150,10 +150,16 @@ All read-only, seconds to run:
 # row count (compare against the §1 table)
 python -c "import csv,io;print(sum(1 for _ in csv.DictReader(io.open(r'J:\gjesus3-data\registries\registry_raw.csv',encoding='utf-8-sig',newline=''))))"
 
-# the validator -- green since 2026-10-05 (D1(a)); ANY error now is new, so read it
+# the validator -- since the pre-port merge, the before-birth check is an ERROR (Ryan, 2026-10-23)
 PYTHONPATH=tools python tools/validate_registries.py --nas-root "J:\gjesus3-data" --no-enrichment
-#   expected: validation OK, 0 errors, 0 warnings, and the info line
-#   "operator awaiting claim (pending-claim): 10314" (until D1(c) blanks the unclaimed).
+#   expected (measured 2026-10-23, 42,981 rows, ~4 min): validation FAILED, exit 1, exactly
+#   "57 error(s)", all of one class, "acquisition dated before the subject's date of birth" (the
+#   5 ACQ-20230807-CT-006..010 + 52 ACQ-20240826-CELL-* label errors, BACKLOG HIGH "Subject records
+#   from the wrong animal"); 0 warnings; "operator awaiting claim (pending-claim): 23126".
+#   ANY other error, or a different count, is new: read it. After the subject repairs: 0 errors.
+# the full run (with enrichment, ~20 min): the same 57 errors, 284 warnings (146 missing subject: +
+#   138 missing condition: blocks, pre-Phase-3 sidecars), and three coverage lines
+#   (subject recovered 32076 of 32367; condition.is_control 12 of 32375; anatomy.is_whole_body 8943 of 24636).
 
 # D7 -- what is still queued for DICOM regeneration
 python -c "import csv,io,collections;print(collections.Counter(r['status'] for r in csv.DictReader(io.open(r'J:\gjesus3-data\registries\pending_dicom_regen.csv',encoding='utf-8-sig',newline=''))))"
