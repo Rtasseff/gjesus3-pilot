@@ -179,6 +179,9 @@ ignores both time and transfers. It can therefore pick the later record.
   - [ ] Not investigated: 159 in-vivo links fall after the animal's DB exit date (90 within 2–7 days).
   - [ ] Proposal (2026-10-20): key `registry_subjects.csv` on the stored `facility_db_id` rather than on `(protocol, code)`.
   - [ ] The 48 links whose animal is not in the DB at all.
+- **Not a blocker for the Box A port** (Ryan, 2026-10-23). This covers the wrong links still in production (about 57 dated
+  before the animal's birth, within the 80 (+5) above), the 159 after-exit links and the 48 links not in the DB. They
+  stay here and are worked when the merges allow, not as a gate on the port.
 - **Status 2026-10-20: the fix is built and rehearsed on branch `fix/subject-lookup-dates`, not merged and not run.**
   - **What it adds:** a dated, transfer-aware `tools/animal_db.py` that stores `facility_db_id`; `audit_subject_links.py`;
     and `relink_subjects.py`. Specs 06, 08 and 10 are updated. The suite passes 59/59.
