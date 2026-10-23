@@ -890,6 +890,26 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
     (a), (b) and (d) are not re-decided here; with no additional institute policy, today's practice
     stands.
 
+## 🔸 MODERATE — an acquisition with an unknown date: the tools offer a stand-in date and write the note; the registry refuses a blank date (Ryan, 2026-10-23)
+
+**Ryan's ruling** (pre-port decision 1, [`pre_port_decisions_2026-10-19.md`](pre_port_decisions_2026-10-19.md)): the registry refuses anything
+without an acquisition date, and a guessed date is described in `notes`; but "for our scripts and tools, we should
+offer the user a way to put in an acquisition with an unknown date, we should offer either a manual entry or today's
+date and fill in the notes for them." The ingest's refusal of an undated case (#7) is the system half and is merged.
+
+**What the tools do today:** the opt-in `ingest.allow_unknown_acquisition_date: true` puts today's date in the ACQ-ID,
+logs a WARN, and leaves the registry's `acquisition_datetime` **blank**: no note, and no prompt in the GUI.
+`acquisition_datetime` is not among the validator's required columns.
+
+- [ ] The opt-in (or its replacement) writes the stand-in date into `acquisition_datetime` and appends a fixed note
+  to `notes` (e.g. "acquisition date unknown at ingest; <date> is a stand-in: typed by <user> / today's date").
+- [ ] The operator GUI (and `mri-ingest` / `ni-ingest` where they can meet it) offers, for an undated case, a typed
+  date or today's date, instead of only refusing. The typed date goes through the same path.
+- [ ] The registry writer refuses a row with a blank `acquisition_datetime`, and the validator makes it a required
+  column. The live registry had **0** blank `acquisition_datetime` in 42,981 rows on 2026-10-23 (read-only count);
+  re-check before the change.
+- [ ] Decide how a stand-in date is told apart in queries: the note alone, or a flag column (a schema change, 06).
+
 ## 🔸 MODERATE — a published "batch window" flag, so researcher syncs never overlap a Data Office batch (2026-10-08)
 
 **Why.** Once NI researchers run the live sync themselves (`ni-ingest` on the Molecubes Mac),
