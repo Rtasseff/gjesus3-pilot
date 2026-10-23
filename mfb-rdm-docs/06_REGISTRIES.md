@@ -28,7 +28,7 @@ Registries are **CSV files** that serve as indexes (manifests) for each storage 
 | Subjects Registry | `/gjesus3/registries/registry_subjects.csv` | One row per animal subject (the static per-animal record; §2.8) | ✅ Live (~715 rows) |
 | Projects Registry | `/gjesus3/registries/registry_projects.csv` | Indexes all project folders | ✅ Live (~50 rows) |
 | Publications Registry | `/gjesus3/registries/registry_publications.csv` | Indexes all publication folders | 🕗 Planned (empty — publications deferred) |
-| Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets | 🔶 DRAFT — **deployed 2026-08-21** (header-only; pilot) |
+| Curated Datasets Registry | `/gjesus3/registries/registry_datasets.csv` | Indexes all curated datasets | 🔶 DRAFT — **deployed 2026-08-21** (pilot; 4 datasets, `DS-SEG-0001`–`0004`) |
 | Retired Acquisitions | `/gjesus3/registries/retired_acquisitions.csv` | Tombstones: every ACQ-ID retired from `registry_raw.csv`, with its row verbatim (§2.9) | 🕗 PLANNED — tool built 2026-10-01; the file is created by the first production retirement |
 
 The `registries/` directory also holds a few **generated / bookkeeping artifacts** that are NOT registries and NOT hand-edited sources of truth:
@@ -539,7 +539,7 @@ PROJ-0001,ipf-biomarkers,IPF biomarker quantification study,MBC,2026-01-15,activ
 
 ### 4.4 Writers, locking & the editable subset (2026-08-12)
 
-This registry has two writers — `create_project.py` (which the Project Manager GUI and ingest's auto-create both go through) and the GUI's project edit — and both route through **[`tools/ingest/projects_registry.py`](../tools/ingest/projects_registry.py)**, the sibling of `registry.py`. Until 2026-08-12 the only writer did a bare trailing-newline guard + `open(..., "a")`: no header check, no lock, no atomic rewrite. That was survivable while one Data Office person ran it from a shell and is not once a GUI puts it in front of several researchers.
+This registry has two writers of whole rows — `create_project.py` (which the Project Manager GUI and ingest's auto-create both go through) and the GUI's project edit — plus, since 2026-10-10 (#10), four writers of the two date columns only: ingest Step 11b (widening), the raw import, `recompute_project_dates.py` and `reopen_project.py` (§4.2). All of them route through **[`tools/ingest/projects_registry.py`](../tools/ingest/projects_registry.py)**, the sibling of `registry.py`. Until 2026-08-12 the only writer did a bare trailing-newline guard + `open(..., "a")`: no header check, no lock, no atomic rewrite. That was survivable while one Data Office person ran it from a shell and is not once a GUI puts it in front of several researchers.
 
 - **Creation is one critical section.** "Read the registry, pick the next `PROJ-NNNN`, check the name is free" and "append the row that claims them" run under one `locking.registry_lock` hold (§2.7) — otherwise two simultaneous creations both mint `PROJ-0053`, or both pass the uniqueness check on the same name. The folder and `_project.yaml` are written inside the same hold, so a project can never exist in the registry without its folder.
 - **Edits are read-all / rewrite-all, atomically** (`update_row`, pid-suffixed temp + `os.replace`), under the same lock. Same contract as `registry.update_row`: the **caller** holds the lock.
@@ -553,8 +553,8 @@ This registry has two writers — `create_project.py` (which the Project Manager
 **File:** `/gjesus3/registries/registry_datasets.csv`
 
 > **🔶 DRAFT — DEPLOYED 2026-08-21 as a pilot** (CDS-01 decided). The file exists on the live
-> system carrying **only the header row** — no dataset has been promoted yet, so a row count of
-> zero is the correct current state, not a fault. The area scaffolding
+> system and holds **four datasets**, `DS-SEG-0001` to `DS-SEG-0004`, all promoted on
+> 2026-08-21 (status `active`, version `v1.0`; checked against the live file 2026-10-23). The area scaffolding
 > (`curated_datasets/README_START_HERE.txt`, `segmentation/MICROSCOPY/`, `segmentation/DICOM/`)
 > was created in the same pass. See [12_CURATED_DATASETS](12_CURATED_DATASETS.md) for the full
 > specification and the open questions (`CDS-03` label formats is still unsettled).
