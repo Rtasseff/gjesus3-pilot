@@ -7,10 +7,10 @@
      anatomy.is_whole_body null, subject.source pending-db) are COVERAGE
      lines, not warnings; a missing block is still a WARN.
   3. Multi-value hygiene: `A;;B`, `A;`, `A;A` in subject_ids / modalities_in_study /
-     project_id are WARNs (one class each); `A; B` (whitespace) is not reported.
-  4. Age sanity: an acquisition dated before its subject's date_of_birth is a
-     WARN; the pair count is an info line.
-  5. /raw/ orphan walk: an ACQ-ID folder with no row and no tombstone is a WARN;
+     project_id are ERRORs (one class each, since 2026-10-23); `A; B` (whitespace) is not reported.
+  4. Age sanity: an acquisition dated before its subject's date_of_birth is an
+     ERROR; the pair count is an info line.
+  5. /raw/ orphan walk: an ACQ-ID folder with no row and no tombstone is an ERROR;
      a live or a retired id is not; non-ACQ names are ignored.
   6. Back-compat: errors/warnings stay (acq_id, msg) tuples; the operator info
      line is unchanged; a clean registry prints "No issues found."
@@ -165,15 +165,15 @@ def test_multivalue():
         ]
         nas = toh.write_nas(d, toh.registry_bytes(rows), rows)
         issues, _n = validate(nas)
-        check(not issues.errors, "hygiene findings are WARNs, not errors")
-        got = {(a, c) for (a, _m), c in zip(issues.warnings, issues.warn_cls)}
+        check(not issues.warnings, "hygiene findings are ERRORs, not warnings")
+        got = {(a, c) for (a, _m), c in zip(issues.errors, issues.error_cls)}
         check(("ACQ-20220118-MRI-001", "column 'subject_ids' has an empty segment") in got, "A;;B -> empty segment")
         check(("ACQ-20220118-MRI-002", "column 'modalities_in_study' starts or ends with the separator") in got,
               "A; -> trailing separator")
         check(("ACQ-20220118-MRI-003", "column 'subject_ids' repeats a member") in got, "A;A -> duplicate member")
         check(not any(a in ("ACQ-20220118-MRI-004", "ACQ-20220118-MRI-005") for a, _c in got),
               "whitespace around the separator, and a single value, are not reported")
-        check(len(issues.warnings) == 3, f"exactly three warnings (got {len(issues.warnings)})")
+        check(len(issues.errors) == 3, f"exactly three errors (got {len(issues.errors)})")
 
 
 # ---- 4. age sanity -------------------------------------------------------------------------
@@ -194,8 +194,8 @@ def test_age_sanity():
             {"facility_id": "76-AE-biomaGUNE-1321", "project_alias": "1321", "date_of_birth": ""},
         ])
         issues, _n = validate(nas)
-        check(not issues.errors, "0 errors (the DOB finding is a WARN)")
-        bad = [a for (a, _m), c in zip(issues.warnings, issues.warn_cls)
+        check(not issues.warnings, "0 warnings (the DOB finding is an ERROR)")
+        bad = [a for (a, _m), c in zip(issues.errors, issues.error_cls)
                if c == "acquisition dated before the subject's date of birth"]
         check(bad == ["ACQ-20230807-CT-006"], f"only the acquisition before the DOB is reported (got {bad})")
         check(any("3 (acquisition, subject) pair(s)" in m for m in issues.notes),
@@ -230,7 +230,7 @@ def test_raw_orphans():
                 w.writerow(t)
         os.rmdir(os.path.join(month, "ACQ-20260710-MRI-002"))
         issues, _n = validate(nas)
-        orphans = [a for (a, _m), c in zip(issues.warnings, issues.warn_cls)
+        orphans = [a for (a, _m), c in zip(issues.errors, issues.error_cls)
                    if c == "/raw/ folder with no registry row and no tombstone"]
         check(orphans == ["ACQ-20260710-MRI-001"], f"only -001 is an orphan (got {orphans})")
         check(any("retired, but its /raw/ folder still exists" in c for c in issues.error_cls),

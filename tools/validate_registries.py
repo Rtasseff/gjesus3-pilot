@@ -53,13 +53,14 @@ WHAT IT CHECKS
       WARN: the alias is what makes the id UNIQUE, so a null one is ambiguous
       — every null-alias protocol collapses onto the same id and the subjects
       table then merges two different animals into one row.
-    - WARN (hygiene, 2026-10-10): the `;`-packed cells `subject_ids`,
+    - ERROR (hygiene, 2026-10-10; ERROR since 2026-10-23, Ryan): the
+      `;`-packed cells `subject_ids`,
       `modalities_in_study` and `project_id` carry no empty segment (`A;;B`),
       no leading/trailing separator and no duplicate member (`A;A`). The
       writers (ingest/project_ids.py, ingest/registry.py) normalize on write,
-      so a violation means a hand edit in Excel. WARN for now; the Data Office
-      can promote it to ERROR once production is known to be clean.
-    - WARN (plausibility, 2026-10-10): an acquisition dated BEFORE its
+      so a violation means a hand edit in Excel.
+    - ERROR (plausibility, 2026-10-10; ERROR since 2026-10-23, Ryan): an
+      acquisition dated BEFORE its
       subject's date_of_birth (registry_subjects.csv). Age alone is a weak
       signal (a naive ">550 days" rule flags 1,332 legitimate ageing-study
       rows), so only the impossible case is reported, never "implausible".
@@ -68,13 +69,13 @@ WHAT IT CHECKS
       built here (BACKLOG "plausibility checks in validate_registries").
 
   the /raw/ tree (2026-10-10)
-    - WARN: an acquisition folder `raw/<ECO>/<YYYY>/<YYYY-MM>/<ACQ-ID>/` with
+    - ERROR (since 2026-10-23, Ryan): an acquisition folder
+      `raw/<ECO>/<YYYY>/<YYYY-MM>/<ACQ-ID>/` with
       no registry row and no tombstone -- the partial-ingest signature (ids
       allocated, folders written, the registry commit never landed; 17 such
       folders sat unnoticed for a month in 2026-07/08). /raw/ is system-owned,
       so unlike project folders (05_PROJECTS §3a) this IS an integrity
-      question. WARN rather than ERROR until the Data Office decides the rule
-      (BACKLOG "17 orphan acquisition folders").
+      question.
 
   retired_acquisitions.csv (the tombstone file; 06_REGISTRIES §2.9) -- only when it exists
     - header EXACTLY equals ingest.retired.RETIRED_FIELDS.
@@ -350,10 +351,10 @@ def check_subject_ids(cell, label, issues):
                 cls="subject_ids carries a null-alias facility id")
 
 
-# ---- Multi-value cell hygiene (WARN-level) -------------------------------
+# ---- Multi-value cell hygiene (ERROR-level) ------------------------------
 
 def check_multivalue_cells(row, label, issues):
-    """WARN for a `;`-packed cell that a hand edit left malformed.
+    """ERROR for a `;`-packed cell that a hand edit left malformed.
 
     Three shapes, each its own class: an empty segment (`A;;B`), a leading or
     trailing separator (`A;`), a duplicate member (`A;A`). Whitespace around a
@@ -367,18 +368,18 @@ def check_multivalue_cells(row, label, issues):
             continue
         parts = cell.split(MULTI_VALUE_SEP)
         if not parts[0].strip() or not parts[-1].strip():
-            issues.warn(
+            issues.error(
                 f"column '{col}' starts or ends with the separator "
                 f"(value: {cell!r})", label,
                 cls=f"column '{col}' starts or ends with the separator")
         if any(not p.strip() for p in parts[1:-1]):
-            issues.warn(
+            issues.error(
                 f"column '{col}' has an empty segment (value: {cell!r})", label,
                 cls=f"column '{col}' has an empty segment")
         members = [p.strip() for p in parts if p.strip()]
         dupes = sorted({m for m in members if members.count(m) > 1})
         if dupes:
-            issues.warn(
+            issues.error(
                 f"column '{col}' repeats {dupes} (value: {cell!r})", label,
                 cls=f"column '{col}' repeats a member")
 
@@ -494,7 +495,7 @@ def check_subjects_registry(registries_dir, issues):
     return len(rows)
 
 
-# ---- Age sanity (WARN-level) ---------------------------------------------
+# ---- Age sanity (ERROR-level) --------------------------------------------
 
 def _iso_date(value):
     """'YYYY-MM-DD' from an ISO date/datetime string, or '' when it has none."""
@@ -507,7 +508,7 @@ def _iso_date(value):
 
 
 def check_age_sanity(rows, registries_dir, issues):
-    """WARN for an acquisition dated BEFORE its subject's date of birth.
+    """ERROR for an acquisition dated BEFORE its subject's date of birth.
 
     Joins registry_raw.subject_ids (`;`-packed) to registry_subjects.csv by
     facility_id. Only the impossible case is reported: age alone is too weak a
@@ -536,18 +537,18 @@ def check_age_sanity(rows, registries_dir, issues):
                 continue
             checked += 1
             if acq_date < dob[sid]:
-                issues.warn(
+                issues.error(
                     f"acquired {acq_date}, before subject {sid}'s date of birth "
-                    f"{dob[sid]} (a facility-DB entry error, or the wrong animal)",
+                    f"{dob[sid]} (the wrong animal linked, or a wrong date)",
                     acq or "<row>",
                     cls="acquisition dated before the subject's date of birth")
     return checked
 
 
-# ---- Unregistered /raw/ folders (WARN-level) ------------------------------
+# ---- Unregistered /raw/ folders (ERROR-level) -----------------------------
 
 def check_raw_orphans(nas_root, live_ids, tomb_ids, issues):
-    """WARN for an ACQ-ID-named folder under /raw/ that no registry row and no
+    """ERROR for an ACQ-ID-named folder under /raw/ that no registry row and no
     tombstone accounts for.
 
     Walks the fixed layout `raw/<ECO>/<YYYY>/<YYYY-MM>/<ACQ-ID>/`
@@ -581,7 +582,7 @@ def check_raw_orphans(nas_root, live_ids, tomb_ids, issues):
                     seen += 1
                     if name in live_ids or name in tomb_ids:
                         continue
-                    issues.warn(
+                    issues.error(
                         f"/raw/ folder with no registry row and no tombstone: "
                         f"/raw/{eco}/{year}/{month}/{name}/ (a partial ingest "
                         f"that never committed?)", name,
@@ -778,7 +779,7 @@ def validate(nas_root, check_enrich=True):
         # step 5.
         check_operator_hold(row, label, issues)
 
-        # 5c. the `;`-packed cells are well formed (WARN; hygiene).
+        # 5c. the `;`-packed cells are well formed (ERROR; hygiene).
         check_multivalue_cells(row, label, issues)
 
         # 6. sample_type controlled vocab (blank allowed)
@@ -835,7 +836,7 @@ def validate(nas_root, check_enrich=True):
     # 11. registry_subjects.csv null-alias detector (ERROR).
     check_subjects_registry(registries_dir, issues)
 
-    # 11b. an acquisition dated before its subject's date of birth (WARN).
+    # 11b. an acquisition dated before its subject's date of birth (ERROR).
     checked_pairs = check_age_sanity(rows, registries_dir, issues)
     issues.note(f"age sanity: {checked_pairs} (acquisition, subject) pair(s) "
                 f"checked against registry_subjects.csv date_of_birth")
@@ -844,7 +845,7 @@ def validate(nas_root, check_enrich=True):
     tombs = check_retired(nas_root, registries_dir, set(seen_acq), issues,
                           live_rows={(r.get("acq_id") or "").strip(): r for r in rows})
 
-    # 13. /raw/ folders that nothing accounts for (WARN).
+    # 13. /raw/ folders that nothing accounts for (ERROR).
     seen_folders = check_raw_orphans(nas_root, set(seen_acq), set(tombs), issues)
     issues.note(f"/raw/ walk: {seen_folders} acquisition folder(s) seen, "
                 f"{len(seen_acq)} live row(s), {len(tombs)} tombstone(s)")
