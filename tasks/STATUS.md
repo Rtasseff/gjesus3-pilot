@@ -76,7 +76,7 @@ So nothing that leaves the scanner is lost. *(Corrected 2026-10-06: the first ve
 
 | # | Decision | Cost of delay | Detail |
 |---|---|---|---|
-| **N3** | **Rebuild and redeploy the operator GUI exe**, so operators see the NOT PARSED list (a deploy). | Until then, the deployed exe still calls an unparsed study "housekeeping", so a new silent skip is possible | review §8 R8 |
+| **N3** | **Rebuild and redeploy the operator GUI exe**, so operators see the NOT PARSED list (a deploy). | Until then, the deployed exe still calls an unparsed study "housekeeping", so a new silent skip is possible. **Ryan, 2026-10-27: wait.** It ships in the one rebuild of both exes (#23), after the pre-port and subject-fix merges and before the 2026-11-04 re-launch | review §8 R8 |
 | **N5** | **A durable queue, `registries\pending_unparsed.csv`**: a new registry convention, which the review recommends. | The June bulk load's skip list (145 studies) existed and still went nowhere | review §6; §8 R7 |
 | **N1** | **Ingest the 51 MFB studies that the June upload skipped and that are still on the scanner** (310 exam folders, 305 images): 25 from 2024, 25 from 2025, and one phantom from 2026. Each would go through a scoped config, as for G1. All 51 were on the June list and marked skip: 28 with the information present but not parseable, 16 naming no project or animal, and 7 phantoms. | Low: if they leave the scanner they go to the platform's archive and can be pulled from there | review §5; §8 R1 |
 | **N2** | **140 scanner study folders (1,125 images) with another group's initials but an MFB link** (protocol `0721`, whose facility-DB holder is Daniel Padró; LP-IONP; the Portugal phantom series): in, out, or per subgroup? | Low, as for N1 | review §3 (b?); §8 R2 |
