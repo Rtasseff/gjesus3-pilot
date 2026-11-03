@@ -53,9 +53,11 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
 - **Practice run on the new engine, 2026-11-03** (`68040fd`, on the Mac, scratch registry, Data
   Office typing): plan, corrections, dry run, sync, re-sync and a late reconstruction all passed.
   Validator 0 errors, 4 of 4 files match their checksums and sources, production unchanged.
-  - **Not covered:** the kit's scans are tiny text files, so real DICOM reading on the new engine
-    (`ingest/dicom_utils.py` changed) has not run on the Mac; and no operator has yet run the
-    sync themselves.
+  - **Real scans on the same engine, 2026-11-03** (copies of Irene's, synced to the scratch registry,
+    then deleted): a CT (1 DICOM, 48 MB) and a two-animal PET (8 DICOMs, 400 MB, 28 s). All 9 files
+    match their checksums and sources; each animal got its own DB record at sync.
+  - **Not covered:** no operator has yet run the sync themselves; a real sync to production on this
+    engine; the nightly link job's first real link. The kit was removed: stage a fresh one to practise.
 - **Researchers' copy:** `S:\gnuclear\2026\Jesus\_gjesus3_sync\`
   (`/Volumes/gnuclear/2026/Jesus/_gjesus3_sync/` on the Mac).
   - Its `VERSION.txt` names the commit.
