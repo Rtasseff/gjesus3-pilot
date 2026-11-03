@@ -76,8 +76,9 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
   - Researchers sync outside announced Data Office batch windows. A published "batch running"
     flag is a moderate BACKLOG item.
 - **After each researcher sync,** finish the hard links and the animal records from Windows. The
-  steps are in the runbook, under "For the data office". This is manual for now; a scheduled
-  checker for all the partial-ingest queues is in the BACKLOG.
+  steps are in the runbook, under "For the data office". This is manual until the nightly link
+  run is live and the Mac's animal lookups work ([`BACKLOG.md`](BACKLOG.md), "run the
+  partial-ingest queues on a schedule"; this page wrongly said it was there before 2026-11-03).
 - **After every merge into `main` that touches `tools/`,** restage the researchers' copy:
   `python tools/operator/stage_ni_gnuclear.py production`.
 - **Testing on the Mac never touches production.**

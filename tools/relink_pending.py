@@ -19,6 +19,11 @@ row's `status` to `linked`. Idempotent: an already-present link is left as-is an
 row is still marked `linked`. A name taken by anything else (another acquisition's link)
 is reported as a COLLISION and the row stays `pending`: nothing is merged (2026-10-05).
 
+Safe to run while a sync is running, so it can run on a schedule (2026-11-03): the links
+are made with no lock held, then the statuses are written under `locking.registry_lock`
+onto a FRESH read of the worklist, so a row a Mac sync queued in the meantime is kept. The
+exit code is non-zero when any row was left pending, so a scheduler can report it.
+
 Usage (from Windows)
 --------------------
     python tools/relink_pending.py --nas-root J:/gjesus3-sandbox --dry-run
@@ -30,7 +35,7 @@ import sys
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ingest import linker, pending_links, provenance  # noqa: E402
+from ingest import linker, locking, pending_links, provenance  # noqa: E402
 
 
 def main(argv):
@@ -54,7 +59,7 @@ def main(argv):
     pending = [r for r in rows if (r.get("status") or "").strip() != "linked"]
     print(f"{len(rows)} row(s) in {path}; {len(pending)} pending.")
 
-    linked = 0
+    linked_ids = set()
     failed = 0
     for r in pending:
         acq = r.get("acq_id", "")
@@ -137,15 +142,26 @@ def main(argv):
         except Exception as e:
             print(f"  WARN {acq}: link made but provenance append failed: {e}")
 
-        r["status"] = "linked"
-        linked += 1
+        linked_ids.add(acq)
         kind = "folder of per-file hard links" if is_dir_link else "hard link"
         print(f"  OK   {acq}: {kind} -> {link_path}")
 
-    if not args.dry_run:
-        pending_links._write_all(path, rows)
+    if linked_ids:
+        # Re-read under the lock: `rows` is as old as this run, and writing it back
+        # would drop anything a sync queued since (the queue is read-all, write-all).
+        try:
+            with locking.registry_lock(registries):
+                fresh = pending_links.read_pending_links(path)
+                for r in fresh:
+                    if r.get("acq_id", "") in linked_ids:
+                        r["status"] = "linked"
+                pending_links._write_all(path, fresh)
+        except locking.LockTimeout as e:
+            # The links exist, so a re-run finds them in place and marks these rows.
+            print(f"\nStatuses NOT written, a re-run will mark them: {e}")
+            return 1
 
-    print(f"\nDone. linked={linked}  failed/skipped={failed}  "
+    print(f"\nDone. linked={len(linked_ids)}  failed/skipped={failed}  "
           f"{'(dry-run — nothing written)' if args.dry_run else ''}")
     return 0 if failed == 0 else 1
 
