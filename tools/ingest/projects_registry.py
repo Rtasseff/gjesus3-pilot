@@ -2,8 +2,8 @@
 
 The sibling of `registry.py` (which owns `registry_raw.csv`): one home for the
 projects-registry column order, the id/uniqueness rules, the two write
-paths, and the acquisition-date rules for `start_date` / `last_activity`
-(`widen_dates`, `acquisition_date_ranges`; bottom of this file). It exists
+paths, and the per-project acquisition-date ranges
+(`acquisition_date_ranges`; bottom of this file). It exists
 because `create_project.py` was the only writer and did its append with a
 bare `csv_safe.ensure_trailing_newline` + `open(..., "a")` — no header check,
 no lock, no atomic rewrite. That was tolerable while one Data
@@ -62,13 +62,14 @@ PROJECT_REGISTRY_FIELDS = [
 STATUS_VALUES = ["active", "paused", "closed"]
 
 # What a researcher may edit after creation. Everything else in the row is
-# identity (`project_id`, `name`, `folder_location`) or a derived date —
-# `start_date` / `last_activity` mean ACQUISITION dates, not edit dates
-# (production update 2026-07-14/15), so an edit must never touch them.
+# identity (`project_id`, `name`, `folder_location`) or a date set at creation
+# (`start_date` / `last_activity`, 06_REGISTRIES §4.2). An edit of these four
+# must never stamp a date; editing the dates themselves is not built (BACKLOG).
 EDITABLE_FIELDS = ["description", "owner", "status", "notes"]
 
-# The two derived date columns. Only the ingest's widening step, the recompute
-# and `reopen_project.py` write them — never an edit (see EDITABLE_FIELDS).
+# The two date columns. After creation only `recompute_project_dates.py` and
+# `reopen_project.py` write them — never an ingest (Ryan, 2026-11-03), never an
+# edit (see EDITABLE_FIELDS).
 DATE_FIELDS = ["start_date", "last_activity"]
 
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
@@ -265,23 +266,19 @@ def update_row(path, project_id, updates, allowed=None):
     return found, applied
 
 
-# --- Project dates = acquisition dates (06_REGISTRIES §4, 2026-07-14) ---------
+# --- A project's acquisition dates, from registry_raw.csv ---------------------
 #
-# `start_date` / `last_activity` are the project's first and newest ACQUISITION
-# dates. Two operations keep them so, and both live here so they agree on what a
-# usable date is:
-#   * widen_dates            — an ingest (or a raw import) registered an
-#                              acquisition into the project: stretch the range to
-#                              cover it, never move a date inward;
-#   * acquisition_date_ranges — recompute from scratch over registry_raw.csv
-#                              (reopen_project.py, recompute_project_dates.py).
+# No ingest maintains `start_date` / `last_activity` (Ryan, 2026-11-03), so a
+# question about a project's newest acquisition reads registry_raw.csv:
+# `acquisition_date_ranges`, also behind reopen_project.py and
+# recompute_project_dates.py.
 
 
 def acquisition_date(value):
     """`YYYY-MM-DD` from an `acquisition_datetime` value, or "" if unusable.
 
     Blank, `NA`, a bare year, or anything that is not a real calendar date
-    yields "" — such an acquisition widens nothing and is left out of a
+    yields "" — such an acquisition is left out of a
     recompute. (The ingest leaves the registry cell blank when it fell back to
     today's date for the ACQ-ID prefix, so the placeholder never reaches here.)
     """
@@ -325,40 +322,3 @@ def acquisition_date_ranges(raw_rows):
 def recompute_dates(raw_rows, project_id):
     """(start, last, n_rows, n_undated) for one project — see acquisition_date_ranges."""
     return acquisition_date_ranges(raw_rows).get(project_id, ("", "", 0, 0))
-
-
-def widened(current_start, current_last, acq_dates):
-    """The (start, last) that cover `acq_dates`, never narrower than the current.
-
-    A current value that is blank or not a date is replaced outright; a usable
-    one only ever moves outward (start earlier, last later). Unusable entries
-    in `acq_dates` are ignored, so a list of only blanks returns the current
-    values unchanged.
-    """
-    days = [d for d in (acquisition_date(v) for v in acq_dates) if d]
-    start, last = current_start or "", current_last or ""
-    if not days:
-        return start, last
-    lo, hi = min(days), max(days)
-    cs, cl = acquisition_date(start), acquisition_date(last)
-    new_start = lo if not cs or lo < cs else start
-    new_last = hi if not cl or hi > cl else last
-    return new_start, new_last
-
-
-def widen_dates(path, project_id, acq_dates):
-    """Widen ONE project's dates to cover `acq_dates`. CALLER MUST HOLD the lock.
-
-    The write path for "an acquisition was registered into this project": reads
-    the row, applies `widened`, and rewrites through `update_row` (atomic, a
-    no-op when nothing moved). Returns (found, applied) like `update_row`.
-    """
-    rows = read_projects(path)
-    row = next((r for r in rows
-                if (r.get("project_id") or "").strip() == project_id), None)
-    if row is None:
-        return False, {}
-    start, last = widened(row.get("start_date"), row.get("last_activity"), acq_dates)
-    return update_row(path, project_id,
-                      {"start_date": start, "last_activity": last},
-                      allowed=DATE_FIELDS)

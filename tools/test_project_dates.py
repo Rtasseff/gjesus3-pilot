@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
-"""test_project_dates.py -- a project's dates are its acquisition dates, and stay so (issue #10).
+"""test_project_dates.py -- a project's dates are set at creation; no ingest moves them (issue #10).
 
-`registry_projects.start_date` / `last_activity` mean the project's first / newest ACQUISITION
-date (06_REGISTRIES §4, 2026-07-14). Covered, against throwaway folders (never the NAS):
+`registry_projects.start_date` / `last_activity` are set when the project is created and an ingest
+or a raw import never touches them (Ryan, 2026-11-03; 06_REGISTRIES §4.2). Covered, against
+throwaway folders (never the NAS):
 
   projects_registry (unit)
     * acquisition_date: ISO dates kept, blank / NA / impossible dates -> ""
-    * widened: only outward; blank current values replaced; unusable dates widen nothing
     * acquisition_date_ranges: min/max per project, multi-project cells, undated rows counted
 
   ingest_raw (end to end on a scratch NAS)
-    * an existing project dated 2026-05 receives a 2024 acquisition: start_date moves back,
-      last_activity unchanged; a later one moves last_activity forward; an acquisition with no
-      date (NA, the today() placeholder) changes nothing
-    * the widening write happens under the registry lock
-    * a failure in the widening WARNs and the ingest still succeeds
+    * an existing project dated 2026-05 receives an earlier and a later acquisition:
+      registry_projects.csv stays byte-identical, and the acquisitions still link
     * an auto-created project is dated by the acquisition, not today, and its _project.yaml is UTF-8
 
   manager.raw_import
-    * an acquisition that GAINS the project widens it; a shared one (registered elsewhere) does not
+    * neither an acquisition that GAINS the project nor a shared one moves the project's dates
 
   recompute_project_dates.py
     * the recompute matches reopen_project's former inline logic on a fixture
@@ -124,24 +121,12 @@ def batch_cfg(staging, acq_dt, link, project="alpha", auto_create=False, acp=Non
 # ======================================================================== unit
 
 def test_unit():
-    print("projects_registry: acquisition_date / widened / ranges")
+    print("projects_registry: acquisition_date / ranges")
     ad = projects_registry.acquisition_date
     check(ad("2024-03-03T10:11:12") == "2024-03-03", "ISO datetime -> date")
     check(ad("2024-03-03") == "2024-03-03", "ISO date kept")
     check(all(ad(v) == "" for v in ("", None, "NA", "2024", "2024-13-01", "2024-02-30", "1900-01-01")),
           "blank / NA / bare year / impossible / placeholder dates -> ''")
-
-    w = projects_registry.widened
-    check(w("2026-05-01", "2026-05-20", ["2024-01-01"]) == ("2024-01-01", "2026-05-20"),
-          "an earlier date moves start_date only")
-    check(w("2026-05-01", "2026-05-20", ["2026-08-01"]) == ("2026-05-01", "2026-08-01"),
-          "a later date moves last_activity only")
-    check(w("2026-05-01", "2026-05-20", ["2026-05-10"]) == ("2026-05-01", "2026-05-20"),
-          "a date inside the range moves nothing (never inward)")
-    check(w("2026-05-01", "2026-05-20", ["", "NA"]) == ("2026-05-01", "2026-05-20"),
-          "blank / NA dates widen nothing")
-    check(w("", "garbage", ["2025-02-02"]) == ("2025-02-02", "2025-02-02"),
-          "blank or unusable current values are replaced")
 
     rows = [
         {"project_id": "PROJ-0001", "acquisition_datetime": "2024-01-05T09:00"},
@@ -159,68 +144,22 @@ def test_unit():
 
 # ====================================================================== ingest
 
-def test_ingest_widening():
+def test_ingest_leaves_dates():
     import ingest_raw
 
-    print("ingest_raw: Step 11b widens an existing project's dates")
+    print("ingest_raw: an ingest never moves an existing project's dates")
     with tempfile.TemporaryDirectory() as nas:
         build_nas(nas)
-        reg_dir = os.path.join(nas, "registries")
-
-        # record whether the lock is held whenever widen_dates writes
-        real_widen = projects_registry.widen_dates
-        seen_lock = []
-
-        def spy(path, pid, ds):
-            seen_lock.append(os.path.exists(os.path.join(reg_dir, locking.LOCK_FILENAME)))
-            return real_widen(path, pid, ds)
-        projects_registry.widen_dates = spy
-        try:
-            st = os.path.join(nas, "_st1")
-            write(os.path.join(st, "a.tif"), b"A2024")
-            res, out = run_quiet(ingest_raw.run_batch, batch_cfg(st, "2024-03-03", "a.tif"), nas)
-            check([ok for _a, ok in res] == [True], "2024 case ingested")
-            check(dates(nas, "PROJ-0001") == ("2024-03-03", "2026-05-20"),
-                  f"start_date moved back to 2024-03-03, last_activity unchanged (got {dates(nas, 'PROJ-0001')})")
-            check("dates widened" in out, "the log says the dates were widened")
-            check(seen_lock == [True], f"widen_dates ran under the registry lock (got {seen_lock})")
-
-            st = os.path.join(nas, "_st2")
-            write(os.path.join(st, "b.tif"), b"B2026")
-            run_quiet(ingest_raw.run_batch, batch_cfg(st, "2026-08-01T10:00:00", "b.tif"), nas)
-            check(dates(nas, "PROJ-0001") == ("2024-03-03", "2026-08-01"),
-                  f"a later acquisition moves last_activity forward (got {dates(nas, 'PROJ-0001')})")
-
-            st = os.path.join(nas, "_st3")
-            write(os.path.join(st, "c.tif"), b"C2025")
-            before = read_bytes(projects_registry.projects_registry_path(nas))
-            n_calls = len(seen_lock)
-            run_quiet(ingest_raw.run_batch, batch_cfg(st, "2025-01-01", "c.tif"), nas)
-            check(read_bytes(projects_registry.projects_registry_path(nas)) == before,
-                  "a date inside the range leaves registry_projects.csv byte-identical")
-            check(len(seen_lock) == n_calls, "...and does not even take the lock (unlocked pre-check)")
-
-            st = os.path.join(nas, "_st4")
-            write(os.path.join(st, "d.tif"), b"D-NA")
-            res, out = run_quiet(ingest_raw.run_batch, batch_cfg(st, "NA", "d.tif"), nas)
-            check(read_bytes(projects_registry.projects_registry_path(nas)) == before,
-                  "an acquisition with no date (today() placeholder) changes nothing")
-        finally:
-            projects_registry.widen_dates = real_widen
-
-        print("ingest_raw: a failure in the widening is non-fatal")
-        projects_registry.widen_dates = lambda *a, **k: (_ for _ in ()).throw(OSError("simulated"))
-        try:
-            st = os.path.join(nas, "_st5")
-            write(os.path.join(st, "e.tif"), b"E2020")
-            res, out = run_quiet(ingest_raw.run_batch, batch_cfg(st, "2020-02-02", "e.tif"), nas)
-        finally:
-            projects_registry.widen_dates = real_widen
-        check([ok for _a, ok in res] == [True], "the ingest still succeeds")
-        check("Could not widen" in out and "simulated" in out, "the failure is logged as a WARN")
-        check(os.path.exists(os.path.join(nas, "projects", "alpha", "raw_linked", "e.tif")),
-              "the link step after it still ran")
-        check(not os.path.exists(os.path.join(reg_dir, locking.LOCK_FILENAME)), "the lock was released")
+        before = read_bytes(projects_registry.projects_registry_path(nas))
+        for name, day in (("a.tif", "2024-03-03"), ("b.tif", "2026-08-01T10:00:00")):
+            st = os.path.join(nas, f"_st_{name}")
+            write(os.path.join(st, name), name.encode())
+            res, _out = run_quiet(ingest_raw.run_batch, batch_cfg(st, day, name), nas)
+            check([ok for _a, ok in res] == [True], f"{day} case ingested")
+            check(os.path.exists(os.path.join(nas, "projects", "alpha", "raw_linked", name)),
+                  f"{name} is linked into the project")
+        check(read_bytes(projects_registry.projects_registry_path(nas)) == before,
+              "an earlier and a later acquisition leave registry_projects.csv byte-identical")
 
 
 def test_ingest_autocreate():
@@ -257,7 +196,7 @@ def test_ingest_autocreate():
 def test_raw_import():
     from manager import raw_import
 
-    print("manager.raw_import: only acquisitions that gain the project widen it")
+    print("manager.raw_import: an import never moves the project's dates")
     with tempfile.TemporaryDirectory() as nas:
         build_nas(nas, projects=(("PROJ-0001", "alpha", "2026-05-01", "2026-05-20"),
                                  ("PROJ-0002", "beta", "2026-01-01", "2026-01-01")))
@@ -281,11 +220,10 @@ def test_raw_import():
                                              log=lambda m, level="INFO": logs.append(m))
         check(res["linked"] == 2 and res["registered"] == 1 and res["shared"] == 1,
               f"two linked, one registered, one shared (got {res['linked']}/{res['registered']}/{res['shared']})")
-        check(dates(nas, "PROJ-0001") == ("2023-04-05", "2026-05-20"),
-              f"the registered 2023 acquisition moved start_date; the shared 2026-12-31 one did not move "
-              f"last_activity (got {dates(nas, 'PROJ-0001')})")
+        check(dates(nas, "PROJ-0001") == ("2026-05-01", "2026-05-20"),
+              f"neither the registered 2023 acquisition nor the shared 2026-12-31 one moved the dates "
+              f"(got {dates(nas, 'PROJ-0001')})")
         check(dates(nas, "PROJ-0002") == ("2026-01-01", "2026-01-01"), "the other project is untouched")
-        check(any("dates widened" in m for m in logs), "the log says so")
 
 
 # =================================================================== recompute
@@ -436,7 +374,7 @@ def test_writers():
 
 def main():
     test_unit()
-    test_ingest_widening()
+    test_ingest_leaves_dates()
     test_ingest_autocreate()
     test_raw_import()
     test_recompute()

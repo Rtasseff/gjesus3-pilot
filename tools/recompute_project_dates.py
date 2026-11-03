@@ -6,17 +6,16 @@
     python tools/recompute_project_dates.py --nas-root "J:\\gjesus3-data" --apply ^
         --backup-dir "C:\\Users\\rtasseff\\temp\\gjesus3_project_dates_backup_20261020"
 
-WHY. Since 2026-07-14 the two columns mean the project's first and newest ACQUISITION date
-(06_REGISTRIES §4), and the retention close-out ("newest acquisition older than 3 years") reads
-them. They were backfilled once that day and nothing maintained them until the ingest's Step 11b
-(2026-10): a project an ingest created carries its creation date, and later ingests never moved
-`last_activity`. This is the one-time repair, and the tool to re-run whenever the range is in doubt.
+NOT ROUTINE. A project's dates are set when it is created and no ingest moves them (Ryan,
+2026-11-03; 06_REGISTRIES §4.2), so nothing needs this to run. It is here for two uses: the dry
+run's table answers "what is this project's real acquisition span?" (e.g. for the retention
+close-out's "newest acquisition older than 3 years"), and --apply sets a project's dates from its
+acquisitions when the Data Office decides to.
 
 WHAT IT DOES. For each project in registry_projects.csv: the min / max usable acquisition date
 over the live rows of registry_raw.csv that name it (`projects_registry.acquisition_date_ranges`,
-the same function reopen_project.py uses; blank or unusable dates excluded). Unlike the ingest's
-widening, a recompute may move a date INWARD -- that is the point. A project with no dated
-acquisition keeps its dates and is reported.
+the same function reopen_project.py uses; blank or unusable dates excluded). A recompute may move
+a date INWARD. A project with no dated acquisition keeps its dates and is reported.
 
 Dry run by default: a table of project, current dates, recomputed dates, changed?. Writes nothing.
 --apply needs --backup-dir, a directory that must NOT exist yet. Under the registry lock it copies
@@ -123,7 +122,7 @@ def main(argv=None):
             print(f"STOP: the backup of {proj_csv} does not verify; nothing written")
             return 3
         print(f"backup: {dst} (SHA-256 verified)")
-        # Re-read both inside the lock: an ingest may have committed or widened since the dry run.
+        # Re-read both inside the lock: an ingest may have committed since the dry run.
         items = plan(projects_registry.read_projects(proj_csv), registry.read_registry(raw_csv), scope)
         for it in items:
             if it["changed"]:

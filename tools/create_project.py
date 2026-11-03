@@ -77,9 +77,8 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes="",
         _hold_lock: take the registry lock ourselves (the default). Pass False
             ONLY from a caller that already holds it — `registry_lock` is not
             reentrant.
-        start_date: the project's first ACQUISITION date (`YYYY-MM-DD`), written
-            as both `start_date` and `last_activity` (06_REGISTRIES §4: they are
-            acquisition dates, not creation dates). Ingest's auto-create passes
+        start_date: the date (`YYYY-MM-DD`) written as both `start_date` and
+            `last_activity` (06_REGISTRIES §4.2). Ingest's auto-create passes
             the acquisition's date. Omitted, blank or not a usable date: today,
             as before (a project created by hand has no acquisition yet).
 

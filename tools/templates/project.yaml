@@ -4,7 +4,7 @@ description: "{description}"
 status: active  # active | paused | closed
 owner: {owner}
 
-# Timeline
+# Timeline (set when the project is created; the registry row is the record)
 start_date: {start_date}
 last_activity: {start_date}
 closed_date: null
