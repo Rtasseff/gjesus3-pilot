@@ -1,6 +1,7 @@
 """Read and append to registry_raw.csv."""
 
 import csv
+import io
 import os
 
 from . import csv_safe
@@ -277,6 +278,73 @@ def update_row(registry_path, acq_id, updates, only_if_blank=None):
             writer.writerow({k: row.get(k, "") for k in REGISTRY_FIELDS})
     os.replace(tmp, registry_path)
     return found, applied, skipped
+
+
+def field_span(line, col):
+    """(start, end) of the col-th field of one CSV line, honouring quotes."""
+    start, n, quoted = 0, 0, False
+    for i, ch in enumerate(line):
+        if ch == '"':
+            quoted = not quoted
+        elif ch == "," and not quoted:
+            if n == col:
+                return start, i
+            n, start = n + 1, i + 1
+    if n == col:
+        return start, len(line.rstrip("\r\n"))
+    raise RuntimeError(f"line has no field {col}")
+
+
+def fill_sample_organism(registry_path, species_by_acq):
+    """Fill `sample_organism` on the named rows, ONLY where it is blank, in BYTES.
+
+    The column is the registry's projection of the subject block's `species`
+    (06_REGISTRIES). `build_row` sets it at ingest; a subject resolved LATER (the
+    recovery and relink tools) needs this, or the row names an animal and no species
+    for good: 338 rows by 2026-11-03.
+
+    Bytes, as in `relink_subjects.rewrite_registry_raw`: the live file has no BOM and
+    mixed line endings, and a csv round-trip would re-quote and re-terminate every row.
+    Each target line is parsed again after the edit, to prove nothing else moved.
+
+    CONCURRENCY: like `update_row`, the caller MUST hold `locking.registry_lock`.
+
+    Returns (filled, kept): the ACQ-IDs filled, and {acq_id: value} for rows that
+    already held a species, which are never overwritten. A named row that is not in
+    the file is ignored.
+    """
+    with open(registry_path, "rb") as f:
+        lines = f.readlines()
+    header = next(csv.reader(io.StringIO(lines[0].decode("utf-8-sig"))))
+    col = header.index("sample_organism")
+    filled, kept = [], {}
+    for n, line in enumerate(lines[1:], start=1):
+        acq = line.split(b",", 1)[0].decode("utf-8", "replace")
+        species = species_by_acq.get(acq)
+        if not species:
+            continue
+        if any(ch in species for ch in ',"\r\n'):
+            raise RuntimeError(f"{acq}: species {species!r} would need quoting - refusing")
+        text = line.decode("utf-8")
+        before = next(csv.reader(io.StringIO(text)))
+        if before[col].strip():
+            kept[acq] = before[col]
+            continue
+        s, e = field_span(text, col)
+        new_text = text[:s] + species + text[e:]
+        after = next(csv.reader(io.StringIO(new_text)))
+        expect = list(before)
+        expect[col] = species
+        if after != expect:
+            raise RuntimeError(f"{acq}: the byte edit changed more than sample_organism - aborting")
+        lines[n] = new_text.encode("utf-8")
+        filled.append(acq)
+    if filled:
+        tmp = f"{registry_path}.tmp.{os.getpid()}"
+        with open(tmp, "wb") as f:
+            f.writelines(lines)
+        os.replace(tmp, registry_path)
+    return filled, kept
 
 
 def build_row(acq_id, cfg, summary, dest_path, registration_dt,

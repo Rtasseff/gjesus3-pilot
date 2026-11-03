@@ -215,6 +215,7 @@ ignores both time and transfers. It can therefore pick the later record.
   - [ ] Proposal (2026-10-20): key `registry_subjects.csv` on the stored `facility_db_id` rather than on `(protocol, code)`.
   - [ ] The 48 links whose animal is not in the DB at all.
   - [ ] **`registry_raw.sample_organism` stays blank after a recovery (found 2026-11-03, by the image-server pilot's guard).**
+    *(Tools fixed 2026-11-03, issue #43: both now fill the column where blank; `recover_subject_metadata.py --organism-only --apply` catches up old rows. The one-time fill waits on Ryan's go.)*
     06 §2.3 makes it a projection of the subject block's `species`, set at ingest; `recover_subject_metadata.py` fills the
     sidecar, the pending list and the subjects table but never touches `registry_raw.csv`, and `relink_subjects.py` edits
     `subject_ids` only. **338 rows today** have a resolved animal and a blank organism (334 mouse, 4 rat; all the `recovered`
