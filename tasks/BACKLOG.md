@@ -338,7 +338,15 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 - [ ] **At least these:**
   - the Finder refresh (daily 03:00);
   - the XNAT pilot sync (reads gjesus3; run by the image-server side);
-  - the new nightly link run (owner: the NI stream; not yet on `main`);
+  - the nightly link run, `gjesus3-relink` (**built by WorkstationOps, on hold, not registered until Ryan's go**):
+    - **Runs:** `toolselink_pending.py --nas-root \GJESUS3\gjesus3\gjesus3-data`, from the `gjesus3-pilot` checkout on `main`.
+    - **Schedule:** daily 02:30, before the Finder. Task Scheduler on the workstation, user `rtasseff`, only while logged on, so a catch-up run can fall after 03:00.
+    - **Reads:** `pending_links.csv`, `registry_projects.csv`, the raw primaries.
+    - **Writes:** hard links in `raw_linked\`, project `provenance.csv`, removes `.PENDING-LINK.txt` stand-ins, and `pending_links.csv` under the registry lock. Not `registry_raw.csv`.
+    - **One-writer rule:** that locked write is a registries write, so this job is an exception that needs Ryan's standing go, recorded in STATUS §0.
+    - **Owners:** the NI stream for the tool; WorkstationOps for the schedule, log and alerts.
+    - **How to tell it ran:** a non-zero exit raises a flag and a notification; the op's status shows open rows and the oldest `queued_datetime`.
+    - **At the port:** the new host must hard-link over SMB (Windows, not the Mac). A true hard link reports `st_nlink` 1 over SMB, so check with `samefile`.
   - the NI Mac tunnel and mount, which are always on rather than scheduled, but fail silently;
   - any job that is intended and not running: the weekly `verify_checksums` (#4) and a scheduled validator (#8).
 - [ ] Say what is a gjesus3 job and what only reads from it, and leave other projects' internals to them.
