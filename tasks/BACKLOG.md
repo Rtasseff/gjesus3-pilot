@@ -109,14 +109,18 @@ run too, at sync if the Mac can do it, otherwise scheduled the same way; MRI DIC
   - [x] *(2026-11-03)* `relink_pending.py` safe to run during a sync: statuses are written under the
     registry lock onto a fresh read of the list. Before this, a row queued during a run was lost.
     First tests of this tool: `tools/test_relink_pending.py`.
-  - [ ] A nightly WorkstationOps operation modelled on `finder-refresh`, before its 03:00 run. It is an
-    unattended production writer, so it needs Ryan's standing go, recorded in STATUS §0.
+  - [x] *(2026-11-03, Ryan's direct go)* `gjesus3-relink`, a nightly WorkstationOps operation at 02:30,
+    before `finder-refresh`. Scheduled. Its test fire had nothing to link.
+  - [ ] Check the first real link it makes, with `os.path.samefile` (the next Mac sync).
 - **Subject records (`pending_subject_metadata.csv`, `recover_subject_metadata.py`).**
   - **Why the Mac queues every animal (found 2026-11-03):** not credentials. The Mac's login works and it
     reaches the database at `10.10.3.230`, but it resolves `intranet.cicbiomagune.es` to a public address
     and times out. The queue's `no-credentials` label covers any connection failure, so it misled us.
-  - [ ] Ryan sets `host=10.10.3.230` in the Mac's `~/.my.cnf`; then test on the practice kit.
-  - [ ] Confirm that new NI rows get `sample_organism` when the lookup succeeds at sync.
+  - [x] *(2026-11-03)* Ryan set `host=10.10.3.230` in the Mac's `~/.my.cnf`. Practice kit, three
+    synthetic scans: a known animal filled from the DB at sync, with `sample_organism` and
+    `facility_db_id`; an unknown number queued `db-miss`; a date before birth queued `db-date-conflict`.
+  - [ ] Check this on the first real sync. A scan dated before its animal's birth keeps its
+    `subject_ids`, so the validator reports an ERROR until someone resolves it. That is the intended signal.
   - [ ] Whatever still misses (a typed number with no animal on that date) stays queued. If lookups at
     sync prove unreliable, schedule the recovery on the links' pattern, with `audit_subject_links.py` as
     the check afterwards. Issue #43 first: recovery does not yet fill `sample_organism`.
