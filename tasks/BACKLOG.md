@@ -93,6 +93,36 @@ a DPA reference.** That gives a validator rule: human ⇒ DPA present.
   and README in `/raw/` (the recovery pattern), plus the agreement details for each cohort from
   Ryan.
 
+## 🔺 HIGH — run the partial-ingest queues on a schedule (Ryan, 2026-08-05; decided 2026-11-03)
+
+A sync or ingest that cannot finish a step queues it, and a Windows tool completes it later. All three
+tools and lists exist. **No schedule exists:** a person has to remember. Ryan asked for this on
+2026-08-05 ([`archive/ni_live_onbox_test_notes_ryan_2026-08-05.txt`](archive/ni_live_onbox_test_notes_ryan_2026-08-05.txt));
+the design is in [`archive/ni_live_onbox_test_review.md`](archive/ni_live_onbox_test_review.md),
+"Deferred-recovery worklists". It was deferred on 2026-08-06. Pages written after that said it was in
+this file, but it was never added here until now.
+
+Ryan's decisions, 2026-11-03, relayed from the relaunch session: links run nightly; subject records must
+run too, at sync if the Mac can do it, otherwise scheduled the same way; MRI DICOM waits.
+
+- **Project links (`pending_links.csv`, `relink_pending.py`).**
+  - [x] *(2026-11-03)* `relink_pending.py` safe to run during a sync: statuses are written under the
+    registry lock onto a fresh read of the list. Before this, a row queued during a run was lost.
+    First tests of this tool: `tools/test_relink_pending.py`.
+  - [ ] A nightly WorkstationOps operation modelled on `finder-refresh`, before its 03:00 run. It is an
+    unattended production writer, so it needs Ryan's standing go, recorded in STATUS §0.
+- **Subject records (`pending_subject_metadata.csv`, `recover_subject_metadata.py`).**
+  - **Why the Mac queues every animal (found 2026-11-03):** not credentials. The Mac's login works and it
+    reaches the database at `10.10.3.230`, but it resolves `intranet.cicbiomagune.es` to a public address
+    and times out. The queue's `no-credentials` label covers any connection failure, so it misled us.
+  - [ ] Ryan sets `host=10.10.3.230` in the Mac's `~/.my.cnf`; then test on the practice kit.
+  - [ ] Confirm that new NI rows get `sample_organism` when the lookup succeeds at sync.
+  - [ ] Whatever still misses (a typed number with no animal on that date) stays queued. If lookups at
+    sync prove unreliable, schedule the recovery on the links' pattern, with `audit_subject_links.py` as
+    the check afterwards. Issue #43 first: recovery does not yet fill `sample_organism`.
+- **MRI DICOM (`pending_dicom_regen.csv`, `backfill_dicom_regen.py`).** On hold (Ryan, 2026-11-03).
+- [ ] One read-only status across the lists (open rows, oldest row's age), as in the August design.
+
 ## 🔺 HIGH — 292 `pending-db` subject rows that were never recoverable (found 2026-10-08)
 
 `registries/pending_subject_metadata.csv` holds 292 non-NI rows (MRI and microscopy) that have
