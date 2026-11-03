@@ -23,17 +23,17 @@ things genuinely in flight. It deliberately stays short.
 - The claim workbook goes out then, and the claim window is set (D1(b), D1(c) below).
 - New researcher uploads follow.
 - ✅ **The new code landed 2026-11-03:** the pre-port integration branch and `fix/subject-lookup-dates` are merged
-  (`0e5e51c`, `68040fd`; 59/59 suites), both exes are rebuilt and deployed, the NI sync is restaged, and the decided
+  (`0e5e51c`, `68040fd`; 59/59 suites), both exes are rebuilt and deployed, the NI sync is restaged (again 2026-11-03, to `f0ab18f`, for the animal lookups at sync), and the decided
   repairs have run (§0.7). The validator is at 0 errors.
 - **Still Ryan's for the re-launch:** the NI Mac's gjesus3 mount is down, so no NI sync can reach production until it
   is back; and a real sync on the new engine on the Mac is untested (the launcher check passed; the practice kit
   would cover it).
 - **✅ Both shared workbooks corrected 2026-11-03 (Ryan: "for the workbooks, fix both tonight"), and both go out at the re-launch.** Counts now match the registry; retired rows and empty sessions are marked, not removed; all 106 answers kept. Original copies are off the NAS, outside the repo.
-  - **Still blank:** the claim window date, which Ryan sets when he sends it.
+  - **Claim window:** open until 4 December 2026 (Ryan: "let's say 1 month", from the 2026-11-04 send).
   - **New wording, from Ryan's words relayed through the relaunch session:** unclaimed scans stay, with the operator locked as unknown. Non-acquisition files left in the holding folder (`staging\historical_drives_unassigned\`, about 59,600 files, 262 GB) will be deleted; no date yet. Nothing has been deleted.
-  - **Before any deletion:** Ryan's 2026-10-06 ruling not to lose the segmentations is unresolved (3,674 paths in that folder name a segment, mask, label or ROI), as is what happens to groups marked "not ours". About 22,600 of the files are not counted in any workbook group.
+  - **That wording is a warning, not a plan (Ryan, 2026-11-03):** "I am threatening everything not associated to something clear. What we actually do we figure out later", and "I will be sure that we review everything before it is deleted." **So no one deletes or locks anything on the strength of the Read me.** For that review: 3,674 paths in that folder name a segment, mask, label or ROI (Ryan, 2026-10-06: don't lose the segmentations), groups may be marked "not ours", and about 22,600 files are not counted in any workbook group.
   - **Project folders:** "go away or at least get archived" (Ryan, relayed). Undefined until "claimed" is. SegBioMed's study depends on 2,056 masks in them.
-- **Thursday 2026-11-05:** the blank `sample_organism` on 338 rows (#43), assuming there are sessions to look at.
+- **`sample_organism` (#43):** the recovery and relink tools now fill it, only where blank (merged `caededb`, 61/61 suites; Ryan: "you should do the column fix"). **The one-time fill of the 338 rows has not run.** Dry run: `recover_subject_metadata.py --organism-only`, 338 to fill. It waits on Ryan's go (he had set Thursday 2026-11-05).
 - **✅ Standing go, 2026-11-03: the nightly link run is an exception to the one-writer rule.** Ryan, to the WorkstationOps session: "go I confirm gjesus3-relink should run nightly at 02:30" (relayed to the coordinator with his words).
   - It covers only this job: `tools\relink_pending.py`, daily 02:30, which writes hard links, project provenance and `pending_links.csv` under the registry lock. Every other production write still needs his go.
   - It runs from this checkout on `main`, so anything merged to that tool is live the next night.
