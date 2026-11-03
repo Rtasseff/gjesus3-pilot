@@ -28,7 +28,7 @@ PENDING_FIELDS = [
     "acq_id",
     "sidecar_path",
     "facility_animal_id",
-    "reason",          # "db-miss" | "no-credentials"
+    "reason",          # "db-miss" | "db-date-conflict" | "no-credentials"
     "logged_at",       # ISO-8601 UTC of the ingest that logged the gap
     "status",          # "pending" | "recovered" | "unresolvable"
     "recovered_at",    # ISO-8601 UTC when a superuser resolved it (else "")

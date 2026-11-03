@@ -388,7 +388,7 @@ auto_discover:
     animal_code:   "${discovered.animal_num}"     # e.g. "17"
 ```
 
-On a **DB miss / no-credentials** the acquisition still ingests: the `subject:` block is written with `source: "pending-db"` and a row is appended to `registries/pending_subject_metadata.csv` for later superuser recovery via `recover_subject_metadata.py` (§3.6; [08_METADATA §4.4.6](08_METADATA.md)). This is the non-blocking contract — an unreachable DB never aborts the batch.
+The lookup is **dated** (since 2026-10-20): it takes the animal that held that protocol and code on the acquisition day, following the DB's records of animals that changed protocol, and stores the DB's `animals.id` as `subject.facility_db_id` ([08_METADATA §4.4.3](08_METADATA.md)). On a **DB miss / no-credentials**, or a **date conflict** (no animal held the code that day, or the scan precedes the animal's birth: usually a label naming the wrong protocol or number), the acquisition still ingests: the `subject:` block is written with `source: "pending-db"` and a row is appended to `registries/pending_subject_metadata.csv` for later superuser recovery via `recover_subject_metadata.py` (§3.6; [08_METADATA §4.4.6](08_METADATA.md)). This is the non-blocking contract — an unreachable DB never aborts the batch.
 
 #### `auto_discover.subject_parse` (multi-animal live sync)
 

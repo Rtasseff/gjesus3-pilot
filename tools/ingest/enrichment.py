@@ -29,7 +29,7 @@ import animal_db
 
 # Sidecar field order for the subject block (08_METADATA §4.4.2).
 SUBJECT_ORDER = [
-    "facility_animal_id", "species", "strain", "sex", "date_of_birth",
+    "facility_animal_id", "facility_db_id", "species", "strain", "sex", "date_of_birth",
     "age_at_acquisition", "genotype", "weight_at_acquisition_g", "cohort_id",
     "procedures", "source",
 ]
@@ -56,6 +56,7 @@ def _subject_placeholder(source, facility_animal_id=""):
     """A fully-sentinel subject block — required fields blank, never omitted."""
     return {
         "facility_animal_id": facility_animal_id or "",
+        "facility_db_id": None,
         "species": "",
         "strain": "",
         "sex": "unknown",
@@ -121,18 +122,28 @@ def _subject_from_operator(block, discovered, acq_for_age):
 
 
 def _resolve_one_db_subject(alias, code, acq_for_age, acq_id, canonical_path,
-                            registries_dir, dry_run, lookup_fn, log):
+                            registries_dir, dry_run, lookup_fn, log, in_vivo=True):
     """Resolve ONE (project_alias, animal_code) to a subject block via the
     facility DB — the shared per-animal path used by both the single-animal
     config (subject_lookup) and the multi-animal live sync (subject_parse).
-    DB hit -> full block; miss/unreachable -> pending-db placeholder + queue."""
-    res = lookup_fn(alias, code)
+
+    The lookup is DATED: it asks which animal held the code on the acquisition
+    day (the ACQ-ID's date, else the age date), following the DB's transfer
+    records, and refuses when none did or the scan precedes the animal's birth
+    (animal_db.choose_holder). A refusal is handled like a miss: the WHOLE
+    record is withheld, not just the age.
+    DB hit -> full block; miss/conflict/unreachable -> pending-db placeholder + queue."""
+    on_date = animal_db.acq_id_day(acq_id) or animal_db.as_day(acq_for_age)
+    res = lookup_fn(alias, code, on_date=on_date, in_vivo=in_vivo)
     if res.status == "found":
         fa = res.subject.get("facility_animal_id")
-        log(f"subject: DB hit {fa}")
+        log(f"subject: DB hit {fa} (DB id {res.subject.get('facility_db_id')})")
+        for w in getattr(res, "warnings", None) or []:
+            log(f"subject: {fa} on {on_date}: {w} (kept; check the label if unexpected)",
+                "WARN")
         return _finalize_subject(res.subject, acq_for_age, "animal-facility-db")
 
-    # not_found (db-miss) | unreachable (no-credentials) -> pending.
+    # not_found (db-miss | db-date-conflict) | unreachable (no-credentials) -> pending.
     # compose_subject_id REFUSES a null/blank alias (it would build the
     # ambiguous "<n>-AE-biomaGUNE-None"). Honour the non-blocking contract
     # (§4.7): no id we can trust -> no id at all. A blank facility id is the
@@ -145,7 +156,7 @@ def _resolve_one_db_subject(alias, code, acq_for_age, acq_id, canonical_path,
         log(f"subject: {e}; writing an empty facility id.", "WARN")
         fa_id = ""
     reason = res.reason or "db-miss"
-    log(f"subject: DB {res.status} ({reason}) for {fa_id}; writing "
+    log(f"subject: DB {res.status} ({reason}) for {fa_id}: {res.detail}; writing "
         f"source=pending-db and queueing for recovery.", "WARN")
     if not dry_run and registries_dir:
         try:
@@ -204,7 +215,8 @@ def _subject_pairs(cfg_single, discovered, log):
 
 
 def _build_subjects(cfg_single, discovered, acq_for_age, acq_id,
-                    canonical_path, registries_dir, dry_run, lookup_fn, log):
+                    canonical_path, registries_dir, dry_run, lookup_fn, log,
+                    in_vivo=True):
     """Resolve the 1..N subjects for this acquisition -> a LIST of subject
     blocks. Length 1 for every single-animal instrument; 1-4 for a multi-animal
     NI scan. Operator override -> [that]; DB path -> one block per animal;
@@ -224,7 +236,7 @@ def _build_subjects(cfg_single, discovered, acq_for_age, acq_id,
         return [
             _resolve_one_db_subject(alias, code, acq_for_age, acq_id,
                                     canonical_path, registries_dir, dry_run,
-                                    lookup_fn, log)
+                                    lookup_fn, log, in_vivo=in_vivo)
             for alias, code in pairs
         ]
 
@@ -357,6 +369,7 @@ def build_enrichment(cfg_single, *, acq_id, acq_date, acq_dt_iso="",
         subjects = _build_subjects(
             cfg_single, discovered, acq_for_age, acq_id,
             canonical_path, registries_dir, dry_run, lookup_fn, log,
+            in_vivo=(sample_type == "organism"),
         )
     # condition: any biological sample can be control-vs-case (a disease-model
     # cell line vs wild-type, treated vs vehicle) -> written for cells too
