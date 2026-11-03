@@ -109,8 +109,9 @@ run too, at sync if the Mac can do it, otherwise scheduled the same way; MRI DIC
   - [x] *(2026-11-03)* `relink_pending.py` safe to run during a sync: statuses are written under the
     registry lock onto a fresh read of the list. Before this, a row queued during a run was lost.
     First tests of this tool: `tools/test_relink_pending.py`.
-  - [ ] A nightly WorkstationOps operation modelled on `finder-refresh`, before its 03:00 run. It is an
-    unattended production writer, so it needs Ryan's standing go, recorded in STATUS §0.
+  - [x] *(2026-11-03, on Ryan's standing go, STATUS §0)* A nightly WorkstationOps operation modelled on `finder-refresh`, at 02:30,
+    before its 03:00 run. It is an unattended production writer.
+  - [ ] After the first sync that queues rows, check one new production link with `os.path.samefile`.
 - **Subject records (`pending_subject_metadata.csv`, `recover_subject_metadata.py`).**
   - **Why the Mac queues every animal (found 2026-11-03):** not credentials. The Mac's login works and it
     reaches the database at `10.10.3.230`, but it resolves `intranet.cicbiomagune.es` to a public address
@@ -338,12 +339,12 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 - [ ] **At least these:**
   - the Finder refresh (daily 03:00);
   - the XNAT pilot sync (reads gjesus3; run by the image-server side);
-  - the nightly link run, `gjesus3-relink` (**built by WorkstationOps, on hold, not registered until Ryan's go**):
+  - the nightly link run, `gjesus3-relink` (**scheduled 2026-11-03 on Ryan's go, STATUS §0**):
     - **Runs:** `tools\relink_pending.py --nas-root \\GJESUS3\gjesus3\gjesus3-data`, from the `gjesus3-pilot` checkout on `main`.
     - **Schedule:** daily 02:30, before the Finder. Task Scheduler on the workstation, user `rtasseff`, only while logged on, so a catch-up run can fall after 03:00.
     - **Reads:** `pending_links.csv`, `registry_projects.csv`, the raw primaries.
     - **Writes:** hard links in `raw_linked\`, project `provenance.csv`, removes `.PENDING-LINK.txt` stand-ins, and `pending_links.csv` under the registry lock. Not `registry_raw.csv`.
-    - **One-writer rule:** that locked write is a registries write, so this job is an exception that needs Ryan's standing go, recorded in STATUS §0.
+    - **One-writer rule:** that locked write is a registries write, so this job is an exception, on Ryan's standing go (STATUS §0).
     - **Owners:** the NI stream for the tool; WorkstationOps for the schedule, log and alerts.
     - **How to tell it ran:** a non-zero exit raises a flag and a notification; the op's status shows open rows and the oldest `queued_datetime`.
     - **At the port:** the new host must hard-link over SMB (Windows, not the Mac). A true hard link reports `st_nlink` 1 over SMB, so check with `samefile`.

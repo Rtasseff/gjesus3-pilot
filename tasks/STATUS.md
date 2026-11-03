@@ -32,6 +32,10 @@ things genuinely in flight. It deliberately stays short.
   926 sessions, while the list now holds 23,126 live exams; 8 listed sessions have no exam left (all retired), and 224 show the wrong exam
   count. 106 are already answered, 105 by the PI, and 37 of those name two people. No acquisition is missing from it.
 - **Thursday 2026-11-05:** the blank `sample_organism` on 338 rows (#43), assuming there are sessions to look at.
+- **✅ Standing go, 2026-11-03: the nightly link run is an exception to the one-writer rule.** Ryan, to the WorkstationOps session: "go I confirm gjesus3-relink should run nightly at 02:30" (relayed to the coordinator with his words).
+  - It covers only this job: `tools\relink_pending.py`, daily 02:30, which writes hard links, project provenance and `pending_links.csv` under the registry lock. Every other production write still needs his go.
+  - It runs from this checkout on `main`, so anything merged to that tool is live the next night.
+  - **Scheduled, not yet proven on real data:** a test fire at 17:30 returned 0 with nothing to link. **After the first sync that queues rows, check one new production link with `os.path.samefile`** (`st_nlink` reads 1 over SMB).
 
 **Ryan ruled on every open item on 2026-10-05.** His rulings are recorded below in his words. He is
 away **2026-10-12 → 10-18**, and **nothing here needs him before 10-19.** If carrying out a ruling
