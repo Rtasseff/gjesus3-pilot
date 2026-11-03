@@ -180,6 +180,13 @@ ignores both time and transfers. It can therefore pick the later record.
   - [ ] Not investigated: 159 in-vivo links fall after the animal's DB exit date (90 within 2–7 days).
   - [ ] Proposal (2026-10-20): key `registry_subjects.csv` on the stored `facility_db_id` rather than on `(protocol, code)`.
   - [ ] The 48 links whose animal is not in the DB at all.
+  - [ ] **`registry_raw.sample_organism` stays blank after a recovery (found 2026-11-03, by the image-server pilot's guard).**
+    06 §2.3 makes it a projection of the subject block's `species`, set at ingest; `recover_subject_metadata.py` fills the
+    sidecar, the pending list and the subjects table but never touches `registry_raw.csv`, and `relink_subjects.py` edits
+    `subject_ids` only. **338 rows today** have a resolved animal and a blank organism (334 mouse, 4 rat; all the `recovered`
+    rows in the pending list, including the 96 `0525` #49-53 and the NI sync's). The sidecars are right. To do: the recovery
+    tools project the species, and one byte-level fill of the 338 cells on Ryan's go. Until then, a species filter misses
+    those rows, and new NI uploads from the Mac join them after recovery.
 - **Not a blocker for the Box A port** (Ryan, 2026-10-23). What is left here is the 159 after-exit links and the 48 links
   not in the DB. The wrong links are repaired.
 - **✅ Status 2026-11-03: merged and run in production.**
