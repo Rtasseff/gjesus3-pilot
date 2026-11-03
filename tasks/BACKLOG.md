@@ -339,7 +339,7 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
   - the Finder refresh (daily 03:00);
   - the XNAT pilot sync (reads gjesus3; run by the image-server side);
   - the nightly link run, `gjesus3-relink` (**built by WorkstationOps, on hold, not registered until Ryan's go**):
-    - **Runs:** `toolselink_pending.py --nas-root \GJESUS3\gjesus3\gjesus3-data`, from the `gjesus3-pilot` checkout on `main`.
+    - **Runs:** `tools\relink_pending.py --nas-root \\GJESUS3\gjesus3\gjesus3-data`, from the `gjesus3-pilot` checkout on `main`.
     - **Schedule:** daily 02:30, before the Finder. Task Scheduler on the workstation, user `rtasseff`, only while logged on, so a catch-up run can fall after 03:00.
     - **Reads:** `pending_links.csv`, `registry_projects.csv`, the raw primaries.
     - **Writes:** hard links in `raw_linked\`, project `provenance.csv`, removes `.PENDING-LINK.txt` stand-ins, and `pending_links.csv` under the registry lock. Not `registry_raw.csv`.
