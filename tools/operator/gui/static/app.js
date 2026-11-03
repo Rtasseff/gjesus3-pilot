@@ -9,6 +9,13 @@ function esc(s) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// The matches the run skipped because they are already in the registry (or
+// retired): the same figure the preview shows, now on the result too (#5).
+function alreadyNote(r) {
+  const n = r.n_already_ingested || 0;
+  return n ? `${n} already ingested (skipped, not copied again). ` : "";
+}
+
 async function postJSON(url, body) {
   const r = await fetch(url, {
     method: "POST",
@@ -528,7 +535,16 @@ function renderSummary(el, data) {
 function renderDropped(el, data) {
   if (!el) return;
   const dropped = data.dropped || [];
-  if (!dropped.length) { el.innerHTML = ""; return; }
+  // Dot-named entries the glob never returns (no SKIP line exists for them).
+  const unseen = data.unseen || [];
+  const unseenHtml = unseen.length
+    ? `<h4>${unseen.length} name(s) starting with "." NOT SEEN by the ingest ` +
+      `(macOS <code>._*</code> AppleDouble files are safe to ignore):</h4><ul>` +
+      unseen.slice(0, 10).map((u) => `<li><code>${esc((u.matches || [u.target])[0])}</code>` +
+        `${u.kind === "appledouble" ? " — AppleDouble" : ""}</li>`).join("") +
+      (unseen.length > 10 ? `<li>…and ${unseen.length - 10} more</li>` : "") + "</ul>"
+    : "";
+  if (!dropped.length) { el.innerHTML = unseenHtml; return; }
   const byReason = new Map();
   dropped.forEach((d) => byReason.set(d.reason, (byReason.get(d.reason) || 0) + 1));
   const reasons = [...byReason.entries()].sort((a, b) => b[1] - a[1]);
@@ -540,7 +556,7 @@ function renderDropped(el, data) {
     `<h4>${dropped.length} file(s) skipped because of a parse / filter error — ` +
     `these are NOT already ingested. ` +
     `<span class="muted">Full per-file list in Warnings / log.</span></h4>` +
-    `<ul>${shown}${more}</ul>`;
+    `<ul>${shown}${more}</ul>` + unseenHtml;
 }
 
 function renderCasesTable(cases) {
@@ -695,13 +711,13 @@ async function runnerIngest() {
           resEl.className = "summary dry-done";
           resEl.innerHTML =
             `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the RDM System.</strong> ` +
-            `${r.ok}/${r.total} acquisitions WOULD be ingested. ` +
+            `${r.ok}/${r.total} acquisitions WOULD be ingested. ` + alreadyNote(r) +
             `To actually ingest, uncheck “Dry-run” and run again.`;
         } else {
           resEl.className = "summary live-done";
           resEl.innerHTML =
             `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} acquisitions written</strong> ` +
-            `to ${esc(nasRoot()) || "the RDM System"}.`;
+            `to ${esc(nasRoot()) || "the RDM System"}. ` + alreadyNote(r);
           // A real ingest also raises an unmissable completion modal — the
           // bottom-line above was easy to overlook. Skip it for a 0-acq run.
           if (r.total > 0 && window.showCompletionModal) {
@@ -713,6 +729,7 @@ async function runnerIngest() {
                 { label: "Destination", value: nasRoot() || "the RDM System" },
                 { label: "Recipe", value: rec ? rec.name : "" },
                 { label: "Instrument", value: rInstrument.value },
+                { label: "Already ingested (skipped)", value: String(r.n_already_ingested || 0) },
               ],
             });
           }

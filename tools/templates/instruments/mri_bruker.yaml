@@ -257,7 +257,10 @@ auto_discover:
 
   filename_parse:
     # `source: parent_name` targets the parent of the match (the study
-    # folder), not the match itself (the exam folder).
+    # folder), not the match itself (the exam folder). The sources are
+    # `name` (the match, default), `parent_name` and `grandparent_name`
+    # (two levels up, for <study>/Other data/<exam> with pattern
+    # "*/Other data/[0-9]*").
     source: parent_name
     # FTP server folder names look like:
     #   20251016_083822_jrc_251016_m17_0424_jrc_251016_m17_0424_1_1

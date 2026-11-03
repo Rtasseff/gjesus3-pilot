@@ -249,7 +249,7 @@ def test_gui(td, staging):
     js_path = os.path.join(TOOLS, "operator", "gui", "static", "mri.js")
     with open(js_path, encoding="utf-8") as f:
         js = f.read()
-    check("renderDropped(d.dropped, d.unparsed)" in js,
+    check("renderDropped(d.dropped, d.unparsed, d.unseen)" in js,
           "mri.js: the preview passes the grouped list to the drop box")
     check("filter((d) => !d.unparsed)" in js,
           "mri.js: only untagged drops are called housekeeping")
@@ -358,6 +358,113 @@ def test_positional(td):
           "headline wording for a non-ParaVision batch")
 
 
+def test_unseen_and_grandparent(td):
+    """Deliverable A (dot-names the glob never returns) and B (grandparent_name)."""
+    # --- A: a dot-file beside a matched file, an AppleDouble, a hidden folder.
+    st = os.path.join(td, "mic")
+    os.makedirs(os.path.join(st, "sub"))
+    for rel in ("A_op_s1.czi", ".A_op_s2.czi", "._A_op_s1.czi", "notes.txt",
+                "sub/B_op_s3.czi", "sub/.B_op_s4.czi"):
+        open(os.path.join(st, rel), "w").write("x")
+    os.makedirs(os.path.join(st, ".hiddendir"))
+    open(os.path.join(st, ".hiddendir", "C_op_s5.czi"), "w").write("x")
+
+    def mic(pattern):
+        return {"ingest": {}, "auto_discover": {
+                    "staging_dir": st, "pattern": pattern, "embedded_metadata": False,
+                    "filename_parse": {"separator": "_", "fields": ["g", "op", "s"]}},
+                "registry": {"instrument": "ZWSI", "data_ecosystem": "MICROSCOPY",
+                             "data_source": "internal", "researcher": "NA",
+                             "sample_id": "discovered.s",
+                             "acquisition_datetime": "2025-10-16"}}
+
+    col = []
+    cases, out = expand(mic("*.czi"), collector=col)
+    check(len(cases) == 1 and cases[0]["discovered"]["filename"] == "A_op_s1.czi",
+          "unseen: only the visible file is a case (include_hidden NOT on)")
+    un = {r["matches"][0]: r for r in col if unparsed.is_unseen(r)}
+    check(sorted(un) == [".A_op_s2.czi", "._A_op_s1.czi"],
+          f"unseen: dot-file and AppleDouble reported (got {sorted(un)})")
+    check(un[".A_op_s2.czi"]["kind"] == "hidden"
+          and un["._A_op_s1.czi"]["kind"] == "appledouble",
+          "unseen: the ._ file is classified appledouble, the other hidden")
+    check("NOT SEEN: 2 name(s)" in out and "(1 macOS AppleDouble, ignorable)" in out,
+          "unseen: stdout headline wording")
+    new_lines = [l for l in out.splitlines() if "NOT SEEN" in l]
+    check(new_lines and not any(w in l for l in new_lines for w in ("SKIP", "WARN")),
+          "unseen: new line carries neither SKIP nor WARN")
+    check("notes.txt" not in out, "unseen: a pattern-excluded extension is not reported")
+    check(not any(unparsed.is_unseen(r) for r in col if r["target"] == "A_op_s1.czi"),
+          "unseen: visible file not reported")
+
+    col = []
+    cases, out = expand(mic("**/*.czi"), collector=col)
+    got = sorted(r["matches"][0] for r in col)
+    check(got == sorted([".A_op_s2.czi", ".hiddendir", "._A_op_s1.czi", "sub/.B_op_s4.czi"]),
+          f"unseen: recursive pattern finds nested dot-file + hidden folder (got {got})")
+    check(len(cases) == 2, "unseen: recursive pattern still ingests only visible files")
+
+    # CSV + summary helpers.
+    csvp = os.path.join(td, "unseen.csv")
+    check(unparsed.write_csv(col, csvp) == 4, "unseen: rows land in the --unparsed-report CSV")
+    with open(csvp, newline="", encoding="utf-8") as fh:
+        kinds = sorted(r["kind"] for r in csv.DictReader(fh))
+    check(kinds == ["appledouble", "hidden", "hidden", "hidden"], "unseen: CSV kind column")
+    check(unparsed.detail_lines(col) == [] and len(unparsed.unseen_detail_lines(col)) == 4,
+          "unseen: kept apart from the NOT PARSED lines")
+
+    # Dir-only pattern: hidden folder reported, hidden FILE is not (pattern wants dirs).
+    st2 = os.path.join(td, "dirs")
+    os.makedirs(os.path.join(st2, "one"))
+    os.makedirs(os.path.join(st2, ".two"))
+    open(os.path.join(st2, ".file"), "w").write("x")
+    got = [r["matches"][0] for r in unparsed.find_unseen(st2, "*/")]
+    check(got == [".two"], f"unseen: '*/' reports hidden folders only (got {got})")
+
+    # No hidden names -> nothing reported, output unchanged.
+    shutil_dir = os.path.join(td, "clean")
+    os.makedirs(shutil_dir)
+    open(os.path.join(shutil_dir, "A_op_s1.czi"), "w").write("x")
+    cfg = mic("*.czi")
+    cfg["auto_discover"]["staging_dir"] = shutil_dir
+    col = []
+    _, out = expand(cfg, collector=col)
+    check(col == [] and "NOT SEEN" not in out, "unseen: clean staging prints nothing new")
+
+    # The idempotent wording is untouched.
+    check("already in registry (idempotent re-run)" in
+          open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ingest", "config.py"), encoding="utf-8").read(),
+          "idempotent SKIP wording still present")
+
+    # --- B: grandparent_name for <study>/Other data/<exam>
+    root = os.path.join(td, "gp")
+    for study in ("jrc250101_m1_0522", "badname"):
+        for ex in ("1", "2"):
+            os.makedirs(os.path.join(root, study, "Other data", ex))
+    cfg = mri_cfg(root, pattern="*/Other data/[0-9]*")
+    cfg["auto_discover"]["filename_parse"]["source"] = "parent_name"
+    col = []
+    cases, _ = expand(cfg, collector=col)
+    check(cases == [] and [r["target"] for r in col] == ["Other data"] * 2,
+          "grandparent: parent_name reads the literal 'Other data' and drops all")
+    cfg["auto_discover"]["filename_parse"]["source"] = "grandparent_name"
+    col = []
+    cases, _ = expand(cfg, collector=col)
+    check(len(cases) == 2 and all(c["discovered"]["jrc_id"] == "jrc250101_m1_0522"
+                                  for c in cases),
+          "grandparent: <study>/Other data/<exam> resolves to the study name")
+    check([r["target"] for r in col] == ["badname"] and col[0]["n_matches"] == 2
+          and col[0]["source"] == "grandparent_name"
+          and col[0]["target_path"] == os.path.join(root, "badname"),
+          "grandparent: an unparseable study is reported under its own name")
+    cfg["auto_discover"]["filename_parse"]["source"] = "grandparent"
+    try:
+        expand(cfg)
+        check(False, "grandparent: unknown source is rejected")
+    except ValueError:
+        check(True, "grandparent: unknown source is rejected")
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="gj3_unparsed_") as td:
         staging = build_staging(td)
@@ -367,6 +474,7 @@ def main():
         test_cli(td, staging)
         test_patterns(staging)
         test_positional(td)
+        test_unseen_and_grandparent(td)
     print()
     if FAILS:
         print(f"FAILED: {len(FAILS)} check(s)")

@@ -717,6 +717,7 @@ def api_preview():
         "n_dropped": result.n_dropped,
         "dropped": result.dropped,
         "unparsed": result.unparsed,
+        "unseen": result.unseen,
         "blocking_errors": result.blocking_errors,
         "warnings": result.warnings,
         "cases": [_case_to_dict(c) for c in result.cases],
@@ -893,7 +894,8 @@ def _ingest_sse_response(cfg, nas_root, dry_run, stamp, cleanup_dir=None):
     Shared by the microscopy (/api/ingest) and MRI (/api/mri/ingest) commit
     paths -- identical streaming behaviour; only the config assembly upstream
     differs. Each (msg, level) the pipeline logs becomes a `data: {...}` event;
-    the final `done` event carries the per-acq results + the dry_run flag.
+    the final `done` event carries the per-acq results + the dry_run flag +
+    `n_already_ingested` (the matches skipped as already ingested).
 
     `cleanup_dir` (MRI remote-pull only): a local staging batch dir to delete
     after a SUCCESSFUL, non-dry-run ingest (every acq ok). The operator never
@@ -910,9 +912,10 @@ def _ingest_sse_response(cfg, nas_root, dry_run, stamp, cleanup_dir=None):
 
         def worker():
             try:
+                stats = {}
                 results = runner.run(
                     cfg, nas_root, dry_run=dry_run,
-                    log_callback=cb, recipe_path=stamp,
+                    log_callback=cb, recipe_path=stamp, stats=stats,
                 )
                 ok = sum(1 for _aid, good in results if good)
                 total = len(results)
@@ -956,6 +959,9 @@ def _ingest_sse_response(cfg, nas_root, dry_run, stamp, cleanup_dir=None):
                     "ok": ok,
                     "total": total,
                     "dry_run": dry_run,
+                    # The same figure the preview shows (issue #5): matches
+                    # skipped because they are already in the registry.
+                    "n_already_ingested": stats.get("n_already_ingested", 0),
                 })))
             except Exception as e:  # noqa: BLE001 — report to the stream
                 q.put(("error", "ERROR", str(e)))
@@ -1151,6 +1157,7 @@ def api_mri_preview():
         "n_dropped": result.n_dropped,
         "dropped": result.dropped,
         "unparsed": result.unparsed,
+        "unseen": result.unseen,
         "blocking_errors": result.blocking_errors,
         "warnings": result.warnings,
         "cases": cases,

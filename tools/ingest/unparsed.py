@@ -37,11 +37,12 @@ pattern (`<study>/Other data/<exam>`, where `parent_name` reads "Other data").
 """
 
 import csv
+import fnmatch
 import os
 from datetime import datetime, timezone
 
 CSV_FIELDS = [
-    "target", "n_exam_folders", "n_matches", "target_path", "source", "rule",
+    "kind", "target", "n_exam_folders", "n_matches", "target_path", "source", "rule",
     "reason", "pattern", "config", "staging_dir", "matches", "reported_at",
 ]
 
@@ -56,7 +57,7 @@ def note(groups, *, target, target_path, source, rule, pattern, reason,
     rec = groups.get(target_path)
     if rec is None:
         rec = groups[target_path] = {
-            "target": target, "target_path": target_path, "source": source,
+            "kind": "parse", "target": target, "target_path": target_path, "source": source,
             "rule": rule, "pattern": pattern, "reason": reason,
             "n_matches": 0, "n_exam_folders": 0, "matches": [],
             "config": config or "", "staging_dir": staging_dir or "",
@@ -66,6 +67,16 @@ def note(groups, *, target, target_path, source, rule, pattern, reason,
         rec["n_exam_folders"] += 1
     rec["matches"].append(original_name)
     return rec
+
+
+def is_unseen(rec):
+    return rec.get("kind") in ("hidden", "appledouble")
+
+
+def split(records):
+    """-> (parse_records, unseen_records)."""
+    return ([r for r in records if not is_unseen(r)],
+            [r for r in records if is_unseen(r)])
 
 
 def totals(records):
@@ -83,6 +94,8 @@ def _unit(records):
 
 def count_label(rec):
     """'15 exam folders', '15 exam folders + 2 other entries', or '3 matches'."""
+    if is_unseen(rec):
+        return _UNSEEN_LABEL[rec["kind"]]
     n_ex, n_m = rec["n_exam_folders"], rec["n_matches"]
     if not n_ex:
         return f"{n_m} match{'es' if n_m != 1 else ''}"
@@ -93,10 +106,15 @@ def count_label(rec):
     return label
 
 
+_UNSEEN_LABEL = {"hidden": "hidden name (never globbed)",
+                 "appledouble": "macOS AppleDouble file (ignorable)"}
+
+
 def headline(records):
     """The one-line count, e.g.
     'NOT PARSED: 3 study folder(s) (31 exam folders) matched no filename_parse rule'.
     """
+    records = split(records)[0]
     n, n_ex, n_m = totals(records)
     inner = (f"{n_ex} exam folder{'s' if n_ex != 1 else ''}" if n_ex
              else f"{n_m} match{'es' if n_m != 1 else ''}")
@@ -105,17 +123,121 @@ def headline(records):
 
 def detail_lines(records):
     """One line per target, sorted by name: '<target>  <count>  <path>'."""
-    recs = sorted(records, key=lambda r: (r["target"].lower(), r["target_path"]))
+    recs = sorted(split(records)[0],
+                  key=lambda r: (r["target"].lower(), r["target_path"]))
     width = min(max((len(r["target"]) for r in recs), default=0), 70)
     return [f"{r['target']:<{width}}  {count_label(r)}" for r in recs]
 
 
+def unseen_headline(records):
+    """'NOT SEEN: 3 hidden name(s) (1 macOS AppleDouble) never reached the ingest',
+    or '' when there are none."""
+    un = split(records)[1]
+    if not un:
+        return ""
+    n_ad = sum(1 for r in un if r["kind"] == "appledouble")
+    ad = f" ({n_ad} macOS AppleDouble, ignorable)" if n_ad else ""
+    return (f"NOT SEEN: {len(un)} name(s) starting with '.'{ad} never reached "
+            f"the ingest (glob does not return them)")
+
+
+def unseen_detail_lines(records):
+    """One line per unseen entry: '<staging-relative path>  <kind label>'."""
+    un = sorted(split(records)[1], key=lambda r: r["matches"][0].lower())
+    width = min(max((len(r["matches"][0]) for r in un), default=0), 70)
+    return [f"{r['matches'][0]:<{width}}  {count_label(r)}" for r in un]
+
+
+def find_unseen(staging_dir, pattern, config=""):
+    """Dot-named entries `glob.glob(staging_dir/pattern)` never returns.
+
+    Walks the staging area plainly (no glob), following the pattern segment by
+    segment. A dot-named entry that fnmatch accepts for a segment is reported:
+    at the last segment it is the file/folder itself; at an earlier segment it is
+    a hidden folder whose contents the glob never reached (reported as that
+    folder, contents not listed). Entries the pattern excludes for other reasons
+    (an extension, a file where `*/` wants folders) are the pattern doing its
+    job and are not reported. Returns records for `unparsed`.
+    """
+    segs = [s for s in pattern.replace("\\", "/").split("/")]
+    dirs_only = bool(segs) and segs[-1] == ""
+    segs = [s for s in segs if s != ""]
+    out = []
+    if not segs:
+        return out
+
+    def rec(path, kind, rel):
+        is_dir = os.path.isdir(path)
+        name = os.path.basename(path)
+        return {
+            "kind": kind, "target": name, "target_path": path,
+            "source": "unseen", "rule": "not globbed", "pattern": pattern,
+            "reason": ("macOS AppleDouble companion file (._*); not ingested, "
+                       "safe to ignore" if kind == "appledouble" else
+                       "name starts with '.', which the glob never returns; "
+                       "not ingested" + (" (folder contents not listed)"
+                                         if is_dir else "")),
+            "n_matches": 1, "n_exam_folders": 0, "matches": [rel],
+            "config": config or "", "staging_dir": staging_dir,
+        }
+
+    def entries(d):
+        try:
+            return sorted(os.scandir(d), key=lambda e: e.name)
+        except OSError:
+            return []
+
+    def walk(d, i):
+        seg, last = segs[i], i == len(segs) - 1
+        if seg == "**":
+            if last:                       # '**' alone: everything below
+                seg, last = "*", True
+            else:
+                walk(d, i + 1)             # zero levels
+                for e in entries(d):
+                    if os.path.isdir(e.path):
+                        if e.name.startswith("."):
+                            add(e.path)
+                        else:
+                            walk(e.path, i)
+                return
+        for e in entries(d):
+            hidden = e.name.startswith(".")
+            if not fnmatch.fnmatchcase(e.name, seg):
+                continue
+            isdir = os.path.isdir(e.path)
+            if last:
+                if dirs_only and not isdir:
+                    continue
+                if hidden:
+                    add(e.path)
+            elif isdir:
+                if hidden:
+                    add(e.path)
+                else:
+                    walk(e.path, i + 1)
+
+    def add(path):
+        rel = os.path.relpath(path, staging_dir).replace(os.sep, "/")
+        kind = "appledouble" if os.path.basename(path).startswith("._") else "hidden"
+        out.append(rec(path, kind, rel))
+
+    if os.path.isdir(staging_dir):
+        walk(staging_dir, 0)
+    return out
+
+
 def public(records):
     """JSON-safe copies for a front-end (the GUI preview): no long match list."""
-    keep = ("target", "target_path", "source", "rule", "reason",
+    keep = ("kind", "target", "target_path", "source", "rule", "reason",
             "n_matches", "n_exam_folders")
-    return [{k: r[k] for k in keep} for r in
-            sorted(records, key=lambda r: (r["target"].lower(), r["target_path"]))]
+    out = []
+    for r in sorted(records, key=lambda r: (r["target"].lower(), r["target_path"])):
+        d = {k: r[k] for k in keep}
+        if is_unseen(r):                    # one path each: short, and the label
+            d["matches"] = list(r["matches"])
+        out.append(d)
+    return out
 
 
 def write_csv(records, path):

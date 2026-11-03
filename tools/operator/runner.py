@@ -28,7 +28,7 @@ from ingest import config
 
 
 def run(cfg, nas_root, dry_run=False, delete_source=False,
-        log_callback=None, nas_unc=None, recipe_path=None):
+        log_callback=None, nas_unc=None, recipe_path=None, stats=None):
     """Run (or dry-run) a batch ingest for `cfg` against `nas_root`.
 
     Args:
@@ -44,6 +44,8 @@ def run(cfg, nas_root, dry_run=False, delete_source=False,
         recipe_path: optional path string stamped into cfg["_ingest_config_path"]
             so the registry ingest_config column records the recipe/template
             that produced these rows. Stored as a forward-slash string.
+        stats: optional dict, passed to run_batch, which fills
+            `n_already_ingested` (matches skipped as already ingested).
 
     Returns:
         list[(acq_id, success)] — exactly what ingest_raw.run_batch returns.
@@ -68,6 +70,7 @@ def run(cfg, nas_root, dry_run=False, delete_source=False,
         return ingest_raw.run_batch(
             cfg, nas_root,
             dry_run=dry_run, nas_unc=nas_unc, delete_source=delete_source,
+            stats=stats,
         )
 
     # Route ingest_raw.log -> the caller's callback for the run's duration.
@@ -84,6 +87,7 @@ def run(cfg, nas_root, dry_run=False, delete_source=False,
         return ingest_raw.run_batch(
             cfg, nas_root,
             dry_run=dry_run, nas_unc=nas_unc, delete_source=delete_source,
+            stats=stats,
         )
     finally:
         ingest_raw.log = original_log

@@ -237,7 +237,7 @@ The streams that ingested on 2026-10-04 checked every planned link name first, a
   - `tools\docs\microscopy_guide.html` was refreshed to the repo version.
   - The record is the review §12.
 - [ ] Low (optional): rebuild `gjesus3_manager.exe` (the Project Manager) with the new linker. Its raw import already refuses a taken name, so this is for consistency only.
-- [ ] Low: make `provenance.has_entry_for_output` compare `output_path` case-insensitively. The share is case-insensitive, so 16 acquisitions carry a provenance row for a link that was never made; the repair has now made those links.
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #14):** Low: make `provenance.has_entry_for_output` compare `output_path` case-insensitively. The share is case-insensitive, so 16 acquisitions carry a provenance row for a link that was never made; the repair has now made those links.
 - [ ] **Audit and repair (Ryan's decision):** list the affected acquisitions (an inode check of each link folder), then add the missing links under distinct names. Additive only: project folders are researcher-owned (05_PROJECTS §3a).
 - [x] The first m12 study of 2026-07-10 avoided it with a scoped config (a `_study1147` suffix).
 - [x] Stream B's drive batches (2026-10-04) were guarded by `tools/drive_staging/check_link_collisions.py` before writing and `verify_links_strict.py` after. All of B's links are exact.
@@ -498,12 +498,12 @@ identity survives folder reshuffling. Do it **cross-ecosystem** (one key model, 
 per-instrument) and **document the key** in the spec so users and developers know
 what "already ingested" means as new instruments are added.
 
-- [ ] Design a stable, content/instrument-anchored dedup key (cross-ecosystem).
-- [ ] Report skips clearly to the operator ("N skipped — already ingested"). The
+- [x] **✅ DONE 2026-11-03 (issue #5):** microscopy `.czi` (06 §2.10, ✅ Ryan). MRI's tail key waits for a bulk ingest from another root (Q6, #19 / #40). Design a stable, content/instrument-anchored dedup key (cross-ecosystem).
+- [x] **✅ DONE 2026-11-03 (issue #5):** the skip count reaches the GUI's result and the BATCH SUMMARY (the GUI once the exe is rebuilt, #23). Report skips clearly to the operator ("N skipped — already ingested"). The
   preview already computes `n_already_ingested` (`/api/discovered`); surface the
   count in the GUI ingest result too — the completion-popup work on
   `feat/gui-operator-polish` is the natural place to show it.
-- [ ] Document the dedup-key contract in `06_REGISTRIES` (or `10_TOOLS`) so identity
+- [x] **✅ DONE 2026-11-03 (issue #5):** 06 §2.10. Document the dedup-key contract in `06_REGISTRIES` (or `10_TOOLS`) so identity
   is explicit for future instruments.
 - *Related but distinct:* the concurrency dedup-**snapshot** risk (see "Architecture
   & code review follow-through", §3.1 #1) is a different concern — a pre-lock
@@ -615,7 +615,7 @@ are the same acquisition, but not always the same pixels.
   right instrument code, e.g. the remaining 15 mis-coded rows). **It must not be blocked by its own
   tombstone:** the ingest dedup index deliberately includes retired rows (Ryan, 2026-10-01), so a
   re-identify has to bypass that for the id it is replacing.
-- [ ] Re-rate this item's priority in the light of the production evidence.
+- [x] **✅ Re-rated 2026-11-03 (Ryan):** the core merges now; the follow-ups are **MEDIUM**: warn on scene splits (Q1, with #11), warn when the serial disagrees with the template (Q2) and name the matched ACQ-ID in the skip line (Q5, unblocked by the #14 wiring), one small issue for the two; an MRI tail key (Q6, #19 / #40). Re-rate this item's priority in the light of the production evidence.
 
 ## Person/role rename — residual cleanup (core done 2026-06-09)
 
@@ -625,7 +625,7 @@ The global researcher/operator/tech/user rename ([06_REGISTRIES §2.3a-bis](../m
 - [ ] **Exhaustive prose sweep** of remaining "operator" mentions that mean the *role* (e.g. "Operator model" rows in `09_MODALITIES`, scattered "operators may…" lines) — the schema/authoritative docs are done; these are descriptive prose.
 - [ ] **`source: "operator-entered"` enum** (in `condition:`/`anatomy:` provenance) — a *different* sense of "operator" (a human supplied the value at ingest). Decide whether to rename it (e.g. `manually-entered`) for consistency, or keep.
 - [ ] **Project owner = researcher.** `auto_create_project.owner` still resolves to the filename/operator person for microscopy; consider making the auto-created project owner the `researcher`.
-- [ ] **Reject the unreplaced MRI researcher placeholder on the data-office YAML path.** `mri-ingest --operator` is required (CLI path enforced), but a direct `ingest_raw.py --config` run that forgets to replace `researcher: "<REQUIRED ...>"` would still write the placeholder. Add a validation that errors when `researcher`/`operator` looks like the placeholder.
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #15):** **Reject the unreplaced MRI researcher placeholder on the data-office YAML path.** `mri-ingest --operator` is required (CLI path enforced), but a direct `ingest_raw.py --config` run that forgets to replace `researcher: "<REQUIRED ...>"` would still write the placeholder. Add a validation that errors when `researcher`/`operator` looks like the placeholder.
 - [ ] **AxioScan researcher REQUIRED in the GUI** (parallel to MRI `--operator`). Today the GUI Researcher box is optional (blank → template placeholder for AxioScan). For AxioScan tissue the researcher isn't in the filename, so the GUI should require it before Ingest. (Handle during the GUI test pass.)
 - [ ] **Normalize the NI curated `animal_id`.** `ni.subject.animal_id` is the raw protocol.txt value `0525_m13` (project_animal); the registry `sample_id` is `m13_0525` (animal_project). Optionally derive a consistent curated `animal_id` while keeping the raw value in `_raw_metadata`.
 
@@ -827,7 +827,7 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
 
 - [ ] **Symmetric override flags:** MRI `--pi` (override the parsed `pi_initials`)
   and NI `--user` (override the parsed user), once the person-home above exists.
-- [ ] **🔺 HIGH — ⚠️ `extract_study_date` reads only the first 20 instances and fails
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #7):** **🔺 HIGH — ⚠️ `extract_study_date` reads only the first 20 instances and fails
   SILENTLY into today's date (hit live 2026-08-12).** *Priority set 2026-08-13: this is
   the highest-priority open item in this file. It has already corrupted production once,
   it is not instrument-specific — any nested DICOM source can hit it — and it fails
@@ -854,7 +854,7 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
   acquisition date is worse than a deferred one. Note the same 20-instance limit
   applies to `detect_modality`, which is why the batch log reported
   `DICOM Mod: PR` (a presentation state) for some cases.
-- [ ] **`dicom_utils.summarize_source` opens every file in the source tree
+- [ ] **Partly done 2026-10-23 (issue #7):** `summarize_source` now walks the tree once; the archive central-directory `file_count` is left as a TODO for #32. **`dicom_utils.summarize_source` opens every file in the source tree
   (measured 2026-08-12).** `find_dicom_files` has no limit in the `file_count`
   path, and for extensionless DICOM it must open each file to check the `DICM`
   magic at byte 128 — so a collaborator case of ~21,000 instances costs ~21,000
@@ -992,6 +992,26 @@ original `STATUS.md` locations (§3.1 / §3.2) as history; this is the active ho
     - the rule that every registration makes a new `DS-SEG` (never an append);
     - the 12 / 07 gaps: a `label_origin` vocabulary, in-place correction, and a reference type for a model.
 
+## 🔸 MODERATE — an acquisition with an unknown date: the tools offer a stand-in date and write the note; the registry refuses a blank date (Ryan, 2026-10-23)
+
+**Ryan's ruling** (pre-port decision 1, [`pre_port_decisions_2026-10-19.md`](pre_port_decisions_2026-10-19.md)): the registry refuses anything
+without an acquisition date, and a guessed date is described in `notes`; but "for our scripts and tools, we should
+offer the user a way to put in an acquisition with an unknown date, we should offer either a manual entry or today's
+date and fill in the notes for them." The ingest's refusal of an undated case (#7) is the system half and is merged.
+
+**What the tools do today:** the opt-in `ingest.allow_unknown_acquisition_date: true` puts today's date in the ACQ-ID,
+logs a WARN, and leaves the registry's `acquisition_datetime` **blank**: no note, and no prompt in the GUI.
+`acquisition_datetime` is not among the validator's required columns.
+
+- [ ] The opt-in (or its replacement) writes the stand-in date into `acquisition_datetime` and appends a fixed note
+  to `notes` (e.g. "acquisition date unknown at ingest; <date> is a stand-in: typed by <user> / today's date").
+- [ ] The operator GUI (and `mri-ingest` / `ni-ingest` where they can meet it) offers, for an undated case, a typed
+  date or today's date, instead of only refusing. The typed date goes through the same path.
+- [ ] The registry writer refuses a row with a blank `acquisition_datetime`, and the validator makes it a required
+  column. The live registry had **0** blank `acquisition_datetime` in 42,981 rows on 2026-10-23 (read-only count);
+  re-check before the change.
+- [ ] Decide how a stand-in date is told apart in queries: the note alone, or a flag column (a schema change, 06).
+
 ## 🔸 MODERATE — a published "batch window" flag, so researcher syncs never overlap a Data Office batch (2026-10-08)
 
 **Why.** Once NI researchers run the live sync themselves (`ni-ingest` on the Molecubes Mac),
@@ -1069,7 +1089,12 @@ build,** the alternative: move retired bytes to a quarantine area (e.g. `raw\_re
 them only in a separate, explicit purge step. That would make a retirement reversible until the
 purge.
 
-## 🔸 MODERATE — no ingest maintains a project's `start_date` / `last_activity` (2026-10-01)
+## ✅ RULED 2026-11-03 — no ingest needs to maintain a project's `start_date` / `last_activity` (raised 2026-10-01)
+
+**Ryan's ruling** (pre-port decision 7, [`pre_port_decisions_2026-10-19.md`](pre_port_decisions_2026-10-19.md)): "the date in a project
+is not super critical … there is certainly no need to touch the dates at acquisition." The engine fix below was built
+on `feat/project-lifecycle` and **removed before the merge**; the one-time recompute was **dropped**. A project's dates
+are set when it is created. What is left is the next item. The text below is the original item.
 
 Since 2026-07-14 these two columns of `registry_projects.csv` **mean acquisition dates**. They were
 backfilled once that day, and **nothing has maintained them since.**
@@ -1085,12 +1110,30 @@ backfilled once that day, and **nothing has maintained them since.**
 Stale dates are how `1019` was closed while it was still receiving data (see "Define what
 `status = closed` actually does").
 
-- [ ] Engine fix: when an ingest registers an acquisition into a project, widen that project's
+- [x] ~~Engine fix: when an ingest registers an acquisition into a project, widen that project's
   `start_date`/`last_activity` to cover its acquisition date. Do it under the projects-registry lock
-  (`ingest/projects_registry.py`), and never move a date inward.
-- [ ] One-time recompute for every project, backup-first. The logic already exists inside
+  (`ingest/projects_registry.py`), and never move a date inward.~~ **Not wanted (Ryan, 2026-11-03).**
+- [x] ~~One-time recompute for every project, backup-first. The logic already exists inside
   `tools/reopen_project.py` (on `feat/drives-microscopy-ingest`); lift it into a shared function.
-  Run it after the historical-drives ingest, which touches 13 projects.
+  Run it after the historical-drives ingest, which touches 13 projects.~~ **The shared function and
+  `tools/recompute_project_dates.py` exist; the run is dropped (Ryan, 2026-11-03).**
+
+## 🔸 MODERATE — the Project Manager sets project dates, and stamps one on close (Ryan, 2026-11-03)
+
+Ryan: "it really should be the project manager tool that lets people change dates. Something like when a project closes
+would be autoset when the project manager tool is used to close a project." Today `start_date` and `last_activity` are
+read-only there, and no ingest moves them.
+
+- [ ] Let the Project Manager edit the dates (`EDITABLE_FIELDS` in `ingest/projects_registry.py`, the GUI's read-only
+  fields, 05 §7, 06 §4.4). Decide who may, and whether `last_activity` keeps its name: nothing maintains it, and the
+  GUI labels it "Last activity".
+- [ ] Stamp a date when the tool closes a project. `closed_date` exists in `_project.yaml` but not in
+  `registry_projects.csv`, so the registry half is a schema call. Goes with "closed projects should be MOVED, not
+  deleted" and "Define what `status = closed` actually does", which have no close action yet.
+- [ ] **The retention close-out must read `registry_raw.csv`, not these columns.** Its rule is "newest acquisition older
+  than 3 years", and stale project dates are how `1019` was closed while it was still receiving data. No close-out tool
+  exists yet; `projects_registry.acquisition_date_ranges` and the dry run of `tools/recompute_project_dates.py` give the
+  real span.
 
 ## 🔸 MODERATE — audit production `.czi` for truncated primaries (2026-10-01)
 
@@ -1483,10 +1526,14 @@ system leaves a trace (`pending_dicom_regen.csv`, `pending_subject_metadata.csv`
   a global relaxation is exactly the "better guesser" the standing direction rules out. The right
   answer is to *report* the unparseable, not to *guess* it.
 
+**✅ Done 2026-10-23 (issue #6):** `filename_parse.source` now accepts `grandparent_name` (an unknown `source` is now a `ValueError`).
+
 **Related, same root:** `filename_parse.source` supports only `name` and `parent_name`. Irene's
 share nests exams as `<study>/Other data/<exam>`, so `parent_name` reads the literal `"Other data"`
 and the regex never matches — 24 cases became 0. Worked around by staging the study flattened
 (0.70 GB); a `grandparent_name` source would remove the need, but that too is a code change.
+
+**✅ Done 2026-10-23 (issue #6):** dot-named entries the pattern would match are now reported as NOT SEEN (`find_unseen`; `include_hidden` stays off).
 
 **Also same class — a file whose name starts with `.` is never globbed (found 2026-09-30).** Python's
 `glob` does not match leading-dot names, so `expand_batch` never sees such a file: no SKIP line, no
@@ -1749,7 +1796,7 @@ wrong, but until this is settled the validator cannot serve as a gate for anythi
   - The claimed names go in at the same time, joined by the claim list's `session key`, the study-folder part of `original_name`.
   - **The sidecars:** `user_supplied.operator` on these rows still holds the old instruction text, because Ryan's rule for (a) was "only those 10,314 cells". Write each final value (a claimed name, or blank) to the sidecars too, by the recovery-tool pattern, so the column and the sidecar agree again (06 §2.3a-bis).
   - For MRI, 06 §2.3a-bis says operator == researcher, and `researcher` is blank on all 10,314. Whether a claimed name also fills `researcher` is Ryan's call at (c).
-- [ ] **Collapse repeated identical findings in the validator regardless.** 10,315 lines for one
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #8):** **Collapse repeated identical findings in the validator regardless.** 10,315 lines for one
   defect class is the saturated-warning-channel item below, reproduced in the error channel — report
   a class once with a count and a few example rows. A future recurrence on 10k rows would be just
   as unreadable, whatever is decided about this instance.
@@ -1833,7 +1880,7 @@ been caught cheaply by two checks that need no image server and no new data sour
 - the PROJ-0056 rows showed as ~120 *weeks* old in a 4-month cohort, which the same pass would
   have flagged had anyone been running it.
 
-- [ ] **Age sanity (cheap, local).** `acquisition_datetime` vs `subject.date_of_birth`: ERROR on
+- [ ] **Partly done 2026-10-23 (issue #8):** an acquisition dated before its subject's `date_of_birth` is now an ERROR (Ryan, 2026-10-23), reported once with a count; the implausible-for-species WARN is not built. **Age sanity (cheap, local).** `acquisition_datetime` vs `subject.date_of_birth`: ERROR on
   negative, WARN on implausible-for-species. Note the tuning trap found on 2026-08-19 — a naive
   ">550 days is suspicious" rule flags **1,332 rows**, nearly all of them legitimate 18-month
   ageing studies in `PROJ-0002` / `PROJ-0006`. Age alone is a weak signal; pair it with the
@@ -1926,10 +1973,10 @@ check nobody reads, so the ~580 lines that *are* actionable are invisible. This 
 failure shape as the PROJ-0056 misattribution itself: the signal existed somewhere, and nothing
 made it visible. **Filling the 18,167 blanks is not the fix.**
 
-- [ ] Stop emitting a per-acquisition WARN when an optional field holds its documented "unknown"
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #8):** Stop emitting a per-acquisition WARN when an optional field holds its documented "unknown"
   sentinel. Report it **once as coverage** instead — e.g. "`is_control` known on 2,549 of 15,474".
 - [ ] Leave the remaining classes as real warnings; ~580 is a list someone will actually read.
-- [ ] Decide whether `pending-db` (292) belongs in the warning stream at all, given it is a queue
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #8):** Decide whether `pending-db` (292) belongs in the warning stream at all, given it is a queue
   with its own drain tool (`recover_subject_metadata.py`) and its own registry.
 - [ ] Re-check the 146 + 138 missing blocks: these are pre-Phase-3 sidecars, so the question is
   whether to backfill them or accept them as historical.
@@ -2191,7 +2238,7 @@ it from the **project's own provenance file** instead of the registry. Raised by
     "select-in-Finder → assemble a project" item above should *write* into this same
     provenance-driven model.
 
-## `metadata.json` sidecars carry platform-dependent line endings (2026-08-16)
+## ✅ DONE 2026-10-23 (issue #7) — `metadata.json` sidecars carry platform-dependent line endings (2026-08-16)
 
 🔸 **MODERATE — already live in `/raw/`, not theoretical.** One-line cause in
 [`tools/ingest/metadata_sidecar.py`](../tools/ingest/metadata_sidecar.py) (~line 116):
@@ -2244,7 +2291,7 @@ Context: found while building `tools/recover_subject_ids.py`
 Small and self-contained — roughly an afternoon inside
 [`tools/validate_registries.py`](../tools/validate_registries.py), not a branch.
 
-- [ ] **Validate the shape of the semicolon-packed columns.** Three columns are
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #8):** **Validate the shape of the semicolon-packed columns.** Three columns are
   `;`-separated lists: **`subject_ids`**, **`modalities_in_study`**, and (legacy /
   hand-edited only) **`project_id`**. Check for empty segments (`A;;B`), a trailing
   separator, and duplicates (`A;A`). `ingest/project_ids.py` and `ingest/registry.py`
@@ -2306,7 +2353,7 @@ place the system promises to be authoritative.
   (2026-07-16) coincides with the no-DICOM DICOM-regen backfill drain, so start with that
   session's records and `pending_dicom_regen.csv`. The empty `.data/` says these are the
   no-DICOM placeholder path.
-- [ ] **Decide the rule, not just this case** *(still open, and now with a second instance: the m6 session's two failed attempts, 2026-10-02)*: should `/raw/` folders without a registry
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #8; now an ERROR, Ryan 2026-10-23):** an ACQ-ID folder under `/raw/` with no registry row and no tombstone is reported by `validate_registries`. **Decide the rule, not just this case** *(still open, and now with a second instance: the m6 session's two failed attempts, 2026-10-02)*: should `/raw/` folders without a registry
   row be (a) reported by `validate_registries` as an ERROR, (b) auto-cleaned by a drain
   tool, or (c) tolerated? Today nothing looks for them, which is why these sat unnoticed
   for a month. A **`/raw/`-vs-registry orphan check is the natural companion** to the
@@ -2353,7 +2400,7 @@ This folder holds the **only copy of `/2`** (`pdata\2` of 12 exams, 72 files) of
 - The workflow notes say auto-generated reconstructions (`/1`, `/2`) are typically discarded, so this is a retention call, not a loss.
 - **Do not delete any `staging\sftp_20260716_*` folder before the m6 session is ingested;** then decide on this one.
 
-## 🔹 LOW — the dry-run preview ignores `.acq_id_seq.json` (2026-10-02)
+## ✅ DONE 2026-10-23 (issue #7) — 🔹 LOW — the dry-run preview ignores `.acq_id_seq.json` (2026-10-02)
 
 `tools/operator/preview.py::_preview_acq_id` calls `generate_acq_id`, which reads only the registry and the tombstones.
 
@@ -2387,7 +2434,7 @@ Ryan drew a line on 2026-10-04 (09_MODALITIES, ✅): a platform acquisition is r
 - [x] **Done 2026-10-09:** all 464 retired (`no-dicom`), files kept in the projects (STATUS §2).
 - [ ] **Live ingest: skip non-image exams (written up 2026-10-08, `feat/mri-placeholder-retire`, gate §6).** Before the ACQ-ID is allocated, when `copy_strategy` is `mri_paravision_v2` and `paravision_regen.is_nonimage_exam(source)` matches (STEAM / PRESS / WOBBLE), report the exam as NOT REGISTERED (spectroscopy / calibration, the 2026-10-04 line) in the log and in a BATCH SUMMARY section like NOT PARSED, and do not register it; optional `--not-registered-report <csv>`. Needs: a third result state through `operator/runner.py` and the GUI, an exe rebuild + redeploy, tests. **Questions (Ryan):** (a) a spectroscopy exam that carries an exported MRS DICOM: skip too? (b) an aborted exam with no data: the same skip? (c) the exam's own parameter files: leave them on the platform, or place them in the project like the retired ones? **With it:** exempt `no-dicom` tombstones from the dedup index (`ingest/config._build_dedupe_index`), so a DICOM made later registers by a normal ingest; only safe once the skip exists. Until then, a new spectroscopy exam from the scanner is again registered as a placeholder.
 
-## 🔹 LOW — an exam that produced no data is registered with today's date (2026-10-04)
+## ✅ DONE 2026-10-23 (issue #7; refused rather than skipped in `expand_batch`) — 🔹 LOW — an exam that produced no data is registered with today's date (2026-10-04)
 
 - **The cause:** an aborted exam has no `visu_pars`, so `mri_acquisition_datetime` is empty and the preview shows today's date (`ACQ-20261004-MRI-…`).
 - **Where it was hit:** stream B, on its B06 setup scans; and again on exam 66 of the 2026-07-08 phantom.
@@ -2475,7 +2522,7 @@ Windows default encoding, so a description with an accent or an em dash is store
 valid UTF-8 (`AE-biomaGUNE-0420`, `-0424`, `-0522`, `-0525`, `-0619`, `-0721`, `-1025`, `-1123`, `-1422`, `CNIC-HEARDS`). The
 registry is not affected (`registry_projects.csv` is UTF-8, checked). A UTF-8 reader of these files fails.
 
-- [ ] Write `_project.yaml` with `encoding="utf-8"` everywhere it is written; convert the 10 (cp1252 → UTF-8, backed up).
+- [ ] **Half done 2026-11-03 (issue #10):** every writer now uses UTF-8, and `tools/fix_project_yaml_encoding.py` is built. Converting the 10 waits on its production run, before anyone edits a project in the rebuilt GUI. Write `_project.yaml` with `encoding="utf-8"` everywhere it is written; convert the 10 (cp1252 → UTF-8, backed up).
 
 ## 🔹 LOW — 165 pig files wait in holding for a path-level remap (2026-10-07)
 
@@ -2558,7 +2605,7 @@ archive ingest adds 118 studies with no project (41 animal studies, 77 phantoms/
 
 ## 🔸 MODERATE — the drives' DICOM stream: follow-ups (stream B, 2026-10-04)
 
-- [ ] **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T.
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #7):** **`_scanner_model` maps `BIOSPEC 500` to "50T"** (`tools/ingest/paravision_metadata.py`). It should be 11.7T.
   - Production is unaffected: the 11.7T rows stream B ingested set `instrument_model` explicitly.
   - Fix it before any 11.7T ingest relies on auto-derivation.
 - [ ] *(2026-10-06: 2022–23 left the acquisition machine around 2026-08-26 for the platform's own archive (Ryan). A re-pull of the May 2023 `0721` `_biod` sessions would come from there, through the platform manager. The 2024–26 MFB studies still on the scanner are STATUS §0.4 N1.)* 🔺 **Re-pull from kenia the sessions the regex skipped, before the retention horizon passes them.** That means the `0721` `_biod` sessions (May 2023) and any other unparsed study. It depends on STATUS §0 D3(a).
@@ -3055,7 +3102,7 @@ Same model planned for the **future external-drive microscopy** (also no standar
 - [ ] **Bulk ingest** — per-folder, throttled, K:-conservative (Confocal ~10 GB first, then Cell
   Observer ~205 GB in chunks). Generate the per-folder configs; run one folder at a time; then the
   best-guess pass over all. **Plan: load it, then gather researcher feedback before the external drives.**
-- [ ] Minor: strip the `.czi` extension from the best-guess `sample_id`.
+- [x] **✅ DONE 2026-10-23 (branch merge, issue #7):** Minor: strip the `.czi` extension from the best-guess `sample_id`.
 - [ ] Optional refinement: some folders embed a project code (`0721 HUGO`, `1022 RGD`) — could map
   those to the `AE-biomaGUNE-NNNN` projects (shared with MRI/NI/AxioScan) instead of a folder slug.
 - [ ] **Project re-organization via researcher feedback (the real fix — post-hoc).** Per-folder
@@ -3272,7 +3319,7 @@ single-operator workflow). See [`CHANGELOG.md`](../CHANGELOG.md) 2026-07-12.
   written in [`02_INFRASTRUCTURE §5.4`](../mfb-rdm-docs/02_INFRASTRUCTURE.md).
   Reframe from "PI decision" to purchase; robust even without the OCRE egress-cap
   answer. **This is inaction, not a design gap.**
-- [ ] **Fix the three HIGH latent bugs (§3.1).** All cause silent registry-vs-NAS
+- [ ] **Partly done 2026-10-23 (issue #14):** bug (1), the pre-lock dedup snapshot, is closed at the commit point (`DuplicateAtCommit`); (2) and (3) remain. **Fix the three HIGH latent bugs (§3.1).** All cause silent registry-vs-NAS
   divergence: (1) dedup is a pre-lock snapshot → concurrent/double-launched batch
   double-ingests everything (`config.py:367`/`:610` vs lock at `ingest_raw.py:809`);
   (2) `pending.py` rewrites the recovery queue non-atomically + unlocked → a crash

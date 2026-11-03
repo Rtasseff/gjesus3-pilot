@@ -57,13 +57,27 @@ def next_file_id(prov_path):
     return f"FILE-{max_num + 1:04d}"
 
 
+def _path_key(path):
+    """The comparison form of an output_path: stripped, case-folded, one slash.
+
+    The share is case-insensitive (SMB on the QNAP, mapped on Windows), so two
+    spellings that differ only in case, or in `/` vs `\\`, are the SAME link
+    entry. Comparing them exactly let 16 acquisitions carry a provenance row
+    for a link that was never made (BACKLOG, the link-collision item, 2026-10-05).
+    """
+    return (path or "").strip().replace("\\", "/").casefold()
+
+
 def has_entry_for_output(prov_path, output_path):
-    """True if a row already exists with this output_path. Used for idempotency."""
-    target = (output_path or "").strip()
+    """True if a row already exists with this output_path. Used for idempotency.
+
+    Case-insensitive, and `/` == `\\` (see _path_key): the share is.
+    """
+    target = _path_key(output_path)
     if not target:
         return False
     for r in _read_rows(prov_path):
-        if (r.get("output_path") or "").strip() == target:
+        if _path_key(r.get("output_path")) == target:
             return True
     return False
 

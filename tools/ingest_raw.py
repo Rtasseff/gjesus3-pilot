@@ -11,6 +11,7 @@ See 10_TOOLS.md and 03_RAW_STORAGE.md for full specification.
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,7 @@ from ingest import (
     metadata_sidecar, provenance, resolver, enrichment, locking,
     subjects_table, project_naming, user_tables, unparsed,
 )
+# Aliased: inside ingest_single `projects_registry` is the CSV's path.
 import create_project as create_project_mod
 import animal_db
 
@@ -126,6 +128,61 @@ def copy_files(src_dir, dst_dir):
     return count
 
 
+class DuplicateAtCommit(RuntimeError):
+    """Raised under the registry lock, at the commit point, when another run has
+    registered this case's (acq_date, original_name) since expand_batch built
+    its dedup snapshot. The case fails and its copy is rolled back; the id it
+    reserved stays unused (ids are never reused; a gap is harmless)."""
+
+
+def _refuse_if_registered_meanwhile(cfg_single, registry_path):
+    """The commit-time dedup re-check. MUST be called under locking.registry_lock.
+
+    Raises DuplicateAtCommit when ANY of the case's dedup keys
+    (config.dedupe_keys_for: the (acq_date, original_name) key, and for a
+    microscopy .czi the content key (instrument, acquisition timestamp, file
+    name), 06_REGISTRIES §2.10) is already in the registry or retired. The
+    index is read fresh here, under the lock, because the batch's snapshot
+    predates this case's copy. A blank original_name never keys (legacy rows),
+    as in the index itself.
+    """
+    keys = config.dedupe_keys_for(cfg_single)
+    hits = keys & config._build_dedupe_index(registry_path)
+    if hits:
+        raise DuplicateAtCommit(
+            f"dedup key(s) {sorted(hits, key=str)} already in the registry (or "
+            f"retired) -- registered by another run after this batch's dedup "
+            f"snapshot was taken; not appending a second row. The copy is rolled "
+            f"back; re-run the batch and this case is skipped as already ingested."
+        )
+
+
+# An `# EDIT:` placeholder a template ships in a person field, e.g.
+# "<REQUIRED - set via mri-ingest --operator, or replace here>". The validator
+# refuses it in ANY column (validate_registries.TEMPLATE_RESIDUE_RE); this is
+# the same shape, checked at ingest time so it never reaches the registry.
+_PLACEHOLDER_RE = re.compile(r"<[^<>\n]*>|\$\{[^}]*\}|\{\{[^}]*\}\}")
+
+
+def _unreplaced_placeholders(cfg_single):
+    """[(field, value)] for every registry value, and the top-level operator,
+    that still holds an unreplaced template placeholder.
+
+    `mri-ingest --operator` fills `researcher` and `operator` on the CLI path,
+    but a direct `ingest_raw.py --config` run with the template's
+    `researcher: "<REQUIRED ...>"` left in place used to write the instruction
+    text into production (10,314 rows, 2026-08-20; BACKLOG "Person/role rename
+    -- residual cleanup"). Every registry column is checked, not only the
+    person fields: the instrument_model incident was the same shape.
+    """
+    found = []
+    for field in dict.fromkeys(list(registry.REGISTRY_FIELDS) + ["operator"]):
+        value = cfg_single.get(field)
+        if isinstance(value, str) and _PLACEHOLDER_RE.search(value):
+            found.append((field, value))
+    return found
+
+
 def _rollback_uncommitted(dest_dir, log_fn=log):
     """Remove a partially-written acquisition folder after a pre-commit failure.
 
@@ -145,6 +202,70 @@ def _rollback_uncommitted(dest_dir, log_fn=log):
             )
     except Exception as e:
         log_fn(f"Could not roll back {dest_dir}: {e}", "WARN")
+
+
+def _resolve_acq_date(acq_dt_iso, summary, ingest_block, log_fn=log):
+    """Step 3: the YYYYMMDD date behind the ACQ-ID prefix and the registry date.
+
+    Returns ``(acq_date, acq_date_is_real, backfill_iso)`` -- ``backfill_iso``
+    is the ISO date to write back into ``acquisition_datetime`` when the date
+    came from the DICOM headers (else None) -- or **None when the case must be
+    refused** because no date is known.
+
+    Order: (1) the config's ``acquisition_datetime`` (a literal, a
+    ``discovered.<x>`` value, or NA; the resolver normalized it to ISO at
+    expand-batch time); (2) the DICOM ``StudyDate`` the summarizer read from
+    the headers -- collaborator / external DICOM carries the real acquisition
+    date in the data, not the filename, so its configs can legitimately set
+    ``acquisition_datetime: NA`` (caveat: such a batch keys its registry rows
+    off the discovered date while expand_batch's idempotency check keys off the
+    empty config value, so a re-run will not dedupe them; supply an explicit
+    ``acquisition_datetime`` for strict idempotency); (3) nothing.
+
+    (3) used to mean "today, with a WARN". It no longer does: a 2019 exam was
+    committed as ``ACQ-20260812-...`` under ``/raw/DICOM/2026/2026-08/`` with
+    the wrong date baked into its project link name, and the batch still
+    exited 0 (CHANGELOG 2026-08-13; BACKLOG "Misc"). A wrong acquisition date
+    is a silently wrong identity; a refused case is a visible one. An MRI exam
+    reaches (3) when it has no ``visu_pars`` -- an aborted exam with no
+    reconstructed image, which the 2026-10-04 line says is not registered
+    anyway. The old behaviour stays reachable, deliberately, through
+    ``ingest.allow_unknown_acquisition_date: true``; enrichment then withholds
+    the placeholder date from age_at_acquisition (``acq_date_is_real``).
+    """
+    if acq_dt_iso and len(acq_dt_iso) >= 10:
+        return acq_dt_iso[:10].replace("-", ""), True, None
+    study_date = ((summary or {}).get("study_date") or "").strip()
+    if len(study_date) == 8 and study_date.isdigit():
+        log_fn(
+            f"acquisition_datetime not provided; using DICOM StudyDate "
+            f"({study_date}) as ACQ-ID prefix and registry date."
+        )
+        return (study_date, True,
+                f"{study_date[:4]}-{study_date[4:6]}-{study_date[6:8]}")
+    if (ingest_block or {}).get("allow_unknown_acquisition_date"):
+        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        log_fn(
+            f"acquisition_datetime not provided and no usable DICOM "
+            f"StudyDate; using today ({today}) as ACQ-ID prefix because "
+            f"ingest.allow_unknown_acquisition_date is set. Backfill the "
+            f"registry acquisition_datetime when known. age_at_acquisition "
+            f"will be left blank (no real date to measure to).",
+            "WARN",
+        )
+        return today, False, None
+    log_fn(
+        "acquisition_datetime not provided and no DICOM instance in the source "
+        "carries a StudyDate: the case is REFUSED, not dated to today (a wrong "
+        "acquisition date is a silently wrong identity). Set "
+        "`acquisition_datetime` in the config (or a discovered.<field>; for "
+        "an MRI exam, no visu_pars usually means an aborted exam with no "
+        "reconstructed image, which is not registered), or set "
+        "`ingest.allow_unknown_acquisition_date: true` to accept today's date "
+        "knowingly.",
+        "ERROR",
+    )
+    return None
 
 
 def _raw_primary_path(cfg_single, raw_acq_dir, acq_id_str):
@@ -910,55 +1031,38 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
     data_ecosystem = config.resolve_ecosystem(instrument)
     cfg_single["data_ecosystem"] = data_ecosystem
 
+    # --- Step 2b: refuse an unreplaced template placeholder ---
+    # Before anything is allocated or copied: a person field (or any registry
+    # value) still holding the template's "<REQUIRED ...>" instruction is a
+    # config that was never edited, not a value (issue #15).
+    placeholders = _unreplaced_placeholders(cfg_single)
+    if placeholders:
+        for field, value in placeholders:
+            log(f"{field} still holds the template placeholder {value!r}", "ERROR")
+        log(
+            "Case REFUSED: replace the placeholder(s) in the config (for MRI, "
+            "`mri-ingest --operator <name>` sets researcher and operator), or "
+            "leave the field blank if the value is genuinely unknown. Nothing "
+            "was allocated or copied.",
+            "ERROR",
+        )
+        return None, False
+
     # --- Step 3: Resolve ACQ-ID date prefix from acquisition_datetime ---
-    # acquisition_datetime is now provided via the YAML registry: block
-    # (literal, discovered.<x>, or NA). The resolver normalized it to ISO
-    # ("YYYY-MM-DDT...") at expand-batch time.
+    # The config's acquisition_datetime (literal / discovered.<x> / NA, ISO-
+    # normalized by the resolver at expand-batch time), else the DICOM
+    # StudyDate, else the case is refused -- the rules and the reasons are in
+    # _resolve_acq_date. acq_date_is_real tells enrichment whether acq_date
+    # may feed age_at_acquisition (False only on the opt-in today placeholder).
     acq_dt_iso = cfg_single.get("acquisition_datetime", "")
-    # Does acq_date below carry a REAL acquisition date, or the today() placeholder?
-    # The ACQ-ID prefix tolerates the placeholder (it only has to be unique and
-    # roughly right), but enrichment uses acq_date to derive age_at_acquisition —
-    # and an age measured to the *ingest* date is not a missing value, it is a
-    # plausible wrong one that reads as DB-sourced truth. Track the distinction here
-    # because it is unrecoverable downstream: both branches produce a bare YYYYMMDD.
-    acq_date_is_real = True
-    if acq_dt_iso and len(acq_dt_iso) >= 10:
-        acq_date = acq_dt_iso[:10].replace("-", "")
-    else:
-        # No acquisition_datetime supplied by the config. Before defaulting
-        # to today, fall back to the DICOM StudyDate the summarizer read
-        # from the headers — collaborator / external DICOM carries the real
-        # acquisition date in the data, not the filename (so the config can
-        # legitimately set `acquisition_datetime: NA`). We also backfill
-        # cfg_single["acquisition_datetime"] so the registry column and the
-        # metadata sidecar reflect the real date instead of being left
-        # blank. Caveat: a config that relies on this fallback keys its
-        # registry rows off the discovered StudyDate while expand_batch's
-        # idempotency check keys off the (empty) config value — so a re-run
-        # won't dedupe these rows. That's acceptable for one-time external
-        # DICOM deposits; supply an explicit acquisition_datetime to keep
-        # strict idempotency.
-        study_date = (summary.get("study_date") or "").strip()
-        if len(study_date) == 8 and study_date.isdigit():
-            acq_date = study_date
-            cfg_single["acquisition_datetime"] = (
-                f"{study_date[:4]}-{study_date[4:6]}-{study_date[6:8]}"
-            )
-            log(
-                f"acquisition_datetime not provided; using DICOM StudyDate "
-                f"({acq_date}) as ACQ-ID prefix and registry date."
-            )
-        else:
-            acq_date = datetime.now(timezone.utc).strftime("%Y%m%d")
-            acq_date_is_real = False
-            log(
-                f"acquisition_datetime not provided and no usable DICOM "
-                f"StudyDate; using today ({acq_date}) as ACQ-ID prefix. "
-                f"Backfill the registry acquisition_datetime when known. "
-                f"age_at_acquisition will be left blank (no real date to "
-                f"measure to).",
-                "WARN",
-            )
+    resolved_date = _resolve_acq_date(acq_dt_iso, summary, ingest_block, log)
+    if resolved_date is None:
+        return None, False
+    acq_date, acq_date_is_real, backfill_iso = resolved_date
+    if backfill_iso:
+        # So the registry column and the sidecar carry the real date instead
+        # of being left blank.
+        cfg_single["acquisition_datetime"] = backfill_iso
 
     # --- Step 4: Generate ACQ-ID ---
     # Allocate under the registry lock with a durable high-water reservation so
@@ -1542,10 +1646,15 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
                         )
 
                     log(f"Auto-creating project: name='{project_name}', owner='{owner}'")
+                    # Dated by THIS acquisition, not today; no later ingest moves
+                    # the dates (06_REGISTRIES §4.2). With no real date,
+                    # create_project falls back to today.
                     new_id, ok = create_project_mod.create_project(
                         project_name, desc, owner, nas_root,
                         dry_run=False,
                         notes=notes_for_proj,
+                        start_date=(cfg_single.get("acquisition_datetime", "")
+                                    if acq_date_is_real else ""),
                     )
                     if ok and new_id:
                         cfg_single["project_id"] = new_id
@@ -1573,6 +1682,15 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         row = registry.build_row(acq_id_str, cfg_single, summary, canonical_path, reg_dt,
                                  anatomy=anatomy_block, subjects=subjects_list)
         with locking.registry_lock(registries_dir):
+            # Re-check the dedup key UNDER the lock (review 2026-07-08 §3.1 #1;
+            # issue #14). expand_batch built its (acq_date, original_name) index
+            # before the batch started, outside any lock, and this case's copy
+            # took minutes since: a second launch of the same batch, or a
+            # concurrent ingest of the same source, can have committed this key
+            # meanwhile, and the snapshot cannot see it. One registry read,
+            # the same cost the ACQ-ID allocation already pays under this lock.
+            # Retired rows count too, as in expand_batch (06_REGISTRIES §2.9).
+            _refuse_if_registered_meanwhile(cfg_single, registry_path)
             registry.append_row(registry_path, row)
             # The row is now written — THIS is the commit point (F item 5). Set
             # `committed` here, inside the lock and BEFORE the non-blocking
@@ -1817,7 +1935,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
 
 
 def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
-              unparsed_report=None):
+              unparsed_report=None, stats=None):
     """Run batch ingestion from a batch config.
 
     `unparsed_report`: optional path. Every parse target (for MRI: every study
@@ -1826,18 +1944,30 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
     Written in --dry-run too; it is a plain file at the path given, never a
     registry. The BATCH SUMMARY lists the same targets either way.
 
+    `stats`: optional dict; filled with `n_already_ingested` (the matches skipped
+    as already in the registry or retired), so a caller such as the operator GUI
+    can show the skip count beside the results (issue #5).
+
     Returns list of (acq_id, success) tuples.
     """
     unparsed_records = []
-    cases = config.expand_batch(cfg, nas_root=nas_root, unparsed=unparsed_records)
+    already = []
+    cases = config.expand_batch(cfg, nas_root=nas_root, unparsed=unparsed_records,
+                                already=already)
+    if stats is not None:
+        stats["n_already_ingested"] = len(already)
     # Stamp ingest_config onto every case (set in main()).
     ingest_config_path = cfg.get("_ingest_config_path", "")
     for case in cases:
         case["ingest_config"] = ingest_config_path
     log(f"Batch: {len(cases)} cases discovered")
-    if unparsed_records:
-        log(f"{unparsed.headline(unparsed_records)}; NOTHING under them will be "
+    parse_recs, unseen_recs = unparsed.split(unparsed_records)
+    if parse_recs:
+        log(f"{unparsed.headline(parse_recs)}; NOTHING under them will be "
             f"ingested (listed in the BATCH SUMMARY).", "WARN")
+    if unseen_recs:
+        log(f"{unparsed.unseen_headline(unseen_recs)} (listed in the BATCH "
+            f"SUMMARY).", "WARN")
     if unparsed_report:
         n_rows = unparsed.write_csv(unparsed_records, unparsed_report)
         log(f"Unparsed report: {n_rows} row(s) -> {unparsed_report}")
@@ -1888,6 +2018,9 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
     print(f"  Total:    {len(results)}")
     print(f"  Success:  {n_ok}")
     print(f"  Failed:   {n_fail}")
+    if already:
+        # Not in Total: these never became cases (issue #5).
+        print(f"  Already ingested (not copied again): {len(already)}")
     if n_fail > 0:
         print("  Failed cases:")
         for i, (aid, ok) in enumerate(results):
@@ -1901,13 +2034,21 @@ def run_batch(cfg, nas_root, dry_run=False, nas_unc=None, delete_source=False,
         print(f"  Registered WITHOUT a project link (name taken): {len(refused)}")
         for aid, why in refused:
             print(f"    {aid}: {why}")
-    if unparsed_records:
+    if parse_recs:
         # Not counted in Total/Failed above: these never became cases. Loud on
         # purpose -- before 2026-10-05 they left only per-exam SKIP lines.
-        print(f"  {unparsed.headline(unparsed_records)}")
+        print(f"  {unparsed.headline(parse_recs)}")
         print("  NOTHING under them was ingested:")
-        for line in unparsed.detail_lines(unparsed_records):
+        for line in unparsed.detail_lines(parse_recs):
             print(f"    {line}")
+    if unseen_recs:
+        # Names the glob never returns (leading '.'): before 2026-10 these left
+        # no trace at all.
+        print(f"  {unparsed.unseen_headline(unseen_recs)}")
+        print("  NOT ingested (AppleDouble ._* files are safe to ignore):")
+        for line in unparsed.unseen_detail_lines(unseen_recs):
+            print(f"    {line}")
+    if unparsed_records:
         if unparsed_report:
             print(f"  Full list (paths, reasons): {unparsed_report}")
         else:

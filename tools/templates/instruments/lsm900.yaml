@@ -162,6 +162,7 @@ auto_discover:
 
   filename_parse:
     # `source: parent_name` targets the batch folder, not the .czi file.
+    # Sources: `name` (the match, default) | `parent_name` | `grandparent_name`.
     # The regex extracts researcher / experiment / cell_line from the
     # convention `<researcher>_<experiment-w/-internal-underscores>_<cell_line>`.
     # The greedy `(?P<experiment>.+)` middle group correctly handles

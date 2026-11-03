@@ -15,6 +15,7 @@ stays 🕗 PLANNED/DEFERRED — see 05_PROJECTS §3. Creating the directory is t
 part that is done; do not read its existence as the layer having shipped.
 """
 
+import io
 import os
 import re
 
@@ -132,8 +133,16 @@ def update_project_yaml(project_dir, updates):
     if not os.path.isfile(path) or not updates:
         return []
 
-    with open(path, "r", encoding="utf-8", newline="") as f:
-        lines = f.readlines()
+    # UTF-8 is what every writer now produces; older files were written in the
+    # Windows default (cp1252) and a strict UTF-8 read would refuse the edit.
+    # Such a file is read as cp1252 and written back as UTF-8 below.
+    with open(path, "rb") as f:
+        raw = f.read()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1252", errors="replace")
+    lines = io.StringIO(text, newline="").readlines()
 
     changed = []
     for key, value in updates.items():

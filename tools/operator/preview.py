@@ -70,6 +70,9 @@ class PreviewResult:
                                                        # folder) whose name matched no filename_parse
                                                        # rule: {"target", "target_path", "source", "rule",
                                                        # "reason", "n_matches", "n_exam_folders"}
+    unseen: list = field(default_factory=list)         # dot-named entries the glob never returns, one per
+                                                       # entry: {"kind": "hidden"|"appledouble", "target",
+                                                       # "target_path", "matches": [staging-relative path], ...}
     n_new: int = 0                                     # cases that would ingest
     blocking_errors: list = field(default_factory=list)
     derived: list = field(default_factory=list)       # NI live: derived files (attenuation maps) for
@@ -180,8 +183,10 @@ def preview_batch(cfg, nas_root, count_matches=True):
     # not by re-parsing the text) and tag the per-exam drops that belong to one,
     # so a front-end can show "1 study NOT PARSED (15 exam folders)" instead of
     # 15 look-alike lines (or, on the MRI page, "housekeeping").
-    result.unparsed = unparsed_mod.public(unparsed_records)
-    unparsed_reasons = {r["reason"] for r in unparsed_records}
+    parse_records, unseen_records = unparsed_mod.split(unparsed_records)
+    result.unparsed = unparsed_mod.public(parse_records)
+    result.unseen = unparsed_mod.public(unseen_records)
+    unparsed_reasons = {r["reason"] for r in parse_records}
     for d in dropped:
         d["unparsed"] = d["reason"] in unparsed_reasons
     result.n_already_ingested = already
@@ -289,6 +294,24 @@ def _preview_acq_id(acq_date, instrument, registry_path, seq_seen, warnings):
             )
             # ACQ-YYYYMMDD-INST-SEQ -> trailing seq int.
             seq = int(generated.rsplit("-", 1)[-1])
+            # generate_acq_id reads the registry (and the tombstones) only.
+            # The real run allocates max(registry, reservation) + 1, where the
+            # reservation is the high-water mark in registries/.acq_id_seq.json
+            # -- ids handed out that never got a row (a failed or rolled-back
+            # ingest) stay reserved. Read it here too, without writing, so the
+            # preview shows the ids the run will really mint (BACKLOG "the
+            # dry-run preview ignores .acq_id_seq.json": it showed -001..-017
+            # where the run allocated -018..-034).
+            prefix = f"ACQ-{acq_date}-{instrument}-"
+            reservations = acq_id_mod._read_reservations(
+                os.path.dirname(os.path.abspath(registry_path)))
+            try:
+                reserved = int(reservations.get(prefix, 0))
+            except (TypeError, ValueError):
+                reserved = 0
+            if reserved >= seq:
+                seq = reserved + 1
+                generated = f"{prefix}{seq:03d}"
             seq_seen[key] = seq
             return generated
         seq_seen[key] += 1

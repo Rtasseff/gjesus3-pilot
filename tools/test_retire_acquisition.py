@@ -205,10 +205,16 @@ def tombs(nas):
     return retired.read_retired(retired.retired_path(os.path.join(nas, "registries")))
 
 
-def validator_errors(nas):
+FIXTURE_ORPHAN = "ACQ-20260710-MRI-001"
+
+
+def validator_errors(nas, keep_orphan=False):
+    """The validator's errors, less the fixture's deliberate orphan folder (an ERROR since
+    2026-10-23) until step 10 retires it; step 10 checks that error on its own."""
     with contextlib.redirect_stderr(io.StringIO()):
         issues, _n = VR.validate(nas, check_enrich=False)
-    return [m for _a, m in issues.errors]
+    return [m for a, m in issues.errors
+            if keep_orphan or not (a == FIXTURE_ORPHAN and m.startswith("/raw/ folder with no registry row"))]
 
 
 def prov_rows(nas, project):
@@ -407,6 +413,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # ---- 10. orphan ----
     print("10. orphan")
+    check(any(m.startswith("/raw/ folder with no registry row") for m in validator_errors(nas, keep_orphan=True)),
+          "before the retire, the validator reports the orphan folder as an ERROR")
     rc, out = run(nas, bk, "--acq-id", "ACQ-20260710-MRI-001", "--orphan", "--reason",
                   "partial ingest 2026-07-16: folder written, registry commit never landed", "--execute")
     check(rc == 0, f"orphan rc=0 (got {rc})")
@@ -417,7 +425,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check(len(bko) == 1 and not os.path.exists(os.path.join(nas, "raw", "DICOM", "2026", "2026-07",
                                                             "ACQ-20260710-MRI-001")),
           "orphan folder backed up whole, then deleted")
-    check(not validator_errors(nas), "validator: clean")
+    check(not validator_errors(nas, keep_orphan=True), "validator: clean, the orphan error gone")
 
     # ---- 11. lookups, allocator, dedup ----
     print("11. resolve_acq_id / allocator / dedup")

@@ -11,10 +11,9 @@ Two facts shape everything in this module:
   remain findable (05_PROJECTS §5). `describe` reports `folder_exists: False`
   for those instead of treating them as corruption, and nothing here recreates
   a folder as a side effect of reading.
-* **`start_date` / `last_activity` mean ACQUISITION dates, not edit dates**
-  (production update 2026-07-14/15). Editing a description must NOT stamp
-  `last_activity` to today — that would silently redefine the column across
-  every project a researcher opens. `EDITABLE_FIELDS` is the whole of what an
+* **Editing a description must NOT stamp `last_activity` to today** — that
+  would silently redefine the column across every project a researcher opens
+  (06_REGISTRIES §4.2). `EDITABLE_FIELDS` is the whole of what an
   edit may touch, and it is enforced in `projects_registry.update_row`.
 """
 

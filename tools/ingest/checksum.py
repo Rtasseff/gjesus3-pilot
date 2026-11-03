@@ -57,7 +57,9 @@ def write_checksums(checksums, output_path):
         "algorithm": "sha256",
         "files": checksums,
     }
-    with open(output_path, "w") as f:
+    # Pinned LF + UTF-8 for the same reason as metadata_sidecar.write_sidecar:
+    # a /raw/ artifact's bytes must not depend on the ingesting OS.
+    with open(output_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(payload, f, indent=2)
 
 

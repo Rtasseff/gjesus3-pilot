@@ -27,9 +27,11 @@ in the template):
                                    Default: template default ('all'). Unselected
                                    recons still get their JCAMP-DX preserved.
     --model 7T|11.7T              which BioSpec scanner produced the batch.
-                                   Sets registry instrument_model. Default: leave
-                                   the template placeholder (you'll see a warning
-                                   in the preview if you skipped it).
+                                   Sets registry instrument_model. Default: auto-
+                                   derived from the ParaVision headers (acqp
+                                   ACQ_station, e.g. 'Biospec 70/30' -> 'Bruker
+                                   BioSpec 7T'); pass it only to override a
+                                   missing or ambiguous value.
 
 FTP (fetch and ingest stay decoupled — same model as tools/ftp_mirror.py):
     Default: the path is assumed already-local (FTP already pulled, or a mounted
@@ -78,8 +80,9 @@ from ingest import unparsed as unparsed_mod  # noqa: E402
 
 INSTRUMENT_KEY = "MRI"
 
-# --model -> registry instrument_model. The template carries the
-# "Bruker BioSpec <7T|11.7T>" placeholder; these are the two real values.
+# --model -> registry instrument_model, overriding the template's own
+# auto-derivation (`instrument_model: "${discovered.mri_scanner_model}"`, since
+# 2026-08-20); these are the two real values.
 _MODEL_MAP = {
     "7T": "Bruker BioSpec 7T",
     "11.7T": "Bruker BioSpec 11.7T",
@@ -298,11 +301,18 @@ def print_preview_table(result):
     # folders whose NAME matched no naming rule. None of their exams is in the
     # table above, and before 2026-10-05 they showed only as per-exam lines in
     # the notes (STATUS §0 D3).
-    if getattr(result, "unparsed", None):
+    parse_recs, unseen_recs = unparsed_mod.split(getattr(result, "unparsed", None) or [])
+    if parse_recs:
         print()
-        print(f"!! {unparsed_mod.headline(result.unparsed)}")
+        print(f"!! {unparsed_mod.headline(parse_recs)}")
         print("!! NOTHING under them will be ingested. Tell the Data Office:")
-        for line in unparsed_mod.detail_lines(result.unparsed):
+        for line in unparsed_mod.detail_lines(parse_recs):
+            print(f"   {line}")
+    if unseen_recs:
+        print()
+        print(f"!! {unparsed_mod.unseen_headline(unseen_recs)}")
+        print("!! NOT ingested (AppleDouble ._* files are safe to ignore):")
+        for line in unparsed_mod.unseen_detail_lines(unseen_recs):
             print(f"   {line}")
 
 
@@ -317,7 +327,7 @@ def build_mri_config(staging_dir, pattern, reconstructions=None, model=None,
         pattern: resolved glob pattern.
         reconstructions: parsed value (str 'all' | list[int]) or None to keep
             the template default.
-        model: '7T' | '11.7T' or None to keep the template placeholder.
+        model: '7T' | '11.7T' or None to keep the template's auto-derivation.
         extra_overrides: optional flat dict of additional config_builder
             overrides (e.g. condition.*/anatomy.* from metadata_prompt).
 
@@ -385,7 +395,8 @@ def main(argv=None):
     p.add_argument(
         "--model", default=None, choices=sorted(_MODEL_MAP),
         help="Which BioSpec scanner produced this batch (sets the registry "
-             "instrument_model). Default: leave the template placeholder.",
+             "instrument_model). Default: auto-derived from the ParaVision "
+             "headers; pass only to override a missing or ambiguous value.",
     )
     p.add_argument(
         "--no-regenerate-dicom", dest="no_regenerate_dicom",
