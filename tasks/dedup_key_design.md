@@ -1,6 +1,6 @@
 # Dedup identity: a content-anchored key (issue #5)
 
-**Status:** ❓ EVALUATING. A design note for Ryan, written 2026-10-17 on branch `feat/dedup-key` while he is
+**Status:** ✅ DECIDED 2026-11-03: Ryan accepted the recommendations, and §7's Q1–Q7 stand as recommended except that Q7's follow-ups are MEDIUM ([`pre_port_decisions_2026-10-19.md`](pre_port_decisions_2026-10-19.md) decisions 11–15). The note stays as written: a design note for Ryan, written 2026-10-17 on branch `feat/dedup-key` while he is
 away. The build follows it on the same branch (Stage 2); nothing here has touched production. Every number
 below is quoted from `tasks/BACKLOG.md` ("Dedup identity", 2026-07-17 → 2026-10-04); none is new.
 

@@ -848,11 +848,10 @@ other findings are confirmed-real *later improvements* and stay in `BACKLOG.md`.
   registry lock; copy-phase verify failures roll back their partial folder;
   `committed=True` moved inside the lock right after `append_row`; and
   `checksum_present` now reports "N" for the empty no-DICOM MRI placeholder instead
-  of a hardcoded "Y". **Still open from this cluster:** the **pre-lock dedup
-  snapshot** (`config.py` builds the dedup index before `ingest_raw.py` takes the
-  lock, so a double-launched batch can double-ingest) — needs design input, tracked
-  in [`BACKLOG.md`](BACKLOG.md). Currently mitigated by the single-operator manual
-  workflow; land it before any concurrent or automated ingest.
+  of a hardcoded "Y". **The pre-lock dedup snapshot** (`config.py` builds the dedup index
+  before `ingest_raw.py` takes the lock, so a double-launched batch could double-ingest) is
+  **closed by the pre-port merge** (#14, #5): the commit re-checks every dedup key under the lock
+  and refuses a case that appeared meanwhile.
 - 🕗 **Schedule `verify_checksums` weekly.** The tool exists but nothing runs it.
   With no DR yet, scheduled checksum verification is the only current tripwire for
   silent corruption — the cheapest partial mitigation for the durability gap.

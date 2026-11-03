@@ -14,10 +14,15 @@ Each entry gives the call, the recommendation, and Ryan's ruling in his words, t
 | 4 | #8 | The 146 + 138 pre-Phase-3 sidecars still WARN "missing block" | Leave as WARN | **Left as WARN** (2026-10-23) |
 | 5 | #6 | NOT SEEN reports only the dot-named entries the pattern would have matched | Accept | **Accepted** (2026-10-23) |
 | 6 | #6 | An unknown `filename_parse.source` is a `ValueError`, not a silent fall-back to `name` | Accept | **Accepted** (2026-10-23) |
-| 7 | #10 | Only an acquisition registered to a project widens its dates, not one shared into it | Accept | **Open:** Ryan accepted it believing it fits his principle below; it assumes dates move at ingest, which the principle says they need not (2026-11-03, below) |
+| 7 | #10 | Only an acquisition registered to a project widens its dates, not one shared into it | Accept | **Flipped: no ingest or import moves a project's dates at all** (2026-11-03, below) |
 | 8 | #10 | `_project.yaml` dates are set at creation only | Accept | **Accepted** (2026-11-03) |
 | 9 | #10 | An auto-created project with no real acquisition date gets today | Accept | **Accepted** (2026-11-03) |
 | 10 | #10 | A cp1252 `_project.yaml` edited in the Project Manager is saved back as UTF-8 | Accept | **Accepted** (2026-11-03) |
+| 11 | #5 | 06 §2.10: a case is already ingested when any of its keys is in the registry or the tombstones; a `.czi` adds `(instrument, timestamp to the second, file name, case-insensitive)` | Accept; mark §2.10 ✅ | **Accepted** (2026-11-03) |
+| 12 | #5 | Q3: no content key for a `00:00:00` timestamp. Q4: file names compared case-insensitively | Accept both | **Accepted** (2026-11-03) |
+| 13 | #5 | Q1, Q2, Q5, Q6 deferred | Accept the deferrals | **Accepted** (2026-11-03) |
+| 14 | #5 | Q7: re-rate the priority | Merge the core now; the follow-ups MEDIUM | **Accepted** (2026-11-03) |
+| 15 | #5 + #14 | The commit-time re-check refuses a case when any of its dedup keys appeared since the snapshot (`d627780`) | Accept | **Accepted** (2026-11-03) |
 
 ## 1. Undated cases (#7)
 
@@ -72,15 +77,34 @@ autoset when the project manager tool is used to close a project. But there is c
 acquisition. I believe the recommendations you suggest above are aligned with this basic set of principles and I agree
 with all your recommendations on this batch."
 
-**What follows:** 8, 9 and 10 fit the principle and stand. **7 does not:** the branch widens `start_date` /
-`last_activity` at every ingest (Step 11b) and raw import, which is what the principle says is not needed, and which
-contradicts the current rule that no editing tool may write these dates (05 §7, 06 §4.2, §4.4). Put back to Ryan the
-same day.
+**What follows:** 8, 9 and 10 fit the principle and stand. **7 did not:** the branch widened `start_date` /
+`last_activity` at every ingest (Step 11b) and raw import, which the principle says is not needed. Put back to Ryan the
+same day:
+
+**Ryan, 2026-11-03, on 7:** "Let's remove date changes at ingest."
+
+**What follows from 7:**
+- Step 11b and the raw import's widening are removed, with `widened` / `widen_dates`. A new project still gets its
+  dates at creation: the acquisition's date when an ingest auto-creates it (decision 8), else today (decision 9).
+- 05 §7 and 06 §4.2 / §4.4 no longer say these columns mean first and newest acquisition. Existing values stay.
+- #10's done-when ("the recompute leaves no project with a creation-date `start_date`") is dropped: a creation date is
+  now correct. The production run of `recompute_project_dates.py` (29 of 65 projects) is dropped; the tool stays, not
+  routine, because its dry run reports each project's real acquisition span. `fix_project_yaml_encoding.py`'s run stays.
+- `reopen_project.py` still sets a reopened project's dates from its acquisitions: a Data Office action, unchanged.
+- **New BACKLOG item:** the Project Manager edits the dates and stamps one on close (a schema call: `closed_date` is
+  not in the registry), and the retention close-out reads `registry_raw.csv`.
+
+## 11 to 15. The dedup key (#5, #14)
+
+**Ryan, 2026-11-03:** "I am also fine with your other recommendation including 'Merge the core now; follow-ups become
+MEDIUM'."
+
+**What follows:** 06 §2.10 and the 10_TOOLS bullet are ✅. Q1 goes with #11; Q2 and Q5 take one small new issue; Q6 is
+noted on #19 / #40; all MEDIUM.
 
 ## Still to rule
 
-- **Decision 7**, per the above: keep or remove the widening at ingest.
-- **Decisions 11–17** (#5 the dedup key, #14 the production guard, #28/#29 the design notes).
+- **Decisions 16 and 17** (#14 the production guard, #28/#29 the design notes).
 - **Decision 1's follow-up:** its own issue, or folded into another? (BACKLOG MODERATE "an acquisition with an unknown
   date", 2026-10-23.)
 - **18. The curated datasets' `provenance.csv` does not follow 07_PROVENANCE's ✅ schema.** 07 §3.4 (12 columns:

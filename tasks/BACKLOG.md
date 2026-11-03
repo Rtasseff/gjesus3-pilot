@@ -426,12 +426,12 @@ identity survives folder reshuffling. Do it **cross-ecosystem** (one key model, 
 per-instrument) and **document the key** in the spec so users and developers know
 what "already ingested" means as new instruments are added.
 
-- [ ] Design a stable, content/instrument-anchored dedup key (cross-ecosystem).
-- [ ] Report skips clearly to the operator ("N skipped — already ingested"). The
+- [x] **✅ DONE 2026-11-03 (issue #5):** microscopy `.czi` (06 §2.10, ✅ Ryan). MRI's tail key waits for a bulk ingest from another root (Q6, #19 / #40). Design a stable, content/instrument-anchored dedup key (cross-ecosystem).
+- [x] **✅ DONE 2026-11-03 (issue #5):** the skip count reaches the GUI's result and the BATCH SUMMARY (the GUI once the exe is rebuilt, #23). Report skips clearly to the operator ("N skipped — already ingested"). The
   preview already computes `n_already_ingested` (`/api/discovered`); surface the
   count in the GUI ingest result too — the completion-popup work on
   `feat/gui-operator-polish` is the natural place to show it.
-- [ ] Document the dedup-key contract in `06_REGISTRIES` (or `10_TOOLS`) so identity
+- [x] **✅ DONE 2026-11-03 (issue #5):** 06 §2.10. Document the dedup-key contract in `06_REGISTRIES` (or `10_TOOLS`) so identity
   is explicit for future instruments.
 - *Related but distinct:* the concurrency dedup-**snapshot** risk (see "Architecture
   & code review follow-through", §3.1 #1) is a different concern — a pre-lock
@@ -543,7 +543,7 @@ are the same acquisition, but not always the same pixels.
   right instrument code, e.g. the remaining 15 mis-coded rows). **It must not be blocked by its own
   tombstone:** the ingest dedup index deliberately includes retired rows (Ryan, 2026-10-01), so a
   re-identify has to bypass that for the id it is replacing.
-- [ ] Re-rate this item's priority in the light of the production evidence.
+- [x] **✅ Re-rated 2026-11-03 (Ryan):** the core merges now; the follow-ups are **MEDIUM**: warn on scene splits (Q1, with #11), warn when the serial disagrees with the template (Q2) and name the matched ACQ-ID in the skip line (Q5, unblocked by the #14 wiring), one small issue for the two; an MRI tail key (Q6, #19 / #40). Re-rate this item's priority in the light of the production evidence.
 
 ## Person/role rename — residual cleanup (core done 2026-06-09)
 
@@ -987,7 +987,12 @@ build,** the alternative: move retired bytes to a quarantine area (e.g. `raw\_re
 them only in a separate, explicit purge step. That would make a retirement reversible until the
 purge.
 
-## 🔸 MODERATE — no ingest maintains a project's `start_date` / `last_activity` (2026-10-01)
+## ✅ RULED 2026-11-03 — no ingest needs to maintain a project's `start_date` / `last_activity` (raised 2026-10-01)
+
+**Ryan's ruling** (pre-port decision 7, [`pre_port_decisions_2026-10-19.md`](pre_port_decisions_2026-10-19.md)): "the date in a project
+is not super critical … there is certainly no need to touch the dates at acquisition." The engine fix below was built
+on `feat/project-lifecycle` and **removed before the merge**; the one-time recompute was **dropped**. A project's dates
+are set when it is created. What is left is the next item. The text below is the original item.
 
 Since 2026-07-14 these two columns of `registry_projects.csv` **mean acquisition dates**. They were
 backfilled once that day, and **nothing has maintained them since.**
@@ -1003,12 +1008,30 @@ backfilled once that day, and **nothing has maintained them since.**
 Stale dates are how `1019` was closed while it was still receiving data (see "Define what
 `status = closed` actually does").
 
-- [ ] Engine fix: when an ingest registers an acquisition into a project, widen that project's
+- [x] ~~Engine fix: when an ingest registers an acquisition into a project, widen that project's
   `start_date`/`last_activity` to cover its acquisition date. Do it under the projects-registry lock
-  (`ingest/projects_registry.py`), and never move a date inward.
-- [ ] One-time recompute for every project, backup-first. The logic already exists inside
+  (`ingest/projects_registry.py`), and never move a date inward.~~ **Not wanted (Ryan, 2026-11-03).**
+- [x] ~~One-time recompute for every project, backup-first. The logic already exists inside
   `tools/reopen_project.py` (on `feat/drives-microscopy-ingest`); lift it into a shared function.
-  Run it after the historical-drives ingest, which touches 13 projects.
+  Run it after the historical-drives ingest, which touches 13 projects.~~ **The shared function and
+  `tools/recompute_project_dates.py` exist; the run is dropped (Ryan, 2026-11-03).**
+
+## 🔸 MODERATE — the Project Manager sets project dates, and stamps one on close (Ryan, 2026-11-03)
+
+Ryan: "it really should be the project manager tool that lets people change dates. Something like when a project closes
+would be autoset when the project manager tool is used to close a project." Today `start_date` and `last_activity` are
+read-only there, and no ingest moves them.
+
+- [ ] Let the Project Manager edit the dates (`EDITABLE_FIELDS` in `ingest/projects_registry.py`, the GUI's read-only
+  fields, 05 §7, 06 §4.4). Decide who may, and whether `last_activity` keeps its name: nothing maintains it, and the
+  GUI labels it "Last activity".
+- [ ] Stamp a date when the tool closes a project. `closed_date` exists in `_project.yaml` but not in
+  `registry_projects.csv`, so the registry half is a schema call. Goes with "closed projects should be MOVED, not
+  deleted" and "Define what `status = closed` actually does", which have no close action yet.
+- [ ] **The retention close-out must read `registry_raw.csv`, not these columns.** Its rule is "newest acquisition older
+  than 3 years", and stale project dates are how `1019` was closed while it was still receiving data. No close-out tool
+  exists yet; `projects_registry.acquisition_date_ranges` and the dry run of `tools/recompute_project_dates.py` give the
+  real span.
 
 ## 🔸 MODERATE — audit production `.czi` for truncated primaries (2026-10-01)
 
@@ -2397,7 +2420,7 @@ Windows default encoding, so a description with an accent or an em dash is store
 valid UTF-8 (`AE-biomaGUNE-0420`, `-0424`, `-0522`, `-0525`, `-0619`, `-0721`, `-1025`, `-1123`, `-1422`, `CNIC-HEARDS`). The
 registry is not affected (`registry_projects.csv` is UTF-8, checked). A UTF-8 reader of these files fails.
 
-- [ ] Write `_project.yaml` with `encoding="utf-8"` everywhere it is written; convert the 10 (cp1252 → UTF-8, backed up).
+- [ ] **Half done 2026-11-03 (issue #10):** every writer now uses UTF-8, and `tools/fix_project_yaml_encoding.py` is built. Converting the 10 waits on its production run, before anyone edits a project in the rebuilt GUI. Write `_project.yaml` with `encoding="utf-8"` everywhere it is written; convert the 10 (cp1252 → UTF-8, backed up).
 
 ## 🔹 LOW — 165 pig files wait in holding for a path-level remap (2026-10-07)
 
