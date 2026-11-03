@@ -26,6 +26,12 @@ WHAT IT DOES (per pending row with status=="pending")
     4. if not_found / unreachable: leave the row pending (never auto-mark
        "unresolvable" — that is a human judgement call).
 
+THEN, THE REGISTRY (2026-11-03)
+    `registry_raw.sample_organism` is the projection of the subject's `species`. For
+    every row now `recovered` whose column is still blank, fill it from the sidecar,
+    under the registry lock, in bytes, only where blank. This also catches up rows
+    recovered before this existed. `--organism-only` does this pass alone (no DB).
+
 SAFEGUARDS (mirror the project close-out controlled-write pattern)
     * DRY-RUN by default — reports what WOULD change and touches NOTHING.
       Writing requires an explicit --apply flag.
@@ -45,8 +51,13 @@ Usage:
     # Apply (writes sidecars + flips pending rows):
     python tools/recover_subject_metadata.py --nas-root J:\\gjesus3-data --apply
 
+    # Only the registry column, for rows already recovered (no DB needed):
+    python tools/recover_subject_metadata.py --nas-root J:\\gjesus3-data --organism-only
+    python tools/recover_subject_metadata.py --nas-root J:\\gjesus3-data --organism-only --apply
+
 Run from a superuser machine (holds ~/.my.cnf, on-network/VPN). READ-ONLY
-against the DB; controlled-write against /raw sidecars + the pending list only.
+against the DB; controlled-write against /raw sidecars, the pending list and
+registry_raw.csv's sample_organism column only.
 """
 
 import argparse
@@ -60,7 +71,7 @@ from datetime import datetime, timezone
 # whether this is run from the repo root or from tools/ (mirrors the other CLIs).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ingest import pending  # noqa: E402
+from ingest import locking, pending, registry  # noqa: E402
 import animal_db  # noqa: E402
 
 
@@ -489,8 +500,70 @@ def recover_one(row, *, apply, lookup_fn, log=log, nas_root=None):
     return result
 
 
-def recover_all(registries_dir, *, apply=False, lookup_fn=None, log=log, only=None):
-    """Walk the pending list and recover what we can.
+def species_of(sidecar):
+    """The species to project into the registry: the first named by a block filled from
+    the animal-facility DB (`registry.build_row`'s rule for several animals), or ""."""
+    for _label, block in _subject_blocks(sidecar):
+        species = (block.get("species") or "").strip()
+        if species and block.get("source") == "animal-facility-db":
+            return species
+    return ""
+
+
+def fill_registry_organism(registries_dir, rows, *, apply, only=None, log=log):
+    """Fill `registry_raw.sample_organism` for `recovered` rows where it is blank.
+
+    Idempotent, and safe to re-run after a stop: it looks only at what the registry
+    holds now. Returns {"would_fill", "filled", "problems"}.
+    """
+    out = {"would_fill": 0, "filled": 0, "problems": []}
+    reg_path = os.path.join(registries_dir, "registry_raw.csv")
+    if not os.path.isfile(reg_path):
+        return out
+    nas_root = os.path.dirname(os.path.normpath(registries_dir))
+    reg = {r["acq_id"]: r for r in registry.read_registry(reg_path)}
+    species = {}
+    for row in rows:
+        acq = row.get("acq_id", "")
+        if only is not None and acq not in only:
+            continue
+        if (row.get("status") or "").strip().lower() != "recovered":
+            continue
+        current = reg.get(acq)
+        if current is None or (current.get("sample_organism") or "").strip():
+            continue
+        try:
+            found = species_of(_read_sidecar(resolve_sidecar_path(row.get("sidecar_path", ""), nas_root)))
+        except Exception as e:
+            out["problems"].append(f"{acq}: could not read its sidecar: {e}")
+            continue
+        if found:
+            species[acq] = found
+        else:
+            out["problems"].append(f"{acq}: recovered, but no DB-filled species in its sidecar")
+    out["would_fill"] = len(species)
+    if not species:
+        return out
+    log(f"sample_organism: {len(species)} blank row(s) to fill: {sorted(set(species.values()))}")
+    if not apply:
+        return out
+    try:
+        with locking.registry_lock(registries_dir, log=log):
+            filled, _kept = registry.fill_sample_organism(reg_path, species)
+    except locking.LockTimeout as e:
+        out["problems"].append(f"sample_organism not written, a re-run will fill it: {e}")
+        return out
+    out["filled"] = len(filled)
+    fresh = {r["acq_id"]: r for r in registry.read_registry(reg_path)}
+    for acq, value in species.items():
+        if (fresh.get(acq, {}).get("sample_organism") or "") != value:
+            out["problems"].append(f"{acq}: sample_organism did not verify after the write")
+    log(f"sample_organism: {len(filled)} row(s) filled in {reg_path}")
+    return out
+
+
+def recover_all(registries_dir, *, apply=False, lookup_fn=None, log=log, only=None, organism_only=False):
+    """Walk the pending list and recover what we can, then fill the registry column.
 
     Args:
         registries_dir: the NAS registries/ directory holding the pending list.
@@ -501,8 +574,9 @@ def recover_all(registries_dir, *, apply=False, lookup_fn=None, log=log, only=No
         only: optional set of ACQ-IDs. When given, rows outside it are neither
             looked up nor touched (their status, sidecar and position stay as
             they are).
+        organism_only: skip the lookups and sidecars; only the registry column.
 
-    Returns a summary dict with per-row results + counts.
+    Returns a summary dict with per-row results + counts + `organism`.
     """
     if lookup_fn is None:
         lookup_fn = animal_db.lookup
@@ -514,6 +588,8 @@ def recover_all(registries_dir, *, apply=False, lookup_fn=None, log=log, only=No
     any_recovered = False
 
     for row in rows:
+        if organism_only:
+            break
         if only is not None and row.get("acq_id", "") not in only:
             continue
         try:
@@ -554,8 +630,10 @@ def recover_all(registries_dir, *, apply=False, lookup_fn=None, log=log, only=No
     for r in results:
         counts[r["outcome"]] = counts.get(r["outcome"], 0) + 1
 
+    organism = fill_registry_organism(registries_dir, rows, apply=apply, only=only, log=log)
+
     return {"path": path, "results": results, "counts": counts,
-            "total": len(rows), "applied": apply}
+            "total": len(rows), "applied": apply, "organism": organism}
 
 
 def _print_summary(summary):
@@ -569,7 +647,12 @@ def _print_summary(summary):
                     "already-recovered", "skipped-status", "error"):
         if c.get(outcome):
             log(f"  {outcome:<18} {c[outcome]}")
-    if not summary["applied"] and c.get("would-recover"):
+    org = summary.get("organism") or {}
+    log(f"sample_organism:    {org.get('filled', 0)} filled, {org.get('would_fill', 0)} blank and resolvable"
+        + (" (a row recovered by --apply is filled in the same run)" if c.get("would-recover") else ""))
+    for problem in org.get("problems", []):
+        log(problem, "ERROR")
+    if not summary["applied"] and (c.get("would-recover") or org.get("would_fill")):
         log("re-run with --apply to write these changes.")
 
 
@@ -595,6 +678,11 @@ def main(argv=None):
         "--acq-ids", metavar="FILE",
         help="Only these acquisitions: a text file with one ACQ-ID per line "
              "('#' comments allowed). Other pending rows are left untouched.",
+    )
+    p.add_argument(
+        "--organism-only", action="store_true",
+        help="Skip the DB lookups and sidecars: only fill registry_raw.sample_organism for "
+             "rows already recovered. Still needs --apply to write.",
     )
     args = p.parse_args(argv)
 
@@ -627,13 +715,13 @@ def main(argv=None):
             only = {ln.split("#", 1)[0].strip() for ln in f} - {""}
         log(f"scope: {len(only)} ACQ-ID(s) from {args.acq_ids}; other pending rows untouched")
 
-    summary = recover_all(registries_dir, apply=args.apply, only=only)
+    summary = recover_all(registries_dir, apply=args.apply, only=only, organism_only=args.organism_only)
     _print_summary(summary)
 
     # Non-zero exit only on hard errors (sidecar missing / verify failure),
     # so an operator can spot a real problem in a wrapper script. Still-pending
     # rows (DB miss / unreachable) are normal and exit 0.
-    return 1 if summary["counts"].get("error") else 0
+    return 1 if summary["counts"].get("error") or summary["organism"]["problems"] else 0
 
 
 if __name__ == "__main__":

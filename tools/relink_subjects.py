@@ -33,7 +33,8 @@ WRITES, in order (dry run by default; --apply to write):
     1. each `/raw/<acq>/metadata.json`: atomic, verified after write, its line
        terminator preserved (recover_subject_metadata._write_sidecar);
     2. under the registry lock: `registry_raw.csv` in BYTES (no BOM, CRLF kept),
-       only the subject_ids field of the named rows; the pending list; and
+       only the subject_ids field of the named rows, and sample_organism where it is
+       blank (2026-11-03: the new animal's species); the pending list; and
        `registry_subjects.csv` (upsert of the new animals; a stub row
        (`pending-db` / `unknown`) that nothing references any more is dropped;
        a DB-filled row is never dropped).
@@ -199,20 +200,10 @@ def write_sidecar(item):
         raise RuntimeError(f"{item['acq_id']}: verify-after-write failed: {detail}")
 
 
-def _field_span(text, col):
-    """(start, end) of the col-th field of one CSV line, honouring quotes."""
-    start, n, quoted = 0, 0, False
-    for i, ch in enumerate(text):
-        if ch == '"':
-            quoted = not quoted
-        elif ch == "," and not quoted:
-            if n == col:
-                return start, i
-            n, start = n + 1, i + 1
-    if n == col:
-        end = len(text.rstrip("\r\n"))
-        return start, end
-    raise RuntimeError(f"line has no field {col}")
+def organism_updates(items):
+    """{acq_id: species} for the rows relinked to an animal; an unlink changes nothing."""
+    return {i["acq_id"]: i["block"]["species"] for i in items
+            if not i["already"] and i["new_id"] and i["block"].get("species")}
 
 
 def rewrite_registry_raw(path, items):
@@ -238,7 +229,7 @@ def rewrite_registry_raw(path, items):
         before = next(csv.reader(io.StringIO(text)))
         if before[col] != item["old_id"]:
             raise RuntimeError(f"{acq}: subject_ids is {before[col]!r}, expected {item['old_id']!r}")
-        s, e = _field_span(text, col)
+        s, e = registry.field_span(text, col)
         if text[s:e] != item["old_id"]:
             raise RuntimeError(f"{acq}: subject_ids cell is {text[s:e]!r} in the file - refusing")
         text = text[:s] + item["new_id"] + text[e:]
@@ -371,8 +362,14 @@ def main(argv=None):
         write_sidecar(i)
     log(f"{len(todo)} sidecar(s) rewritten + verified")
     with locking.registry_lock(registries_dir, log=log):
-        changed = rewrite_registry_raw(os.path.join(registries_dir, "registry_raw.csv"), items)
+        raw_path = os.path.join(registries_dir, "registry_raw.csv")
+        changed = rewrite_registry_raw(raw_path, items)
         log(f"registry_raw.csv: {changed} line(s) rewritten")
+        filled, kept_species = registry.fill_sample_organism(raw_path, organism_updates(items))
+        log(f"registry_raw.csv: sample_organism filled on {len(filled)} blank row(s)")
+        different = {a: s for a, s in kept_species.items() if s != organism_updates(items)[a]}
+        if different:
+            log(f"sample_organism kept, but differs from the new animal's species: {different}", "WARN")
         flipped = flip_pending(registries_dir, items, now)
         log(f"pending_subject_metadata.csv: {flipped} row(s) flipped to recovered")
         stats, dropped, kept = update_subjects(registries_dir, items, now)

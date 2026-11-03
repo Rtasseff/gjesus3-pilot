@@ -536,8 +536,8 @@ def test_relink():
         row = {r["acq_id"]: r for r in registry.read_registry(raw)}["ACQ-20230807-CT-006"]
         check(n == 1 and row["subject_ids"] == "98-AE-biomaGUNE-1321",
               "a blank subject_ids cell is relinked in place")
-        check(relink._field_span('a,"x,y",,z\r\n', 2) == (8, 8)
-              and relink._field_span('a,"x,y",,z\r\n', 3) == (9, 10),
+        check(relink.registry.field_span('a,"x,y",,z\r\n', 2) == (8, 8)
+              and relink.registry.field_span('a,"x,y",,z\r\n', 3) == (9, 10),
               "field spans honour quotes and the line ending")
 
 
