@@ -157,12 +157,20 @@ to try to clear an error; a stuck sync is safe to leave alone.
   `python tools/operator/stage_ni_gnuclear.py production`. The same tool restages the
   mount kit (`mount-kit`), the tunnel field card (`tunnel-card`) and a test kit pinned to a
   scratch NAS (`test-kit`). It writes only the files it names and deletes nothing.
-- **After a researcher's sync, finish it from Windows.** The Mac can make neither hard links
-  nor animal-database lookups, so both are queued. Tell the coordinator session first: these
-  are production writes.
+- **After a researcher's sync, what is left (2026-11-03).**
+  - **Project links:** the Mac cannot make hard links, so they are queued. The nightly
+    `gjesus3-relink` job (WorkstationOps, 02:30) makes them; the scans show in the project's
+    `raw_linked` folder the next morning.
+  - **Animal records:** looked up during the sync since 2026-11-03. The Mac's `~/.my.cnf` has
+    `host=10.10.3.230`, because its DNS sends the server's name to a public address. A lookup
+    that finds no animal for that date stays queued, and so does every lookup if the server
+    moves (a `no-credentials` row means any connection failure). Nothing drains those on a
+    schedule; find the cause, then use steps 2 and 3.
+
+  By hand, when needed. Tell the coordinator session first: these are production writes.
   1. Links: `python tools/relink_pending.py --nas-root J:\gjesus3-data --dry-run`, then
      again without `--dry-run`.
-  2. Animal records: list the sync's new ACQ-IDs in a text file (one per line), then
+  2. Animal records: list the ACQ-IDs in a text file (one per line), then
      `python tools/recover_subject_metadata.py --nas-root J:\gjesus3-data --acq-ids <file>`
      (a dry run), then the same with `--apply`. Check every animal block against that
      animal's own DB record before going on (08_METADATA §4.4.6).

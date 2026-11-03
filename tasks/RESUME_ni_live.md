@@ -53,9 +53,11 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
 - **Practice run on the new engine, 2026-11-03** (`68040fd`, on the Mac, scratch registry, Data
   Office typing): plan, corrections, dry run, sync, re-sync and a late reconstruction all passed.
   Validator 0 errors, 4 of 4 files match their checksums and sources, production unchanged.
-  - **Not covered:** the kit's scans are tiny text files, so real DICOM reading on the new engine
-    (`ingest/dicom_utils.py` changed) has not run on the Mac; and no operator has yet run the
-    sync themselves.
+  - **Real scans on the same engine, 2026-11-03** (copies of Irene's, synced to the scratch registry,
+    then deleted): a CT (1 DICOM, 48 MB) and a two-animal PET (8 DICOMs, 400 MB, 28 s). All 9 files
+    match their checksums and sources; each animal got its own DB record at sync.
+  - **Not covered:** no operator has yet run the sync themselves; a real sync to production on this
+    engine; the nightly link job's first real link. The kit was removed: stage a fresh one to practise.
 - **Researchers' copy:** `S:\gnuclear\2026\Jesus\_gjesus3_sync\`
   (`/Volumes/gnuclear/2026/Jesus/_gjesus3_sync/` on the Mac).
   - Its `VERSION.txt` names the commit.
@@ -75,10 +77,12 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
   - Before any NI production write the Data Office runs, tell the coordinator session.
   - Researchers sync outside announced Data Office batch windows. A published "batch running"
     flag is a moderate BACKLOG item.
-- **After each researcher sync,** finish the hard links and the animal records from Windows. The
-  steps are in the runbook, under "For the data office". This is manual until the nightly link
-  run is live and the Mac's animal lookups work ([`BACKLOG.md`](BACKLOG.md), "run the
-  partial-ingest queues on a schedule"; this page wrongly said it was there before 2026-11-03).
+- **After each researcher sync (2026-11-03):** the nightly `gjesus3-relink` job (02:30) makes the
+  queued project links, and animal records are looked up during the sync. Only lookup misses stay
+  queued, for a person. The runbook has the steps, under "For the data office";
+  [`BACKLOG.md`](BACKLOG.md) has the rest, "run the partial-ingest queues on a schedule". Neither has
+  yet run on a real sync: check the first one, with `os.path.samefile` for the links (a true hard link
+  reports a link count of 1 over SMB).
 - **After every merge into `main` that touches `tools/`,** restage the researchers' copy:
   `python tools/operator/stage_ni_gnuclear.py production`.
 - **Testing on the Mac never touches production.**
@@ -107,6 +111,9 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
     running and the NAS reachable; cause not established (no mount attempt in 3 h of system log,
     and the saved password not found over ssh, which is not conclusive). Ryan re-ran `setup.sh`,
     which fixed it. Before anyone syncs: `test -d ~/.gjesus3/gjesus3-data/registries`.
+- **Animal database from the Mac:** `~/.my.cnf` has `host=10.10.3.230` (Ryan, 2026-11-03), unlike the
+  workstation's, because the Mac's DNS sends `intranet.cicbiomagune.es` to a public address. If that
+  server moves, lookups fail softly and every animal queues as `no-credentials`.
 - **Retired at Box A:** once Box A pulls NI data through the tunnel, `undo.sh` removes the
   mount and the password from the Mac.
 
