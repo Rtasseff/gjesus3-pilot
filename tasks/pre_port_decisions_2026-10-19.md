@@ -14,6 +14,10 @@ Each entry gives the call, the recommendation, and Ryan's ruling in his words, t
 | 4 | #8 | The 146 + 138 pre-Phase-3 sidecars still WARN "missing block" | Leave as WARN | **Left as WARN** (2026-10-23) |
 | 5 | #6 | NOT SEEN reports only the dot-named entries the pattern would have matched | Accept | **Accepted** (2026-10-23) |
 | 6 | #6 | An unknown `filename_parse.source` is a `ValueError`, not a silent fall-back to `name` | Accept | **Accepted** (2026-10-23) |
+| 7 | #10 | Only an acquisition registered to a project widens its dates, not one shared into it | Accept | **Open:** Ryan accepted it believing it fits his principle below; it assumes dates move at ingest, which the principle says they need not (2026-11-03, below) |
+| 8 | #10 | `_project.yaml` dates are set at creation only | Accept | **Accepted** (2026-11-03) |
+| 9 | #10 | An auto-created project with no real acquisition date gets today | Accept | **Accepted** (2026-11-03) |
+| 10 | #10 | A cp1252 `_project.yaml` edited in the Project Manager is saved back as UTF-8 | Accept | **Accepted** (2026-11-03) |
 
 ## 1. Undated cases (#7)
 
@@ -59,9 +63,24 @@ date and fill in the notes for them. So I guess it depends on what level we are 
 
 **What follows:** the two 10_TOOLS lines already marked ✅ are now true; no marker changes.
 
+## 7 to 10. Project dates (#10)
+
+**Ryan, 2026-11-03:** "I want to be clear, that the date in a project is not super critical. It could be auto set when
+the project is autocreated for the first time it is made by whatever script makes projects, that's fine. After that, it
+really should be the project manager tool that lets people change dates. Something like when a project closes would be
+autoset when the project manager tool is used to close a project. But there is certainly no need to touch the dates at
+acquisition. I believe the recommendations you suggest above are aligned with this basic set of principles and I agree
+with all your recommendations on this batch."
+
+**What follows:** 8, 9 and 10 fit the principle and stand. **7 does not:** the branch widens `start_date` /
+`last_activity` at every ingest (Step 11b) and raw import, which is what the principle says is not needed, and which
+contradicts the current rule that no editing tool may write these dates (05 §7, 06 §4.2, §4.4). Put back to Ryan the
+same day.
+
 ## Still to rule
 
-- **Decisions 7–17** (#10 project dates, #5 the dedup key, #14 the production guard, #28/#29 the design notes).
+- **Decision 7**, per the above: keep or remove the widening at ingest.
+- **Decisions 11–17** (#5 the dedup key, #14 the production guard, #28/#29 the design notes).
 - **Decision 1's follow-up:** its own issue, or folded into another? (BACKLOG MODERATE "an acquisition with an unknown
   date", 2026-10-23.)
 - **18. The curated datasets' `provenance.csv` does not follow 07_PROVENANCE's ✅ schema.** 07 §3.4 (12 columns:
