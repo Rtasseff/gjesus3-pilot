@@ -28,9 +28,11 @@ things genuinely in flight. It deliberately stays short.
 - **Still Ryan's for the re-launch:** the NI Mac's gjesus3 mount is down, so no NI sync can reach production until it
   is back; and a real sync on the new engine on the Mac is untested (the launcher check passed; the practice kit
   would cover it).
-- **The claim workbook needs a look before it goes out (read-only check, 2026-11-03):** its Read me still says 10,314 acquisitions from
-  926 sessions, while the list now holds 23,126 live exams; 8 listed sessions have no exam left (all retired), and 224 show the wrong exam
-  count. 106 are already answered, 105 by the PI, and 37 of those name two people. No acquisition is missing from it.
+- **✅ Both shared workbooks corrected 2026-11-03 (Ryan: "for the workbooks, fix both tonight"), and both go out at the re-launch.** Counts now match the registry; retired rows and empty sessions are marked, not removed; all 106 answers kept. Original copies are off the NAS, outside the repo.
+  - **Still blank:** the claim window date, which Ryan sets when he sends it.
+  - **New wording, from Ryan's words relayed through the relaunch session:** unclaimed scans stay, with the operator locked as unknown. Non-acquisition files left in the holding folder (`staging\historical_drives_unassigned\`, about 59,600 files, 262 GB) will be deleted; no date yet. Nothing has been deleted.
+  - **Before any deletion:** Ryan's 2026-10-06 ruling not to lose the segmentations is unresolved (3,674 paths in that folder name a segment, mask, label or ROI), as is what happens to groups marked "not ours". About 22,600 of the files are not counted in any workbook group.
+  - **Project folders:** "go away or at least get archived" (Ryan, relayed). Undefined until "claimed" is. SegBioMed's study depends on 2,056 masks in them.
 - **Thursday 2026-11-05:** the blank `sample_organism` on 338 rows (#43), assuming there are sessions to look at.
 - **✅ Standing go, 2026-11-03: the nightly link run is an exception to the one-writer rule.** Ryan, to the WorkstationOps session: "go I confirm gjesus3-relink should run nightly at 02:30" (relayed to the coordinator with his words).
   - It covers only this job: `tools\relink_pending.py`, daily 02:30, which writes hard links, project provenance and `pending_links.csv` under the registry lock. Every other production write still needs his go.
