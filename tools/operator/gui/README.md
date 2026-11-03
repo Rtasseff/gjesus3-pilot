@@ -135,10 +135,10 @@ chosen so the data office can drop a single file onto the NAS
 (`...\tools\gjesus3_ingest.exe`) and run it in place. (Set `ONEFILE = False` in
 the spec for the faster-starting one-folder build, where operators copy the whole
 folder locally.) The deployed production exe is the ~96 MB single-file build;
-it was last rebuilt and redeployed **2026-10-05** (a taken project link name is
-refused, never merged; the MRI link name carries the study time), 96,015,460
-bytes, sha256 `54c641f1…253732`. Previous: 2026-09-04 (token-valued MRI
-destination project), 95,897,468 bytes.
+it was last rebuilt and redeployed **2026-11-03** from `main` `68040fd` (the
+pre-port engine fixes and the dated subject lookup), 95,832,990 bytes, sha256
+`be9199ee…f13e12`. Previous: 2026-10-05 (a taken project link name is refused,
+never merged; the MRI link name carries the study time), 96,015,460 bytes.
 
 > **⚠️ Build OUTSIDE OneDrive.** This repo lives under a OneDrive-synced folder,
 > and OneDrive locks PyInstaller's build artifacts mid-build (`PermissionError`

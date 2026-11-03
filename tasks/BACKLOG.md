@@ -170,19 +170,30 @@ ignores both time and transfers. It can therefore pick the later record.
 - **Recoverable that the tool cannot reach today:** **140** `pending-db` links (`0721` → `0821` 136, `0324` → `0721` 4)
   are in the DB under a later protocol; a transfer-aware lookup recovers them (they are 140 of the "188 not recoverable").
 - **To do:**
-  - [ ] A **date-aware, transfer-aware lookup** (the holder of `(protocol, code)` on the scan date, following
+  - [x] *(✅ Done 2026-11-03, merged `68040fd`.)* A **date-aware, transfer-aware lookup** (the holder of `(protocol, code)` on the scan date, following
     `old_project` / `project_change_date`), storing the DB's **`animals.id`** beside the canonical id; refuse when no
     holder fits the date. Keep the before-birth / before-entry guard (it catches label errors no join can fix).
-  - [ ] Repair the 80 (+5) label-error rows: the `1123` slides → `1321` animals after the owner confirms; the `1321` CT
-    73–77 (and decide on 68–72). Recovery pattern, Ryan's go.
-  - [ ] The 96 `0525` rows: Ryan's call (keep the scan-time code, or relink to `1025`), then recover with the new lookup.
+  - [x] *(✅ Done 2026-11-03, Ryan's go.)* Repair the 80 (+5) label-error rows: the 75 `1123` slides → `1321` animals (Ryan: without
+    asking the owner first; they stay in the `1123` project's folder, and whether they also appear under `1321`'s is a separate call);
+    all ten `1321` CT 68–77 unlinked.
+  - [x] *(✅ Done 2026-11-03, Ryan's go.)* The 96 `0525` rows: relinked to `1..5-AE-biomaGUNE-1025`.
   - [ ] Not investigated: 159 in-vivo links fall after the animal's DB exit date (90 within 2–7 days).
   - [ ] Proposal (2026-10-20): key `registry_subjects.csv` on the stored `facility_db_id` rather than on `(protocol, code)`.
   - [ ] The 48 links whose animal is not in the DB at all.
-- **Not a blocker for the Box A port** (Ryan, 2026-10-23). This covers the wrong links still in production (about 57 dated
-  before the animal's birth, within the 80 (+5) above), the 159 after-exit links and the 48 links not in the DB. They
-  stay here and are worked when the merges allow, not as a gate on the port.
-- **Status 2026-10-20: the fix is built and rehearsed on branch `fix/subject-lookup-dates`, not merged and not run.**
+- **Not a blocker for the Box A port** (Ryan, 2026-10-23). What is left here is the 159 after-exit links and the 48 links
+  not in the DB. The wrong links are repaired.
+- **✅ Status 2026-11-03: merged and run in production.**
+  - **Run, in order, on Ryan's go:** the NI sync restaged and both exes redeployed first; `facility_db_id` on 1,578
+    subjects rows; 147 rows recovered (140 transfers + 7 no-credentials); then the relinks and unlinks above. A
+    full-sequence rehearsal on a scratch copy gave the same numbers first.
+  - **Verified independently, against the backup:** 181 `registry_raw.csv` lines changed, in `subject_ids` only, on
+    exactly the worklists' rows; 328 sidecars rewritten, each block matching a fresh dated DB lookup of its own id; only
+    the 5 `0525` stub subject rows dropped, and `16-AE-biomaGUNE-1321` added.
+  - **Result:** validator 0 errors; audit 31,364 links, 31,316 unchanged, 48 still pending, 0 wrong; 48 rows `pending`
+    in `pending_subject_metadata.csv`.
+  - **Sidecar coverage of `facility_db_id`:** new uploads carry it. Of the historical sidecars, only those the repairs
+    rewrote do (318); `registry_subjects.csv` has it on 1,600 of 1,693 rows.
+  - **The audit at the time (2026-10-20):**
   - **What it adds:** a dated, transfer-aware `tools/animal_db.py` that stores `facility_db_id`; `audit_subject_links.py`;
     and `relink_subjects.py`. Specs 06, 08 and 10 are updated. The suite passes 59/59.
   - **Production audit (read-only):** it reproduces the counts above. Of 31,374 links:
@@ -192,8 +203,6 @@ ignores both time and transfers. It can therefore pick the later record.
     - 61 are refused as the wrong animal (56 `1123`, 5 `1321`);
     - 19 more `1123` slides are flagged "tissue before exit";
     - 48 are not in the DB.
-  - **Order:** it merges after the pre-port integration branch. At the merge, restage the NI sync and redeploy the exe,
-    because `registry_subjects.csv` gains a column. Every repair then waits on Ryan's go.
   - **Ryan's calls (✅ DECIDED 2026-10-21; STATUS §0.7):** relink `0525` #49–53 to `1025`; relink the `1123` slides to
     `1321` now, without asking the owner; unlink all ten `1321` CT (68–77).
 

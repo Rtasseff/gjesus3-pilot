@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-10-10
+**Last Updated:** 2026-11-03
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -22,8 +22,12 @@ things genuinely in flight. It deliberately stays short.
 - Ryan presents the new features, then pushes adoption.
 - The claim workbook goes out then, and the claim window is set (D1(b), D1(c) below).
 - New researcher uploads follow.
-- To re-launch on the new code, these land before that date: the pre-port integration branch, then
-  `fix/subject-lookup-dates` and its decided repairs (§0.7).
+- ✅ **The new code landed 2026-11-03:** the pre-port integration branch and `fix/subject-lookup-dates` are merged
+  (`0e5e51c`, `68040fd`; 59/59 suites), both exes are rebuilt and deployed, the NI sync is restaged, and the decided
+  repairs have run (§0.7). The validator is at 0 errors.
+- **Still Ryan's for the re-launch:** the NI Mac's gjesus3 mount is down, so no NI sync can reach production until it
+  is back; and a real sync on the new engine on the Mac is untested (the launcher check passed; the practice kit
+  would cover it).
 
 **Ryan ruled on every open item on 2026-10-05.** His rulings are recorded below in his words. He is
 away **2026-10-12 → 10-18**, and **nothing here needs him before 10-19.** If carrying out a ruling
@@ -37,7 +41,7 @@ would need a new decision from him, it is written into this section and the work
 | **D1(b)** | "NOW, build only, do not send. A claim list for Jesús's group: one row per session or folder (not per acquisition) with project, date, session name and acquisition count, plus blank columns for who ran it. Make it similar to the projects xlsx we just did … You can put it in projects folder as well because more people will have some access to that. … I send it at the pilot re-launch and set the claim window then." | **✅ Built 2026-10-05, not sent:** `J:\gjesus3-data\projects\_MRI sessions - who ran them.xlsx`. **926 sessions** (one row per session folder on the scanner), **21 projects** (4 of them closed), 10,314 acquisitions, 2022-01-10 → 2026-06-05. Sheets: Read me (the claim window's end is left blank for Ryan), Sessions to claim (yellow: Who ran it, Notes, Answered by; a grey session key), Projects, Acquisitions. Ryan sends it at the pilot re-launch. |
 | **D1(c)** | "LATER. After the claim window closes, blank whatever is still unclaimed. Record it in BACKLOG, dated to the window end; do nothing now." | In [`BACKLOG.md`](BACKLOG.md) (the 🔺 `operator` item), due when the claim window closes. Ryan sets the window at the pilot re-launch. |
 | **D2** | "I am emailing Irene today. When her answer arrives: if 37, repair by the recovery-tool pattern in BACKLOG (HIGH, 2026-08-21), 19 sidecars and 19 registry rows, ACQ-IDs kept; if 39, record it and close." | **Answered, per the hub's record: Irene said mouse 37 (2026-10-06, relayed by Ryan).** Under the ruling, that means the repair: 19 sidecars and 19 registry rows, ACQ-IDs kept. **Waiting on Ryan to confirm the answer and give the go for the write** (a registry repair; build, dry run, then run). [`BACKLOG.md`](BACKLOG.md) HIGH (2026-08-21) |
-| **D3** | "NOW. Make the ingest report every study folder that matches neither regex (code change on a branch, with tests), then re-scan the historical sources read-only and report the count. Reconcile it with the drives DICOM review §5 as it stands after the weekend." | **✅ Done 2026-10-05** (merge `188d737`, 37/37 suites). The CLI (a NOT PARSED section in BATCH SUMMARY, `--unparsed-report <csv>`), the GUI preview and `mri-ingest` now list every study folder whose name matches no rule, one line per study with its exam count. The deployed GUI exe does not, until it is rebuilt (§0.4 N3). **The count, re-scanned read-only: 1,481 study folders / 11,602 exam folders** match neither regex: the scanner 1,364 / 9,869, `K:` 9 / 165, the drives 108 / 1,568. Of these, 1,147 / 8,290 are other groups'. **§5 reconciles exactly:** of its 1,568 drive exams, 1,417 are now in production (stream B's eight configs), 109 are copies on the same drive, 24 are not registered under the 10-04 line, 18 were never acquired, and 0 are unexplained. **MFB data missing from gjesus3:** 59 study folders / 451 exam folders (51 on the scanner, 8 on `K:`). Review: [`mri_unparsed_rescan_review.md`](mri_unparsed_rescan_review.md). The decisions it raises are §0.4; none is urgent, since the platform archives what leaves the scanner (Ryan, 2026-10-06). |
+| **D3** | "NOW. Make the ingest report every study folder that matches neither regex (code change on a branch, with tests), then re-scan the historical sources read-only and report the count. Reconcile it with the drives DICOM review §5 as it stands after the weekend." | **✅ Done 2026-10-05** (merge `188d737`, 37/37 suites). The CLI (a NOT PARSED section in BATCH SUMMARY, `--unparsed-report <csv>`), the GUI preview and `mri-ingest` now list every study folder whose name matches no rule, one line per study with its exam count. The deployed GUI exe has too since its 2026-11-03 rebuild (§0.4 N3). **The count, re-scanned read-only: 1,481 study folders / 11,602 exam folders** match neither regex: the scanner 1,364 / 9,869, `K:` 9 / 165, the drives 108 / 1,568. Of these, 1,147 / 8,290 are other groups'. **§5 reconciles exactly:** of its 1,568 drive exams, 1,417 are now in production (stream B's eight configs), 109 are copies on the same drive, 24 are not registered under the 10-04 line, 18 were never acquired, and 0 are unexplained. **MFB data missing from gjesus3:** 59 study folders / 451 exam folders (51 on the scanner, 8 on `K:`). Review: [`mri_unparsed_rescan_review.md`](mri_unparsed_rescan_review.md). The decisions it raises are §0.4; none is urgent, since the platform archives what leaves the scanner (Ryan, 2026-10-06). |
 | **D4, D5** | "SegBioMed's decisions, not mine. Move both to the SegBioMed memo/backlog and off §0. Apply nothing." | Moved to the SegBioMed memo (REPLY 7) and the [`BACKLOG.md`](BACKLOG.md) item "the curated-datasets pilot returned 19 spec gaps". Nothing applied. |
 | **D6** | "Held until SegBioMed starts, after the leadership write-up. Off §0, into BACKLOG with that trigger." | Moved to [`BACKLOG.md`](BACKLOG.md) 🕗 "mint the `SegBioMed` project", with that trigger. |
 | **D7** | "NOW. Flip the five header-only exams to terminal no-source." | **✅ Done 2026-10-05.** The five worklist rows went `pending` → `no-source` (`backfill_dicom_regen.py --apply --mark-no-source`, limited to the five ACQ-IDs). **Verified:** only those five rows changed, and only `status`; the worklist is now not-applicable 365, regenerated 164, no-source 99, pending 0; the invariant holds (`backfill_pending_dicom.py --dry-run`: 0 to add). **Checked first, read-only:** the scanner still holds the study, and its copy matches the staged one: none of the five has a `2dseq` or a `fid`. Exam 7 (a cine) holds only `rawdata.job0/1`, which Dicomifier cannot use; a ParaVision reconstruction on the scanner would still be possible. Backup: `C:\Users\rtasseff\temp\gjesus3_registry_backup_20261005_preD7\`. |
@@ -76,7 +80,7 @@ So nothing that leaves the scanner is lost. *(Corrected 2026-10-06: the first ve
 
 | # | Decision | Cost of delay | Detail |
 |---|---|---|---|
-| **N3** | **Rebuild and redeploy the operator GUI exe**, so operators see the NOT PARSED list (a deploy). | Until then, the deployed exe still calls an unparsed study "housekeeping", so a new silent skip is possible. **Ryan, 2026-10-27: wait.** It ships in the one rebuild of both exes (#23), after the pre-port and subject-fix merges and before the 2026-11-04 re-launch | review §8 R8 |
+| **N3** ✅ | **Done 2026-11-03: rebuilt and redeployed the operator GUI exe**, so operators see the NOT PARSED list. | Until then, the deployed exe still calls an unparsed study "housekeeping", so a new silent skip is possible. **Ryan, 2026-10-27: wait.** It ships in the one rebuild of both exes (#23), after the pre-port and subject-fix merges and before the 2026-11-04 re-launch | review §8 R8 |
 | **N5** | **A durable queue, `registries\pending_unparsed.csv`**: a new registry convention, which the review recommends. | The June bulk load's skip list (145 studies) existed and still went nowhere | review §6; §8 R7 |
 | **N1** | **Ingest the 51 MFB studies that the June upload skipped and that are still on the scanner** (310 exam folders, 305 images): 25 from 2024, 25 from 2025, and one phantom from 2026. Each would go through a scoped config, as for G1. All 51 were on the June list and marked skip: 28 with the information present but not parseable, 16 naming no project or animal, and 7 phantoms. | Low: if they leave the scanner they go to the platform's archive and can be pulled from there | review §5; §8 R1 |
 | **N2** | **140 scanner study folders (1,125 images) with another group's initials but an MFB link** (protocol `0721`, whose facility-DB holder is Daniel Padró; LP-IONP; the Portugal phantom series): in, out, or per subgroup? | Low, as for N1 | review §3 (b?); §8 R2 |
@@ -150,14 +154,13 @@ rulings). Read it if D2's or the SegBioMed items' context is needed.
     data-entry issue for the facility to explain, not reuse. *Corrected 2026-10-22:* the earlier text
     said the DB "gave their old codes to a new group".
   - gjesus3's date-blind lookup would pick the later records (Data Office read-only check; the
-    evidence is kept outside the repo). **2026-10-20:** the fix and the repair dry runs are built on `fix/subject-lookup-dates`. It merges after the pre-port integration branch, each repair waits on Ryan's go, and the calls are in the BACKLOG HIGH item "Subject records from the wrong animal". The lookup picked animals born after the scans, and
+    evidence is kept outside the repo). **✅ 2026-11-03:** the fix is merged (`68040fd`) and the repairs below have run; the record is the BACKLOG HIGH item "Subject records from the wrong animal". The lookup picked animals born after the scans, and
   `recover_subject_metadata.py` does not catch it (it only leaves the age blank). Only the 7
   slide-scanner rows (project 1321, animals 65 and 70, queued for missing DB credentials) remain
   plausible. No recovery until the tool refuses an animal born after the scan. The same check
   found 57 production acquisitions already linked to an animal born after the scan
   ([`BACKLOG.md`](BACKLOG.md), "Subject records from the wrong animal").
-- **✅ DECIDED 2026-10-21 (Ryan): the subject repairs.** Each runs from `main` after
-  `fix/subject-lookup-dates` merges, on its own go with its dry run shown.
+- **✅ DECIDED 2026-10-21 (Ryan), ✅ RUN 2026-11-03 on his go, with the dry runs shown: the subject repairs.**
   - **(b)** Relink the 96 `0525` #49–53 MRI to `1..5-AE-biomaGUNE-1025`.
   - **(c)** Relink the 75 `1123` slides of 2024-08-26 to the 13 `1321` animals now, without asking the drive-3 owner first.
     The fix session's caveat (#17 does not fit the `1321` reading) was put to Ryan.
@@ -173,20 +176,21 @@ All read-only, seconds to run:
 # row count (compare against the §1 table)
 python -c "import csv,io;print(sum(1 for _ in csv.DictReader(io.open(r'J:\gjesus3-data\registries\registry_raw.csv',encoding='utf-8-sig',newline=''))))"
 
-# the validator -- since the pre-port merge, the before-birth check is an ERROR (Ryan, 2026-10-23)
+# the validator -- green again since the 2026-11-03 subject repairs; ANY error now is new, so read it
 PYTHONPATH=tools python tools/validate_registries.py --nas-root "J:\gjesus3-data" --no-enrichment
-#   expected (measured 2026-10-23, 42,981 rows, ~4 min): validation FAILED, exit 1, exactly
-#   "57 error(s)", all of one class, "acquisition dated before the subject's date of birth" (the
-#   5 ACQ-20230807-CT-006..010 + 52 ACQ-20240826-CELL-* label errors, BACKLOG HIGH "Subject records
-#   from the wrong animal"); 0 warnings; "operator awaiting claim (pending-claim): 23126".
-#   ANY other error, or a different count, is new: read it. After the subject repairs: 0 errors.
-# the full run (with enrichment, ~20 min): the same 57 errors, 284 warnings (146 missing subject: +
+#   expected (measured 2026-11-03, 42,981 rows, ~4 min): validation OK, exit 0, 0 errors, 0 warnings.
+#   The before-birth check has been an ERROR since the pre-port merge (Ryan, 2026-10-23); its 57 rows were
+#   label errors, repaired 2026-11-03.
+# the full run (with enrichment, ~20 min; 2026-10-23 figures, before the repairs): 284 warnings (146 missing subject: +
 #   138 missing condition: blocks, pre-Phase-3 sidecars), and three coverage lines
 #   (subject recovered 32076 of 32367; condition.is_control 12 of 32375; anatomy.is_whole_body 8943 of 24636).
 
 # D7 -- what is still queued for DICOM regeneration
 python -c "import csv,io,collections;print(collections.Counter(r['status'] for r in csv.DictReader(io.open(r'J:\gjesus3-data\registries\pending_dicom_regen.csv',encoding='utf-8-sig',newline=''))))"
 #   expected: not-applicable 365, regenerated 164, no-source 99, pending 0 (the five D7 exams were flipped 2026-10-05)
+
+# subject links -- expected 2026-11-03: 31,364 links, 31,316 unchanged (159 flagged after-exit), 48 still pending, 0 wrong
+PYTHONPATH=tools python tools/audit_subject_links.py --nas-root "J:\gjesus3-data" --out <local folder>
 
 # curated datasets -- should be 4 rows
 python -c "import csv,io;print(len(list(csv.DictReader(io.open(r'J:\gjesus3-data\registries\registry_datasets.csv',encoding='utf-8-sig',newline='')))))"
