@@ -187,6 +187,7 @@ ignores both time and transfers. It can therefore pick the later record.
     rows in the pending list, including the 96 `0525` #49-53 and the NI sync's). The sidecars are right. To do: the recovery
     tools project the species, and one byte-level fill of the 338 cells on Ryan's go. Until then, a species filter misses
     those rows, and new NI uploads from the Mac join them after recovery.
+    **Ryan, 2026-11-03: Thursday 2026-11-05, assuming there are sessions to look at.** Issue #43.
 - **Not a blocker for the Box A port** (Ryan, 2026-10-23). What is left here is the 159 after-exit links and the 48 links
   not in the DB. The wrong links are repaired.
 - **✅ Status 2026-11-03: merged and run in production.**

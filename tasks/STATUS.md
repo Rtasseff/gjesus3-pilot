@@ -28,6 +28,10 @@ things genuinely in flight. It deliberately stays short.
 - **Still Ryan's for the re-launch:** the NI Mac's gjesus3 mount is down, so no NI sync can reach production until it
   is back; and a real sync on the new engine on the Mac is untested (the launcher check passed; the practice kit
   would cover it).
+- **The claim workbook needs a look before it goes out (read-only check, 2026-11-03):** its Read me still says 10,314 acquisitions from
+  926 sessions, while the list now holds 23,126 live exams; 8 listed sessions have no exam left (all retired), and 224 show the wrong exam
+  count. 106 are already answered, 105 by the PI, and 37 of those name two people. No acquisition is missing from it.
+- **Thursday 2026-11-05:** the blank `sample_organism` on 338 rows (#43), assuming there are sessions to look at.
 
 **Ryan ruled on every open item on 2026-10-05.** His rulings are recorded below in his words. He is
 away **2026-10-12 → 10-18**, and **nothing here needs him before 10-19.** If carrying out a ruling
