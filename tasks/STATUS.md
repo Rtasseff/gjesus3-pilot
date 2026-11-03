@@ -181,9 +181,9 @@ PYTHONPATH=tools python tools/validate_registries.py --nas-root "J:\gjesus3-data
 #   expected (measured 2026-11-03, 42,981 rows, ~4 min): validation OK, exit 0, 0 errors, 0 warnings.
 #   The before-birth check has been an ERROR since the pre-port merge (Ryan, 2026-10-23); its 57 rows were
 #   label errors, repaired 2026-11-03.
-# the full run (with enrichment, ~20 min; 2026-10-23 figures, before the repairs): 284 warnings (146 missing subject: +
+# the full run (with enrichment, ~20 min; measured 2026-11-03): validation OK, 0 errors, 284 warnings (146 missing subject: +
 #   138 missing condition: blocks, pre-Phase-3 sidecars), and three coverage lines
-#   (subject recovered 32076 of 32367; condition.is_control 12 of 32375; anatomy.is_whole_body 8943 of 24636).
+#   (subject recovered 32319 of 32367; condition.is_control 12 of 32375; anatomy.is_whole_body 8943 of 24636).
 
 # D7 -- what is still queued for DICOM regeneration
 python -c "import csv,io,collections;print(collections.Counter(r['status'] for r in csv.DictReader(io.open(r'J:\gjesus3-data\registries\pending_dicom_regen.csv',encoding='utf-8-sig',newline=''))))"
