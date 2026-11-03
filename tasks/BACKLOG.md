@@ -296,6 +296,24 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 
 ---
 
+## 🔸 MODERATE — one documented list of everything that runs regularly (Ryan, 2026-11-03)
+
+**Ryan:** "this should be documented somewhere because we are starting to have multiple things that need to run regularly. At some point we are porting the tools running gjesus3 to another computer and at some point we may scale, there should be a clear list of these tools in documentation."
+
+**Where it goes (Data Office call):** one table in [`11_OPERATIONS`](../mfb-rdm-docs/11_OPERATIONS.md) §5, as a new subsection beside §5.6 (the Finder refresh), since that is where production operations are specified. Other docs point at it rather than keep their own copy; the port plan's per-job table in `box_a_production_migration_plan.md` is the one to reconcile first.
+
+**Each row:** the job; what it runs; schedule; machine and login; what it reads and writes, and whether it writes registries (the one-writer rule); who owns it; how to tell it ran; what happens at the port.
+
+- [ ] Write the table and keep it current: a new recurring job is not done until it has a row.
+- [ ] **At least these:**
+  - the Finder refresh (daily 03:00);
+  - the XNAT pilot sync (reads gjesus3; run by the image-server side);
+  - the new nightly link run (owner: the NI stream; not yet on `main`);
+  - the NI Mac tunnel and mount, which are always on rather than scheduled, but fail silently;
+  - any job that is intended and not running: the weekly `verify_checksums` (#4) and a scheduled validator (#8).
+- [ ] Say what is a gjesus3 job and what only reads from it, and leave other projects' internals to them.
+- **Before the port:** Phase 5 hands over the schedule (#26), so this list should exist by then.
+
 ## Ingest from one place — one web app on Box A, NI pulled through the tunnel (Ryan, 2026-10-01)
 
 **The goal behind the NI live-sync work.** NI researchers operate the Molecubes scanner
