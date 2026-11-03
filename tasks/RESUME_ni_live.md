@@ -1,6 +1,6 @@
 # ▶ RESUME HERE — NI live sync (current state)
 
-**Updated 2026-10-09.** The NI live sync is **in production**. It was merged into `main` on
+**Updated 2026-11-03.** The NI live sync is **in production**. It was merged into `main` on
 2026-10-09 (`3127ad0`), and researchers run a copy staged on gnuclear from `main`. This page is
 the short current state.
 - **History:** the full working history (the design, the merge gates, every decision with its
@@ -50,6 +50,12 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
   - 52 CT attenuation maps filed as derived files.
   - Verified: checksums 95/95, validator 0 errors, 95 true hard links, and 145 animal blocks
     equal to their own DB records.
+- **Practice run on the new engine, 2026-11-03** (`68040fd`, on the Mac, scratch registry, Data
+  Office typing): plan, corrections, dry run, sync, re-sync and a late reconstruction all passed.
+  Validator 0 errors, 4 of 4 files match their checksums and sources, production unchanged.
+  - **Not covered:** the kit's scans are tiny text files, so real DICOM reading on the new engine
+    (`ingest/dicom_utils.py` changed) has not run on the Mac; and no operator has yet run the
+    sync themselves.
 - **Researchers' copy:** `S:\gnuclear\2026\Jesus\_gjesus3_sync\`
   (`/Volumes/gnuclear/2026/Jesus/_gjesus3_sync/` on the Mac).
   - Its `VERSION.txt` names the commit.
@@ -76,6 +82,8 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
   `python tools/operator/stage_ni_gnuclear.py production`.
 - **Testing on the Mac never touches production.**
   - `stage_ni_gnuclear.py test-kit` stages a kit whose launcher is pinned to a scratch NAS.
+    **Only that launcher is safe:** the `ni-ingest` alias goes to production, so anyone practising
+    types the kit's full path. Stage it with `--ref` set to the researchers' copy's commit.
   - Off the box, `tools/test_ni_live_e2e.py` covers plan, dry-run, go, re-sync, the Mac's
     `ENOTSUP`, a person at a terminal, cross-source dedup, derived files and the project rule.
 
@@ -94,6 +102,10 @@ Why: the Mac is the platform manager's (§5). Erasing, overwriting or a slow box
     file, wait, then copy.
   - Do not unmount from ssh: a mount made in the GUI session refuses it.
   - One dead layer sits under the live mount. It is harmless, and a reboot clears it.
+  - **The mount can be down with nothing telling anyone.** Found down on 2026-11-03, with MacMounter
+    running and the NAS reachable; cause not established (no mount attempt in 3 h of system log,
+    and the saved password not found over ssh, which is not conclusive). Ryan re-ran `setup.sh`,
+    which fixed it. Before anyone syncs: `test -d ~/.gjesus3/gjesus3-data/registries`.
 - **Retired at Box A:** once Box A pulls NI data through the tunnel, `undo.sh` removes the
   mount and the password from the Mac.
 
