@@ -1202,9 +1202,22 @@ Ryan: "it really should be the project manager tool that lets people change date
 would be autoset when the project manager tool is used to close a project." Today `start_date` and `last_activity` are
 read-only there, and no ingest moves them.
 
+**Ryan, 2026-11-04:** "the project manager still has a lot of 'last activity' screens even though we agreed not to live
+update it. it should track status changes, like when it was first created and then closed."
+
+- [ ] **Stop showing the old meaning.** The GUI still says these dates follow the acquisitions, which stopped being true
+  with the 2026-11-03 ruling. The project table has "Started" and "Last activity" columns (`PROJ_COLS` in
+  `manager/gui/static/manager.js`). The detail panel has "Started — first acquisition", "Last activity — newest
+  acquisition, not the last edit", and a note repeating that meaning (`manager/gui/templates/index.html`).
+- [ ] **Replace `last_activity` with status dates: created, then closed.** This is a schema call (06 §4.2 and §4.4, 05 §7,
+  `registry_projects.csv`, the `_project.yaml` template), and `create_project.py`, `reopen_project.py`,
+  `recompute_project_dates.py` and `test_manager.py` follow it. Two things to settle first:
+  - **Existing values are not creation dates.** The 2026-07-14 backfill set them from acquisitions, and an ingest that
+    creates a project passes the acquisition's date. They cannot simply be relabelled "created".
+  - **A project can reopen.** `reopen_project.py` only writes the date into `notes` today. Decide between two date
+    columns and a small status history.
 - [ ] Let the Project Manager edit the dates (`EDITABLE_FIELDS` in `ingest/projects_registry.py`, the GUI's read-only
-  fields, 05 §7, 06 §4.4). Decide who may, and whether `last_activity` keeps its name: nothing maintains it, and the
-  GUI labels it "Last activity".
+  fields, 05 §7, 06 §4.4). Decide who may.
 - [ ] Stamp a date when the tool closes a project. `closed_date` exists in `_project.yaml` but not in
   `registry_projects.csv`, so the registry half is a schema call. Goes with "closed projects should be MOVED, not
   deleted" and "Define what `status = closed` actually does", which have no close action yet.
