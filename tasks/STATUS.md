@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-11-03
+**Last Updated:** 2026-11-04
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -17,6 +17,12 @@ things genuinely in flight. It deliberately stays short.
 ---
 
 ## 0. ⚠️ DECISIONS WAITING ON RYAN — read this first after a break
+
+**The next goal is the Box A port (Ryan, 2026-11-04):** "the last step of porting to box A is what we now need to work on ... lets finish up the backlog that we need to finish and get to a point to do the port. which will take its own plan."
+- **Scope (Ryan agreed 2026-11-04):** one plan, two stages, in order: move the jobs, then build the web app (#28). Moving the jobs alone changes nothing researchers see. [`box_a_production_migration_plan.md`](box_a_production_migration_plan.md) is due for a rewrite.
+- **Decided the same day ("I agree with the plan recommendations"):** B1 and B3 yes, B4 `D:\gjesus3\gjesus3-pilot`, and the paths researchers read from do not move. Ryan has full admin on Box A.
+- **Before the port:** #3 (Phase 0), the #21 purge decision, the #14 production guard (decision 16), and #4's weekly `verify_checksums` job. #43's fill of 338 rows is not a blocker, but it is ready.
+- **Waiting on Ryan:** whether #6, #8, #9, #10, #11, #13, #15, #16, #18, #19, #20, #22, #24 and #25 move to after the port, and his call on #2; whether a start date is set; who administers the QNAP, which decides the web app's write account.
 
 **The pilot re-launch is set for 2026-11-04** (Ryan, 2026-10-22, with the PI's full backing).
 - Ryan presents the new features, then pushes adoption.

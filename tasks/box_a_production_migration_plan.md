@@ -5,6 +5,10 @@
 > **Companion satellite:** `projects\DataInfra\image-server\` owns the *box* (procurement,
 > IT engagement, rack/power/network). This file owns the *port* — what moves off this
 > workstation onto it, in what order, and how each step is verified.
+>
+> **Scope widened 2026-11-04 (Ryan agreed): one plan, two stages, in order: move the jobs, then build the web app
+> ([`web_app_design_options.md`](web_app_design_options.md)).** Moving the jobs alone changes nothing researchers see.
+> This file still describes the first stage only, and is due for a rewrite.
 
 > ⛔ **Timing gate.** `image-server\README.md` states that racking, provisioning, and
 > migrating services off Ryan's workstation are **deliberately unscheduled until after the
@@ -48,6 +52,7 @@ These were open questions; they are now answered and need no re-litigating.
 | | Answer |
 |---|---|
 | **Account on Box A** | Ryan's own domain account. NAS ACLs (`CICBIOMAGUNE\GJesus` group, `J:` write paths) therefore carry over unchanged — no IT grant needed. |
+| **Admin on Box A** | Ryan has full admin rights on the box (Ryan, 2026-11-04), so installing and configuring anything on the box itself needs no IT. An account the NAS recognises for the web app is a separate question. |
 | **Drive mappings** | Already mapped to the same letters and targets as here. |
 | **Repo location on Box A** | **Plain local disk, NOT OneDrive** (see §4.3). |
 | **Image-server trials** | **Stay on this workstation.** Box A is not sufficient to host OMERO + XNAT. ⚠️ This *contradicts* `image-server\README.md`, which still says the trials migrate off Ryan's workstation to Box A — see §8. |
@@ -330,10 +335,11 @@ Finish with `.\ops unschedule molecubes-tunnel` on this workstation.
 
 | # | Decision | Note |
 |---|---|---|
-| **B1** | **Does the GUI exe keep being built on the dev box?** Recommendation: **yes.** PyInstaller, the throwaway-test-NAS verification loop, and the worktree flow are development. Box A pulls and at most deploys. Nothing about the frozen build needs the production box. |
+| **B1** | **Does the GUI exe keep being built on the dev box?** Recommendation: **yes.** PyInstaller, the throwaway-test-NAS verification loop, and the worktree flow are development. Box A pulls and at most deploys. Nothing about the frozen build needs the production box. | ✅ **DECIDED 2026-11-04 (Ryan): yes.** |
 | **B2** | **`molecubes-tunnel`** — move to Box A (needs the acquisition box reconfigured, rare physical access) or leave here as the documented exception? | ✅ **DECIDED 2026-10-01 (Ryan): move it.** The "rare physical access" cost no longer applies: with the tunnel live, the box is re-pointed through it, make-before-break (§5, Phase 6). |
-| **B3** | **Does Box A need a `dicomifier-pilot` env at all**, or is ParaVision→DICOM regeneration a Data-Office activity that stays on dev? Phase 2 assumes Box A gets it; dropping it removes a WSL/conda dependency from the production box. |
-| **B4** | **Repo path on Box A** — `D:\gjesus3\gjesus3-pilot` is assumed throughout. Confirm, because it goes into `instance.local.ps1` and determines the memory slug. |
+| **B3** | **Does Box A need a `dicomifier-pilot` env at all**, or is ParaVision→DICOM regeneration a Data-Office activity that stays on dev? Phase 2 assumes Box A gets it; dropping it removes a WSL/conda dependency from the production box. | ✅ **DECIDED 2026-11-04 (Ryan): yes, Box A gets it.** The web app's MRI ingest needs Dicomifier there ([`web_app_design_options.md`](web_app_design_options.md) §3). |
+| **B4** | **Repo path on Box A** — `D:\gjesus3\gjesus3-pilot` is assumed throughout. Confirm, because it goes into `instance.local.ps1` and determines the memory slug. | ✅ **DECIDED 2026-11-04 (Ryan): `D:\gjesus3\gjesus3-pilot`.** |
+| **B5** | **Do the paths researchers use to read data move with Box A?** | ✅ **DECIDED 2026-11-04 (Ryan): no.** The data stays on the NAS; only the apps move. |
 
 ---
 
