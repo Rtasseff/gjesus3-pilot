@@ -208,6 +208,8 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **On hold (Ryan, 2026-11-05):** Box A is unreachable; IT may have cut its power. Ryan asked them; nothing on Box A until they
+  answer. Making it reliably reachable is now a BACKLOG HIGH item, and moving the jobs (Phase 5) waits on it.
 - **Phase 1 blocked:** Box A (`BMG-WKS-RYAN`, 10.10.2.161) doesn't answer on the network: no ARP reply from this workstation
   on the same subnet, so it is off, asleep or unplugged. SSH, with Ryan's domain account, is the planned route.
 
