@@ -104,7 +104,7 @@ batch() {
     [ -d "$bk" ] || $BACKUP "$NAS" "$bk" ${p:-AE-biomaGUNE-0118} > "$RUN/write/bk_$b.txt" 2>&1 || stop "$b backup failed (another writer?)"
   fi
   step "$b: write $exp exams$([ -n "$p" ] && echo " into $p") (expect: Total = Success = $exp less any already committed, Failed 0)"
-  python tools/ingest_raw.py --config "$(cfg $b)" --nas-root "$NAS" --refresh-index projects > "$RUN/write/run_$b.log" 2>&1
+  python tools/ingest_raw.py --config "$(cfg $b)" --nas-root "$NAS" --production --refresh-index projects > "$RUN/write/run_$b.log" 2>&1
   grep -E '^\s*(Total|Success|Failed):' "$RUN/write/run_$b.log" | tr -s ' ' | tr '\n' ' '; echo
   $CHK run-log "$RUN/write/run_$b.log" "$exp" "$NAS" "$(cfg $b)" \
     || stop "$b: the run is not clean ($RUN/write/run_$b.log). Fix the cause and resume with: write --from $b (committed exams are skipped). Rollback: the gate §7, baseline $bk"
