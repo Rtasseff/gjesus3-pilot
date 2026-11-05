@@ -95,6 +95,8 @@ a DPA reference.** That gives a validator rule: human ⇒ DPA present.
 
 ## 🔺 HIGH — run the partial-ingest queues on a schedule (Ryan, 2026-08-05; decided 2026-11-03)
 
+**Found 2026-11-03, not fixed:** `recover_all` in `tools/recover_subject_metadata.py` rewrites `pending_subject_metadata.csv` with `pending._write_all` and no registry lock, so a row an ingest queues during a run can be lost. `relink_pending.py` had the same bug, fixed in `17520fa`. Fix this before subject recovery runs on a schedule or at sync.
+
 A sync or ingest that cannot finish a step queues it, and a Windows tool completes it later. All three
 tools and lists exist. **No schedule exists:** a person has to remember. Ryan asked for this on
 2026-08-05 ([`archive/ni_live_onbox_test_notes_ryan_2026-08-05.txt`](archive/ni_live_onbox_test_notes_ryan_2026-08-05.txt));
