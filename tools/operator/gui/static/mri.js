@@ -27,8 +27,14 @@ function alreadyNote(r) {
   return n ? `${n} already ingested (skipped, not copied again). ` : "";
 }
 
+// Every URL in this file is app-relative ("/api/..."). The app may be mounted
+// under a prefix (the combined web app, tools/webapp/, serves it at /ingest);
+// the page writes that prefix into window.GJ3_BASE ("" when standalone) and
+// every request goes through apiUrl(), so one file works both ways.
+function apiUrl(path) { return (window.GJ3_BASE || "") + path; }
+
 async function postJSON(url, body) {
-  const r = await fetch(url, {
+  const r = await fetch(apiUrl(url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -48,7 +54,7 @@ async function postJSON(url, body) {
   return data;
 }
 
-function getJSON(url) { return fetch(url).then((r) => r.json()); }
+function getJSON(url) { return fetch(apiUrl(url)).then((r) => r.json()); }
 
 // ---------------------------------------------------------------- NAS root
 const nasInput = $("#nas-root");
@@ -552,7 +558,7 @@ async function ingest() {
   // SSE via fetch + ReadableStream (POST body needed -> can't use EventSource).
   let resp;
   try {
-    resp = await fetch("/api/mri/ingest", {
+    resp = await fetch(apiUrl("/api/mri/ingest"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -711,7 +717,7 @@ async function sftpPull() {
   sftp.result.innerHTML = "";
   let resp;
   try {
-    resp = await fetch("/api/sftp_pull", {
+    resp = await fetch(apiUrl("/api/sftp_pull"), {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         remotes,

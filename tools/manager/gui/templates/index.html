@@ -7,20 +7,21 @@
   <!-- The INGEST GUI's stylesheet, served from /shared/ (see app.py). One
        stylesheet for both tools, so they look like one system today and fold
        together cheaply when the RDM server replaces the exes. -->
-  <link rel="stylesheet" href="/shared/style.css">
+  <link rel="stylesheet" href="{{ url_for('shared_static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='manager.css') }}">
 </head>
 <body>
   <header>
     <h1>Project Manager
-      <span class="muted" style="font-size:.55em;font-weight:normal">— your projects on gjesus3</span></h1>
+      <span class="muted" style="font-size:.55em;font-weight:normal">— your projects on gjesus3</span>
+      {% if home_url %}<a href="{{ home_url }}" class="muted" style="font-size:.55em;font-weight:normal">← all tools</a>{% endif %}</h1>
     <div class="nasbar">
-      <label>RDM System <span class="muted">— the gjesus3 storage your projects live on</span>
+      <label>RDM System <span class="muted">— the gjesus3 storage your projects live on{% if nas_fixed %}, set by the server{% endif %}</span>
         <input id="nas-root" type="text" value="{{ nas_root }}" size="30"
-               placeholder="\\gjesus3\gjesus3\gjesus3-data">
+               placeholder="\\gjesus3\gjesus3\gjesus3-data"{% if nas_fixed %} readonly{% endif %}>
       </label>
-      <button id="nas-browse" type="button" class="browse">Browse…</button>
-      <button id="nas-save" type="button">Set</button>
+      <button id="nas-browse" type="button" class="browse"{% if nas_fixed %} hidden{% endif %}>Browse…</button>
+      <button id="nas-save" type="button"{% if nas_fixed %} hidden{% endif %}>Set</button>
       <span id="nas-status" class="pill"></span>
     </div>
   </header>
@@ -265,8 +266,11 @@
     </div>
   </div>
 
-  <script src="/shared/folder_browser.js"></script>
-  <script src="/shared/completion_modal.js"></script>
+  {# The mount point ("" standalone, "/projects" in the combined web app): every
+     request the scripts make goes through apiUrl(), which prefixes it. #}
+  <script>window.GJ3_BASE = {{ request.script_root|tojson }};</script>
+  <script src="{{ url_for('shared_static', filename='folder_browser.js') }}"></script>
+  <script src="{{ url_for('shared_static', filename='completion_modal.js') }}"></script>
   <script src="{{ url_for('static', filename='manager.js') }}"></script>
 </body>
 </html>

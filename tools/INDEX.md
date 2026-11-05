@@ -12,7 +12,7 @@ and where its full docs live. New to the system? Pick your role in
 > and the **Project Manager** GUI.
 > A term you don't recognise → [`GLOSSARY.md`](../GLOSSARY.md).
 
-*Last Updated: 2026-09-28*
+*Last Updated: 2026-11-05*
 
 ---
 
@@ -77,6 +77,7 @@ Overview: [`operator/README.md`](operator/README.md). Operator questions:
 | **`gjesus3_ingest.exe`** (GUI) | microscopy (ZWSI / CELL / LSM9) **and** MRI (ParaVision) operators | Windows (opens in the browser) | The frozen executable deployed on the NAS (~95 MB, PyInstaller/Flask). Source: [`operator/gui/`](operator/gui/) (`app.py`, built via `gjesus3_ingest.spec`) — [`operator/gui/README.md`](operator/gui/README.md) |
 | **`mri-ingest`** | MRI (Bruker ParaVision) operators | Linux acquisition machine | `python tools/operator/mri_ingest.py /path/to/study` (previews, then `Proceed? [y/N]`) |
 | **`ni-ingest`** | Nuclear Imaging (Molecubes / MILabs PET/SPECT/CT) operators | Linux acquisition machine | `python tools/operator/ni_ingest.py /path/to/folder` (previews, then `Proceed? [y/N]`) |
+| **`webapp/app.py`** (web app, 🔶 DRAFT, not deployed) | the Box A port (Stage 2.1): the ingest GUI's two pages **and** the Project Manager from one URL (`/ingest/`, `/ingest/mri`, `/projects/`), both apps mounted unchanged | Windows, `127.0.0.1:5002`, against a **scratch** root for now | `python tools/webapp/app.py --nas-root C:\Users\<you>\temp\testnas`. One server-side NAS root (`--nas-root`, `GJESUS3_WEBAPP_NAS_ROOT` or a JSON `--config`); refuses to start without one and never uses `GJESUS3_ROOT`; the production root also needs `--production`. No sign-in yet. Tests: `python tools/webapp/test_webapp.py`. Spec: [`10_TOOLS §5.4`](../mfb-rdm-docs/10_TOOLS.md) |
 
 > **Name note:** the GUI is **`gjesus3_ingest.exe`** (microscopy **and** MRI
 > pages). The older name *`microscopy_ingest.exe`* is obsolete.

@@ -55,8 +55,12 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // The page's mount point ("" standalone; /ingest or /projects in the
+  // combined web app), written by the template into window.GJ3_BASE.
+  const apiUrl = (path) => (window.GJ3_BASE || "") + path;
+
   async function listdir(path, desc, withSize) {
-    const r = await fetch("/api/listdir", {
+    const r = await fetch(apiUrl("/api/listdir"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path, desc, with_size: !!withSize }),
