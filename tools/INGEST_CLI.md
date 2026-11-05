@@ -46,6 +46,7 @@ By default a CLI ingest does **not** touch the researcher Finder. The global `re
 | `--config <path>` | `-c` | — | YAML config file (batch or single-case). Required unless `-i`. |
 | `--interactive` | `-i` | off | Single-case mode; tool prompts for each field. |
 | `--dry-run` | `-n` | off | Log what would happen; touch nothing on NAS. **Use first.** |
+| `--production` | — | off | **Required for a real run against the production data root**, the one whose `registries\` holds the `.production` marker; without it the run is refused before anything is read or written (✅ 2026-11-05, decision 16). A dry run never needs it. The GUIs, `mri-ingest` and `ni-ingest` don't need it. |
 | `--nas-root <path>` | — | `$GJESUS3_ROOT` or `/mnt/gjesus3` | NAS mount point on this host. |
 | `--nas-unc <unc>` | — | `$GJESUS3_UNC` or `\\GJESUS3\gjesus3` | Legacy `.lnk` porting-seam only — **not used by the current hard-link linker** (hard links use local NAS-volume paths). Retained for backward compatibility; safe to omit. |
 | `--project <name-or-id>` | — | — | Project applied to every row this run — a project **name** or a `PROJ-NNNN` id. Resolved at Step 9.5 and recorded as `project_id`. Overrides any value the YAML sets. |

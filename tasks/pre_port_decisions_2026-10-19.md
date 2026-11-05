@@ -104,7 +104,9 @@ noted on #19 / #40; all MEDIUM.
 
 ## Still to rule
 
-- **Decisions 16 and 17** (#14 the production guard, #28/#29 the design notes).
+- **Decision 17** (#28/#29 the design notes).
+
+**Decision 16, the production guard: built 2026-11-05** on `fix/production-guard`, as recommended (a `registries\.production` marker; a real `ingest_raw.py` run against it needs `--production`). Ryan, 2026-11-05, on the Box A port: "do what ever needs to be done to finish this port". The port plan lists the guard in Phase 0, so it is taken as his go on the recommendation. Writing the marker on the live root is a production write, done after the merge.
 - **Decision 1's follow-up:** its own issue, or folded into another? (BACKLOG MODERATE "an acquisition with an unknown
   date", 2026-10-23.)
 - **18. The curated datasets' `provenance.csv` does not follow 07_PROVENANCE's ✅ schema.** 07 §3.4 (12 columns:
