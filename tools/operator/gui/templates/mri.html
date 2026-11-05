@@ -9,15 +9,16 @@
 <body>
   <header>
     <h1>MRI Ingest <span class="muted">— Bruker ParaVision</span>
-      <a href="/static/help/mri_guide.html" target="_blank" class="muted" style="font-size:.55em;font-weight:normal">? Help</a>
-      <a href="/" class="muted" style="font-size:.55em;font-weight:normal">→ switch to microscopy ingest</a></h1>
+      {% if home_url %}<a href="{{ home_url }}" class="muted" style="font-size:.55em;font-weight:normal">← all tools</a>{% endif %}
+      <a href="{{ url_for('static', filename='help/mri_guide.html') }}" target="_blank" class="muted" style="font-size:.55em;font-weight:normal">? Help</a>
+      <a href="{{ url_for('index') }}" class="muted" style="font-size:.55em;font-weight:normal">→ switch to microscopy ingest</a></h1>
     <div class="nasbar">
-      <label>Destination <span class="muted">— the RDM System (gjesus3 storage) files are ingested to</span>
+      <label>Destination <span class="muted">— the RDM System (gjesus3 storage) files are ingested to{% if nas_fixed %}, set by the server{% endif %}</span>
         <input id="nas-root" type="text" value="{{ nas_root }}" size="28"
-               placeholder="\\gjesus3\gjesus3\gjesus3-data">
+               placeholder="\\gjesus3\gjesus3\gjesus3-data"{% if nas_fixed %} readonly{% endif %}>
       </label>
-      <button id="nas-browse" type="button" class="browse">Browse…</button>
-      <button id="nas-save" type="button">Set</button>
+      <button id="nas-browse" type="button" class="browse"{% if nas_fixed %} hidden{% endif %}>Browse…</button>
+      <button id="nas-save" type="button"{% if nas_fixed %} hidden{% endif %}>Set</button>
       <span id="nas-status" class="pill"></span>
     </div>
   </header>
@@ -207,6 +208,9 @@
     </div>
   </div>
 
+  {# The mount point ("" standalone, "/ingest" in the combined web app): every
+     request the scripts make goes through apiUrl(), which prefixes it. #}
+  <script>window.GJ3_BASE = {{ request.script_root|tojson }};</script>
   <script>
     window.MRI = {
       linkDefault: {{ link_default|tojson }},

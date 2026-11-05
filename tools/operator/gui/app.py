@@ -115,6 +115,34 @@ app = Flask(
     static_folder=os.path.join(_GUI_DIR, "static"),
 )
 
+# ----------------------------------------------------------------- server mode
+# The combined web app (tools/webapp/app.py) mounts this app beside the Project
+# Manager in one process and PINS one NAS root, read once at start by
+# tools/webapp/settings.py. Pinned, that root is the only one this app uses: the
+# per-PC saved choice, $GJESUS3_ROOT and any nas_root a page posts are ignored,
+# nothing is saved to %LOCALAPPDATA%, recipes live in <root>/recipes, and the
+# page shows the root read-only. Unpinned (this file run on its own, and the exe
+# built from it) nothing changes. The Project Manager carries the same block.
+SERVER_NAS_ROOT = "GJ3_SERVER_NAS_ROOT"   # app.config key: the pinned root
+SERVER_HOME_URL = "GJ3_HOME_URL"          # app.config key: the landing page
+
+
+def use_server_settings(nas_root, home_url=None):
+    """Pin the NAS root (and the link back to the landing page): server mode."""
+    app.config[SERVER_NAS_ROOT] = nas_root
+    app.config[SERVER_HOME_URL] = home_url
+
+
+def server_nas_root():
+    """The pinned root in server mode, else None (standalone and the exe)."""
+    return app.config.get(SERVER_NAS_ROOT) or None
+
+
+@app.context_processor
+def _server_context():
+    return {"nas_fixed": bool(server_nas_root()),
+            "home_url": app.config.get(SERVER_HOME_URL)}
+
 # Microscopy instruments this GUI serves. NI/MRI have their own Linux scripts.
 MICROSCOPY_KEYS = ["ZWSI", "CELL", "LSM9"]
 INSTRUMENT_LABELS = {
@@ -326,8 +354,12 @@ def load_saved_nas_root():
     Precedence: the operator's saved choice > $GJESUS3_ROOT > GUI_DEFAULT_NAS_ROOT
     (the Windows-SMB UNC). We do NOT fall back to env.resolve_nas_root()'s
     `/mnt/gjesus3` default, which is the WSL/Linux data-office path — wrong for a
-    Windows GUI operator who has never set one.
+    Windows GUI operator who has never set one. Server mode: the pinned root,
+    always.
     """
+    pinned = server_nas_root()
+    if pinned:
+        return pinned
     try:
         with open(_nas_state_path(), "r", encoding="utf-8") as f:
             val = f.read().strip()
@@ -339,6 +371,8 @@ def load_saved_nas_root():
 
 
 def save_nas_root(value):
+    if server_nas_root():
+        return                      # server mode: the root is not a per-PC choice
     try:
         with open(_nas_state_path(), "w", encoding="utf-8") as f:
             f.write((value or "").strip())
@@ -346,12 +380,21 @@ def save_nas_root(value):
         pass
 
 
+def _request_nas_root(data):
+    """The NAS root one request works on: pinned > the page's value > saved."""
+    return (server_nas_root() or (data.get("nas_root") or "").strip()
+            or load_saved_nas_root())
+
+
 def _recipes_dir_state_path():
     return os.path.join(_state_dir(), "recipes_dir.txt")
 
 
 def load_saved_recipes_dir():
-    """The operator's persisted recipes folder, or "" (use the NAS default)."""
+    """The operator's persisted recipes folder, or "" (use the NAS default).
+    Server mode: always "" -- recipes live in <pinned root>/recipes."""
+    if server_nas_root():
+        return ""
     try:
         with open(_recipes_dir_state_path(), "r", encoding="utf-8") as f:
             return f.read().strip()
@@ -360,6 +403,8 @@ def load_saved_recipes_dir():
 
 
 def save_recipes_dir(value):
+    if server_nas_root():
+        return                      # server mode: fixed at <pinned root>/recipes
     v = (value or "").strip()
     if v:
         v = os.path.normpath(v)   # consistent separators (J:\… not J:/…)
@@ -489,7 +534,8 @@ def api_template():
 
 @app.route("/api/nas_root", methods=["GET", "POST"])
 def api_nas_root():
-    if request.method == "POST":
+    # Server mode: a POST changes nothing and answers with the pinned root.
+    if request.method == "POST" and not server_nas_root():
         data = request.get_json(silent=True) or {}
         value = (data.get("nas_root") or "").strip()
         valid = env.is_valid_nas_root(value)
@@ -500,6 +546,7 @@ def api_nas_root():
     return jsonify({
         "nas_root": nas_root,
         "valid": env.is_valid_nas_root(nas_root),
+        "fixed": bool(server_nas_root()),
     })
 
 
@@ -517,6 +564,7 @@ def api_recipes_dir():
         "default": default_recipes_dir(),
         "is_default": not load_saved_recipes_dir(),
         "exists": os.path.isdir(rdir),
+        "fixed": bool(server_nas_root()),
     })
 
 
@@ -679,7 +727,7 @@ def api_preview():
     instrument = (data.get("instrument") or "").upper()
     overrides = data.get("overrides") or {}
     staging_path = (data.get("staging_path") or "").strip()
-    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    nas_root = _request_nas_root(data)
 
     # Plain-language guards before we touch the pipeline.
     if instrument not in MICROSCOPY_KEYS:
@@ -736,7 +784,7 @@ def api_discovered():
     instrument = (data.get("instrument") or "").upper()
     overrides = data.get("overrides") or {}
     staging_path = (data.get("staging_path") or "").strip()
-    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    nas_root = _request_nas_root(data)
     limit = int(data.get("limit") or BUILDER_GRID_LIMIT)
 
     if instrument not in MICROSCOPY_KEYS:
@@ -993,7 +1041,7 @@ def api_ingest():
     instrument = (data.get("instrument") or "").upper()
     overrides = data.get("overrides") or {}
     staging_path = (data.get("staging_path") or "").strip()
-    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    nas_root = _request_nas_root(data)
     dry_run = bool(data.get("dry_run"))
     recipe_path = (data.get("recipe_path") or "").strip() or None
 
@@ -1118,7 +1166,7 @@ def api_mri_preview():
     """Read-only MRI preview + link-collision check (local source folder)."""
     data = request.get_json(silent=True) or {}
     staging_path = (data.get("staging_path") or "").strip()
-    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    nas_root = _request_nas_root(data)
 
     if not staging_path:
         return jsonify({"error": "Pick a source folder (a ParaVision exam, a "
@@ -1178,7 +1226,7 @@ def api_mri_ingest():
     """
     data = request.get_json(silent=True) or {}
     staging_path = (data.get("staging_path") or "").strip()
-    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    nas_root = _request_nas_root(data)
     dry_run = bool(data.get("dry_run"))
     operator = (data.get("operator") or "").strip()
     cleanup_staging = bool(data.get("cleanup_staging"))
@@ -1369,7 +1417,7 @@ def api_sftp_pull():
     from datetime import datetime
     data = request.get_json(silent=True) or {}
     remotes = [r for r in (data.get("remotes") or []) if isinstance(r, str)]
-    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    nas_root = _request_nas_root(data)
     staging_root = (data.get("staging_root") or "").strip() or _default_mri_staging_root(nas_root)
     batch = (data.get("batch") or "").strip()
     force = bool(data.get("force"))
