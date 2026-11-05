@@ -136,7 +136,7 @@ your recommendations."*
 | Q4 | **The 6 MFB studies whose code is no gjesus3 project are ingested with no project**, and listed in the assign workbook | in the ingest build |
 | Q5 | **`AE-biomaGUNE-0220` is reopened** for its 3 studies of 2022 | at ingest time |
 | Q6 | **The 25 archives with no `.sha1`** are checked by the compression's own checksum plus a full tar listing | in the download step |
-| Q7 | **Ryan asks the platform manager** where July–August 2020, the missing June 2020 days, 2022-01-25, 2023 and the older 11.7 T data are | with Ryan; 41 of drive 3's 7 T studies have no archive copy; also two archive tarballs that are themselves short (`m21_1019`, `m3r7f2_Caff`; their `.sha1` was taken from the short file) |
+| Q7 | **Ryan asks the platform manager** where July–August 2020, the missing June 2020 days, 2022-01-25, 2023 and the older 11.7 T data are | **Partly answered 2026-11-05, from a folder listing reported to us and not checked here:** the archive's server also holds `MRI_11_daily` (446.5 GB, 2024-10 to now), `MRI_7_daily` (281.3 GB, 2025-01 to now), both all groups, and `backupMRI11_centos_almalinux/data` (83.1 GB, dates not reported). 11.7 T data from before 2024-10 may be in that last folder; that isn't confirmed. `tools/mri_archive.py` stays confined to the 7 T folder. Otherwise with Ryan; 41 of drive 3's 7 T studies have no archive copy; also two archive tarballs that are themselves short (`m21_1019`, `m3r7f2_Caff`; their `.sha1` was taken from the short file) |
 
 **Progress (2026-10-08):**
 - **Download:** night 1 verified 552 of 780 archives (175 GB, 0 bad; one connection, 3.6 MB/s, stopped itself at 07:36);
