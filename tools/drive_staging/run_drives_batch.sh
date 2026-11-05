@@ -63,7 +63,7 @@ if [ "$CASES" != "Batch: $N cases" ] || [ "$SK" != "0" ] || [ "$RF" != "0" ] || 
 
 # d. the run
 s=$(date +%s)
-python tools/ingest_raw.py -c "$CFG" --nas-root "$NAS" --refresh-index projects > "$BK/run.log" 2>&1
+python tools/ingest_raw.py -c "$CFG" --nas-root "$NAS" --production --refresh-index projects > "$BK/run.log" 2>&1
 echo "d. run exit=$? secs=$(( $(date +%s) - s ))"
 grep -A4 "BATCH SUMMARY" "$BK/run.log" | grep -E "Total|Success|Failed"
 grep -q "Success:  $N$" "$BK/run.log" && grep -q "Failed:   0$" "$BK/run.log" || { echo "STOP: the run did not ingest all $N with 0 failed"; exit 4; }
@@ -79,7 +79,7 @@ cmp -s "$BK/errors_before.txt" "$BK/errors_after.txt" || { echo "STOP: the valid
 grep -E "Refreshing|targeted refresh" "$BK/run.log" | tail -2
 
 # f. idempotency
-python tools/ingest_raw.py -c "$CFG" --nas-root "$NAS" > "$BK/rerun.log" 2>&1
+python tools/ingest_raw.py -c "$CFG" --nas-root "$NAS" --production > "$BK/rerun.log" 2>&1
 echo "f. re-run: $(grep 'Total:' "$BK/rerun.log")"
 grep -q "Total:    0$" "$BK/rerun.log" || { echo "STOP: the re-run added rows"; exit 7; }
 echo "WARN lines in run: $(grep -c WARN "$BK/run.log")"

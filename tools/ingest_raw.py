@@ -2139,6 +2139,15 @@ def _touched_project_ids(acq_ids, nas_root):
     return ids
 
 
+PRODUCTION_MARKER = ".production"
+
+
+def is_production_root(nas_root):
+    """True when `nas_root` carries `registries/.production`, written once by hand
+    on the live data root only (decision 16, 2026-11-05)."""
+    return os.path.isfile(os.path.join(nas_root, "registries", PRODUCTION_MARKER))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Ingest raw data from staging to structured raw area.",
@@ -2162,6 +2171,16 @@ def main():
         "--dry-run", "-n",
         action="store_true",
         help="Preview what would happen without making changes",
+    )
+    parser.add_argument(
+        "--production",
+        action="store_true",
+        help=(
+            "Required for a real (non-dry) run against the production data root, "
+            "the one whose registries/ holds the .production marker. Without it "
+            "the run is refused before anything is read or written. The GUIs, "
+            "mri-ingest and ni-ingest call run_batch directly and do not need it."
+        ),
     )
     parser.add_argument(
         "--project",
@@ -2244,6 +2263,21 @@ def main():
             "ERROR",
         )
         sys.exit(2)
+    # A synthetic test run once wrote two fake acquisitions into production
+    # (2026-06-29) because nothing told a test root from the live one. The live
+    # root carries a marker; a real CLI run against it must say --production.
+    if is_production_root(nas_root) and not args.dry_run and not args.production:
+        log(
+            f"'{nas_root}' is the PRODUCTION data root (registries/{PRODUCTION_MARKER} "
+            f"is present) and this is not a dry run. Refusing without --production. "
+            f"Run with --dry-run first; add --production only when you mean to write "
+            f"to production.",
+            "ERROR",
+        )
+        sys.exit(2)
+    if args.production and not is_production_root(nas_root):
+        log(f"--production given, but '{nas_root}' has no registries/{PRODUCTION_MARKER} "
+            f"marker; carrying on as an ordinary run.", "WARN")
     # Project links are now hard links (local NAS-volume paths); they are
     # created whenever a row's project name resolves, independent of nas_unc.
     if nas_unc:
