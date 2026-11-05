@@ -1,6 +1,6 @@
 # gjesus3 RDM Pilot — Status
 
-**Last Updated:** 2026-11-04
+**Last Updated:** 2026-11-05
 
 This is the **lean current-state** view: where the system is *right now* and the few
 things genuinely in flight. It deliberately stays short.
@@ -19,10 +19,13 @@ things genuinely in flight. It deliberately stays short.
 ## 0. ⚠️ DECISIONS WAITING ON RYAN — read this first after a break
 
 **The next goal is the Box A port (Ryan, 2026-11-04):** "the last step of porting to box A is what we now need to work on ... lets finish up the backlog that we need to finish and get to a point to do the port. which will take its own plan."
-- **Scope (Ryan agreed 2026-11-04):** one plan, two stages, in order: move the jobs, then build the web app (#28). Moving the jobs alone changes nothing researchers see. [`box_a_production_migration_plan.md`](box_a_production_migration_plan.md) is due for a rewrite.
+- **The commitment (Ryan, 2026-11-05):** "We are now not doing many improvements ... our last commitment is to port to Box A to have the same functionality as the current version has here (that includes running all the processes that are regularly run by workstationops so a version of workstationops, specific to gjesus3 ... needs to move there too) and to make a single unified web app for the ingests and the project manager that runs on a single login to do work but has accounts for users."
+- **Timing (Ryan, 2026-11-05):** no date gate: "move it forward now. This is a high priority effort", "as soon as possible with the least work from me."
+- **Scope (Ryan agreed 2026-11-04):** one plan, two stages, in order: move the jobs, then build the web app (#28). [`box_a_production_migration_plan.md`](box_a_production_migration_plan.md) is due for a rewrite, on branch `feat/box-a-port`.
 - **Decided the same day ("I agree with the plan recommendations"):** B1 and B3 yes, B4 `D:\gjesus3\gjesus3-pilot`, and the paths researchers read from do not move. Ryan has full admin on Box A.
 - **Before the port:** #3 (Phase 0), the #21 purge decision, the #14 production guard (decision 16), and #4's weekly `verify_checksums` job. #43's fill of 338 rows is not a blocker, but it is ready.
-- **Waiting on Ryan:** whether #6, #8, #9, #10, #11, #13, #15, #16, #18, #19, #20, #22, #24 and #25 move to after the port, and his call on #2; whether a start date is set; who administers the QNAP, which decides the web app's write account.
+- **Moved to after the port, 2026-11-05:** #6, #8, #9, #10, #11, #13, #15, #16, #18, #19, #20, #22, #24, #25. #28 moved into the port milestone. #2 stays where it is, Ryan's call.
+- **Waiting on Ryan:** the go on #3's private repo, purge or defer for #21, decision 16, and which account the web app's single login uses. We probably have no admin on the QNAP (Ryan, 2026-11-05), so a local account there is unlikely; that does not affect moving the jobs, because Box A has the same access as this workstation.
 
 **The pilot re-launch is set for 2026-11-04** (Ryan, 2026-10-22, with the PI's full backing).
 - Ryan presents the new features, then pushes adoption.

@@ -9,6 +9,7 @@
 > **Scope widened 2026-11-04 (Ryan agreed): one plan, two stages, in order: move the jobs, then build the web app
 > ([`web_app_design_options.md`](web_app_design_options.md)).** Moving the jobs alone changes nothing researchers see.
 > This file still describes the first stage only, and is due for a rewrite.
+> **The timing gate below no longer applies (Ryan, 2026-11-05: "move it forward now").**
 
 > ⛔ **Timing gate.** `image-server\README.md` states that racking, provisioning, and
 > migrating services off Ryan's workstation are **deliberately unscheduled until after the

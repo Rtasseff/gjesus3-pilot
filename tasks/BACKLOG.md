@@ -2098,6 +2098,8 @@ release are owed back, none urgent, all cheap to send.
 
 ## 🔸 OPTIONAL — move (or mirror) `projects/` off the QNAP onto IT-managed `gjesus` (2026-08-20)
 
+**Ryan, 2026-11-05:** "it may be possible that at some time in the near future data will not all be stored on gjesus3 QNAP. We may keep projects on a different NAS location because it hold info that is not reproducible from source ... I don't want you to prepare for that now but I want you to know the QNAP may not be the only place the rdm plan of gjesus3 needs to work with. In fact, we will eventually need to generalize this away from a gjesus3 pilot to a broad RDM system."
+
 **Context.** IT declined to back up the gjesus3 QNAP and instead offered active-project backup on
 their own NAS, `gjesus` (`K:\gjesus` from the Data Office workstation) — the same share the group
 already works on, and the same one that kept running out of space, which is part of why the QNAP
