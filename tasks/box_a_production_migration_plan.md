@@ -197,6 +197,13 @@ close. The agent reports to the coordinator.
   and `finder-refresh`; the OMERO and XNAT pilots return 200. Tonight's 02:30 and 03:00 runs are the first on the new code.
 - **0.1 blocked:** the agent's permission classifier refuses to upload the memory to GitHub. Ryan runs a ready script
   instead, kept outside the repo.
+- **2.1 built** on `feat/web-app` (`4c8a534`), with Box A offline. `tools/webapp/app.py` mounts both GUIs unchanged in one
+  process (`/ingest/`, `/ingest/mri`, `/projects/`) behind a landing page. One server-side root, refused when missing; the
+  production root also needs `--production`. Tried against a scratch root only: a preview and a real ingest, and the Project
+  Manager's list, create, link and copy. 63/63 suites. Sent for merge. **For 2.2:** sign-in goes in front of the whole process,
+  so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
+  the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
+  Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
 - **Phase 1 blocked:** Box A (`BMG-WKS-RYAN`, 10.10.2.161) doesn't answer on the network: no ARP reply from this workstation
   on the same subnet, so it is off, asleep or unplugged. SSH, with Ryan's domain account, is the planned route.
 
