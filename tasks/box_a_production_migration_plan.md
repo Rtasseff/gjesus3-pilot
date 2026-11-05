@@ -185,7 +185,7 @@ close. The agent reports to the coordinator.
 | 2.5 Cut over: operators use the URL, exes labelled fallback; undo the Mac mount (#27); confirm each instrument PC keeps its exports long enough, and that Box A can read each export share | Agent, Ryan | an operator ingests from one URL |
 | 2.6 Retire the exes at the end of the overlap | Ryan's call | #27 and #28 close |
 
-**Open, from 2.1 (merged into `main` at `a12b812`):** the next exe rebuild must smoke-test the built exes themselves, not just
+**Open, from 2.1 (on `main` as `9df2e96`):** the next exe rebuild must smoke-test the built exes themselves, not just
 the rendered pages: both GUIs' templates and JS changed (base path, server mode). Until then the deployed exes are the
 pre-2.1 build, which is fine. **The combined app listens on loopback only until sign-in (2.2) exists.**
 
