@@ -25,7 +25,8 @@ things genuinely in flight. It deliberately stays short.
 - **Decided the same day ("I agree with the plan recommendations"):** B1 and B3 yes, B4 `D:\gjesus3\gjesus3-pilot`, and the paths researchers read from do not move. Ryan has full admin on Box A.
 - **Before the port:** #3 (Phase 0), the #21 purge decision, the #14 production guard (decision 16), and #4's weekly `verify_checksums` job. 
 - **Moved to after the port, 2026-11-05:** #6, #8, #9, #10, #11, #13, #15, #16, #18, #19, #20, #22, #24, #25. #28 moved into the port milestone. #2 stays where it is, Ryan's call.
-- **Waiting on Ryan:** the go on #3's private repo, purge or defer for #21, decision 16, and which account the web app's single login uses. We probably have no admin on the QNAP (Ryan, 2026-11-05), so a local account there is unlikely; that does not affect moving the jobs, because Box A has the same access as this workstation.
+- **Progress 2026-11-05:** the plan for both stages is rewritten on `feat/box-a-port`, not yet merged. Nothing has run on Box A.
+- **Waiting on Ryan:** how sessions reach Box A (Claude Code installed there), the go on #3's private repo, purge or defer for #21, decision 16, and which account the web app's single login uses. We probably have no admin on the QNAP (Ryan, 2026-11-05), so a local account there is unlikely; that does not affect moving the jobs, because Box A has the same access as this workstation.
 
 **The pilot re-launch is set for 2026-11-04** (Ryan, 2026-10-22, with the PI's full backing).
 - Ryan presents the new features, then pushes adoption.
