@@ -185,6 +185,21 @@ close. The agent reports to the coordinator.
 | 2.5 Cut over: operators use the URL, exes labelled fallback; undo the Mac mount (#27); confirm each instrument PC keeps its exports long enough, and that Box A can read each export share | Agent, Ryan | an operator ingests from one URL |
 | 2.6 Retire the exes at the end of the overlap | Ryan's call | #27 and #28 close |
 
+## Progress
+
+- **2026-11-05:** Ryan: "do what ever needs to be done to finish this port", and to work with the coordinator to avoid
+  conflicts. The recommendations below are taken as his answers unless he says otherwise. #21: the purge is deferred
+  to 2027-01-15.
+- **0.4 done:** the production guard is merged (`c4b4217`), and the marker `registries\.production` was written 2026-11-05
+  20:24. A real CLI run against the root without `--production` is refused (tested).
+- **0.2 done:** WorkstationOps instance config (`bb3ad7f` in that repo), live on this workstation from 20:25, after the
+  image-server owner agreed the time. `status --brief` was identical before and after; `verify` passes for `gjesus3-relink`
+  and `finder-refresh`; the OMERO and XNAT pilots return 200. Tonight's 02:30 and 03:00 runs are the first on the new code.
+- **0.1 blocked:** the agent's permission classifier refuses to upload the memory to GitHub. Ryan runs a ready script
+  instead, kept outside the repo.
+- **Phase 1 blocked:** Box A (`BMG-WKS-RYAN`, 10.10.2.161) doesn't answer on the network: no ARP reply from this workstation
+  on the same subnet, so it is off, asleep or unplugged. SSH, with Ryan's domain account, is the planned route.
+
 ## What's needed from Ryan: the running list
 
 1. **How sessions reach Box A.** Recommended: Claude Code on Box A at the desktop, with Remote Control. As far as we know, a key-based
