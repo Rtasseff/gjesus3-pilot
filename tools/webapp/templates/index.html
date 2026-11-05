@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>gjesus3</title>
+  <!-- The ingest GUI's stylesheet, as every page of the tools uses it. -->
+  <link rel="stylesheet" href="{{ ingest }}/static/style.css">
+  <style>
+    .tools { display: grid; gap: 1rem; padding: 1rem; max-width: 60rem;
+             grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+    .tool { display: block; padding: 1rem; border: 1px solid var(--border);
+            border-radius: 8px; background: var(--panel); color: var(--ink);
+            text-decoration: none; }
+    .tool:hover, .tool:focus { border-color: var(--accent); }
+    .tool h2 { margin: 0 0 .3rem; font-size: 1rem; color: var(--accent); }
+    .tool p { margin: 0; font-size: .85rem; color: var(--muted); }
+    .root { font-size: .85rem; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>gjesus3 <span class="muted" style="font-size:.55em;font-weight:normal">— research data tools</span></h1>
+    <div class="nasbar">
+      <span class="root muted">RDM System: <code>{{ nas_root }}</code></span>
+      {% if production %}<span class="pill no">production</span>{% endif %}
+    </div>
+  </header>
+
+  <main class="tools">
+    <a class="tool" href="{{ ingest }}/">
+      <h2>Microscopy ingest</h2>
+      <p>AxioScan 7, Cell Observer, LSM 900: put a batch of .czi files into gjesus3.</p>
+    </a>
+    <a class="tool" href="{{ ingest }}/mri">
+      <h2>MRI ingest</h2>
+      <p>Bruker ParaVision: pull studies from the scanner and put them into gjesus3.</p>
+    </a>
+    <a class="tool" href="{{ projects }}/">
+      <h2>Project Manager</h2>
+      <p>Your projects: create one, edit it, add acquisitions or your own files to it.</p>
+    </a>
+  </main>
+</body>
+</html>

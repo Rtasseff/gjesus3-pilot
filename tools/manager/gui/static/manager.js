@@ -19,8 +19,14 @@ const esc = (s) => String(s == null ? "" : s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;");
 
+// Every URL in this file is app-relative ("/api/..."). The app may be mounted
+// under a prefix (the combined web app, tools/webapp/, serves it at /projects);
+// the page writes that prefix into window.GJ3_BASE ("" when standalone) and
+// every request goes through apiUrl(), so one file works both ways.
+function apiUrl(path) { return (window.GJ3_BASE || "") + path; }
+
 async function postJSON(url, body) {
-  const r = await fetch(url, {
+  const r = await fetch(apiUrl(url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body || {}),
@@ -68,7 +74,7 @@ document.querySelectorAll(".tab").forEach((t) => {
 
 async function refreshNasStatus() {
   // GET, not POST: POSTing an empty body would be read as "set it to blank".
-  const r = await fetch("/api/nas_root");
+  const r = await fetch(apiUrl("/api/nas_root"));
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
@@ -621,7 +627,7 @@ async function streamTo(url, body, logEl, onDone) {
   logEl.hidden = false;
   logEl.textContent = "";
   try {
-    const r = await fetch(url, {
+    const r = await fetch(apiUrl(url), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

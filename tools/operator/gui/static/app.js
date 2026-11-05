@@ -16,8 +16,14 @@ function alreadyNote(r) {
   return n ? `${n} already ingested (skipped, not copied again). ` : "";
 }
 
+// Every URL in this file is app-relative ("/api/..."). The app may be mounted
+// under a prefix (the combined web app, tools/webapp/, serves it at /ingest);
+// the page writes that prefix into window.GJ3_BASE ("" when standalone) and
+// every request goes through apiUrl(), so one file works both ways.
+function apiUrl(path) { return (window.GJ3_BASE || "") + path; }
+
 async function postJSON(url, body) {
-  const r = await fetch(url, {
+  const r = await fetch(apiUrl(url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -39,7 +45,7 @@ async function postJSON(url, body) {
 }
 
 function getJSON(url) {
-  return fetch(url).then((r) => r.json());
+  return fetch(apiUrl(url)).then((r) => r.json());
 }
 
 // The value-field key whose content becomes a folder name, so it gets the
@@ -658,7 +664,7 @@ async function runnerIngest() {
   // SSE via fetch + ReadableStream (POST body needed -> can't use EventSource).
   let resp;
   try {
-    resp = await fetch("/api/ingest", {
+    resp = await fetch(apiUrl("/api/ingest"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

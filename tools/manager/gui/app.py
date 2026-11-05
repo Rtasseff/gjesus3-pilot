@@ -95,6 +95,35 @@ OPERATOR_STATE_DIR_NAME = "gjesus3-operator"
 TOOL_NAME = "project_manager"
 
 
+# ----------------------------------------------------------------- server mode
+# The combined web app (tools/webapp/app.py) mounts this app beside the ingest
+# GUI in one process and PINS one NAS root, read once at start by
+# tools/webapp/settings.py. Pinned, that root is the only one this app uses: the
+# per-PC saved choice, $GJESUS3_ROOT, the ingest GUI's saved choice and any
+# nas_root a page posts are ignored, nothing is saved to %LOCALAPPDATA%, and the
+# page shows the root read-only. Unpinned (this file run on its own, and the exe
+# built from it) nothing changes. Kept identical to the ingest GUI's block.
+SERVER_NAS_ROOT = "GJ3_SERVER_NAS_ROOT"   # app.config key: the pinned root
+SERVER_HOME_URL = "GJ3_HOME_URL"          # app.config key: the landing page
+
+
+def use_server_settings(nas_root, home_url=None):
+    """Pin the NAS root (and the link back to the landing page): server mode."""
+    app.config[SERVER_NAS_ROOT] = nas_root
+    app.config[SERVER_HOME_URL] = home_url
+
+
+def server_nas_root():
+    """The pinned root in server mode, else None (standalone and the exe)."""
+    return app.config.get(SERVER_NAS_ROOT) or None
+
+
+@app.context_processor
+def _server_context():
+    return {"nas_fixed": bool(server_nas_root()),
+            "home_url": app.config.get(SERVER_HOME_URL)}
+
+
 # ------------------------------------------------------------ saved NAS root
 
 def _state_dir(name=STATE_DIR_NAME):
@@ -122,8 +151,10 @@ def _read_state_file(path):
 
 
 def load_saved_nas_root():
-    """Saved choice > $GJESUS3_ROOT > the ingest GUI's saved choice > default."""
-    return (_read_state_file(_nas_state_path())
+    """Saved choice > $GJESUS3_ROOT > the ingest GUI's saved choice > default.
+    Server mode: the pinned root, always."""
+    return (server_nas_root()
+            or _read_state_file(_nas_state_path())
             or os.environ.get("GJESUS3_ROOT")
             or _read_state_file(os.path.join(_state_dir(OPERATOR_STATE_DIR_NAME),
                                              "nas_root.txt"))
@@ -131,6 +162,8 @@ def load_saved_nas_root():
 
 
 def save_nas_root(value):
+    if server_nas_root():
+        return                      # server mode: the root is not a per-PC choice
     try:
         with open(_nas_state_path(), "w", encoding="utf-8") as f:
             f.write((value or "").strip())
@@ -151,8 +184,10 @@ def is_valid_nas_root(nas_root):
 
 
 def _require_nas(data):
-    """(nas_root, error_response_or_None) for a request body."""
-    nas_root = (data.get("nas_root") or "").strip() or load_saved_nas_root()
+    """(nas_root, error_response_or_None) for a request body.
+    Server mode: the pinned root, whatever the page sent."""
+    nas_root = (server_nas_root() or (data.get("nas_root") or "").strip()
+                or load_saved_nas_root())
     if not is_valid_nas_root(nas_root):
         return nas_root, (jsonify({"error": (
             f"That is not the RDM System: {nas_root!r}. Pick the folder that "
@@ -193,7 +228,8 @@ def shared_static(filename):
 
 @app.route("/api/nas_root", methods=["GET", "POST"])
 def api_nas_root():
-    if request.method == "POST":
+    # Server mode: a POST changes nothing and answers with the pinned root.
+    if request.method == "POST" and not server_nas_root():
         data = request.get_json(silent=True) or {}
         value = (data.get("nas_root") or "").strip()
         valid = is_valid_nas_root(value)
@@ -202,7 +238,8 @@ def api_nas_root():
             acq_search.invalidate(value)
         return jsonify({"nas_root": value, "valid": valid})
     nas_root = load_saved_nas_root()
-    return jsonify({"nas_root": nas_root, "valid": is_valid_nas_root(nas_root)})
+    return jsonify({"nas_root": nas_root, "valid": is_valid_nas_root(nas_root),
+                    "fixed": bool(server_nas_root())})
 
 
 @app.route("/api/listdir", methods=["POST"])
