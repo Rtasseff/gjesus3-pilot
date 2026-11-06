@@ -154,6 +154,10 @@ covers this workstation only.
 5. **Only then,** here: `.\ops unschedule <op>`, and drop it from this machine's list.
 6. **Next morning:** Box A ran it, and this workstation's task is gone.
 
+Then Box A's own `memory-sync`. Its conf points at dev's paths, so Box A's `instance.local.ps1` first overrides `$MEMORY_DIR`
+(`...\.claude\projects\C--Users-rtasseff-projects-RDM-MFB\memory`) and `$GIT` (`C:\Program Files\Git\cmd\git.exe`). `wsl-backup`
+stays with dev; it targets `D:`, and Box A has only `C:`.
+
 ### Phase 6: the tunnel
 
 **Who:** Box A session, with Ryan's go for each Mac write, following `equipment/nuclear-imaging/live_machine_remote_access.md` §10:
@@ -226,6 +230,11 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06: the test suite on Box A, 61/63; the two failures exposed an undeclared dependency.** Both repos were fast-forwarded
+  to `main` (rdm `2ce5d30`; WorkstationOps `cc772c9`, still nothing enabled). Both failures were `No module named 'openpyxl'`.
+  That is a runtime dependency (`claim_workbooks.py`, and `ingest/user_tables.py` for Excel user tables), but it was missing from
+  `tools/requirements.txt`; dev had it only because it was installed outside the list. Now declared (`openpyxl>=3.1`; dev has
+  3.1.5). An import scan of `tools/` finds nothing else undeclared outside the finished one-off `drive_staging` scripts.
 - **2026-11-06 14:18: ⏸ STOPPING POINT REACHED; waiting for Ryan's go for Phase 5.** The Phase 4 recall test passes: a fresh
   headless session in `RDM_MFB` read its memory and answered Box A's address (10.10.3.195) and code path (`RDM_MFB\rdm`). On Box A,
   nothing is enabled or scheduled, and the relink holds its schedule guard. **Next, on Ryan's go, in order:**
