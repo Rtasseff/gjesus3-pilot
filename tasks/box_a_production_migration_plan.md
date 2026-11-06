@@ -235,6 +235,7 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   That is a runtime dependency (`claim_workbooks.py`, and `ingest/user_tables.py` for Excel user tables), but it was missing from
   `tools/requirements.txt`; dev had it only because it was installed outside the list. Now declared (`openpyxl>=3.1`; dev has
   3.1.5). An import scan of `tools/` finds nothing else undeclared outside the finished one-off `drive_staging` scripts.
+  With `openpyxl` 3.1.5 installed on Box A (the same as dev), **the suite passes 63/63 on Box A** (62 s, 16:13).
 - **2026-11-06 14:18: ⏸ STOPPING POINT REACHED; waiting for Ryan's go for Phase 5.** The Phase 4 recall test passes: a fresh
   headless session in `RDM_MFB` read its memory and answered Box A's address (10.10.3.195) and code path (`RDM_MFB\rdm`). On Box A,
   nothing is enabled or scheduled, and the relink holds its schedule guard. **Next, on Ryan's go, in order:**
