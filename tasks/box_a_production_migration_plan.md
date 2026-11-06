@@ -226,6 +226,12 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06 14:17: 0.3 `memory-sync` is live on dev** (Ryan: "I am happy to do the memory-sync anytime ... it should be run
+  from workstationops like other daily tasks"). WorkstationOps `cc772c9`. Each run scans changed notes for secrets before
+  staging and stops on a hit. It brings the other machine's notes in by fast-forward, or by a rebase only when the two sides
+  changed different files, so no conflict markers ever reach a note. It never resets or deletes. Tested on throwaway repos.
+  The first run pushed `d4ba143` (69 files), and it is scheduled daily at 22:30. The 8 existing jobs' status was identical
+  before and after. Box A's own `memory-sync` joins Phase 5.
 - **2026-11-06: both jobs tested safely on Box A, read-only on the NAS.**
   - **Relink** `--dry-run` (13:44): 95 rows in `pending_links.csv`, 0 pending, nothing written, no lock taken.
   - **Finder** `generate_index.py --per-project --out <local folder>` (13:45, 2 s): the same 43,327 acquisitions as dev's
