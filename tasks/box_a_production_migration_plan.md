@@ -208,6 +208,13 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06: Phases 1 and 2 pass.**
+  - **The hard-link test passes on Box A** (`test_oslink.py` on `\\GJESUS3\gjesus3\gjesus3-data\tmp`, Ryan's go, 12:5x): shared
+    inode, edits both ways, and the link survives deleting the original; `tmp` is empty again.
+  - **The validator matches dev exactly** (`--no-enrichment`, both started 12:52): 43,327 rows, 0 errors, 0 warnings,
+    `pending-claim` 23,126, 31,662 age pairs, `/raw/` 43,327 folders and 682 tombstones.
+  - Box A's WSL is Ubuntu 26.04 (dev: 24.04). Miniforge and `dicomifier-pilot` are with Ryan: the session's permission check
+    refused to download and run the installer.
 - **2026-11-06: the Box A session `gj3-boxa`** (Claude Code at Ryan's desktop login, Remote Control on) runs the Box A side; this
   session sends it briefs. Step 1 done: Python 3.13.17 from python.org (per-user), both repos cloned under `RDM_MFB`, the NAS
   reachable by UNC, WSL Ubuntu present. `J:` isn't mapped on Box A. Nothing needs it: the jobs and the tests use
