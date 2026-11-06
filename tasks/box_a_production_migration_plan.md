@@ -226,6 +226,12 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06: both jobs tested safely on Box A, read-only on the NAS.**
+  - **Relink** `--dry-run` (13:44): 95 rows in `pending_links.csv`, 0 pending, nothing written, no lock taken.
+  - **Finder** `generate_index.py --per-project --out <local folder>` (13:45, 2 s): the same 43,327 acquisitions as dev's
+    published 03:00 index, and 58 of 62 project pages identical apart from the timestamp. The only difference is `proj_owner` in
+    4,138 records (4 projects), because `registry_projects.csv` was edited at 12:29, after the 03:00 build; `registry_raw.csv` is
+    unchanged since 2026-11-05. So Box A builds what dev builds.
 - **2026-11-06: Phase 4 done.** After Ryan's GitHub sign-in on Box A (Git Credential Manager), `gj3-boxa`'s memory folder is
   a checkout of `Rtasseff/gjesus3-memory` (68 files, `2d1edde`, clean; nothing clashed: the folder was empty). The recall test
   waits for a fresh session in `RDM_MFB`. A shared note, `box_a_environment.md`, records Box A's differences (no `J:`, UNC, paths).
