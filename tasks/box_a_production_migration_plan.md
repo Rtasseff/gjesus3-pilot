@@ -39,7 +39,7 @@ here, and he has full admin on the box.
 | B1 | Exes keep building on the dev box | ✅ yes (2026-11-04) |
 | B2 | `molecubes-tunnel` moves, re-pointed through the live tunnel | ✅ yes (2026-10-01) |
 | B3 | Box A gets the `dicomifier-pilot` env | ✅ yes (2026-11-04) |
-| B4 | Repo path on Box A | ✅ `D:\gjesus3\gjesus3-pilot` (2026-11-04) |
+| B4 | Repo path on Box A | ✅ `C:\Users\rtasseff\projects\RDM_MFB\rdm`, with `RDM_MFB\WorkstationOps` beside it (Ryan, 2026-11-06). It replaces `D:\gjesus3\gjesus3-pilot` (2026-11-04): Box A has no D: drive, and Ryan doesn't want the gjesus3 name spread further. Outside OneDrive. |
 | B5 | Paths researchers read from | ✅ don't move (2026-11-04) |
 
 ## Which job runs where
@@ -105,7 +105,7 @@ listing every current op; check `.\ops status` in the clone; only then pull the 
 |---|---|
 | Install Claude Code, sign in at the desktop as Ryan, start Remote Control | Ryan, once |
 | Python from python.org, Git, clone both repos to `D:\gjesus3\`; WSL and Ubuntu if not already there | Box A session |
-| **The hard-link test:** `python tools\diagnostics\test_oslink.py J:\gjesus3-data\tmp` | Box A session, on Ryan's go |
+| **The hard-link test:** `python tools\diagnostics\test_oslink.py \\GJESUS3\gjesus3\gjesus3-data\tmp` | Box A session, on Ryan's go |
 
 **This test can sink the port.** Everything rests on `os.link` over SMB against the QNAP. It works in a private temporary folder
 under `tmp\`: makes a file and a hard link, checks they share an inode and that edits show through both, and removes everything it
@@ -208,6 +208,11 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06: the Box A session `gj3-boxa`** (Claude Code at Ryan's desktop login, Remote Control on) runs the Box A side; this
+  session sends it briefs. Step 1 done: Python 3.13.17 from python.org (per-user), both repos cloned under `RDM_MFB`, the NAS
+  reachable by UNC, WSL Ubuntu present. `J:` isn't mapped on Box A. Nothing needs it: the jobs and the tests use
+  `\\GJESUS3\gjesus3\gjesus3-data`. A key-based SSH session from dev cannot reach the NAS (no network credentials), so NAS
+  work runs in `gj3-boxa`.
 - **2026-11-06: reachable, with a fixed address.** It had been switched off because it was never in the data centre. IT moves
   it there next week, and work goes ahead this weekend. Ryan set the static address IT gave: **10.10.3.195**, mask
   255.255.0.0, gateway 10.10.1.4, DNS 10.10.1.84 and 10.10.1.85. DNS name `bmg-wks-ryan.cicbiomagune.int`; "Box A" stays the
