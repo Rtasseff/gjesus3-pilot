@@ -226,6 +226,14 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06 14:18: ⏸ STOPPING POINT REACHED; waiting for Ryan's go for Phase 5.** The Phase 4 recall test passes: a fresh
+  headless session in `RDM_MFB` read its memory and answered Box A's address (10.10.3.195) and code path (`RDM_MFB\rdm`). On Box A,
+  nothing is enabled or scheduled, and the relink holds its schedule guard. **Next, on Ryan's go, in order:**
+  1. Box A: enable and run `gjesus3-relink`, verify, schedule; then unschedule it on dev.
+  2. The same for `finder-refresh`.
+  3. Box A's own `memory-sync`.
+  4. The next-morning check.
+  5. Later, Phase 6 (the tunnel), after the data-centre move.
 - **2026-11-06 14:17: 0.3 `memory-sync` is live on dev** (Ryan: "I am happy to do the memory-sync anytime ... it should be run
   from workstationops like other daily tasks"). WorkstationOps `cc772c9`. Each run scans changed notes for secrets before
   staging and stops on a hit. It brings the other machine's notes in by fast-forward, or by a rebase only when the two sides
