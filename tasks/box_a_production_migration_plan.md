@@ -1,354 +1,299 @@
-# Box A — moving gjesus3 RDM production off the dev workstation
+# Box A: the port plan, both stages
 
-> 🔶 **DRAFT — a plan for review. Nothing here has been executed.**
-> **Raised:** 2026-09-04 · **Owner:** Ryan Tasseff (Data Office)
-> **Companion satellite:** `projects\DataInfra\image-server\` owns the *box* (procurement,
-> IT engagement, rack/power/network). This file owns the *port* — what moves off this
-> workstation onto it, in what order, and how each step is verified.
->
-> **Scope widened 2026-11-04 (Ryan agreed): one plan, two stages, in order: move the jobs, then build the web app
-> ([`web_app_design_options.md`](web_app_design_options.md)).** Moving the jobs alone changes nothing researchers see.
-> This file still describes the first stage only, and is due for a rewrite.
-> **The timing gate below no longer applies (Ryan, 2026-11-05: "move it forward now").**
+**Status:** 🔶 DRAFT, being executed · **Rewritten:** 2026-11-05 · **Issues:** #3, #14 (guard only), #21 (decision), #26,
+#27, #28 · **Owner:** Ryan Tasseff (Data Office)
 
-> ⛔ **Timing gate.** `image-server\README.md` states that racking, provisioning, and
-> migrating services off Ryan's workstation are **deliberately unscheduled until after the
-> 10 September 2026 leadership meeting** — *"Do not start it earlier without Ryan saying
-> so."* This plan is written to be ready on that date, not to pre-empt it. **Phase 0 is the
-> exception**: it runs on the dev workstation, has no Box A dependency, and fixes a
-> data-loss exposure that exists today.
+**The commitment (Ryan, 2026-11-05):** "our last commitment is to port to Box A to have the same functionality as the
+current version has here (that includes running all the processes that are regularly run by workstationops so a version
+of workstationops, specific to gjesus3 ... needs to move there too) and to make a single unified web app for the ingests
+and the project manager that runs on a single login to do work but has accounts for users." No date gate: "as soon as
+possible with the least work from me."
 
----
+**Done means:**
+- **Stage 1:** Box A does everything this workstation does for gjesus3, on schedule, and this workstation no longer runs
+  those jobs. The next-morning check passes. The validator matches dev: 0 errors, plus the 284 known warnings on a full run.
+- **Stage 2:** from one URL, a signed-in person can ingest (microscopy, MRI, NI) and use the Project Manager. All work runs
+  on the single login, each action is attributed to the person's account, and the exes can retire.
 
-## 1. What this port actually is
+**Who does what.** **Agent** = the session running the port. **Box A session** = Claude Code on Box A, working from a brief
+(Ryan's item 1, below). **Ryan** = by hand. No agent changes security settings (firewall, authentication, accounts, ACLs):
+the agent writes one short script and Ryan runs it. Production writes (anything under the data root, scheduling or
+unscheduling a job, anything on the Mac) need Ryan's direct go in the session doing them, against a matching dry run,
+bundled by phase. Before each one, the agent sends the coordinator session one line; other production work on this
+workstation has priority.
 
-Box A is an **HP Z2 G1i SFF** (Core Ultra 7 265, no GPU, 1 GbE — €1,879 ex-IVA), delivered
-2026-09-03. Its job, in Ryan's words: *"like an app the users can log into on a dedicated
-box to do basic RDM."*
+## What the port is
 
-The port is **not** a data migration. All research data already lives on the QNAP
-(`\\GJESUS3\gjesus3\gjesus3-data`, mapped `J:`) and stays there. What moves is the
-**operational role**: the scheduled jobs, the tooling environment, and the credentials that
-make this workstation the machine that runs gjesus3 RDM.
+Not a data migration. The data stays on the QNAP (`\\GJESUS3\gjesus3\gjesus3-data`, mapped `J:`), and **the paths researchers
+read from don't move** (B5). What moves is the operational role. This workstation becomes dev: it keeps `J:`, `/mnt/gjesus3`
+and the by-hand Data Office tools, and **neither mapping changes here**, because other jobs read them daily. The guardrail is
+that **no job is ever scheduled on two machines at once**: start on Box A, verify, and only then unschedule here.
 
-**Target end state:**
+Box A is an HP Z2 G1i SFF (Core Ultra 7 265, no GPU, 1 GbE). Ryan's domain account runs it, so it has the same NAS access as
+here, and he has full admin on the box.
 
-| | Runs the RDM system | Runs everything else |
+## Decided, not reopened
+
+| # | Decision | Ruling |
 |---|---|---|
-| **Box A** (prod) | ✅ all of it | — |
-| **This workstation** (dev) | ❌ none of it | ✅ backups, the OMERO + XNAT image-server trials |
+| B1 | Exes keep building on the dev box | ✅ yes (2026-11-04) |
+| B2 | `molecubes-tunnel` moves, re-pointed through the live tunnel | ✅ yes (2026-10-01) |
+| B3 | Box A gets the `dicomifier-pilot` env | ✅ yes (2026-11-04) |
+| B4 | Repo path on Box A | ✅ `C:\Users\rtasseff\projects\RDM_MFB\rdm`, with `RDM_MFB\WorkstationOps` beside it (Ryan, 2026-11-06). It replaces `D:\gjesus3\gjesus3-pilot` (2026-11-04): Box A has no D: drive, and Ryan doesn't want the gjesus3 name spread further. Outside OneDrive. |
+| B5 | Paths researchers read from | ✅ don't move (2026-11-04) |
 
-**The dev box is not sandboxed, and shouldn't be.** It keeps `J:` mapped and keeps the
-ability to run Data-Office operations (ingests, backfills, recovery tools) by hand, because
-that is Ryan's actual job. What moves is everything **scheduled** and **serving**. The
-guardrail is therefore not network isolation — it is making sure no job is *scheduled* on
-two machines at once (§4.1).
+## Which job runs where
 
----
+| Op | Box A | This workstation |
+|---|---|---|
+| `gjesus3-relink` (02:30) | ✅ moves | unschedule after Box A verifies |
+| `finder-refresh` (03:00) | ✅ moves | unschedule after Box A verifies |
+| `molecubes-tunnel` | ✅ moves, last | unschedule after the box dials Box A |
+| `memory-sync` (new) | ✅ | ✅ |
+| `wsl-backup` | ✅ set up fresh; only Ryan starts a real run | ✅ stays |
+| `vps-backup`, `omero-web-forward`, `xnat-web-forward`, `oadata-web-forward` | ❌ never | ✅ stay: **don't stop, restart or break** |
 
-## 2. Settled ground (confirmed 2026-09-04)
+**The WorkstationOps jobs only run while their user is signed in** (interactive logon, `lib\scheduled-task.ps1`). So Box A
+stays signed in as Ryan, locked is fine, and after a restart someone signs in again before the jobs resume.
 
-These were open questions; they are now answered and need no re-litigating.
+**`verify_checksums` is left out of Stage 1.** It was to join only if small, and it isn't. It re-reads every file: 5.26 TB
+registered today, so at least 15 hours of continuous reads at the full 1 GbE, and it is new, not "same functionality". It
+stays with #4.
 
-| | Answer |
+## What git does not carry (re-read 2026-11-05)
+
+| What | Here | On Box A | Who |
+|---|---|---|---|
+| Project memory, 66 files, ~390 KB, no backup today | `<slug>\memory\` under `~\.claude\projects\` | checkout of the private repo; the slug differs by path, which is fine | Agent, then Box A session |
+| Animal-facility DB | `~\.my.cnf`, Windows and WSL | both sides | Ryan |
+| MRI scanner and MRI archive, sections `[mri]` and `[mri_archive]` | `~\.ssh\gjesus3_mri.cred`, Windows only | same | Ryan |
+| GitHub | `~\.ssh\id_ed25519` | a **new** key, separately revocable | Ryan |
+| Tunnel | the box's public key in WSL `authorized_keys`; a Data Office key in WSL | the same public line; a **new** key minted on Box A, authorized through the tunnel. No private key moves | Box A session, Ryan's go |
+| Python 3.13 and `tools\requirements.txt` | Store build | **python.org**, a stable path. The Store build virtualizes `%LOCALAPPDATA%` and its alias fails under Task Scheduler | Box A session |
+| WSL Ubuntu, miniforge, `dicomifier-pilot` | yes, plus `xnatpic`, which stays | from `tools\dicomifier-pilot.environment.yml` | Box A session |
+| `/mnt/gjesus3` in WSL | drvfs mount of `J:` | same, on Box A only | Box A session |
+| `.claude\settings.local.json` | a permissions file | **Ryan copies it by hand** | Ryan |
+
+**The repo stays off OneDrive on Box A.** Two synced working copies of one repository, `.git` included, would corrupt it.
+
+## Stage 1: the jobs
+
+### Phase 0: this workstation, no Box A needed
+
+| Step | Who | Check |
+|---|---|---|
+| 0.1 Memory into a private repo `gjesus3-memory`: `git init` in `memory\` only, never its parent (transcripts). Secret scan done 2026-11-05: none found | Agent, on Ryan's go | GitHub shows the files |
+| 0.2 WorkstationOps instance config (below) | Agent | `.\ops status` lists every op as before, under `dev-workstation`; without the file, `ops.ps1` refuses |
+| 0.3 `memory-sync` op: commit if dirty, push, daily | Agent | a run pushes |
+| 0.4 Production guard (#14, decision 16): `registries\.production` marker, `ingest_raw.py main()` refuses a real run against it without `--production`. Own branch | Agent; marker on Ryan's go | tests for the CLI path, and that the GUI path is unaffected |
+
+**WorkstationOps: one repo with a per-instance file, not a gjesus3 fork.** It's the least work: the ops already share `lib\`, a
+fork would double every future fix, and Box A only needs a different list. `config\instance.local.ps1` (gitignored) sets
+`$INSTANCE_NAME`, `$ENABLED_OPS` and the path overrides (`$GJESUS3_REPO`, `$PYTHON`), dot-sourced after each op's config, with
+a tracked `instance.example.ps1`. `ops.ps1` fails closed without it, so a fresh clone can never schedule anything; `schedule`
+refuses a disabled op, and `run` refuses unless forced. Box A's list holds gjesus3's jobs only, which is the "version specific
+to gjesus3" Ryan asked for.
+
+**The order that protects the live jobs.** Tasks here run `ops.ps1` from the working tree, and a fail-closed `ops.ps1` with no
+local file would stop every one of them. So: develop in a separate clone; write this machine's `instance.local.ps1` **first**,
+listing every current op; check `.\ops status` in the clone; only then pull the change here. Removing an op from the list does
+**not** stop its task: decommissioning always needs `.\ops unschedule <op>`.
+
+### Phase 1: Box A base
+
+| Step | Who |
 |---|---|
-| **Account on Box A** | Ryan's own domain account. NAS ACLs (`CICBIOMAGUNE\GJesus` group, `J:` write paths) therefore carry over unchanged — no IT grant needed. |
-| **Admin on Box A** | Ryan has full admin rights on the box (Ryan, 2026-11-04), so installing and configuring anything on the box itself needs no IT. An account the NAS recognises for the web app is a separate question. |
-| **Drive mappings** | Already mapped to the same letters and targets as here. |
-| **Repo location on Box A** | **Plain local disk, NOT OneDrive** (see §4.3). |
-| **Image-server trials** | **Stay on this workstation.** Box A is not sufficient to host OMERO + XNAT. ⚠️ This *contradicts* `image-server\README.md`, which still says the trials migrate off Ryan's workstation to Box A — see §8. |
-| **Repo access** | Both repos are on GitHub: `git@github.com:Rtasseff/gjesus3-pilot.git` and `git@github.com:Rtasseff/WorkstationOps-PS.git`. |
-
----
-
-## 3. What does NOT come down from git
-
-Cloning the two repos gives you the code and the docs. It gives you none of the following,
-and the port is almost entirely about this list.
-
-| | What | Where it lives now | Size / note |
-|---|---|---|---|
-| **Memory** | Claude project memory — 46 files | `C:\Users\rtasseff\.claude\projects\C--Users-...-gjesus3-pilot\memory\` | 292 KB. **Outside OneDrive, not in git → one copy, zero backups.** Directory name is the repo's absolute path, mangled. See §4.2. |
-| **Creds** | Animal-facility DB (read-only) | `C:\Users\rtasseff\.my.cnf` **and** WSL `~/.my.cnf` | 104 B each. Path overridable via `GJESUS3_MYCNF` (`tools/animal_db.py:81`). |
-| | MRI scanner SFTP | `C:\Users\rtasseff\.ssh\gjesus3_mri.cred` | 69 B, INI `[mri]`. **Windows only — WSL does not have it.** A deliberate shared copy also sits on the NAS at `tools\docs\` (see the memory note; do not re-flag or move it). |
-| | GitHub | `~\.ssh\id_ed25519` | **Mint a NEW key for Box A** — separately revocable. |
-| | Molecubes tunnel | The box's **public** key (the `molecubes-box` line of WSL `~/.ssh/authorized_keys`, hardened) · the rehearsal key WSL `~/.ssh/id_ed25519_molecubes_tunnel` · the Data Office key that logs into the box (WSL `~/.ssh/id_ed25519`) | **The op moves** (§5, B2 decided 2026-10-01). Box A needs the box's public line, restrictions included. To log into the box, mint a **new** key on Box A and authorize it on the box through the tunnel. No private key moves. |
-| | ReDIB VPS | `~\.ssh\id_ed25519_vps` | Not gjesus3. Stays here. |
-| **Windows env** | Python **3.13.14** + the 7 packages in `tools/requirements.txt` | Store build here — **do not repeat that on Box A**, see §6 Phase 1 | pydicom, pyyaml, tqdm, czifile, pymysql, paramiko, flask |
-| **WSL env** | Ubuntu 24.04.3 LTS, miniforge3, envs `dicomifier-pilot` + `xnatpic` | `dicomifier-pilot` rebuilds from the committed `tools/dicomifier-pilot.environment.yml` — that one is free. `xnatpic` is the XNAT trial and **stays here**. |
-| **Mount** | WSL sees `J:` as `/mnt/gjesus3` (drvfs) | Needed by the WSL-side ingest and regen paths. |
-| **Schedule** | Task Scheduler job `WorkstationOps-finder-refresh`, daily 03:00 | Registered in Windows, **independent of the repo** — see the trap in §4.1. |
-| **Tool permissions** | `.claude\settings.local.json` (2.5 KB, gitignored) | Copying it saves re-approving a long permission list on Box A. |
-
----
-
-## 4. The three problems this port creates — and the answers
-
-### 4.1 WorkstationOps has to know which machine it is
-
-**The problem.** All six op configs are **tracked in git** (`config/*.conf.ps1`) with **no
-local-override mechanism**. `config/finder-refresh.conf.ps1` hard-codes this machine's paths
-at line 12 (`$GJESUS3_REPO`) and line 20 (`$PYTHON`). Box A pulls that config and gets the
-wrong paths; edit it on Box A and you have a permanently dirty tree and a recurring merge
-conflict on every pull. And with the op set now genuinely *different* per machine — RDM ops
-on Box A, backups and image-server forwards here — one shared config cannot express both.
-
-**The answer (Ryan's shape, 2026-09-04): a gitignored per-instance file that declares which
-operations this instance runs.**
-
-```powershell
-# config\instance.local.ps1   -- GITIGNORED, one per machine
-$INSTANCE_NAME = "box-a-prod"          # printed in every `.\ops status` header
-$INSTANCE_ROLE = "prod"                # dev | prod (informational)
-$ENABLED_OPS   = @("finder-refresh", "wsl-backup", "memory-sync")
-
-# per-op path overrides for THIS machine (dot-sourced AFTER the op's own conf, so it wins)
-$GJESUS3_REPO  = "D:\gjesus3\gjesus3-pilot"
-$PYTHON        = "C:\Program Files\Python313\python.exe"
-```
-
-Ship `config\instance.example.ps1` **tracked** as the template, and add `*.local.ps1` to
-`.gitignore`.
-
-Behaviour changes in `ops.ps1`:
-
-- Load `instance.local.ps1` first. **If it is missing, fail closed** with a message pointing
-  at the example — no op lists, runs, or schedules. This is the property that matters: a
-  fresh clone on a new machine must never silently schedule the whole set.
-- `status` shows only enabled ops, and prints `$INSTANCE_NAME` in the header so you always
-  know which box you are looking at.
-- `schedule` refuses a disabled op. `run` refuses unless `-Force`.
-- `verify` checks that each **enabled** op's paths resolve on this machine.
-
-> ⚠️ **The trap that will bite if it is missed.** Removing an op from `$ENABLED_OPS` does
-> **not** stop an already-registered Windows scheduled task. Decommissioning `finder-refresh`
-> on this workstation needs an explicit **`.\ops unschedule finder-refresh`** (the verb
-> exists — `ops.ps1:307` help, `ops.ps1:331` dispatch, `Unregister-OpTask` at
-> `lib/scheduled-task.ps1:95`). Get this wrong and both machines rebuild and write
-> `registries\index.html` to the same NAS path at 03:00.
-
-### 4.2 The memory has no backup, and it is keyed to the repo path
-
-**The problem, restated because it is the sharpest thing in this document.** 46 files,
-292 KB, at `C:\Users\rtasseff\.claude\projects\<slug>\memory\`. That path is **outside
-OneDrive** and **not in git**. It exists in exactly one place, on one disk, and nothing
-copies it anywhere. Separately, `<slug>` is the repo's absolute path with separators
-replaced — so a repo at a different path on Box A produces a different slug, and the memory
-is simply invisible there.
-
-**Junction is OUT.** The obvious fix — junction the slug's `memory\` at a folder inside the
-repo — is dead. **OneDrive silently stops syncing when it meets a reparse point in a synced
-tree** (observed first-hand: sync stopped, took a long time to notice and longer to
-diagnose; removing the junction restored it). The dev repo lives in OneDrive, so that
-configuration is exactly the one that burned us. Not worth re-testing on the machine that
-holds the only copy of the thing we are trying to protect.
-
-**The answer: make `memory\` its own git working tree, in place. No reparse points anywhere.**
-
-```
-C:\Users\rtasseff\.claude\projects\<slug>\memory\   <-- git init here, this IS the working tree
-    .git\                                            <-- inert to Claude Code
-    MEMORY.md
-    *.md  (45 memory files)
-```
-
-Push to a **new private** GitHub repo (`gjesus3-memory`).
-
-Why this over the alternatives:
-
-- **No OneDrive interaction at all.** `C:\Users\rtasseff\.claude\` is not in the synced tree,
-  on either machine. The problem in §4.2 never arises because OneDrive never sees any of it.
-- **No reparse point**, so nothing to silently break.
-- **No copy-sync lag or conflict window** — unlike a mirror script, there is one copy of the
-  truth and git is the transport, which is already how everything else here is backed up.
-- **`.git` inside `memory\` is inert** — Claude Code reads and writes `*.md` there and does
-  not care what else is in the directory.
-- **Its own repo settles the sensitivity question.** The memory names people, animal protocol
-  codes, DB structure, and the shared-credential situation. As a separate private repo it is
-  private regardless of what `gjesus3-pilot`'s visibility is or later becomes.
-
-Two details that are easy to get wrong:
-
-- **Box A's slug is different, and that is fine.** Each machine has its own
-  `<slug>\memory\` directory holding a checkout of the same branch.
-- **Do not `git init` the slug's *parent*.** That directory also holds session transcript
-  `.jsonl` files — large, and full of raw conversation. Only `memory\` goes in the repo.
-- On Box A the target directory already exists (Claude Code creates it), so plain
-  `git clone` into it fails. Use `git init` + `git remote add` + `git fetch` +
-  `git checkout`.
-
-**Make the backup automatic**, or it depends on someone remembering: a small
-`memory-sync` op in WorkstationOps — commit if dirty, push, daily — enabled on both machines
-under the §4.1 mechanism.
-
-### 4.3 OneDrive must not follow the repo to Box A
-
-Already decided, recorded here because the failure mode is severe and non-obvious. If Box A
-signs into the same OneDrive account and syncs `projects\DataInfra\`, the two machines end up
-holding **two live working copies of the same git repository — `.git` included — synced
-byte-for-byte between them.** That corrupts git.
-
-Box A puts the repo on plain local disk (`D:\gjesus3\gjesus3-pilot` or similar). Side
-benefits: no ReadOnly+ReparsePoint worktree-delete lock, and no Files-On-Demand placeholders
-silently defeating recursive greps.
-
----
-
-## 5. Which operation runs where
-
-| Op | Box A | Dev workstation | Why |
-|---|---|---|---|
-| `finder-refresh` | ✅ | ❌ **`.\ops unschedule`** | The one true RDM production job. Rebuilds the researcher Finder from the registry to the NAS, daily 03:00. |
-| `memory-sync` *(new, §4.2)* | ✅ | ✅ | Small, wanted on both. |
-| `wsl-backup` | ✅ (set up fresh) | ✅ keep | Per-machine by nature — each box backs up its own WSL. |
-| `vps-backup` | ❌ | ✅ keep | ReDIB Portal, not gjesus3. Needs `X:` and the VPS key. |
-| `omero-web-forward` | ❌ | ✅ keep | Image-server trial. **Box A is not sufficient to host it.** |
-| `xnat-web-forward` | ❌ | ✅ keep | Same. |
-| `molecubes-tunnel` | ✅ **moves** (B2, decided 2026-10-01) | ✅ until cut-over | See below. |
-
-**`molecubes-tunnel` is the one RDM op with a real cost to move.** The Molecubes PET/CT
-acquisition box (`192.168.0.180`) is NAT'd and cannot be reached inbound — it **dials out to
-this workstation** and the tunnel rides that connection backward. Moving it means
-reconfiguring the acquisition box to dial Box A instead, and `README.md` notes that *physical
-access to that box is rare and scheduled*. It is genuinely an RDM operation and by the
-"none locally" rule it should move — but it should move **deliberately and second**, once
-Box A is otherwise live, not as a line item inside this port. Until then it is the one
-documented exception to "no RDM ops on the dev box."
-
-**Update 2026-10-01 — it moves, and the move needs no visit.** Ryan decided B2: the tunnel
-goes to Box A with everything else, and Box A's single ingest web app will pull NI data
-through it (BACKLOG "Ingest from one place"). The access cost above is gone. The tunnel went
-live on 2026-10-01, so the acquisition box can be re-pointed **through the tunnel itself**,
-make-before-break: a second LaunchAgent dials Box A and is proven, and only then is the old
-one removed. Procedure:
-[`live_machine_remote_access.md` §10](../equipment/nuclear-imaging/live_machine_remote_access.md).
-"Deliberately and second" still stands.
-
----
-
-## 6. Phases
-
-Each phase ends with a verification that either passes or stops the port. Do not proceed on
-a failed verification.
-
-### Phase 0 — on the dev workstation, now (no Box A dependency)
-
-Both items are prerequisites for a second machine, and 0.1 closes a live data-loss exposure.
-
-- **0.1 Memory into git** (§4.2). Create the private `gjesus3-memory` repo; `git init` in
-  `<slug>\memory\`; initial commit of all 46 files; push.
-  - **Verify:** `git log --oneline` in that directory shows the commit, and the GitHub repo
-    shows 46 files. The single-copy exposure is closed at this moment, independent of Box A.
-- **0.2 WorkstationOps per-instance config** (§4.1). Add `instance.local.ps1` support +
-  tracked example + `.gitignore` entry; make `ops.ps1` fail closed without it; write this
-  machine's `instance.local.ps1` declaring its current op set.
-  - **Verify:** `.\ops status` still reports every op it does today, now under the header
-    `dev-workstation`; temporarily renaming `instance.local.ps1` makes `ops.ps1` refuse
-    with the pointer message rather than doing anything.
-- **0.3 `memory-sync` op** (optional but recommended) — commit-if-dirty + push, daily.
-
-### Phase 1 — Box A base
-
-WSL2 + Ubuntu (in flight), OpenSSH server (in flight), **Python from python.org — not the
-Microsoft Store build.** Two reasons: the Store build virtualizes `%LOCALAPPDATA%`, so
-source-mode and frozen-exe tooling read different state files (already bit us once), and it
-is why `config/finder-refresh.conf.ps1:20` has to hard-code
-`...WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe` — the Store
-alias does not resolve reliably under Task Scheduler. A normal install gives a stable path.
-Match the dev version (3.13.x). Then clone both repos to local disk.
-
-**Verify — the one test that can sink the whole thing.** Everything in this system depends on
-`os.link()` working over SMB against the QNAP:
-
-```powershell
-python -c "import os,pathlib; p=pathlib.Path(r'J:\gjesus3-data\tmp'); (p/'boxa_src.txt').write_text('boxa'); os.link(p/'boxa_src.txt', p/'boxa_link.txt'); print('hard link OK')"
-# then remove both files
-```
-
-Expected to pass — same account, same share — but if it fails, Box A cannot ingest at all and
-nothing further in this plan matters. Stop and take it to IT.
-
-### Phase 2 — environment and code
-
-`pip install -r tools/requirements.txt`; `conda env create -f
-tools/dicomifier-pilot.environment.yml` in WSL; mount `J:` as `/mnt/gjesus3` in WSL; copy
-`.claude\settings.local.json`.
-
-**Verify:** run the validator and compare against this workstation —
-
-```bash
-PYTHONPATH=tools python tools/validate_registries.py --nas-root "J:\gjesus3-data" --no-enrichment
-```
-
-The pass condition is **the same result as dev, not a green one.** As of 2026-09-04 that is
-`FAILED` with exactly **10,314** `operator`-placeholder errors (decision **D1** in
-[`STATUS.md`](STATUS.md) §0). A *different* count means something about Box A's environment
-is wrong — do not wave it off as "the known red."
-
-### Phase 3 — credentials
-
-`.my.cnf` on **both** the Windows and WSL sides; `gjesus3_mri.cred` (Windows side — or point
-at the NAS copy); a **newly minted** GitHub key added to the account, not a copy of the dev
-key.
-
-**Verify:**
-
-```bash
-python -c "import sys; sys.path.insert(0,'tools'); import animal_db; print(animal_db.credentials_available())"
-```
-
-then a real lookup for a known animal (`tools/animal_db.py --help`). `True` plus a resolved
-species/strain/sex/DOB means the enrichment path works from Box A.
-
-### Phase 4 — memory onto Box A
-
-Create `~\.claude\projects\<Box-A-slug>\memory\`, `git init`, add the `gjesus3-memory` remote,
-fetch, check out. (Not `git clone` — the directory already exists.)
-
-**Verify:** the 46 files are present, and a Claude Code session started in the Box A repo
-recalls a known memory.
-
-### Phase 5 — hand over the schedule
-
-1. Write Box A's `config\instance.local.ps1` with `$ENABLED_OPS = @("finder-refresh", ...)`
-   and its local `$GJESUS3_REPO` / `$PYTHON`.
-2. `.\ops verify finder-refresh` on Box A — it must pass before scheduling.
-3. `.\ops run finder-refresh` manually on Box A.
-4. **Verify:** `.\ops status finder-refresh` reports a build time of *just now*, and the
-   published `registries\index.html` on the NAS has moved.
-5. `.\ops schedule finder-refresh` on Box A.
-6. **Only then**, on this workstation: `.\ops unschedule finder-refresh` and drop it from the
-   dev `$ENABLED_OPS`.
-7. **Verify next morning:** the index's build time advanced overnight, and Task Scheduler on
-   the dev box no longer holds `WorkstationOps-finder-refresh`.
-
-### Phase 6 — `molecubes-tunnel`
-
-~~Separate decision, separate visit (§5).~~ **Decided 2026-10-01 (B2): it moves, with no
-visit.** Still not part of the port itself: it runs once Box A is otherwise live. Re-point the
-acquisition box through the live tunnel, make-before-break, following
-[`live_machine_remote_access.md` §10](../equipment/nuclear-imaging/live_machine_remote_access.md).
-Finish with `.\ops unschedule molecubes-tunnel` on this workstation.
-
----
-
-## 7. Open decisions
-
-| # | Decision | Note |
+| Install Claude Code, sign in at the desktop as Ryan, start Remote Control | Ryan, once |
+| Python from python.org, Git, clone both repos to `D:\gjesus3\`; WSL and Ubuntu if not already there | Box A session |
+| **The hard-link test:** `python tools\diagnostics\test_oslink.py \\GJESUS3\gjesus3\gjesus3-data\tmp` | Box A session, on Ryan's go |
+
+**This test can sink the port.** Everything rests on `os.link` over SMB against the QNAP. It works in a private temporary folder
+under `tmp\`: makes a file and a hard link, checks they share an inode and that edits show through both, and removes everything it
+made. If it fails, stop and take it to IT. It is expected to pass: same account, same share. Run it once from WSL too, as information
+only: the engine runs on Windows Python (S1).
+
+### Phase 2: environment and code
+
+**Who:** Box A session. `pip install -r tools\requirements.txt`; `conda env create -f tools\dicomifier-pilot.environment.yml`; the
+WSL mount.
+
+**Check:** the validator gives **the same result as a run on dev the same day**: 0 errors, and on a full run the 284 known
+warnings. A different count means Box A's environment is wrong. Read-only.
+
+### Phase 3: credentials
+
+**Who:** Ryan copies the three files and adds the new GitHub key. Agents never print them.
+
+**Check (Box A session):** `animal_db.credentials_available()` and a real lookup of a known animal; a read-only SFTP listing on the
+scanner. **Never write to the MRI archive, and no parallel reads 08:00–18:00 Mon–Fri.**
+
+### Phase 4: memory on Box A
+
+**Who:** Box A session. `git init`, add the remote, fetch, check out (the directory already exists, so `clone` fails).
+
+**Check:** a session started in the Box A repo recalls a known memory.
+
+### Phase 5: hand over the schedule
+
+> **⏸ Waits for Ryan's go (2026-11-06):** "For now I want to get a version that works identical to the current version. no new
+> tool set just yet. I want to test it in a safe way before we turn off the workstation ops on this side. We should stop here and
+> wait for my go ahead, then we will switch those processes to box a. after it works for a bit, we will work on the app."
+> **Sign-in after a restart, for now:** Ryan stays signed in on Box A and signs in again by Remote Desktop after any restart.
+> Automatic sign-in plus an alert is the HIGH recommendation in BACKLOG ("Box A keeps going dark").
+
+One job at a time: `gjesus3-relink`, then `finder-refresh`. Ryan gives one go, for the phase. The standing go for the nightly relink
+covers this workstation only.
+
+1. Box A's `instance.local.ps1`, listing only that job so far. For `gjesus3-relink`, also remove the hold
+   `$SCHEDULE_CONFIRMED = $false` set there on 2026-11-06. While it is false, `.\ops schedule` treats the op as manual, and
+   `verify` softens two FAILs to WARNs ("checkout not on main", "tool lacks the locked re-read"). Re-run `verify` after removing
+   it.
+2. `.\ops verify <op>` on Box A passes.
+3. `.\ops run <op>` on Box A by hand. Check the result on the NAS (the index's build time; the relink's log).
+4. `.\ops schedule <op>` on Box A.
+5. **Only then,** here: `.\ops unschedule <op>`, and drop it from this machine's list.
+6. **Next morning:** Box A ran it, and this workstation's task is gone.
+
+### Phase 6: the tunnel
+
+**Who:** Box A session, with Ryan's go for each Mac write, following `equipment/nuclear-imaging/live_machine_remote_access.md` §10:
+a landing pad on Box A; prove the box can reach it through the current tunnel; authorize its key; a second LaunchAgent; prove it;
+only then remove the old one and `.\ops unschedule molecubes-tunnel` here. The firewall rule for the landing pad is Ryan's script.
+Read the Mac rules first: free writes only in the agreed folder, and never delete what we didn't write.
+
+### Phase 7: Stage 1 done
+
+The next-morning checks pass; the validator matches; `02_INFRASTRUCTURE` and `11_OPERATIONS` describe the two boxes; #3 and #26
+close. The agent reports to the coordinator.
+
+## Stage 2: the web app
+
+> **⏸ After Stage 1 has run on Box A for a while (Ryan, 2026-11-06).** Step 2.1 is already on `main`; nothing further until then.
+> **Ryan's direction for user sign-in (2026-11-06, details later):** "I was hoping to do everything under my sign in. Users sign
+> into the app with some local password specific to that app. then the writes are done in my name. I don't mind if the file
+> system records everything like that, but I was hoping the sign in locally could be used in some way for metadata and other
+> documentation." That is A3 (app accounts) with D1 (writes as Ryan), and the login feeding the people fields and the action
+> log. It replaces the "Sign-in" row below. App passwords over plain HTTP need care (HTTPS, or a decision), and it gets settled in
+> 2.2.
+
+**Choices, from [`web_app_design_options.md`](web_app_design_options.md), taken as recommended unless Ryan says otherwise:**
+
+| Question | Choice |
+|---|---|
+| Sign-in | A1 Windows sign-in; test on Box A. A1b or A3 if it stalls |
+| The account it writes with | ✅ **Ryan's account (D1), the same practice as the services already running here** (Ryan, 2026-11-06): "The eventual web app we build will work just like the existing services we have on the workstationops here, we already run something for OA data archiving and the pilots, IT has been fine with all this so I want to use the same practice. It's behind the centre's firewall." The risk he was told: an app bug could change raw data his account can change. So the app's own code never modifies or deletes anything in `raw\`, and tests check that |
+| How it is served | ✅ A long-running WorkstationOps service op on Box A, like the existing web forwards, inside the firewall (Ryan, 2026-11-06). No IIS and no IT certificate needed for that |
+| What the login fills | B2 a small people table; `creator` from the login, never editable; `owner` defaults to it; `researcher` and `operator` keep today's rules |
+| Who pressed ingest | C2 the app's action log. No registry change |
+| Where the engine runs | S1 Windows Python, Dicomifier through `wsl.exe` |
+| Processes | G1 one web process, one job queue; scheduled work stays in WorkstationOps |
+| Serving | Superseded by the row above: a WorkstationOps service op. **Open for 2.2:** how users sign in to their accounts without IIS (Windows sign-in through the app, a directory login over HTTPS, or app accounts). A recommendation comes then |
+| NI pull | P3 a nightly sweep plus "pull now", behind a review gate; unreviewed sessions get a reminder, then ingest as-is after 7 days |
+| NI corrections | F2 today's CSV format, moved into gjesus3, written only by the app |
+| "Add files from my computer" | "Put them in `staging\` first, then pick them here" |
+| Exes | E2 overlap for one month of real use, then retire. The CLI stays for the Data Office |
+| Logging | L1 write actions as counts without names until the DPO agrees; no read or search logging |
+
+| Step | Who | Check |
 |---|---|---|
-| **B1** | **Does the GUI exe keep being built on the dev box?** Recommendation: **yes.** PyInstaller, the throwaway-test-NAS verification loop, and the worktree flow are development. Box A pulls and at most deploys. Nothing about the frozen build needs the production box. | ✅ **DECIDED 2026-11-04 (Ryan): yes.** |
-| **B2** | **`molecubes-tunnel`** — move to Box A (needs the acquisition box reconfigured, rare physical access) or leave here as the documented exception? | ✅ **DECIDED 2026-10-01 (Ryan): move it.** The "rare physical access" cost no longer applies: with the tunnel live, the box is re-pointed through it, make-before-break (§5, Phase 6). |
-| **B3** | **Does Box A need a `dicomifier-pilot` env at all**, or is ParaVision→DICOM regeneration a Data-Office activity that stays on dev? Phase 2 assumes Box A gets it; dropping it removes a WSL/conda dependency from the production box. | ✅ **DECIDED 2026-11-04 (Ryan): yes, Box A gets it.** The web app's MRI ingest needs Dicomifier there ([`web_app_design_options.md`](web_app_design_options.md) §3). |
-| **B4** | **Repo path on Box A** — `D:\gjesus3\gjesus3-pilot` is assumed throughout. Confirm, because it goes into `instance.local.ps1` and determines the memory slug. | ✅ **DECIDED 2026-11-04 (Ryan): `D:\gjesus3\gjesus3-pilot`.** |
-| **B5** | **Do the paths researchers use to read data move with Box A?** | ✅ **DECIDED 2026-11-04 (Ryan): no.** The data stays on the NAS; only the apps move. |
+| 2.1 One app: merge the microscopy/MRI GUI and the Project Manager into one Flask app, blueprints per tool, one settings function, a job queue. Runs on `127.0.0.1` against a scratch NAS; the exes keep working | Agent | every existing GUI and manager suite passes |
+| 2.2 Accounts: the sign-in layer, the people table, attribution, the action log | Agent; Ryan's script for any security setting | the login shows in `creator` and the action log |
+| 2.3 NI page, corrections form (the server enforces the sync-safety invariant), Box A's pull through the tunnel (#27) | Agent, Box A session; Ryan's go for Mac and production steps | a new session appears without anyone touching the Mac |
+| 2.4 Serve on Box A under the chosen account; re-run the hard-link test under that account; a `web-app` op with a health page; a test instance on a scratch NAS | Box A session; Ryan's script for IIS and accounts | the URL works and a test ingest lands on the scratch NAS |
+| 2.5 Cut over: operators use the URL, exes labelled fallback; undo the Mac mount (#27); confirm each instrument PC keeps its exports long enough, and that Box A can read each export share | Agent, Ryan | an operator ingests from one URL |
+| 2.6 Retire the exes at the end of the overlap | Ryan's call | #27 and #28 close |
 
----
+**Open, from 2.1 (on `main` as `9df2e96`):** the next exe rebuild must smoke-test the built exes themselves, not just
+the rendered pages: both GUIs' templates and JS changed (base path, server mode). Until then the deployed exes are the
+pre-2.1 build, which is fine. **The combined app listens on loopback only until sign-in (2.2) exists.**
 
-## 8. Corrections this raises in other documents
+## Progress
 
-- **`image-server\README.md`** still says migrating the OMERO/XNAT trials off Ryan's
-  workstation to Box A is pending work. **That is no longer the plan** — Box A is not
-  sufficient for them and they stay on the dev workstation (§2). That satellite owns its own
-  status; flagged here rather than edited from this repo.
-- **`workstationops_finder_refresh` memory** records the cross-repo `$GJESUS3_REPO` coupling
-  as a dev-box fact. It needs updating when Phase 5 completes.
+- **2026-11-05:** Ryan: "do what ever needs to be done to finish this port", and to work with the coordinator to avoid
+  conflicts. The recommendations below are taken as his answers unless he says otherwise. #21: the purge is deferred
+  to 2027-01-15.
+- **0.4 done:** the production guard is merged (`c4b4217`), and the marker `registries\.production` was written 2026-11-05
+  20:24. A real CLI run against the root without `--production` is refused (tested).
+- **0.2 done:** WorkstationOps instance config (`bb3ad7f` in that repo), live on this workstation from 20:25, after the
+  image-server owner agreed the time. `status --brief` was identical before and after; `verify` passes for `gjesus3-relink`
+  and `finder-refresh`; the OMERO and XNAT pilots return 200. Tonight's 02:30 and 03:00 runs are the first on the new code.
+- **0.1 blocked:** the agent's permission classifier refuses to upload the memory to GitHub. Ryan runs a ready script
+  instead, kept outside the repo.
+- **2.1 built** on `feat/web-app` (`4c8a534`), with Box A offline. `tools/webapp/app.py` mounts both GUIs unchanged in one
+  process (`/ingest/`, `/ingest/mri`, `/projects/`) behind a landing page. One server-side root, refused when missing; the
+  production root also needs `--production`. Tried against a scratch root only: a preview and a real ingest, and the Project
+  Manager's list, create, link and copy. 63/63 suites. Sent for merge. **For 2.2:** sign-in goes in front of the whole process,
+  so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
+  the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
+  Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06 14:18: ⏸ STOPPING POINT REACHED; waiting for Ryan's go for Phase 5.** The Phase 4 recall test passes: a fresh
+  headless session in `RDM_MFB` read its memory and answered Box A's address (10.10.3.195) and code path (`RDM_MFB\rdm`). On Box A,
+  nothing is enabled or scheduled, and the relink holds its schedule guard. **Next, on Ryan's go, in order:**
+  1. Box A: enable and run `gjesus3-relink`, verify, schedule; then unschedule it on dev.
+  2. The same for `finder-refresh`.
+  3. Box A's own `memory-sync`.
+  4. The next-morning check.
+  5. Later, Phase 6 (the tunnel), after the data-centre move.
+- **2026-11-06 14:17: 0.3 `memory-sync` is live on dev** (Ryan: "I am happy to do the memory-sync anytime ... it should be run
+  from workstationops like other daily tasks"). WorkstationOps `cc772c9`. Each run scans changed notes for secrets before
+  staging and stops on a hit. It brings the other machine's notes in by fast-forward, or by a rebase only when the two sides
+  changed different files, so no conflict markers ever reach a note. It never resets or deletes. Tested on throwaway repos.
+  The first run pushed `d4ba143` (69 files), and it is scheduled daily at 22:30. The 8 existing jobs' status was identical
+  before and after. Box A's own `memory-sync` joins Phase 5.
+- **2026-11-06: both jobs tested safely on Box A, read-only on the NAS.**
+  - **Relink** `--dry-run` (13:44): 95 rows in `pending_links.csv`, 0 pending, nothing written, no lock taken.
+  - **Finder** `generate_index.py --per-project --out <local folder>` (13:45, 2 s): the same 43,327 acquisitions as dev's
+    published 03:00 index, and 58 of 62 project pages identical apart from the timestamp. The only difference is `proj_owner` in
+    4,138 records (4 projects), because `registry_projects.csv` was edited at 12:29, after the 03:00 build; `registry_raw.csv` is
+    unchanged since 2026-11-05. So Box A builds what dev builds.
+- **2026-11-06: Phase 4 done.** After Ryan's GitHub sign-in on Box A (Git Credential Manager), `gj3-boxa`'s memory folder is
+  a checkout of `Rtasseff/gjesus3-memory` (68 files, `2d1edde`, clean; nothing clashed: the folder was empty). The recall test
+  waits for a fresh session in `RDM_MFB`. A shared note, `box_a_environment.md`, records Box A's differences (no `J:`, UNC, paths).
+  **0.3 `memory-sync`** is built (WorkstationOps `a167383`) and is being rolled out on dev; Box A gets it with Phase 5.
+  **Phases 1–4 pass. Phase 5 waits for Ryan's go.**
+- **2026-11-06: Phase 3, the animal DB passes; WSL's Dicomifier works.**
+  - Ryan copied the three credential files at 13:20; sizes match dev's, and WSL's copy is mode 600. `credentials_available()` is
+    True, and the dated lookup `0525` #37 on 2026-02-24 finds DB id 17325.
+  - Miniforge 26.9.4 in Box A's WSL (Ryan ran the install script; the session's permission check refused it); the
+    `dicomifier-pilot` env builds on Ubuntu 26.04 with Dicomifier 2.5.3, the same as dev. `dicomifier --help` runs.
+  - **The scanner passes too (13:31, read-only):** one SFTP connection with the `[mri]` credentials, guarded so it would refuse
+    the archive host; it listed `/opt/PV-7.0.0/data/nmr` (3,101 entries) and `/opt/PV6.0.1/data/nmr` (154). **Phase 3 passes.**
+  - Still to do: Box A's GitHub sign-in for the memory checkout (Phase 4).
+- **2026-11-06: Phase 0.1 done.** Ryan ran the prepared script: the project memory (68 files) is in the private repo
+  `Rtasseff/gjesus3-memory` (`2d1edde`), committed byte-exact (`core.autocrlf false`). The single-copy exposure is closed.
+  Phase 4 (Box A's checkout, in the memory directory of `gj3-boxa`'s `RDM_MFB` folder) is sent to `gj3-boxa`. Syncing both ways
+  waits for the `memory-sync` op (0.3).
+- **2026-11-06: Phases 1 and 2 pass.**
+  - **The hard-link test passes on Box A** (`test_oslink.py` on `\\GJESUS3\gjesus3\gjesus3-data\tmp`, Ryan's go, 12:5x): shared
+    inode, edits both ways, and the link survives deleting the original; `tmp` is empty again.
+  - **The validator matches dev exactly** (`--no-enrichment`, both started 12:52): 43,327 rows, 0 errors, 0 warnings,
+    `pending-claim` 23,126, 31,662 age pairs, `/raw/` 43,327 folders and 682 tombstones.
+  - Box A's WSL is Ubuntu 26.04 (dev: 24.04). Miniforge and `dicomifier-pilot` are with Ryan: the session's permission check
+    refused to download and run the installer.
+- **2026-11-06: the Box A session `gj3-boxa`** (Claude Code at Ryan's desktop login, Remote Control on) runs the Box A side; this
+  session sends it briefs. Step 1 done: Python 3.13.17 from python.org (per-user), both repos cloned under `RDM_MFB`, the NAS
+  reachable by UNC, WSL Ubuntu present. `J:` isn't mapped on Box A. Nothing needs it: the jobs and the tests use
+  `\\GJESUS3\gjesus3\gjesus3-data`. A key-based SSH session from dev cannot reach the NAS (no network credentials), so NAS
+  work runs in `gj3-boxa`.
+- **2026-11-06: reachable, with a fixed address.** It had been switched off because it was never in the data centre. IT moves
+  it there next week, and work goes ahead this weekend. Ryan set the static address IT gave: **10.10.3.195**, mask
+  255.255.0.0, gateway 10.10.1.4, DNS 10.10.1.84 and 10.10.1.85. DNS name `bmg-wks-ryan.cicbiomagune.int`; "Box A" stays the
+  role name. The dev workstation reaches it by SSH with a dedicated key (`ssh boxa`, password logins off for it); the key is in
+  `C:\ProgramData\ssh\administrators_authorized_keys`, because Ryan is in Administrators there. Lesson: switching the adapter to
+  manual clears its DNS servers, and without them domain logins fail (SSH was reset) until they are set again.
+- **On hold (Ryan, 2026-11-05):** Box A is unreachable; IT may have cut its power. Ryan asked them; nothing on Box A until they
+  answer. Making it reliably reachable is now a BACKLOG HIGH item, and moving the jobs (Phase 5) waits on it.
+- **Phase 1 blocked:** Box A (`BMG-WKS-RYAN`, 10.10.2.161) doesn't answer on the network: no ARP reply from this workstation
+  on the same subnet, so it is off, asleep or unplugged. SSH, with Ryan's domain account, is the planned route.
+
+## What's needed from Ryan: the running list
+
+1. **How sessions reach Box A.** Recommended: Claude Code on Box A at the desktop, with Remote Control. As far as we know, a key-based
+   SSH login on Windows has no network credentials, so it couldn't reach the NAS.
+2. **Go for the private memory repo** (0.1).
+3. **#21, `contacts.xlsx`:** recommended, defer the purge to 2027-01-15. Box A's clone holds no local work, so re-cloning later costs
+   a minute.
+4. **Decision 16, the production guard** (0.4): recommended, accept.
+5. **The app's single login.** Recommended: a service account from IT, with Ryan's own account only as an interim. Under his account
+   a bug in the app could overwrite raw data; a service account with Tech grants physically can't. This doesn't affect Stage 1.
+6. **Go for the hard-link test** (Phase 1).

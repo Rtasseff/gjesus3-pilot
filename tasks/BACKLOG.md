@@ -296,6 +296,45 @@ The streams that ingested on 2026-10-04 checked every planned link name first, a
 - [x] The first m12 study of 2026-07-10 avoided it with a scoped config (a `_study1147` suffix).
 - [x] Stream B's drive batches (2026-10-04) were guarded by `tools/drive_staging/check_link_collisions.py` before writing and `verify_links_strict.py` after. All of B's links are exact.
 
+## 🔺 HIGH — Box A keeps going dark: make it reliably reachable before it runs production (Ryan, 2026-11-05)
+
+**Ryan, 2026-11-05:** "that box is in a room that I don't control, and sometimes IT has shut off the power ... We need to
+reassess how to fix this problem because they keep turning it off or we keep losing contact."
+
+**What happened:** on 2026-11-05 evening Box A (`BMG-WKS-RYAN`, DNS 10.10.2.161) gave no answer at all from the dev workstation
+on the same /16 network: no ARP reply, and no NetBIOS name. It was configured to stay on. Ryan asked IT whether they cut the
+power. The port's Phase 1 waits on their answer.
+
+**Why it matters:** after the port, the nightly relink (02:30) and Finder (03:00), the NI tunnel's landing pad and the web app
+all run on Box A. A box that is silently off means silently stale links and a dead tunnel, and researchers lose the one URL.
+Today's jobs also need the user signed in (interactive logon), so even a clean power-on stops them until someone signs in.
+
+**Update 2026-11-06.** The cause: Box A was never put in the data centre, so it was switched off with the room. IT moves it
+there the week of 2026-11-09. It now has a fixed address, 10.10.3.195 (`bmg-wks-ryan`).
+
+**For now (Ryan, 2026-11-06):** "lets leave me signed in right now and I will do a remote desktop after a restart. just for now."
+
+**🔺 Recommended, HIGH priority (Ryan asked for it here, 2026-11-06):**
+- [ ] **Automatic sign-in on Box A for Ryan's account:** Sysinternals Autologon, which stores the password as an LSA secret and
+  locks the screen. After any restart the jobs, the tunnel and later the web app come back on their own. The cost: a stored
+  password, re-entered after each password change. The data centre's physical security lowers that risk. It's a security
+  setting, so Ryan sets it himself.
+- [ ] **An alert on the dev workstation when Box A stops answering:** a small WorkstationOps check, plus the Finder's existing
+  STALE status after 30h. A restart nobody noticed then costs hours, not days.
+
+**To reassess (options, not decided):**
+- [ ] **Location or power:** ask IT to treat Box A as a server (labelled, on protected power, in their inventory, never switched
+  off without notice), or move it somewhere Ryan controls, or into IT's server room. *(Being done: IT moves it to the data
+  centre, 2026-11-09 week.)*
+- [ ] **Recover by itself:** in the BIOS, power on after power loss; and decide how jobs survive a restart with nobody signed in.
+  Options: tasks that run whether or not the user is signed in, which needs a stored password or the service account (#28's D2);
+  or Windows auto-logon, which stores a password, so it is a security call for Ryan.
+- [ ] **Know when it's down:** a WorkstationOps check on the dev box that alerts when Box A stops answering, or when the Finder's
+  build time goes stale (finder-refresh already reports STALE after 30h).
+- [ ] **Fall back:** keep the dev box able to take the jobs back within minutes (re-enable them in its instance file and
+  `.\ops schedule`), written down as a runbook step, so an outage costs a night, not a week.
+- [ ] **Gate:** don't move the jobs (port Phase 5) until the answers above are in place, or Ryan accepts the risk.
+
 ## 🔺 HIGH — port gjesus3 RDM production onto Box A (2026-09-04)
 
 **The plan is written and awaiting review:

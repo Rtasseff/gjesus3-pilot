@@ -26,8 +26,9 @@ Alternatively, pass `--nas-root <path>` on every command (e.g. `--nas-root "J:\"
 # Batch ingest, dry-run first (always do this).
 python tools/ingest_raw.py -c tools/configs/<your_config>.yaml --dry-run
 
-# Same config, for real.
-python tools/ingest_raw.py -c tools/configs/<your_config>.yaml
+# Same config, for real. Against the production root this needs --production
+# (registries\.production marks it; without the flag the run is refused).
+python tools/ingest_raw.py -c tools/configs/<your_config>.yaml --production
 
 # Interactive single-case ingest (no YAML — answer prompts).
 python tools/ingest_raw.py -i
@@ -286,8 +287,8 @@ ingest:
 ```bash
 conda activate dicomifier-pilot
 python tools/ingest_raw.py --config tools/configs/<batch>.yaml --nas-root /mnt/gjesus3 --dry-run
-# review, then real run
-python tools/ingest_raw.py --config tools/configs/<batch>.yaml --nas-root /mnt/gjesus3
+# review, then real run (the production root needs --production)
+python tools/ingest_raw.py --config tools/configs/<batch>.yaml --nas-root /mnt/gjesus3 --production
 ```
 
 **Fall-through behaviour:**

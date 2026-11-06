@@ -418,7 +418,8 @@ conda install -c conda-forge dicomifier pydicom
 
 # Per-ingest (Bash from WSL or any shell that has conda on PATH)
 conda activate dicomifier-pilot
-python tools/ingest_raw.py --config tools/configs/mri_bruker_<batch>.yaml --nas-root /mnt/gjesus3
+python tools/ingest_raw.py --config tools/configs/mri_bruker_<batch>.yaml --nas-root /mnt/gjesus3 --dry-run
+python tools/ingest_raw.py --config tools/configs/mri_bruker_<batch>.yaml --nas-root /mnt/gjesus3 --production
 ```
 
 In the YAML config, set `ingest.auto_regenerate_dicom: true` to opt in to regeneration. Default is false; ingests of normally-Bruker-GUI-exported source data don't need the flag at all.
