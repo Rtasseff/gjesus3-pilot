@@ -138,7 +138,10 @@ scanner. **Never write to the MRI archive, and no parallel reads 08:00–18:00 M
 One job at a time: `gjesus3-relink`, then `finder-refresh`. Ryan gives one go, for the phase. The standing go for the nightly relink
 covers this workstation only.
 
-1. Box A's `instance.local.ps1`, listing only that job so far.
+1. Box A's `instance.local.ps1`, listing only that job so far. For `gjesus3-relink`, also remove the hold
+   `$SCHEDULE_CONFIRMED = $false` set there on 2026-11-06. While it is false, `.\ops schedule` treats the op as manual, and
+   `verify` softens two FAILs to WARNs ("checkout not on main", "tool lacks the locked re-read"). Re-run `verify` after removing
+   it.
 2. `.\ops verify <op>` on Box A passes.
 3. `.\ops run <op>` on Box A by hand. Check the result on the NAS (the index's build time; the relink's log).
 4. `.\ops schedule <op>` on Box A.
