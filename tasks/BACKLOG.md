@@ -1237,6 +1237,12 @@ Stale dates are how `1019` was closed while it was still receiving data (see "De
   Run it after the historical-drives ingest, which touches 13 projects.~~ **The shared function and
   `tools/recompute_project_dates.py` exist; the run is dropped (Ryan, 2026-11-03).**
 
+## 🔸 MODERATE — a project id can be reused after the highest project is deleted (found 2026-11-06)
+
+`next_project_id` (`tools/ingest/projects_registry.py`) returns the highest `PROJ-NNNN` present in `registry_projects.csv` plus one. Its docstring and 10_TOOLS §3.1 say ids are never reused, but deleting the highest project frees its number. That happened once: `PROJ-0054` was `99_test` (created by a live exe check, removed 2026-08-12), then DTS24 the same day. `PROJ-0051`, a gap below the maximum, was never reused. Acquisition ids have a sequence file (`.acq_id_seq.json`); project ids have none.
+
+- [ ] Keep the highest project id ever issued, for example in a `.proj_id_seq.json` written under the projects-registry lock, and take the next id from it, so a deleted project's number stays retired. Seed it from today's maximum, 66.
+
 ## 🔸 MODERATE — the Project Manager sets project dates, and stamps one on close (Ryan, 2026-11-03)
 
 Ryan: "it really should be the project manager tool that lets people change dates. Something like when a project closes
