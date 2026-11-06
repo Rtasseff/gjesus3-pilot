@@ -208,6 +208,12 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06: reachable, with a fixed address.** It had been switched off because it was never in the data centre. IT moves
+  it there next week, and work goes ahead this weekend. Ryan set the static address IT gave: **10.10.3.195**, mask
+  255.255.0.0, gateway 10.10.1.4, DNS 10.10.1.84 and 10.10.1.85. DNS name `bmg-wks-ryan.cicbiomagune.int`; "Box A" stays the
+  role name. The dev workstation reaches it by SSH with a dedicated key (`ssh boxa`, password logins off for it); the key is in
+  `C:\ProgramData\ssh\administrators_authorized_keys`, because Ryan is in Administrators there. Lesson: switching the adapter to
+  manual clears its DNS servers, and without them domain logins fail (SSH was reset) until they are set again.
 - **On hold (Ryan, 2026-11-05):** Box A is unreachable; IT may have cut its power. Ryan asked them; nothing on Box A until they
   answer. Making it reliably reachable is now a BACKLOG HIGH item, and moving the jobs (Phase 5) waits on it.
 - **Phase 1 blocked:** Box A (`BMG-WKS-RYAN`, 10.10.2.161) doesn't answer on the network: no ARP reply from this workstation
