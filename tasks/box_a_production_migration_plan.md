@@ -140,6 +140,23 @@ scanner. **Never write to the MRI archive, and no parallel reads 08:00–18:00 M
 > wait for my go ahead, then we will switch those processes to box a. after it works for a bit, we will work on the app."
 > **Sign-in after a restart, for now:** Ryan stays signed in on Box A and signs in again by Remote Desktop after any restart.
 > Automatic sign-in plus an alert is the HIGH recommendation in BACKLOG ("Box A keeps going dark").
+>
+> **⏸ Holds until after IT's data-centre move, the week of 2026-11-09 (Ryan, 2026-11-06):** "Let's hold for that. I will
+> shutdown the Claude session on that box and get it read to be powered down and moved by it next week. Then we can start it back
+> up, recheck everything and get to work on the switching over the regular jobs and establishing the ni tunnel."
+
+**Recheck after the move, before Phase 5.** Everything is read-only, or local to Box A, and repeats the checks already passed:
+1. **Ryan:** Box A is powered on and he signs in by Remote Desktop. The scheduled tasks run in his session, and Autologon is not
+   set up yet. Sleep is still off. In the data centre, a restart means another Remote Desktop sign-in, so the BACKLOG HIGH item
+   matters more there.
+2. **The address:** the DNS name `bmg-wks-ryan.cicbiomagune.int` resolves; the address is still 10.10.3.195, or IT's new one;
+   and `ssh boxa` works from dev. If the address changed, the static setting is Ryan's to redo; `~/.ssh/config` uses the DNS name.
+3. **Ryan:** starts `gj3-boxa` in `RDM_MFB` with Remote Control.
+4. **Box A session:** `git pull --ff-only` in `rdm`, `WorkstationOps` and the memory folder. The NAS is reachable by UNC; the three
+   credential files are present and `credentials_available()` is True. WSL starts, and `dicomifier --help` runs.
+5. **Box A session:** the suite passes (63/63 on 2026-11-06). The validator `--no-enrichment` matches dev's same-day run. The
+   relink `--dry-run` runs, and so does the Finder preview to a local folder, compared with dev's published index.
+6. Then Ryan's go for Phase 5, and after it Phase 6.
 
 One job at a time: `gjesus3-relink`, then `finder-refresh`. Ryan gives one go, for the phase. The standing go for the nightly relink
 covers this workstation only.
@@ -230,6 +247,10 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06, end of day: ⏸ holding until after the data-centre move (Ryan).** Box A is at `main` `a894801` (rdm) and `cc772c9`
+  (WorkstationOps); all 8 requirements are installed; nothing is enabled or scheduled; the relink hold is on. Ryan closes `gj3-boxa`
+  so the box can be powered down and moved the week of 2026-11-09. Next: the Phase 5 "Recheck after the move" list, then Phase 5
+  (the jobs), then Phase 6 (the NI tunnel).
 - **2026-11-06: the test suite on Box A, 61/63; the two failures exposed an undeclared dependency.** Both repos were fast-forwarded
   to `main` (rdm `2ce5d30`; WorkstationOps `cc772c9`, still nothing enabled). Both failures were `No module named 'openpyxl'`.
   That is a runtime dependency (`claim_workbooks.py`, and `ingest/user_tables.py` for Excel user tables), but it was missing from
