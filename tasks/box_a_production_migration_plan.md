@@ -167,12 +167,13 @@ close. The agent reports to the coordinator.
 | Question | Choice |
 |---|---|
 | Sign-in | A1 Windows sign-in; test on Box A. A1b or A3 if it stalls |
-| The account it writes with | **Ryan's call, pending (below):** D2 service account, D1 his account only as an interim |
+| The account it writes with | ✅ **Ryan's account (D1), the same practice as the services already running here** (Ryan, 2026-11-06): "The eventual web app we build will work just like the existing services we have on the workstationops here, we already run something for OA data archiving and the pilots, IT has been fine with all this so I want to use the same practice. It's behind the centre's firewall." The risk he was told: an app bug could change raw data his account can change. So the app's own code never modifies or deletes anything in `raw\`, and tests check that |
+| How it is served | ✅ A long-running WorkstationOps service op on Box A, like the existing web forwards, inside the firewall (Ryan, 2026-11-06). No IIS and no IT certificate needed for that |
 | What the login fills | B2 a small people table; `creator` from the login, never editable; `owner` defaults to it; `researcher` and `operator` keep today's rules |
 | Who pressed ingest | C2 the app's action log. No registry change |
 | Where the engine runs | S1 Windows Python, Dicomifier through `wsl.exe` |
 | Processes | G1 one web process, one job queue; scheduled work stays in WorkstationOps |
-| Serving | H1 IIS and an IT name and certificate. H3 plain HTTP only for a first internal version, and only with A1 |
+| Serving | Superseded by the row above: a WorkstationOps service op. **Open for 2.2:** how users sign in to their accounts without IIS (Windows sign-in through the app, a directory login over HTTPS, or app accounts). A recommendation comes then |
 | NI pull | P3 a nightly sweep plus "pull now", behind a review gate; unreviewed sessions get a reminder, then ingest as-is after 7 days |
 | NI corrections | F2 today's CSV format, moved into gjesus3, written only by the app |
 | "Add files from my computer" | "Put them in `staging\` first, then pick them here" |
