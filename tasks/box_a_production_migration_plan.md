@@ -212,6 +212,10 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-06: Phase 0.1 done.** Ryan ran the prepared script: the project memory (68 files) is in the private repo
+  `Rtasseff/gjesus3-memory` (`2d1edde`), committed byte-exact (`core.autocrlf false`). The single-copy exposure is closed.
+  Phase 4 (Box A's checkout, in the memory directory of `gj3-boxa`'s `RDM_MFB` folder) is sent to `gj3-boxa`. Syncing both ways
+  waits for the `memory-sync` op (0.3).
 - **2026-11-06: Phases 1 and 2 pass.**
   - **The hard-link test passes on Box A** (`test_oslink.py` on `\\GJESUS3\gjesus3\gjesus3-data\tmp`, Ryan's go, 12:5x): shared
     inode, edits both ways, and the link survives deleting the original; `tmp` is empty again.
