@@ -135,6 +135,12 @@ scanner. **Never write to the MRI archive, and no parallel reads 08:00–18:00 M
 
 ### Phase 5: hand over the schedule
 
+> **⏸ Waits for Ryan's go (2026-11-06):** "For now I want to get a version that works identical to the current version. no new
+> tool set just yet. I want to test it in a safe way before we turn off the workstation ops on this side. We should stop here and
+> wait for my go ahead, then we will switch those processes to box a. after it works for a bit, we will work on the app."
+> **Sign-in after a restart, for now:** Ryan stays signed in on Box A and signs in again by Remote Desktop after any restart.
+> Automatic sign-in plus an alert is the HIGH recommendation in BACKLOG ("Box A keeps going dark").
+
 One job at a time: `gjesus3-relink`, then `finder-refresh`. Ryan gives one go, for the phase. The standing go for the nightly relink
 covers this workstation only.
 
@@ -161,6 +167,14 @@ The next-morning checks pass; the validator matches; `02_INFRASTRUCTURE` and `11
 close. The agent reports to the coordinator.
 
 ## Stage 2: the web app
+
+> **⏸ After Stage 1 has run on Box A for a while (Ryan, 2026-11-06).** Step 2.1 is already on `main`; nothing further until then.
+> **Ryan's direction for user sign-in (2026-11-06, details later):** "I was hoping to do everything under my sign in. Users sign
+> into the app with some local password specific to that app. then the writes are done in my name. I don't mind if the file
+> system records everything like that, but I was hoping the sign in locally could be used in some way for metadata and other
+> documentation." That is A3 (app accounts) with D1 (writes as Ryan), and the login feeding the people fields and the action
+> log. It replaces the "Sign-in" row below. App passwords over plain HTTP need care (HTTPS, or a decision), and it gets settled in
+> 2.2.
 
 **Choices, from [`web_app_design_options.md`](web_app_design_options.md), taken as recommended unless Ryan says otherwise:**
 

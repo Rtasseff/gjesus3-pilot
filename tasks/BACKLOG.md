@@ -309,9 +309,23 @@ power. The port's Phase 1 waits on their answer.
 all run on Box A. A box that is silently off means silently stale links and a dead tunnel, and researchers lose the one URL.
 Today's jobs also need the user signed in (interactive logon), so even a clean power-on stops them until someone signs in.
 
+**Update 2026-11-06.** The cause: Box A was never put in the data centre, so it was switched off with the room. IT moves it
+there the week of 2026-11-09. It now has a fixed address, 10.10.3.195 (`bmg-wks-ryan`).
+
+**For now (Ryan, 2026-11-06):** "lets leave me signed in right now and I will do a remote desktop after a restart. just for now."
+
+**🔺 Recommended, HIGH priority (Ryan asked for it here, 2026-11-06):**
+- [ ] **Automatic sign-in on Box A for Ryan's account:** Sysinternals Autologon, which stores the password as an LSA secret and
+  locks the screen. After any restart the jobs, the tunnel and later the web app come back on their own. The cost: a stored
+  password, re-entered after each password change. The data centre's physical security lowers that risk. It's a security
+  setting, so Ryan sets it himself.
+- [ ] **An alert on the dev workstation when Box A stops answering:** a small WorkstationOps check, plus the Finder's existing
+  STALE status after 30h. A restart nobody noticed then costs hours, not days.
+
 **To reassess (options, not decided):**
 - [ ] **Location or power:** ask IT to treat Box A as a server (labelled, on protected power, in their inventory, never switched
-  off without notice), or move it somewhere Ryan controls, or into IT's server room.
+  off without notice), or move it somewhere Ryan controls, or into IT's server room. *(Being done: IT moves it to the data
+  centre, 2026-11-09 week.)*
 - [ ] **Recover by itself:** in the BIOS, power on after power loss; and decide how jobs survive a restart with nobody signed in.
   Options: tasks that run whether or not the user is signed in, which needs a stored password or the service account (#28's D2);
   or Windows auto-logon, which stores a password, so it is a security call for Ryan.
