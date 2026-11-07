@@ -372,6 +372,14 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 
 ---
 
+## 🔺 HIGH — `is_control` is unknown on almost every animal and tissue acquisition (census 2026-11-07; Ryan decides)
+
+A read-only census of every sidecar: of 32,791 organism and tissue acquisitions, `condition.is_control` is known on 88, and 76 of those are the CNIC-HEARDS pigs filled on 2026-11-07. Every year 2019 to 2026 and every large protocol project is affected, mostly MRI. 11,564 rows say `source: operator-entered` with `is_control: null` (a batch block with no value). The 75 DTS24 human rows carry a disease description but no `is_control`; their attached collaborator tables may say healthy vs patient. By design the field is non-blocking and is not in the animal DB, so only people can supply it. Ryan: "We have missed metadata in the past and it can cause real issues."
+
+- [ ] Ryan decides: leave historical rows unknown; or ask the group for control / case / don't know per session, as one more column of the re-launch claim workbook, written back with `tools/backfill_sidecar_condition.py`; and/or fill DTS24 from its attached tables.
+- [ ] New batches: set `condition:` per case (possible since 2026-11-07) and read the dry run's `Condition:` lines before the go.
+
+
 ## 🔸 MODERATE — the ingest cannot set control vs case per case, and its dry run does not show a missing condition (found 2026-11-07)
 
 Batch P02 (CNIC-HEARDS) registered 70 series with `is_control: null`, though the collaborator's folders said control or ARDS. Two gaps let it through. (1) `resolver.resolve_condition_block` passes `is_control` and `timepoint_days` through `to_tristate` / `to_number` without resolving `${discovered.*}`, so a case table cannot set them per case; only a batch-constant value works. (2) The real run logs `condition: is_control is null` per case, but `--dry-run` does not reach the enrichment step, so the dry run a go is given on is silent. Fixed after the fact with `tools/backfill_sidecar_condition.py` (2026-11-07).
