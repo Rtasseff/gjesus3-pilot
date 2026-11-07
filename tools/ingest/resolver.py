@@ -427,8 +427,17 @@ def resolve_condition_block(block, discovered):
 
     is_control is tri-state (true/false/null); free-text -> '' (treatment ->
     null); timepoint_days -> number|null. Never raises (08_METADATA §4.7).
+    is_control and timepoint_days may be `${discovered.<column>}`, so a case
+    table can set them per case; a missing column resolves to null.
     """
-    b = block or {}
+    b = dict(block or {})
+    for k in ("is_control", "timepoint_days"):
+        v = b.get(k)
+        if isinstance(v, str) and "${" in v:
+            try:
+                b[k] = resolve_value(v, discovered or {}, key_for_error=f"condition.{k}") or None
+            except ResolverError:
+                b[k] = None
     return {
         "is_control": to_tristate(b.get("is_control")),
         "disease_model": _resolve_text_lenient(b.get("disease_model"), discovered, "condition.disease_model"),

@@ -193,6 +193,8 @@ auto_discover:
 
 **2. Top-level `condition:` / `anatomy:` / `subject:` blocks** — set once per batch, inherited by every acquisition the batch produces:
 
+**Per case (2026-11-07):** any `condition:` field, `is_control` and `timepoint_days` included, may be `${discovered.<column>}` from the batch's case table, so one batch can hold controls and cases; a blank or missing column resolves to unknown (`null`), never an error. A `--dry-run` now prints each case's resolved `condition` and its `user_metadata` tables, with their warnings (no animal-DB lookup in a dry run).
+
 ```yaml
 condition:                 # disease/control state (08_METADATA §4.5)
   is_control:    null      # true=control, false=case, null=unknown (WARN, still ingests)

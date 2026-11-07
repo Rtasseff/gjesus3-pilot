@@ -5,15 +5,15 @@
 Context (2026-11-07): the CNIC-HEARDS collaborator batches were ingested with no
 `condition:` block, so every sidecar says `is_control: null`, although the
 collaborator's own folders say which series are the healthy baseline and which
-the induced ARDS. The ingest cannot set control-vs-case per case today: its
-`condition.is_control` and `condition.timepoint_days` do not resolve
-`${discovered.*}` (tasks/BACKLOG.md). This tool fills it afterwards, the same
-way the other recovery tools do (tools/recover_subject_metadata.py).
+the induced ARDS. (The ingest can set it per case since 2026-11-07; batches
+ingested before, or without a `condition:` block, cannot.) This tool fills it
+afterwards, the same way the other recovery tools do
+(tools/recover_subject_metadata.py).
 
 Inputs (both are back-fill inputs, kept outside the code):
   --config  a YAML with the same `condition:` and `user_metadata:` blocks an
-            ingest config takes. Values may be `${discovered.<column>}`; here
-            that includes is_control and timepoint_days.
+            ingest config takes. Values may be `${discovered.<column>}`,
+            is_control and timepoint_days included.
   --table   a CSV with an `acq_id` column plus the columns the config refers
             to. One row per acquisition to fill; acquisitions not listed are
             never touched.
@@ -90,17 +90,10 @@ def condition_is_unset(cond):
 
 
 def resolve_condition(block, row):
-    """The ingest's resolve_condition_block, with is_control / timepoint_days
-    also resolved from `${discovered.*}` (the ingest passes those two through
-    literally)."""
+    """The ingest's own resolve_condition_block (per-case values included)."""
     if not block:
         return None
-    b = dict(block)
-    for k in ("is_control", "timepoint_days"):
-        v = b.get(k)
-        if isinstance(v, str) and "${" in v:
-            b[k] = resolver.resolve_value(v, row, key_for_error=f"condition.{k}") or None
-    return resolver.resolve_condition_block(b, row)
+    return resolver.resolve_condition_block(block, row)
 
 
 def plan_one(sidecar, row, cfg):

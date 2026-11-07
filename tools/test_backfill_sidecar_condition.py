@@ -6,7 +6,7 @@ import csv
 import json
 import os
 
-import pytest
+
 
 import backfill_sidecar_condition as bsc
 from ingest import registry as reg
@@ -103,3 +103,31 @@ def test_refuses_to_overwrite_an_existing_backup(tmp_path):
     (tmp_path / "bk" / "A1.metadata.json").write_text("{}", encoding="utf-8")
     counts, _ = bsc.backfill(nas, CFG, [_row("A1")], apply=True, backup_dir=str(tmp_path / "bk"))
     assert counts["error"] == 1
+
+
+def main():
+    """Run as a suite script (tools/run_tests.py runs each test_*.py as a program); pytest also works."""
+    import inspect
+    import pathlib
+    import sys
+    import tempfile
+    fails = []
+    for name, fn in sorted(globals().items()):
+        if not (name.startswith("test_") and callable(fn)):
+            continue
+        try:
+            if "tmp_path" in inspect.signature(fn).parameters:
+                with tempfile.TemporaryDirectory() as d:
+                    fn(pathlib.Path(d))
+            else:
+                fn()
+            print(f"ok: {name}")
+        except Exception as e:  # noqa: BLE001 - report every failure
+            fails.append(name)
+            print(f"FAIL: {name}: {type(e).__name__}: {e}")
+    print("FAILED: " + ", ".join(fails) if fails else "ALL CHECKS PASSED")
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

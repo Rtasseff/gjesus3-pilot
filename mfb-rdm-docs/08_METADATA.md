@@ -742,7 +742,7 @@ This is a forward-only mechanism: the historical/archival backfills in progress 
 |---|---|---|
 | **What it answers** | "Who is this animal?" | "What study state is this acquisition?" |
 | **Variation** | Per-subject, fixed | Per-acquisition, varies (same animal at baseline + post-treatment) |
-| **Source** | Animal-facility-DB (auto) > study YAML > instrument extracts | Operator-entered via per-batch YAML or `/projects/<proj>/metadata/`; `disease_model` can be pre-seeded from the DB `projects.name`, but `is_control` is not in the DB |
+| **Source** | Animal-facility-DB (auto) > study YAML > instrument extracts | Operator-entered via per-batch YAML (per case from a case-table column, `${discovered.<column>}`, since 2026-11-07) or `/projects/<proj>/metadata/`; `disease_model` can be pre-seeded from the DB `projects.name`, but `is_control` is not in the DB |
 | **Recommended for** (non-blocking) | `sample_type ∈ {organism, tissue}` | `sample_type ∈ {organism, tissue, cells}` |
 
 Folding into `subject:` would conflate two different source pipelines (DB-auto vs. operator-only) and obscure the per-acquisition semantics.

@@ -917,6 +917,24 @@ def copy_paravision_exam(source_path, dest_dir, reconstructions, log_fn):
     return checksums
 
 
+def _preview_sidecar_metadata(cfg_single, log):
+    """Dry run only: build the condition block and the user tables the real run
+    would write, and log them with their warnings, so the dry run a go is given
+    on shows missing metadata (BACKLOG 2026-11-07). No animal-DB lookup and no
+    writes: the subject block still needs the real run."""
+    discovered = cfg_single.get("discovered") or {}
+    sample_type = (cfg_single.get("sample_type") or "").strip().lower()
+    if sample_type in ("organism", "tissue", "cells"):
+        cond = enrichment._build_condition(cfg_single, discovered, log)
+        log(f"  Condition:   is_control={cond.get('is_control')}"
+            + (f", disease_state={cond['disease_state']!r}" if cond.get("disease_state") else "")
+            + (f", study_arm={cond['study_arm']!r}" if cond.get("study_arm") else ""))
+    tables = user_tables.build_user_metadata(cfg_single.get("user_metadata"), discovered,
+                                             log=log, dry_run=True)
+    if tables:
+        log(f"  User tables: {', '.join(tables)}")
+
+
 def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_source=False,
                   planned_links=None):
     """Run the ingestion workflow for a single acquisition.
@@ -1238,6 +1256,7 @@ def ingest_single(cfg_single, nas_root, dry_run=False, nas_unc=None, delete_sour
         log(f"  Link:        {link_msg}")
 
     if dry_run:
+        _preview_sidecar_metadata(cfg_single, log)
         log("[DRY RUN] Would create folder and copy files. Skipping.")
         return acq_id_str, True
 
