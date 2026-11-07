@@ -18,6 +18,11 @@ things genuinely in flight. It deliberately stays short.
 
 ## 0. ⚠️ DECISIONS WAITING ON RYAN — read this first after a break
 
+**Waiting for Ryan on site (2026-11-07; no hurry, he is remote):**
+- **Claim workbook column "Control or case?"** (his decision 11-07; window open until 12-04). Built and verified, 0 existing cells changed; the auto-mode classifier blocks an agent writing the live shared file. When nobody has it open: `python -P -E "D:\projects\gjesus3\claims_condition_20261107\claims_add_condition.py" --apply` (backs up first).
+- **Erase the CNIC-HEARDS Box staging on D:** (his go 11-07; the deny rule on `rm -rf` stops an agent): `powershell -NoProfile -Command "Remove-Item -LiteralPath 'D:\projects\gjesus3\cnic_heards_box_20261106\files','D:\projects\gjesus3\cnic_heards_box_20261106\ingest\stage' -Recurse -Force"`. Keep `ingest\` (76 sidecar backups, logs) until about 11-14, then the whole folder.
+- **Send the ask for the missing pig acquisitions** (5 absent, 15 with RL only): the draft is with the coordinator's reports.
+
 **The next goal is the Box A port (Ryan, 2026-11-04):** "the last step of porting to box A is what we now need to work on ... lets finish up the backlog that we need to finish and get to a point to do the port. which will take its own plan."
 - **The commitment (Ryan, 2026-11-05):** "We are now not doing many improvements ... our last commitment is to port to Box A to have the same functionality as the current version has here (that includes running all the processes that are regularly run by workstationops so a version of workstationops, specific to gjesus3 ... needs to move there too) and to make a single unified web app for the ingests and the project manager that runs on a single login to do work but has accounts for users."
 - **Timing (Ryan, 2026-11-05):** no date gate: "move it forward now. This is a high priority effort", "as soon as possible with the least work from me."
