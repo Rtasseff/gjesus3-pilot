@@ -1,0 +1,70 @@
+# CNIC-HEARDS, batch P02: the pig MRI from Vicomtech's Box share 'Cerdos' (given to Ryan by Jesus, 2026-11-06; downloaded
+# 2026-11-07 with a SHA-256 manifest). Ryan, 2026-11-06: "log it all in our system. Acquisitions into the main system and
+# other data into metadata json sidecars where it makes sense and the rest into the project folder."
+#
+# WHAT: the same CNIC study as P01 (Philips Achieva 3T, CNIC Madrid, 2014). Box holds session 1 (parte 1) of all 8 pigs:
+# the control and ARDS 4D flow acquisitions as three series each (RL, AP, FH; magnitude + velocity map in each), a 3D
+# phase-contrast angiography series, and for pigs 2225, 2237 and 2327 the 2D flow series. 12 of Box's RL series are P01
+# rows already (byte-identical, SHA-256 against the ingest checksums); they are left out of this batch.
+#
+# ROW UNIT: as P01, one row per series folder (+ the companion object the scanner exported with it); session_id = the
+# scanner study. DICOMDIR not registered. The condition (control / ARDS) is Box's folder name, in the notes; the
+# pressures (presiones_edit.xlsx, one row per pig x condition) attach as user_provided_metadata.pressures.
+#
+# STAGING: <this folder>/stage/P02/HEARDSMRI<pig>P_1_<series>/IM_*, hard links of the Box download (build_p02.py).
+#
+#   python tools/ingest_raw.py --config D:/projects/gjesus3/cnic_heards_box_20261106/ingest/cnic_heards_P02_box.yaml --nas-root J:/gjesus3-data --dry-run
+
+ingest:
+  delete_source_after_ingest: false
+  auto_create_projects: false             # CNIC-HEARDS exists (P01)
+
+auto_discover:
+  staging_dir: "D:/projects/gjesus3/cnic_heards_box_20261106/ingest/stage/P02"
+  pattern: "*/"
+  dicom_headers: true
+  case_table:
+    file:       cases_P02.csv
+    key:        original_name
+    on_missing: error
+  subject_from_db: false                  # not our animals: no facility id
+
+registry:
+  instrument:           XMRI
+  data_ecosystem:       DICOM
+  instrument_model:     "${discovered.drv_model}"
+  modalities_in_study:  MR
+  researcher:           "NA"
+  data_source:          "collaborator:CNIC"
+  sample_id:            "${discovered.drv_sample}"
+  sample_type:          organism
+  session_id:           "${discovered.drv_session}"
+  acquisition_datetime: discovered.drv_acq_datetime
+  project_name:         "CNIC-HEARDS"
+  notes:                "${discovered.drv_note}"
+
+subject:
+  facility_animal_id:  ""
+  species:             "Sus scrofa"
+  sex:                 "${discovered.drv_sex}"
+  source:              "dicom-header"
+
+anatomy:
+  is_whole_body: false
+  region:
+    label:    heart
+    ontology: UBERON
+    id:       UBERON:0000948
+
+operator: "NA"
+
+link_filename: "XMRI_${discovered.drv_session}_${discovered.drv_series}"
+
+# Catheter pressures and cardiac output per pig x condition, from the collaborator's presiones_edit.xlsx (key column added:
+# <pig>_<control|ARDS>; values verbatim). The series with no condition folder (the angiography) have an empty key.
+user_metadata:
+  - label: pressures
+    file: "D:/projects/gjesus3/cnic_heards_box_20261106/ingest/pressures_keyed.csv"
+    key_column: "key"
+    match: "${discovered.drv_pressure_key}"
+    on_missing: warn
