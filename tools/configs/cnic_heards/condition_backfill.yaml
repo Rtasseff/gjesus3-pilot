@@ -1,0 +1,20 @@
+# CNIC-HEARDS condition back-fill (2026-11-07): input to tools/backfill_sidecar_condition.py.
+# The condition comes from the collaborator's own Box folders (control / ARDS); notas_javi.txt: "baseline: control. cerdos
+# sanos" and "ARDS (accute distress respiratory syndrome): patologia forzada". The same animal is scanned at baseline and
+# after ARDS is induced, so the control is an untreated baseline. The 6 angiography series have no condition folder and
+# are not listed (they stay null). Pressures: the same table and key as batch P02, added only where absent (the P01 rows).
+
+condition:
+  is_control:     "${discovered.drv_is_control}"
+  disease_model:  "${discovered.drv_disease_model}"
+  disease_state:  "${discovered.drv_disease_state}"
+  control_type:   "${discovered.drv_control_type}"
+  study_arm:      "${discovered.drv_study_arm}"
+  source:         "operator-entered"
+
+user_metadata:
+  - label: pressures
+    file: "D:/projects/gjesus3/cnic_heards_box_20261106/ingest/pressures_keyed.csv"
+    key_column: "key"
+    match: "${discovered.drv_pressure_key}"
+    on_missing: error

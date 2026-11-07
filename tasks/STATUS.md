@@ -311,6 +311,8 @@ historical ingest. Nothing is mid-ingest; it is safe to restart at any time.
 
 ---
 
+**CNIC-HEARDS, 2026-11-07:** 97 acquisitions (27 P01 + 70 P02 from Vicomtech's Box), condition filled on 76 (40 control, 36 ARDS), pressures on 76; project folder `working\vicomtech_box_20261106\`. Not in either copy: 5 acquisitions of Jesus's listing (2225 parte 2 x3, 2237 parte 2, 2327 16:45); getting them means asking Vicomtech or CNIC, Ryan's call. Details: CHANGELOG 2026-11-07.
+
 ## 2. Active / Up next
 
 The genuinely in-flight items (kept tight — everything else is in

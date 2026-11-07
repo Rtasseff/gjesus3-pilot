@@ -372,6 +372,13 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 
 ---
 
+## 🔸 MODERATE — the ingest cannot set control vs case per case, and its dry run does not show a missing condition (found 2026-11-07)
+
+Batch P02 (CNIC-HEARDS) registered 70 series with `is_control: null`, though the collaborator's folders said control or ARDS. Two gaps let it through. (1) `resolver.resolve_condition_block` passes `is_control` and `timepoint_days` through `to_tristate` / `to_number` without resolving `${discovered.*}`, so a case table cannot set them per case; only a batch-constant value works. (2) The real run logs `condition: is_control is null` per case, but `--dry-run` does not reach the enrichment step, so the dry run a go is given on is silent. Fixed after the fact with `tools/backfill_sidecar_condition.py` (2026-11-07).
+
+- [ ] Resolve `${discovered.*}` in `condition.is_control` and `condition.timepoint_days` (spec 10_TOOLS / 08_METADATA §4.5 and the templates, per the integrity-mirror rule).
+- [ ] Make `--dry-run` build the sidecar blocks (subject, condition, anatomy, user_provided_metadata) and print their warnings, so a dry run shows what metadata will be missing.
+
 ## 🔸 MODERATE — one documented list of everything that runs regularly (Ryan, 2026-11-03)
 
 **Ryan:** "this should be documented somewhere because we are starting to have multiple things that need to run regularly. At some point we are porting the tools running gjesus3 to another computer and at some point we may scale, there should be a clear list of these tools in documentation."

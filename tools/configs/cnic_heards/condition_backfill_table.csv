@@ -1,0 +1,77 @@
+acq_id,original_name,batch,condition,drv_pressure_key,drv_is_control,drv_disease_model,drv_disease_state,drv_control_type,drv_study_arm
+ACQ-20140217-XMRI-018,HEARDSMRI2225P_1_3803,P02,ARDS,2225_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140217-XMRI-019,HEARDSMRI2225P_1_3804,P02,ARDS,2225_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140217-XMRI-020,HEARDSMRI2225P_1_3805,P02,ARDS,2225_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140217-XMRI-011,HEARDSMRI2225P_1_3201,P02,ARDS,2225_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140217-XMRI-012,HEARDSMRI2225P_1_3301,P02,ARDS,2225_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140217-XMRI-013,HEARDSMRI2225P_1_3401,P02,ARDS,2225_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140217-XMRI-014,HEARDSMRI2225P_1_3501,P02,ARDS,2225_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140217-XMRI-015,HEARDSMRI2225P_1_3601,P02,ARDS,2225_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140217-XMRI-016,HEARDSMRI2225P_1_3701,P02,ARDS,2225_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140217-XMRI-008,HEARDSMRI2225P_1_2003,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140217-XMRI-009,HEARDSMRI2225P_1_2004,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140217-XMRI-010,HEARDSMRI2225P_1_2005,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140217-XMRI-001,HEARDSMRI2225P_1_1301,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140217-XMRI-002,HEARDSMRI2225P_1_1401,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140217-XMRI-003,HEARDSMRI2225P_1_1501,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140217-XMRI-004,HEARDSMRI2225P_1_1601,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140217-XMRI-005,HEARDSMRI2225P_1_1701,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140217-XMRI-006,HEARDSMRI2225P_1_1801,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140217-XMRI-007,HEARDSMRI2225P_1_1901,P02,control,2225_control,true,,baseline,untreated_baseline,control
+ACQ-20140205-XMRI-015,HEARDSMRI2237P_1_3903,P02,ARDS,2237_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140205-XMRI-016,HEARDSMRI2237P_1_3904,P02,ARDS,2237_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140205-XMRI-017,HEARDSMRI2237P_1_3905,P02,ARDS,2237_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140205-XMRI-008,HEARDSMRI2237P_1_3301,P02,ARDS,2237_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140205-XMRI-009,HEARDSMRI2237P_1_3401,P02,ARDS,2237_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140205-XMRI-010,HEARDSMRI2237P_1_3501,P02,ARDS,2237_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140205-XMRI-011,HEARDSMRI2237P_1_3601,P02,ARDS,2237_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140205-XMRI-012,HEARDSMRI2237P_1_3701,P02,ARDS,2237_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140205-XMRI-013,HEARDSMRI2237P_1_3801,P02,ARDS,2237_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140205-XMRI-005,HEARDSMRI2237P_1_2404,P02,control,2237_control,true,,baseline,untreated_baseline,control
+ACQ-20140205-XMRI-006,HEARDSMRI2237P_1_2405,P02,control,2237_control,true,,baseline,untreated_baseline,control
+ACQ-20140205-XMRI-007,HEARDSMRI2237P_1_2406,P02,control,2237_control,true,,baseline,untreated_baseline,control
+ACQ-20140205-XMRI-001,HEARDSMRI2237P_1_1601,P02,control,2237_control,true,,baseline,untreated_baseline,control
+ACQ-20140205-XMRI-002,HEARDSMRI2237P_1_1701,P02,control,2237_control,true,,baseline,untreated_baseline,control
+ACQ-20140205-XMRI-003,HEARDSMRI2237P_1_1801,P02,control,2237_control,true,,baseline,untreated_baseline,control
+ACQ-20140205-XMRI-004,HEARDSMRI2237P_1_1901,P02,control,2237_control,true,,baseline,untreated_baseline,control
+ACQ-20140221-XMRI-012,HEARDSMRI2327P_1_3404,P02,ARDS,2327_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140221-XMRI-013,HEARDSMRI2327P_1_3405,P02,ARDS,2327_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140221-XMRI-010,HEARDSMRI2327P_1_2204,P02,control,2327_control,true,,baseline,untreated_baseline,control
+ACQ-20140221-XMRI-011,HEARDSMRI2327P_1_2205,P02,control,2327_control,true,,baseline,untreated_baseline,control
+ACQ-20140221-XMRI-005,HEARDSMRI2327P_1_1501,P02,control,2327_control,true,,baseline,untreated_baseline,control
+ACQ-20140221-XMRI-006,HEARDSMRI2327P_1_1601,P02,control,2327_control,true,,baseline,untreated_baseline,control
+ACQ-20140221-XMRI-007,HEARDSMRI2327P_1_1701,P02,control,2327_control,true,,baseline,untreated_baseline,control
+ACQ-20140221-XMRI-008,HEARDSMRI2327P_1_1801,P02,control,2327_control,true,,baseline,untreated_baseline,control
+ACQ-20140221-XMRI-009,HEARDSMRI2327P_1_1901,P02,control,2327_control,true,,baseline,untreated_baseline,control
+ACQ-20140430-XMRI-009,HEARDSMRI2444P_1_2704,P02,ARDS,2444_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140430-XMRI-010,HEARDSMRI2444P_1_2705,P02,ARDS,2444_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140430-XMRI-007,HEARDSMRI2444P_1_2004,P02,control,2444_control,true,,baseline,untreated_baseline,control
+ACQ-20140430-XMRI-008,HEARDSMRI2444P_1_2005,P02,control,2444_control,true,,baseline,untreated_baseline,control
+ACQ-20140423-XMRI-009,HEARDSMRI2459P_1_3004,P02,ARDS,2459_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140423-XMRI-010,HEARDSMRI2459P_1_3005,P02,ARDS,2459_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140423-XMRI-006,HEARDSMRI2459P_1_2304,P02,control,2459_control,true,,baseline,untreated_baseline,control
+ACQ-20140423-XMRI-007,HEARDSMRI2459P_1_2305,P02,control,2459_control,true,,baseline,untreated_baseline,control
+ACQ-20140429-XMRI-007,HEARDSMRI2487P_1_3204,P02,ARDS,2487_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140429-XMRI-008,HEARDSMRI2487P_1_3205,P02,ARDS,2487_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140429-XMRI-005,HEARDSMRI2487P_1_2204,P02,control,2487_control,true,,baseline,untreated_baseline,control
+ACQ-20140429-XMRI-006,HEARDSMRI2487P_1_2205,P02,control,2487_control,true,,baseline,untreated_baseline,control
+ACQ-20140528-XMRI-009,HEARDSMRI2502P_1_2704,P02,ARDS,2502_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140528-XMRI-010,HEARDSMRI2502P_1_2705,P02,ARDS,2502_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140528-XMRI-007,HEARDSMRI2502P_1_2004,P02,control,2502_control,true,,baseline,untreated_baseline,control
+ACQ-20140528-XMRI-008,HEARDSMRI2502P_1_2005,P02,control,2502_control,true,,baseline,untreated_baseline,control
+ACQ-20140716-XMRI-008,HEARDSMRI2672P_1_3204,P02,ARDS,2672_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140716-XMRI-009,HEARDSMRI2672P_1_3205,P02,ARDS,2672_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140716-XMRI-006,HEARDSMRI2672P_1_1904,P02,control,2672_control,true,,baseline,untreated_baseline,control
+ACQ-20140716-XMRI-007,HEARDSMRI2672P_1_1905,P02,control,2672_control,true,,baseline,untreated_baseline,control
+ACQ-20140221-XMRI-001,HEARDSMRI2327P_1_2203,P01,control,2327_control,true,,baseline,untreated_baseline,control
+ACQ-20140221-XMRI-002,HEARDSMRI2327P_1_3403,P01,ARDS,2327_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140430-XMRI-001,HEARDSMRI2444P_1_2003,P01,control,2444_control,true,,baseline,untreated_baseline,control
+ACQ-20140430-XMRI-002,HEARDSMRI2444P_1_2703,P01,ARDS,2444_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140423-XMRI-001,HEARDSMRI2459P_1_2303,P01,control,2459_control,true,,baseline,untreated_baseline,control
+ACQ-20140423-XMRI-002,HEARDSMRI2459P_1_3003,P01,ARDS,2459_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140429-XMRI-001,HEARDSMRI2487P_1_2203,P01,control,2487_control,true,,baseline,untreated_baseline,control
+ACQ-20140429-XMRI-002,HEARDSMRI2487P_1_3203,P01,ARDS,2487_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140528-XMRI-001,HEARDSMRI2502P_1_2003,P01,control,2502_control,true,,baseline,untreated_baseline,control
+ACQ-20140528-XMRI-002,HEARDSMRI2502P_1_2703,P01,ARDS,2502_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
+ACQ-20140716-XMRI-001,HEARDSMRI2672P_1_1903,P01,control,2672_control,true,,baseline,untreated_baseline,control
+ACQ-20140716-XMRI-002,HEARDSMRI2672P_1_3203,P01,ARDS,2672_ARDS,false,ARDS (induced acute respiratory distress syndrome),ARDS,,ARDS
