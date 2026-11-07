@@ -30,7 +30,8 @@ Safe-by-design, mirroring tools/backfill_mri_anatomy.py:
   - user_provided_metadata: adds a table label only when that label is absent.
     Existing labels are never overwritten.
   - --apply needs --backup-dir: each sidecar is copied there before its write.
-  - Atomic sidecar write + verify-after-write + rollback on failure.
+  - In-place sidecar write (hard links, e.g. the project's raw_linked copy,
+    stay the same file) + verify-after-write + rollback on failure.
   - Sidecars only. The registry has no condition column; nothing else changes.
 
 Run (dry-run):
@@ -64,13 +65,21 @@ def _read_sidecar(path):
 
 
 def _write_sidecar(path, sidecar):
-    """Atomic sidecar write (temp + os.replace), 2-space indent + trailing
-    newline as elsewhere; never leaves a truncated file."""
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(sidecar, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-    os.replace(tmp, path)
+    """Write the sidecar IN PLACE (same file, so every hard link to it, e.g. a
+    project's raw_linked copy, sees the change), 2-space indent + trailing
+    newline as elsewhere. A temp + os.replace write would put a new file at the
+    /raw path and leave the project link on the old one (2026-11-07: 76
+    CNIC-HEARDS project copies went stale that way). The content is rendered
+    and parsed back before the original is touched; the caller's backup and
+    verify-after-write cover an interrupted write."""
+    data = (json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    json.loads(data.decode("utf-8"))
+    with open(path, "r+b") as f:
+        f.seek(0)
+        f.write(data)
+        f.truncate()
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def _sidecar_path(nas_root, canonical_path):

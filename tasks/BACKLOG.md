@@ -372,6 +372,13 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 
 ---
 
+## 🔸 MODERATE — nine sidecar writers replace the /raw sidecar instead of writing it in place (found 2026-11-07)
+
+`recover_subject_metadata`, `recover_subject_ids(_proj0056)`, `relink_subjects`, `backfill_mri_anatomy`, `backfill_microscopy_anatomy`, `backfill_microscopy_bestguess`, `backfill_dicom_regen` and `retire_acquisition` write `metadata.json` by temp file + `os.replace`. Where a project link hard-links the whole acquisition folder, that leaves the project copy on the old file. Today that exposure is 24 sidecars (census 2026-11-07; most links hold images only); the CNIC-HEARDS back-fill split 76 that way before it was fixed.
+
+- [ ] Give them one in-place writer (as `backfill_sidecar_condition._write_sidecar`), or run `tools/relink_split_sidecars.py` after any of them.
+
+
 ## 🔺 HIGH — `is_control` is unknown on almost every animal and tissue acquisition (census 2026-11-07; Ryan decides)
 
 A read-only census of every sidecar: of 32,791 organism and tissue acquisitions, `condition.is_control` is known on 88, and 76 of those are the CNIC-HEARDS pigs filled on 2026-11-07. Every year 2019 to 2026 and every large protocol project is affected, mostly MRI. 11,564 rows say `source: operator-entered` with `is_control: null` (a batch block with no value). The 75 DTS24 human rows are null on purpose (Ryan, 2026-08-12, in their configs: LIONS has no healthy arm; HPIC may be labelled neither without the collaborators' confirmation). By design the field is non-blocking and is not in the animal DB, so only people can supply it. Ryan: "We have missed metadata in the past and it can cause real issues."

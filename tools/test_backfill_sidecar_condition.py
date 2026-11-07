@@ -105,6 +105,19 @@ def test_refuses_to_overwrite_an_existing_backup(tmp_path):
     assert counts["error"] == 1
 
 
+def test_project_hard_link_sees_the_write(tmp_path):
+    """The /raw sidecar is hard-linked into the project folder; the back-fill must
+    write the same file, not replace it (2026-11-07 regression)."""
+    nas = _nas(tmp_path, {"A1": {"acq_id": "A1", "condition": dict(UNSET)}})
+    raw = os.path.join(nas, "raw", "A1", "metadata.json")
+    link = os.path.join(nas, "project_link_metadata.json")
+    os.link(raw, link)
+    counts, _ = bsc.backfill(nas, CFG, [_row("A1", "false", "ARDS")], apply=True, backup_dir=str(tmp_path / "bk"))
+    assert counts["changed"] == 1
+    assert os.path.samefile(raw, link)
+    assert json.load(open(link, encoding="utf-8"))["condition"]["is_control"] is False
+
+
 def main():
     """Run as a suite script (tools/run_tests.py runs each test_*.py as a program); pytest also works."""
     import inspect
