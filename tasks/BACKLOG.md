@@ -383,7 +383,7 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 
 A read-only census of every sidecar: of 32,791 organism and tissue acquisitions, `condition.is_control` is known on 88, and 76 of those are the CNIC-HEARDS pigs filled on 2026-11-07. Every year 2019 to 2026 and every large protocol project is affected, mostly MRI. 11,564 rows say `source: operator-entered` with `is_control: null` (a batch block with no value). The 75 DTS24 human rows are null on purpose (Ryan, 2026-08-12, in their configs: LIONS has no healthy arm; HPIC may be labelled neither without the collaborators' confirmation). By design the field is non-blocking and is not in the animal DB, so only people can supply it. Ryan: "We have missed metadata in the past and it can cause real issues."
 
-- [ ] **Decided (Ryan, 2026-11-07: "Follow your recommendations"):** ask the group as one more yellow column, "Control or case?", in the MRI claim workbook (open until 2026-12-04), and write the answers back with `tools/backfill_sidecar_condition.py` when the window closes. Column built and verified (0 existing cells changed); writing the live shared workbook waits on Ryan's own run or permission.
+- [ ] **Decided (Ryan, 2026-11-07: "Follow your recommendations"):** ask the group as one more yellow column, "Control or case?", in the MRI claim workbook (open until 2026-12-04), and write the answers back with `tools/backfill_sidecar_condition.py` when the window closes. Column written 2026-11-08 on Ryan's word (column J; 0 existing cells changed, 106 answers kept). Left: the write-back after 12-04.
 - [ ] New batches: set `condition:` per case (possible since 2026-11-07) and read the dry run's `Condition:` lines before the go.
 
 

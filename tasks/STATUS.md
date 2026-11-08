@@ -19,7 +19,7 @@ things genuinely in flight. It deliberately stays short.
 ## 0. ⚠️ DECISIONS WAITING ON RYAN — read this first after a break
 
 **Waiting for Ryan on site (2026-11-07; no hurry, he is remote):**
-- **Claim workbook column "Control or case?"** (his decision 11-07; window open until 12-04). Built and verified, 0 existing cells changed; the auto-mode classifier blocks an agent writing the live shared file. When nobody has it open: `python -P -E "D:\projects\gjesus3\claims_condition_20261107\claims_add_condition.py" --apply` (backs up first).
+- ✅ **Claim workbook column "Control or case?" written 2026-11-08** on Ryan's word (column J, drop-down; 0 existing cells changed, 106 answers kept; backup taken). Answers go back with `tools/backfill_sidecar_condition.py` when the window closes (12-04).
 - **Erase the CNIC-HEARDS Box staging on D:** (his go 11-07; the deny rule on `rm -rf` stops an agent): `powershell -NoProfile -Command "Remove-Item -LiteralPath 'D:\projects\gjesus3\cnic_heards_box_20261106\files','D:\projects\gjesus3\cnic_heards_box_20261106\ingest\stage' -Recurse -Force"`. Keep `ingest\` (76 sidecar backups, logs) until about 11-14, then the whole folder.
 - **Send the ask for the missing pig acquisitions** (5 absent, 15 with RL only): the draft is with the coordinator's reports.
 
