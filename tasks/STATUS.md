@@ -20,7 +20,7 @@ things genuinely in flight. It deliberately stays short.
 
 **Waiting for Ryan on site (2026-11-07; no hurry, he is remote):**
 - ✅ **Claim workbook column "Control or case?" written 2026-11-08** on Ryan's word (column J, drop-down; 0 existing cells changed, 106 answers kept; backup taken). Answers go back with `tools/backfill_sidecar_condition.py` when the window closes (12-04).
-- **Erase the CNIC-HEARDS Box staging on D:** (his go 11-07; the deny rule on `rm -rf` stops an agent): `powershell -NoProfile -Command "Remove-Item -LiteralPath 'D:\projects\gjesus3\cnic_heards_box_20261106\files','D:\projects\gjesus3\cnic_heards_box_20261106\ingest\stage' -Recurse -Force"`. Keep `ingest\` (76 sidecar backups, logs) until about 11-14, then the whole folder.
+- **Erase the CNIC-HEARDS Box staging on D: on or after 2026-11-14** (Ryan's go 11-07/11-08; cos-leader checked 11-08: no session reads it). Kept one week as a spare: two flaws were found the day after the ingest, and the Box link dies 11-13. Then, in one scoped command, the whole folder: `powershell -NoProfile -Command "Remove-Item -LiteralPath 'D:\projects\gjesus3\cnic_heards_box_20261106' -Recurse -Force"` (the SHA-256 manifest and logs are already in the project's `_records`).
 - **Send the ask for the missing pig acquisitions** (5 absent, 15 with RL only): the draft is with the coordinator's reports.
 
 **The next goal is the Box A port (Ryan, 2026-11-04):** "the last step of porting to box A is what we now need to work on ... lets finish up the backlog that we need to finish and get to a point to do the port. which will take its own plan."
