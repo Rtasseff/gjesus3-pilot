@@ -18,6 +18,8 @@ things genuinely in flight. It deliberately stays short.
 
 ## 0. ⚠️ DECISIONS WAITING ON RYAN — read this first after a break
 
+**Dated commitments:** 2026-12-14, a dated count set for the P1 paper (total, by instrument, by organism, projects, subjects, retired, disk used; promised to papers-leader 11-08). After 2026-12-04, write the claim workbook's "Control or case?" answers back with `tools/backfill_sidecar_condition.py`.
+
 **Waiting for Ryan on site (2026-11-07; no hurry, he is remote):**
 - ✅ **Claim workbook column "Control or case?" written 2026-11-08** on Ryan's word (column J, drop-down; 0 existing cells changed, 106 answers kept; backup taken). Answers go back with `tools/backfill_sidecar_condition.py` when the window closes (12-04).
 - **Erase the CNIC-HEARDS Box staging on D: on or after 2026-11-14** (Ryan's go 11-07/11-08; cos-leader checked 11-08: no session reads it). Kept one week as a spare: two flaws were found the day after the ingest, and the Box link dies 11-13. Then, in one scoped command, the whole folder: `powershell -NoProfile -Command "Remove-Item -LiteralPath 'D:\projects\gjesus3\cnic_heards_box_20261106' -Recurse -Force"` (the SHA-256 manifest and logs are already in the project's `_records`).
