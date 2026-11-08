@@ -1263,7 +1263,7 @@ Stale dates are how `1019` was closed while it was still receiving data (see "De
 
 `next_project_id` (`tools/ingest/projects_registry.py`) returns the highest `PROJ-NNNN` present in `registry_projects.csv` plus one. Its docstring and 10_TOOLS §3.1 say ids are never reused, but deleting the highest project frees its number. That happened once: `PROJ-0054` was `99_test` (created by a live exe check, removed 2026-08-12), then DTS24 the same day. `PROJ-0051`, a gap below the maximum, was never reused. Acquisition ids have a sequence file (`.acq_id_seq.json`); project ids have none.
 
-- [ ] Keep the highest project id ever issued, for example in a `.proj_id_seq.json` written under the projects-registry lock, and take the next id from it, so a deleted project's number stays retired. Seed it from today's maximum, 66.
+- [x] Done 2026-11-08 (branch `fix/proj-id-seq`): `projects_registry.allocate_project_id` writes the high-water to `registries/.proj_id_seq.json` under the registry lock; `next_project_id` (previews) reads it. No seeding: the file is created at the next project creation, from max(present, 0) + 1 = 67.
 
 ## 🔸 MODERATE — the Project Manager sets project dates, and stamps one on close (Ryan, 2026-11-03)
 

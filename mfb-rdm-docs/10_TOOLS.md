@@ -824,7 +824,7 @@ log_activity \
 **Actions** — steps 1–7 run inside ONE `locking.registry_lock` hold (see below):
 1. Normalize + validate the name (`ingest/project_naming.py`; spaces → hyphens)
 2. Check the name is free — **case-insensitively** (scan `registry_projects.csv`)
-3. Generate PROJ-ID (`PROJ-NNNN`, next available; ids are never reused)
+3. Generate PROJ-ID (`PROJ-NNNN`, next available; ids are never reused: max(ids present, the high-water in `registries/.proj_id_seq.json`) + 1, taken under the registry lock, since 2026-11-08; before that a deleted highest project freed its number, as PROJ-0054 did on 2026-08-12)
 4. Create folder: `/projects/<name>/` (the name, verbatim — [05_PROJECTS §2a](05_PROJECTS.md))
 5. Create the recommended subfolders — `raw_linked/`, `working/`, `outputs/`, `metadata/` (one definition, `ingest/project_layout.py`; [05_PROJECTS §3](05_PROJECTS.md))
 6. Write `_project.yaml` from the bundled template (resolved via `ingest/resources.py`, so it works in the frozen exe too)

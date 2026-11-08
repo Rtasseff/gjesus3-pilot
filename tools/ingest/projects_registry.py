@@ -30,6 +30,7 @@ that schema's integrity mirror.
 """
 
 import csv
+import json
 import os
 import re
 from datetime import date
@@ -38,6 +39,7 @@ from . import csv_safe
 from . import project_ids as pids
 
 PROJECTS_FILENAME = "registry_projects.csv"
+PROJ_SEQ_FILENAME = ".proj_id_seq.json"   # highest PROJ number ever issued (allocate_project_id)
 
 # Column order is the contract (06_REGISTRIES §4). `name` was RENAMED from
 # `short_name` 2026-08-02 — it is the project's human key, case-preserved, and
@@ -121,11 +123,25 @@ def assert_header_compatible(path):
         )
 
 
-def next_project_id(rows):
-    """The next `PROJ-NNNN` id, from the maximum already present.
+def _read_proj_seq(registries_dir):
+    """The highest PROJ number ever issued, from `.proj_id_seq.json`; 0 if absent/corrupt."""
+    if not registries_dir:
+        return 0
+    try:
+        with open(os.path.join(registries_dir, PROJ_SEQ_FILENAME), encoding="utf-8") as f:
+            return int((json.load(f) or {}).get("PROJ", 0))
+    except (FileNotFoundError, ValueError, TypeError, AttributeError, OSError):
+        return 0
+
+
+def next_project_id(rows, registries_dir=None):
+    """The next `PROJ-NNNN` id: max(ids present, highest ever issued) + 1. Read-only.
 
     Ids are never reused — a deleted project keeps its number retired, the same
-    rule the ACQ-ID sequence follows.
+    rule the ACQ-ID sequence follows. The maximum present alone does not keep
+    that promise when the highest project is deleted (PROJ-0054, 2026-08-12), so
+    with `registries_dir` the high-water in `.proj_id_seq.json` counts too. Use
+    `allocate_project_id` to take an id; this is for previews.
     """
     max_num = 0
     for row in rows:
@@ -136,7 +152,23 @@ def next_project_id(rows):
             except (ValueError, IndexError):
                 continue
             max_num = max(max_num, num)
-    return f"PROJ-{max_num + 1:04d}"
+    return f"PROJ-{max(max_num, _read_proj_seq(registries_dir)) + 1:04d}"
+
+
+def allocate_project_id(rows, registries_dir):
+    """Take the next PROJ id AND record it as the high-water in `.proj_id_seq.json`.
+
+    MUST be called while holding locking.registry_lock(registries_dir), in the
+    same critical section as the append that uses the id. Like `.acq_id_seq.json`
+    it is bookkeeping, not data; purging `registries/` resets it.
+    """
+    pid = next_project_id(rows, registries_dir)
+    path = os.path.join(registries_dir, PROJ_SEQ_FILENAME)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"PROJ": int(pid.split("-")[1])}, f)
+    os.replace(tmp, path)
+    return pid
 
 
 def check_name_unique(rows, name):
