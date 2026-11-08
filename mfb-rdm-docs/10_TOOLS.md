@@ -113,7 +113,7 @@ tools/
 
 ### 2.1.1 Project Linking — Hard Links
 
-> **✅ DECIDED + APPLIED 2026-06-02 — NTFS/SMB hard links are the project-linking method.** Project links are **hard links** to the raw primary, created by `linker.create_hardlink` via `os.link`. The project copy is a **real file identical to the raw primary** — same inode, **zero extra storage**, and it shares raw's single security descriptor, so a read-only raw file stays read-only through the project link even inside a read/write `projects` folder. This **retired** the original Windows `.lnk` shortcut mechanism (the 283 then-existing `.lnk` links were migrated in place — see "Migration of existing links" — and `linker.create_lnk` is kept only as a non-default porting seam; see "History"). The driver is adoption: change-averse researchers trust a project copy that looks and behaves like a normal file far more than a shortcut.
+> **✅ DECIDED + APPLIED 2026-06-02 — NTFS/SMB hard links are the project-linking method.** Project links are **hard links** to the raw primary, created by `linker.create_hardlink` via `os.link`. The project copy is a **real file identical to the raw primary** — same inode, **zero extra storage**, and it shares raw's single security descriptor, so a read-only raw file stays read-only through the project link even inside a read/write `projects` folder. This **retired** the original Windows `.lnk` shortcut mechanism (the 284 then-existing `.lnk` links were migrated in place — see "Migration of existing links" — and `linker.create_lnk` is kept only as a non-default porting seam; see "History"). The driver is adoption: change-averse researchers trust a project copy that looks and behaves like a normal file far more than a shortcut.
 
 When `ingest_raw.py` is run with `--project <name-or-id>` (or `registry.project_name` set in the YAML config), Step 12 of full-mode ingest creates the link at:
 
@@ -150,7 +150,7 @@ This unified model gives "real files" across every instrument and removes the di
 
 #### Migration of existing links
 
-`tools/relink_projects.py` converted the pre-existing `.lnk` shortcuts to hard links in place **without re-ingesting** — it maps each `.lnk` to its acquisition via the project `provenance.csv` + `registry_raw.csv`, creates the hard link (file or folder-of-links), verifies it, removes the `.lnk`, and logs a provenance row. This one-time migration moved **all 283 then-existing `.lnk` links** to hard links and is complete; the tool remains available (idempotent; supports `--dry-run`, `--keep-lnk`, and `--project`) for any future folder that still carries a legacy shortcut.
+`tools/relink_projects.py` converted the pre-existing `.lnk` shortcuts to hard links in place **without re-ingesting** — it maps each `.lnk` to its acquisition via the project `provenance.csv` + `registry_raw.csv`, creates the hard link (file or folder-of-links), verifies it, removes the `.lnk`, and logs a provenance row. This one-time migration moved **all 284 then-existing `.lnk` links** to hard links and is complete; the tool remains available (idempotent; supports `--dry-run`, `--keep-lnk`, and `--project`) for any future folder that still carries a legacy shortcut.
 
 #### History / porting seam
 
