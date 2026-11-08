@@ -99,7 +99,7 @@ from datetime import datetime
 # repo root or from tools/ (mirrors the other CLIs).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ingest import checksum, locking, paravision_regen, pending_dicom, registry, resolver  # noqa: E402
+from ingest import checksum, inplace, locking, paravision_regen, pending_dicom, registry, resolver  # noqa: E402
 import animal_db  # noqa: E402  (age_iso8601 is pure; no DB connection made)
 
 
@@ -326,7 +326,7 @@ def update_sidecar_age(sidecar_path, acq_datetime):
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(sidecar, f, indent=2, ensure_ascii=False)
             f.write("\n")
-        os.replace(tmp, sidecar_path)
+        inplace.replace_keeping_links(tmp, sidecar_path)
         with open(sidecar_path, "r", encoding="utf-8") as f:
             fresh = json.load(f)
         if (fresh.get("subject") or {}).get("age_at_acquisition") != age:
@@ -337,7 +337,7 @@ def update_sidecar_age(sidecar_path, acq_datetime):
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(sidecar, f, indent=2, ensure_ascii=False)
                 f.write("\n")
-            os.replace(tmp, sidecar_path)
+            inplace.replace_keeping_links(tmp, sidecar_path)
         except Exception:
             pass
         return f"error: {e} (rolled back)"
@@ -373,7 +373,7 @@ def refresh_readme(acq_dir, acq_date_iso, file_count, size_mb):
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             f.writelines(lines)
-        os.replace(tmp, path)
+        inplace.replace_keeping_links(tmp, path)
         return f"refreshed {replaced} line(s)"
     except Exception as e:
         return f"error: {e}"

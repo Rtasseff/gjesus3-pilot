@@ -51,7 +51,7 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
-from ingest import locking, subjects_table  # noqa: E402
+from ingest import inplace, locking, subjects_table  # noqa: E402
 from recover_subject_metadata import (  # noqa: E402  (reuse, don't re-implement)
     _read_sidecar, _verify_after_write, _write_sidecar)
 from validate_registries import null_alias_of  # noqa: E402
@@ -160,7 +160,7 @@ def _refresh_checksum(item):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    os.replace(tmp, item["checksums"])
+    inplace.replace_keeping_links(tmp, item["checksums"])
     log(f"{item['acq_id']}: checksums.json entry for the sidecar recomputed")
 
 

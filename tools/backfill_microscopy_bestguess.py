@@ -17,7 +17,7 @@ and proposes:
 Everything is written source="auto-guess" + a notes flag so the low confidence is
 explicit and queryable. Safe-by-design, mirroring backfill_microscopy_anatomy.py:
   - DRY-RUN by default; --apply to write. Idempotent (only fills UNSET fields).
-  - Atomic sidecar write (temp + os.replace) + verify; registry patched under lock.
+  - Sidecar write (temp, then in place, keeping hard links) + verify; registry patched under lock.
   - Re-runnable: refine the YAML map and re-run to improve the guesses.
 
     python tools/backfill_microscopy_bestguess.py --nas-root J:/gjesus3-data            # dry-run
@@ -31,7 +31,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ingest import registry as reg, locking  # noqa: E402
+from ingest import inplace, registry as reg, locking  # noqa: E402
 
 MICRO_INSTRUMENTS = {"CELL", "LSM9"}
 MAP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -86,7 +86,7 @@ def _write(path, obj):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    os.replace(tmp, path)
+    inplace.replace_keeping_links(tmp, path)
 
 
 def plan_one(sidecar, relpath, cell_lines, organs):
