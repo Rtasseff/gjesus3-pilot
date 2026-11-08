@@ -118,7 +118,7 @@ def create_project(name, description, owner, nas_root, dry_run=False, notes="",
         if not check_name_unique(rows, name):
             log(f"Project name '{name}' already exists in registry", "ERROR")
             return None, False
-        project_id = next_project_id(rows)
+        project_id = next_project_id(rows, registries_dir)
         log(f"Generated project ID: {project_id}")
         _log_summary(name, description, owner, project_id,
                      os.path.join(nas_root, "projects", project_folder_name(name)),
@@ -153,8 +153,8 @@ def _create_locked(name, description, owner, nas_root, registry_path, notes,
         log(f"Project name '{name}' already exists in registry", "ERROR")
         return None, False
 
-    # --- Generate ID ---
-    project_id = next_project_id(rows)
+    # --- Generate ID (and record it as the high-water: ids are never reused) ---
+    project_id = projects_registry.allocate_project_id(rows, os.path.dirname(registry_path))
     log(f"Generated project ID: {project_id}")
 
     # --- Determine paths (folder == name, verbatim) ---
