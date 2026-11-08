@@ -376,7 +376,7 @@ image-server trials stay here (Box A is not sufficient to host OMERO/XNAT).
 
 `recover_subject_metadata`, `recover_subject_ids(_proj0056)`, `relink_subjects`, `backfill_mri_anatomy`, `backfill_microscopy_anatomy`, `backfill_microscopy_bestguess`, `backfill_dicom_regen` and `retire_acquisition` write `metadata.json` by temp file + `os.replace`. Where a project link hard-links the whole acquisition folder, that leaves the project copy on the old file. Today that exposure is 24 sidecars (census 2026-11-07; most links hold images only); the CNIC-HEARDS back-fill split 76 that way before it was fixed.
 
-- [ ] Give them one in-place writer (as `backfill_sidecar_condition._write_sidecar`), or run `tools/relink_split_sidecars.py` after any of them.
+- [x] Done 2026-11-08 (branch `fix/inplace-writes`): one helper, `ingest/inplace.replace_keeping_links`, at every write inside an acquisition folder (sidecar, `checksums.json`, `README.txt`) in `recover_subject_metadata` (and so `relink_subjects`, `recover_subject_ids`, `recover_subject_ids_proj0056`), `recover_subject_ids` (checksums), `backfill_mri_anatomy`, `backfill_microscopy_anatomy`, `backfill_microscopy_bestguess`, `backfill_dicom_regen`. Registry CSVs keep `os.replace` (not hard-linked). `retire_acquisition` relinks deliberately and is unchanged. `relink_split_sidecars.py` stays as the check.
 
 
 ## 🔺 HIGH — `is_control` is unknown on almost every animal and tissue acquisition (census 2026-11-07; Ryan decides)

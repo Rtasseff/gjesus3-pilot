@@ -71,7 +71,7 @@ from datetime import datetime, timezone
 # whether this is run from the repo root or from tools/ (mirrors the other CLIs).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ingest import locking, pending, registry  # noqa: E402
+from ingest import inplace, locking, pending, registry  # noqa: E402
 import animal_db  # noqa: E402
 
 
@@ -261,8 +261,8 @@ def _existing_newline(path, default="\n"):
 def _write_sidecar(path, sidecar, newline=None):
     """Write the sidecar back, preserving the 2-space indent + trailing \\n.
 
-    Atomic: write to a sibling .tmp then os.replace, so a crash mid-write can't
-    truncate / corrupt this IMMUTABLE raw artifact. (verify-after-write +
+    Written to a sibling .tmp first, then moved into the existing file IN PLACE
+    (ingest/inplace.py), so a project's hard-linked copy stays the same file. (verify-after-write +
     rollback in the caller stay as-is.)
 
     `newline=None` PRESERVES whatever terminator the file already uses; pass an
@@ -280,7 +280,7 @@ def _write_sidecar(path, sidecar, newline=None):
               newline=newline or _existing_newline(path)) as f:
         json.dump(sidecar, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    os.replace(tmp_path, path)
+    inplace.replace_keeping_links(tmp_path, path)
 
 
 def _subject_blocks(sidecar):

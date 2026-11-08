@@ -38,7 +38,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # tools/ on path
 
-from ingest import anatomy_derive, registry as reg, csv_safe, locking  # noqa: E402
+from ingest import anatomy_derive, inplace, registry as reg, csv_safe, locking  # noqa: E402
 
 
 def log(msg, level="INFO"):
@@ -51,14 +51,14 @@ def _read_sidecar(path):
 
 
 def _write_sidecar(path, sidecar):
-    """Atomic sidecar write (temp + os.replace), preserving the 2-space indent
+    """Sidecar write (temp, then in place: ingest/inplace.py keeps hard links), preserving the 2-space indent
     + trailing newline used elsewhere. The /raw sidecar is immutable-by-policy,
     so the write must never leave a truncated file."""
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(sidecar, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    os.replace(tmp, path)
+    inplace.replace_keeping_links(tmp, path)
 
 
 def _sidecar_path(nas_root, canonical_path):
