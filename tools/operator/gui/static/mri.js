@@ -583,7 +583,9 @@ async function ingest() {
         resEl.className = "summary dry-done";
         resEl.innerHTML = `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the RDM System.</strong> ` +
           `${r.ok}/${r.total} scans WOULD be ingested. ` + alreadyNote(r) +
-          `Uncheck “Dry-run” and run again to ingest for real.`;
+          (window.GJ3_USER   // the web app: two buttons, no tick box
+            ? `To add them for real, press “Add to gjesus3”.`
+            : `Uncheck “Dry-run” and run again to ingest for real.`);
       } else {
         resEl.className = "summary live-done";
         resEl.innerHTML = `✓ INGEST COMPLETE — <strong>${r.ok}/${r.total} scans written</strong> to ${esc(nasInput.value) || "the RDM System"}. ` + alreadyNote(r);

@@ -20,7 +20,9 @@ settings.py; never under the NAS root). Passwords are kept only as salted hashes
      "pw_version": 3,             # bumped on every change: older sessions end
      "created": "2026-11-13T10:00:00", "last_login": "..."}
 
-The first administrator is made on the server, from this file:
+The first administrator is made on the server itself, either in a browser there
+(while no account exists, the app shows a setup page, to that machine only), or
+from this file:
 
     python tools\webapp\accounts.py add ryan --name "Ryan Tasseff" --admin
     (asks for the password twice; nothing is echoed or printed)
@@ -157,7 +159,10 @@ class AccountStore:
         return self.public(u, rec)
 
     # -------------------------------------------------------------- changes
-    def add(self, username, name, password, role="user", must_change=False):
+    def add(self, username, name, password, role="user", must_change=False,
+            only_if_empty=False):
+        """Add an account. `only_if_empty` is the first-run setup page: it adds
+        only while there is no account at all, checked under the lock."""
         u = check_username(username)
         n = check_name(name)
         if role not in ROLES:
@@ -165,6 +170,8 @@ class AccountStore:
         check_password(password, u)
         with self._lock:
             data = self._load()
+            if only_if_empty and data["users"]:
+                raise AccountError("The first administrator already exists. Sign in instead.")
             if u in data["users"]:
                 raise AccountError(f"There is already an account '{u}'.")
             data["users"][u] = {

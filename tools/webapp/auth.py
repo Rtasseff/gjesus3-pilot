@@ -36,11 +36,23 @@ SECRET_FILE = "secret.key"
 LOGIN_PATH = "/account/login"
 LOGOUT_PATH = "/account/logout"
 PASSWORD_PATH = "/account/password"
+SETUP_PATH = "/account/setup"
+SETUP_CODE_FILE = "setup_code.txt"
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 # Reached without a session: the sign-in page and plain static files (the
 # stylesheets and scripts are in the repository anyway).
 PUBLIC_EXACT = (LOGIN_PATH,)
 PUBLIC_PREFIXES = ("/static/", "/ingest/static/", "/projects/shared/", "/projects/static/")
+
+
+def make_setup_code(state_dir):
+    """A fresh one-time code for the first-run setup page, written to the state
+    folder (readable only by the server's account) and never printed."""
+    os.makedirs(state_dir, exist_ok=True)
+    code = secrets.token_urlsafe(9)
+    with open(os.path.join(state_dir, SETUP_CODE_FILE), "w", encoding="ascii") as f:
+        f.write(code + "\n")
+    return code
 
 
 def load_secret(state_dir):
@@ -178,6 +190,18 @@ class Gate:
         if method not in SAFE_METHODS and not _same_origin(environ):
             return _json(start_response, "403 Forbidden",
                          "Refused: this request came from another web site.")
+
+        # First run: no account exists yet. Everything leads to the setup page,
+        # which asks for the one-time code in the state folder (see app.py):
+        # only someone who can open files as the server's account gets in.
+        if self.sessions.accounts.count() == 0:
+            if path == SETUP_PATH or path.startswith(PUBLIC_PREFIXES):
+                return self.app(environ, start_response)
+            if _is_api(path, environ):
+                return _json(start_response, "503 Service Unavailable",
+                             "This app has no accounts yet: the first administrator "
+                             "must be made on the server.")
+            return _redirect(start_response, f"{base}{SETUP_PATH}")
 
         user = self.sessions.user_from(environ)
         if user:

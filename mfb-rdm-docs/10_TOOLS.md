@@ -1310,8 +1310,11 @@ the account pages under `/account/`.
   a username, the full name that metadata gets, a role (user or administrator), a salted password
   hash. They live in `users.json` in the server's **state folder** (`--state-dir`, default
   `%LOCALAPPDATA%\gjesus3-webapp`), which is refused under the NAS root. The first administrator
-  is made on the server (`python tools/webapp/accounts.py add <username> --name "..." --admin`);
-  everyone else on the **People** page, with a temporary password changed at first sign-in. The
+  is made on the server: while no account exists, every page leads to a **setup page** that asks
+  for a one-time code the app writes to `setup_code.txt` in the state folder (only the server's
+  account can open it; never printed or logged), or with
+  `python tools/webapp/accounts.py add <username> --name "..." --admin`. Everyone else is added on
+  the **People** page, with a temporary password changed at first sign-in. The
   session is a signed cookie (HttpOnly, SameSite=Strict, 12 hours); changing a password or
   disabling an account ends older sessions. Repeated wrong passwords wait; a write from another
   web site is refused. **The server runs as one Windows account (Ryan's, D1), so every file is
@@ -1335,6 +1338,10 @@ the account pages under `/account/`.
   banner on a test root, and the same page title and help link. Inside the web app each tool's own
   header is hidden and its server-only wording adjusted; run on its own, or as an exe, nothing
   changes.
+- **Check, then add.** Every tool works the same way: Preview first, then the button that does
+  it. On the ingest pages the dry-run tick box and its banner give way to two buttons, **Test
+  run** (every step, nothing written) and **Add to gjesus3**; the Project Manager keeps Preview,
+  then **Add to project**. Inside the web app only.
 
 - **Mounted, not rewritten.** The two Flask apps run unchanged inside one WSGI process
   (werkzeug `DispatcherMiddleware`). The same `app.py` files still run on their own and still
@@ -1351,9 +1358,9 @@ the account pages under `/account/`.
   `%LOCALAPPDATA%`, recipes live in `<root>\recipes`, and the pages show the root read-only.
 - **Who can reach it.** `127.0.0.1` (this machine only) by default. Other machines
   (`--host 0.0.0.0`) need HTTPS (`--cert`, `--key`), or `--allow-http` for a test copy only, which
-  is refused with `--production`. With no accounts yet it refuses to start and says how to make
-  the first administrator. The firewall rule that lets other machines in is a security setting:
-  Ryan's script.
+  is refused with `--production`. With no accounts yet it starts and says where the setup code
+  is. Whether other machines get through Box A's firewall without a rule is being checked (Ryan is
+  no longer an administrator there, so a rule would need IT).
 
 Run: `python tools/webapp/app.py --nas-root C:\Users\<you>\temp\testnas`, on a scratch root
 built with `tools/operator/make_test_nas.py`, after making the first account. Tests:

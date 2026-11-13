@@ -45,10 +45,13 @@
     <!-- Dry-run banner — shown by app.js updateDryState() whenever dry-run is
          ON. High-contrast so an operator can never mistake a test for a real
          run (operators sometimes don't realise a run was a dry run). -->
+    {#- In the web app the two buttons at the bottom say it instead (shell.js). #}
+    {%- if not shell %}
     <div id="r-dry-banner" class="dry-banner" hidden>
       DRY RUN — preview only. <strong>Nothing will be written to the RDM System.</strong>
       Uncheck “Dry-run” at the bottom to ingest for real.
     </div>
+    {%- endif %}
     <div class="row">
       <label>Instrument
         <select id="r-instrument">
@@ -155,6 +158,19 @@
       <pre id="r-warnings"></pre>
     </details>
 
+    {%- if shell %}
+    {#- The web app's "check, then add" row, the same on every tool: Preview
+        above, then a test run or the real thing. app.js still reads the hidden
+        box; shell.js sets it from the button pressed. #}
+    <div class="commit-row gj-commit" id="r-commit">
+      <input id="r-dry" type="checkbox" checked hidden>
+      <span class="state" id="r-dry-state" hidden></span>
+      <span class="gj-commit-help">Preview first. <strong>Test run</strong> goes through every
+        step and writes nothing; <strong>Add to gjesus3</strong> adds them for real.</span>
+      <button type="button" class="gj-testrun" disabled>Test run</button>
+      <button id="r-ingest" type="button" class="go gj-add" data-dry="r-dry" disabled>Add to gjesus3</button>
+    </div>
+    {%- else %}
     <div class="commit-row" id="r-commit">
       <!-- TODO(dry-run-default): dry-run defaults ON (checked) during the
            testing period so operators learn the tool safely. Flip to OFF
@@ -164,6 +180,7 @@
       <span class="state" id="r-dry-state"></span>
       <button id="r-ingest" type="button" class="go" disabled>Ingest</button>
     </div>
+    {%- endif %}
     <div id="r-log-wrap" class="log-wrap" hidden>
       <h3>Ingest log</h3>
       <pre id="r-log"></pre>

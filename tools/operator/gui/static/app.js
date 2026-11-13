@@ -723,7 +723,9 @@ async function runnerIngest() {
           resEl.innerHTML =
             `✓ DRY RUN COMPLETE — <strong>NOTHING was written to the RDM System.</strong> ` +
             `${r.ok}/${r.total} acquisitions WOULD be ingested. ` + alreadyNote(r) +
-            `To actually ingest, uncheck “Dry-run” and run again.`;
+            (window.GJ3_USER   // the web app: two buttons, no tick box
+              ? `To add them for real, press “Add to gjesus3”.`
+              : `To actually ingest, uncheck “Dry-run” and run again.`);
         } else {
           resEl.className = "summary live-done";
           resEl.innerHTML =

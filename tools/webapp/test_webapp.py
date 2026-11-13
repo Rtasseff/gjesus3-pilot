@@ -215,8 +215,8 @@ def test_entry_point(decoy, prod, state, tmp):
     check(webapp_app.main(["--nas-root", decoy, "--cert", os.path.join(tmp, "none.pem"),
                            "--key", os.path.join(tmp, "none.key")] + common) == 2,
           "--cert/--key naming missing files: refused")
-    check(webapp_app.main(["--nas-root", decoy] + common) == 2,
-          "no accounts yet: refused (it says how to make the first administrator)")
+    # No accounts yet is NOT a refusal any more: the app starts and offers the
+    # first-run setup page (section 8b), so it is not started here.
 
 
 # ---------------------------------------------------------- 3. standalone
@@ -234,6 +234,13 @@ def test_standalone(ingest_gui, manager_gui, nas, state):
           "ingest page: no home link, the root still editable")
     check("gj-top" not in html and "window.GJ3_USER = null" in html and "<header>" in html,
           "ingest page: no shell, no signed-in person, its own header shown")
+    check('id="r-dry-banner"' in html and 'id="r-dry" type="checkbox" checked>' in html
+          and "Add to gjesus3" not in html,
+          "ingest page: the dry-run banner and tick box as before")
+    mri = c.get("/mri").get_data(as_text=True)
+    check('id="dry-banner"' in mri and 'id="dry" type="checkbox" checked>' in mri
+          and "Add to gjesus3" not in mri,
+          "MRI page: the dry-run banner and tick box as before")
     d = c.post("/api/nas_root", json={"nas_root": nas}).get_json()
     saved = os.path.join(state, "gjesus3-operator", "nas_root.txt")
     check(d.get("valid") is True and os.path.isfile(saved)
@@ -290,6 +297,13 @@ def test_pages(client, nas):
         check(bool(_NAS_READONLY.search(html)) and nas in html
               and re.search(r'id="nas-save"[^>]*\bhidden\b', html),
               f"{page} still holds the pinned root read-only (in the hidden header)")
+        if mount == "/ingest":
+            dry_id = "r-dry" if key == "microscopy" else "dry"
+            check('class="commit-row gj-commit"' in html and ">Test run</button>" in html
+                  and ">Add to gjesus3</button>" in html
+                  and f'id="{dry_id}" type="checkbox" checked hidden' in html
+                  and f'id="{dry_id}-banner"' not in html,
+                  f"{page}: 'Test run' and 'Add to gjesus3', no dry-run banner or visible tick box")
         links = [u for u in _LINK.findall(html) if u.startswith("/")]
         stray = [u for u in links if not u.startswith(mount + "/") and u not in SHELL_LINKS]
         check(links and not stray, f"{page}: every link carries {mount} or is the shell's "
@@ -537,6 +551,54 @@ def test_sign_in(make_client, nas, store):
           "five wrong passwords: even the right one waits")
 
 
+# ------------------------------------------------------------ 8b. first run
+
+def test_first_run(nas, tmp):
+    print("8b. first run: the first administrator, made in the browser with the setup code")
+    from webapp import app as webapp_app
+    from webapp import settings as s
+    from webapp.accounts import AccountStore, AccountError
+    from werkzeug.test import Client
+    state = os.path.join(tmp, "first_run_state")
+    cfg = s.load_settings(nas_root=nas, state_dir=state, environ={})
+    c = Client(webapp_app.create_app(cfg))
+    code_file = os.path.join(state, "setup_code.txt")
+    code = open(code_file, encoding="ascii").read().strip() if os.path.isfile(code_file) else ""
+    check(len(code) >= 10, "with no accounts, a one-time setup code is written to the state folder")
+    for path in ("/", "/projects/", "/account/login"):
+        r = c.get(path)
+        check(r.status_code == 302 and location(r).endswith("/account/setup"),
+              f"no accounts yet: {path} leads to the setup page")
+    r = c.get("/ingest/api/nas_root")
+    check(r.status_code == 503, "no accounts yet: an API call gets 503")
+    html = c.get("/account/setup").get_data(as_text=True)
+    check(code_file in html and code not in html,
+          "the setup page names the code's file, never the code")
+    form = {"username": "rya", "name": "Rya Admin", "password": PW_ADA, "again": PW_ADA}
+    r = c.post("/account/setup", data=dict(form, code="not-the-code"))
+    check(r.status_code == 403 and AccountStore(state).count() == 0, "a wrong setup code: refused")
+    r = c.post("/account/setup", data=dict(form, code=code, again=PW_ADA + "x"))
+    check(r.status_code == 400 and AccountStore(state).count() == 0, "two different passwords: refused")
+    r = c.post("/account/setup", data=dict(form, code=code))
+    users = AccountStore(state).list()
+    check(r.status_code == 302 and [(u["username"], u["role"]) for u in users] == [("rya", "admin")]
+          and not os.path.exists(code_file),
+          "the right code: the first administrator exists, and the code file is gone")
+    check("Hello, Rya." in c.get("/").get_data(as_text=True), "...and they are signed in")
+    r = c.get("/account/setup")
+    check(r.status_code == 302 and location(r).endswith("/account/login"),
+          "once someone exists, the setup page is closed")
+    r = Client(webapp_app.create_app(cfg)).post("/account/setup", data=dict(form, code=code,
+                                                                              username="mallory"))
+    check(AccountStore(state).count() == 1, "a second setup attempt adds no one")
+    try:
+        AccountStore(state).add("zed", "Zed", PW_ADA, only_if_empty=True)
+        closed = False
+    except AccountError:
+        closed = True
+    check(closed, "the store itself refuses a 'first' administrator once one exists")
+
+
 # ------------------------------------------------------------ 9. attribution
 
 def test_attribution(client, nas, log):
@@ -667,6 +729,7 @@ def main():
         test_ingest_routes(client, nas, decoy, tmp)
         test_js_and_templates()
         test_sign_in(make_client, nas, store)
+        test_first_run(nas, tmp)
         test_attribution(client, nas, ActionLog(web_state))
         test_guard(client, nas, tmp)
     finally:

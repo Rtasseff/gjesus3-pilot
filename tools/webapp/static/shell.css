@@ -96,6 +96,18 @@
 /* The tools' own tab rows sit right under the page head. */
 .gj-top ~ main.wrap > .tabs, .gj-pagehead + main.wrap > .tabs { padding-top: .6rem; }
 
+/* The ingest pages' "check, then add" row (shell.js): one neutral look,
+   whatever the hidden dry-run box says. */
+.commit-row.gj-commit, .commit-row.gj-commit.safe, .commit-row.gj-commit.live {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--gj-radius);
+  padding: .75rem .9rem; box-shadow: var(--gj-shadow);
+}
+.gj-commit-help { flex: 1 1 18rem; color: var(--muted); font-size: .9rem; }
+.gj-commit-help strong { color: var(--ink); }
+.gj-commit button { padding: .5rem .95rem; font-weight: 700; }
+.gj-testrun { background: var(--panel); }
+
 /* ----------------------------------------------------- web-app pages */
 .gj-page { padding: 0 1rem 2.5rem; }
 .gj-hello { padding: 1.6rem 0 .6rem; }

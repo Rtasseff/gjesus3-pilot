@@ -44,6 +44,7 @@ is loaded by path, and it loads the operator core through its own loader.
 """
 
 import argparse
+import hmac
 import importlib.util
 import os
 import sys
@@ -169,6 +170,53 @@ def _portal_app(cfg, sessions, store, log):
         resp.headers.add(*sessions.cookie_header(user, secure()))
         return resp
 
+    @portal.route(auth.SETUP_PATH, methods=["GET", "POST"])
+    def setup():
+        """First run only: make the first administrator in the browser. Needs
+        the one-time code from <state>\\setup_code.txt, which only the server's
+        account can open, so a visitor from elsewhere cannot take the app."""
+        base = request.environ.get("gj3.base", "")
+        if store.count():
+            return redirect(base + auth.LOGIN_PATH)
+        code_file = os.path.join(cfg.state_dir, auth.SETUP_CODE_FILE)
+        page = dict(code_file=code_file, error=None, username="", name="",
+                    min_len=accounts_mod.MIN_PASSWORD)
+        if request.method == "GET":
+            return render_template("setup.html", **page)
+        page.update(username=(request.form.get("username") or "").strip().lower(),
+                    name=request.form.get("name") or "")
+        addr = request.remote_addr or "?"
+        if sessions.throttle.wait_seconds("setup", "a:" + addr):
+            page["error"] = "Too many tries. Wait a few minutes and try again."
+            return render_template("setup.html", **page), 429
+        try:
+            with open(code_file, "r", encoding="ascii") as f:
+                expected = f.read().strip()
+        except OSError:
+            expected = ""
+        given = (request.form.get("code") or "").strip()
+        if not expected or not hmac.compare_digest(given, expected):
+            sessions.throttle.failed("setup", "a:" + addr)
+            page["error"] = "That setup code is not right. Open the file named above on the server."
+            return render_template("setup.html", **page), 403
+        if (request.form.get("password") or "") != (request.form.get("again") or ""):
+            page["error"] = "The two passwords differ."
+            return render_template("setup.html", **page), 400
+        try:
+            user = store.add(page["username"], page["name"], request.form.get("password") or "",
+                             role="admin", only_if_empty=True)
+        except accounts_mod.AccountError as e:
+            page["error"] = str(e)
+            return render_template("setup.html", **page), 400
+        try:
+            os.remove(code_file)
+        except OSError:
+            pass
+        store.touch_login(user["username"])
+        resp = redirect(base + "/")
+        resp.headers.add(*sessions.cookie_header(user, secure()))
+        return resp
+
     @portal.route(auth.LOGOUT_PATH, methods=["POST"])
     def logout():
         resp = redirect(request.environ.get("gj3.base", "") + auth.LOGIN_PATH)
@@ -249,6 +297,8 @@ def create_app(cfg):
     store = accounts_mod.AccountStore(cfg.state_dir)
     sessions = auth.Sessions(store, auth.load_secret(cfg.state_dir))
     log = ActionLog(cfg.state_dir)
+    if store.count() == 0:
+        auth.make_setup_code(cfg.state_dir)     # first run: the setup page's code
 
     ingest_gui, manager_gui = load_guis()
     for gui in (ingest_gui, manager_gui):
@@ -327,13 +377,6 @@ def main(argv=None):
             return 2
 
     store = accounts_mod.AccountStore(cfg.state_dir)
-    if store.count() == 0:
-        print("gjesus3 web app: not starting: there are no accounts yet. Make the "
-              "first administrator on this machine:\n"
-              f"  python tools/webapp/accounts.py --state-dir \"{cfg.state_dir}\" "
-              "add <username> --name \"Your Name\" --admin", file=sys.stderr)
-        return 2
-
     application = create_app(cfg)
     scheme = "https" if tls else "http"
     shown = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
@@ -343,6 +386,10 @@ def main(argv=None):
     print(f"  NAS root: {cfg.nas_root}  (from {cfg.source})"
           + ("  ** PRODUCTION **" if cfg.production else ""))
     print(f"  State:    {cfg.state_dir}  ({store.count()} account(s))")
+    if store.count() == 0:
+        print(f"  ** No accounts yet. Open {url}account/setup in a browser and enter the "
+              f"one-time code from {os.path.join(cfg.state_dir, auth.SETUP_CODE_FILE)} "
+              "(or: python tools/webapp/accounts.py add <username> --name \"...\" --admin). **")
     print("  Sources:  " + "; ".join(cfg.source_roots))
     if args.host not in LOOPBACK_HOSTS and not tls:
         print("  ** Plain HTTP to other machines: a test copy only. **")

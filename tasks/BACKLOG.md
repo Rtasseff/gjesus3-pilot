@@ -432,9 +432,9 @@ production data:
   `waitress` (one more requirement) under a WorkstationOps `web-app` service op with a health page, restarted with Box A.
 - [ ] **Ryan to confirm** that researcher and MRI operator start as the signed-in person (editable). The B2 choice said they keep
   today's rules.
-- [ ] **One flow in all three tools.** Each tool still has its own way to say "check first, then do it": the ingest pages use a
-  dry-run tick box at the bottom; the Project Manager uses Preview, then a button. One pattern everywhere (a "Check" step
-  that unlocks "Add to gjesus3") would make them easier still. The wording "RDM System" also remains inside the tools.
+- [x] **One flow in all three tools** (done 2026-11-13, in the web app): Preview, then the button that does it. The ingest
+  pages' dry-run tick box and banner became **Test run** and **Add to gjesus3**; the Project Manager already had Preview,
+  then **Add to project**. Still open: the wording "RDM System" inside the tools.
 - [ ] **MRI from a folder in the app.** The MRI page only pulls from the scanner. A study already copied into a source folder
   (for example from the platform's archive, by the Data Office) can only be ingested with the CLI.
 - [ ] **Which shares are source folders** on Box A (`--source-root`): each instrument's export share that Box A can read,

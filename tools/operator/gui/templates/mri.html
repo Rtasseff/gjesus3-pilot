@@ -28,11 +28,14 @@
   </header>
 
   <main class="wrap">
-    <!-- Dry-run banner (shown by mri.js whenever dry-run is ON). -->
+    <!-- Dry-run banner (shown by mri.js whenever dry-run is ON). In the web app
+         the two buttons at the bottom say it instead (shell.js). -->
+    {%- if not shell %}
     <div id="dry-banner" class="dry-banner" hidden>
       DRY RUN — preview only. <strong>Nothing will be written to the RDM System.</strong>
       Uncheck “Dry-run” at the bottom to ingest for real.
     </div>
+    {%- endif %}
 
     <p class="muted">
       Pick the scans you want from the scanner and pull them. The MRI naming
@@ -154,11 +157,23 @@
       <pre id="warnings"></pre>
     </details>
 
+    {%- if shell %}
+    {#- The web app's "check, then add" row (see the microscopy page). #}
+    <div class="commit-row gj-commit" id="commit">
+      <input id="dry" type="checkbox" checked hidden>
+      <span class="state" id="dry-state" hidden></span>
+      <span class="gj-commit-help">Preview first. <strong>Test run</strong> goes through every
+        step and writes nothing; <strong>Add to gjesus3</strong> adds them for real.</span>
+      <button type="button" class="gj-testrun" disabled>Test run</button>
+      <button id="ingest" type="button" class="go gj-add" data-dry="dry" disabled>Add to gjesus3</button>
+    </div>
+    {%- else %}
     <div class="commit-row" id="commit">
       <label class="check"><input id="dry" type="checkbox" checked> Dry-run (test only — writes nothing)</label>
       <span class="state" id="dry-state"></span>
       <button id="ingest" type="button" class="go" disabled>Ingest</button>
     </div>
+    {%- endif %}
     <div id="log-wrap" class="log-wrap" hidden>
       <h3>Ingest log</h3>
       <pre id="log"></pre>
@@ -215,6 +230,8 @@
   {# The mount point ("" standalone, "/ingest" in the combined web app): every
      request the scripts make goes through apiUrl(), which prefixes it. #}
   <script>window.GJ3_BASE = {{ request.script_root|tojson }};</script>
+  {#- The signed-in person in the web app (null on its own). #}
+  <script>window.GJ3_USER = {{ (shell.user if shell else none)|tojson }};</script>
   {%- if shell %}<script src="{{ shell.js }}"></script>{% endif %}
   <script>
     window.MRI = {
