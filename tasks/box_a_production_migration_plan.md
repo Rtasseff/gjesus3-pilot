@@ -190,6 +190,11 @@ close. The agent reports to the coordinator.
 ## Stage 2: the web app
 
 > **⏸ After Stage 1 has run on Box A for a while (Ryan, 2026-11-06).** Step 2.1 is already on `main`; nothing further until then.
+> **A prototype now (Ryan, 2026-11-13):** "make me a prototyple web app that replaces the three tools we have now, ingest and
+> proejct managment. I want them all to fucntion stright from box a and allow users to log in locally and then if we record
+> things under my own permissions that that is fine. but i want an working web app that shows consistantcy and easy of use for
+> all users". So 2.2 is built ahead of Stage 1, as a prototype on a test root (branch `feat/webapp-prototype`); production use
+> still follows Stage 1.
 > **Ryan's direction for user sign-in (2026-11-06, details later):** "I was hoping to do everything under my sign in. Users sign
 > into the app with some local password specific to that app. then the writes are done in my name. I don't mind if the file
 > system records everything like that, but I was hoping the sign in locally could be used in some way for metadata and other
@@ -201,14 +206,14 @@ close. The agent reports to the coordinator.
 
 | Question | Choice |
 |---|---|
-| Sign-in | A1 Windows sign-in; test on Box A. A1b or A3 if it stalls |
+| Sign-in | ✅ **A3, the app's own accounts** (Ryan, 2026-11-06 and 2026-11-13: "allow users to log in locally"), with D1. Built in the 2.2 prototype |
 | The account it writes with | ✅ **Ryan's account (D1), the same practice as the services already running here** (Ryan, 2026-11-06): "The eventual web app we build will work just like the existing services we have on the workstationops here, we already run something for OA data archiving and the pilots, IT has been fine with all this so I want to use the same practice. It's behind the centre's firewall." The risk he was told: an app bug could change raw data his account can change. So the app's own code never modifies or deletes anything in `raw\`, and tests check that |
 | How it is served | ✅ A long-running WorkstationOps service op on Box A, like the existing web forwards, inside the firewall (Ryan, 2026-11-06). No IIS and no IT certificate needed for that |
-| What the login fills | B2 a small people table; `creator` from the login, never editable; `owner` defaults to it; `researcher` and `operator` keep today's rules |
+| What the login fills | B2 a small people table; `creator` from the login, never editable; `owner` defaults to it; `researcher` and `operator` keep today's rules. **The prototype also starts `researcher` and the MRI `operator` as the signed-in person, still editable and still required** (for ease of use; Ryan to confirm) |
 | Who pressed ingest | C2 the app's action log. No registry change |
 | Where the engine runs | S1 Windows Python, Dicomifier through `wsl.exe` |
 | Processes | G1 one web process, one job queue; scheduled work stays in WorkstationOps |
-| Serving | Superseded by the row above: a WorkstationOps service op. **Open for 2.2:** how users sign in to their accounts without IIS (Windows sign-in through the app, a directory login over HTTPS, or app accounts). A recommendation comes then |
+| Serving | Superseded by the row above: a WorkstationOps service op. Sign-in is the app's own accounts (row 1). **HTTPS:** the app serves other machines only over HTTPS (`--cert`/`--key`); a self-signed certificate on Box A for the prototype (each browser warns once), an IT-issued one before real use (BACKLOG). `--allow-http` exists for a test copy only |
 | NI pull | P3 a nightly sweep plus "pull now", behind a review gate; unreviewed sessions get a reminder, then ingest as-is after 7 days |
 | NI corrections | F2 today's CSV format, moved into gjesus3, written only by the app |
 | "Add files from my computer" | "Put them in `staging\` first, then pick them here" |
@@ -218,7 +223,7 @@ close. The agent reports to the coordinator.
 | Step | Who | Check |
 |---|---|---|
 | 2.1 One app: merge the microscopy/MRI GUI and the Project Manager into one Flask app, blueprints per tool, one settings function, a job queue. Runs on `127.0.0.1` against a scratch NAS; the exes keep working | Agent | every existing GUI and manager suite passes |
-| 2.2 Accounts: the sign-in layer, the people table, attribution, the action log | Agent; Ryan's script for any security setting | the login shows in `creator` and the action log |
+| 2.2 Accounts: the sign-in layer, the people table, attribution, the action log. 🔶 **Prototype built 2026-11-13** (`feat/webapp-prototype`), with one shared look across the three tools and reads confined to the source folders | Agent; Ryan's script for any security setting | the login shows in `creator` and the action log ✅ (dev, test root) |
 | 2.3 NI page, corrections form (the server enforces the sync-safety invariant), Box A's pull through the tunnel (#27) | Agent, Box A session; Ryan's go for Mac and production steps | a new session appears without anyone touching the Mac |
 | 2.4 Serve on Box A under the chosen account; re-run the hard-link test under that account; a `web-app` op with a health page; a test instance on a scratch NAS | Box A session; Ryan's script for IIS and accounts | the URL works and a test ingest lands on the scratch NAS |
 | 2.5 Cut over: operators use the URL, exes labelled fallback; undo the Mac mount (#27); confirm each instrument PC keeps its exports long enough, and that Box A can read each export share | Agent, Ryan | an operator ingests from one URL |
@@ -247,6 +252,24 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-13: the 2.2 prototype is built** on `feat/webapp-prototype` (Ryan's ask above), on the dev workstation, against
+  a test root. The ingest and project engines are untouched; the two GUIs stay mounted as in 2.1.
+  - **Sign-in in front of everything:** the app's own accounts (hashed, in a state folder on the server's disk, never on the
+    NAS), a People page for administrators, temporary passwords changed at first sign-in, sessions ended by a password change
+    or disabling, a throttle on guessing, cross-site writes refused.
+  - **One look:** the same top bar, navigation, page titles and help links on all three tools and a new Home page with the
+    person's recent activity; each tool's own header hidden; wording that assumed a local PC changed inside the web app.
+  - **Who is recorded:** `creator` from the sign-in, whatever a page posts; owner, researcher and MRI operator start as the
+    signed-in person, editable. **The action log** records each write with its outcome.
+  - **Source folders:** tool calls may read only from `<root>\staging` plus listed shares; the folder browser cannot leave
+    them; junctions cannot lead out.
+  - **Tried in the browser** on a test root: sign-in, a microscopy preview and a real ingest of 3 demo files (registry
+    researcher = the signed-in name; log "3 of 3 ingested"), a new project (PROJ-0067, owner from the sign-in), People. Not
+    yet tried: an MRI pull and ingest end to end in the app (the scanner pull is Box A's to test), phone width.
+  - Checks: 151 in `test_webapp.py`; 68/68 suites. Standalone GUIs and the exes unchanged.
+  - **Next, on Box A:** a worktree of the branch beside `rdm`, a test root built from production's registry headers and
+    projects (read-only), Ryan's first account, a self-signed certificate, Ryan's firewall script for the port, then Ryan
+    and a few colleagues try it.
 - **2026-11-06, end of day: ⏸ holding until after the data-centre move (Ryan).** Box A is at `main` `a894801` (rdm) and `cc772c9`
   (WorkstationOps); all 8 requirements are installed; nothing is enabled or scheduled; the relink hold is on. Ryan closes `gj3-boxa`
   so the box can be powered down and moved the week of 2026-11-09. Next: the Phase 5 "Recheck after the move" list, then Phase 5

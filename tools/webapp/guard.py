@@ -40,9 +40,11 @@ MAX_BODY = 4 * 1024 * 1024
 
 
 def inside_any(path, roots):
-    p = os.path.normcase(os.path.abspath(path))
+    """True when `path` is at or below one of `roots`. Real paths are compared,
+    so a junction or link inside a source folder cannot lead out of it."""
+    p = os.path.normcase(os.path.realpath(path))
     for r in roots:
-        r = os.path.normcase(os.path.abspath(r))
+        r = os.path.normcase(os.path.realpath(r))
         try:
             if os.path.commonpath([p, r]) == r:
                 return True

@@ -420,6 +420,27 @@ Batch P02 (CNIC-HEARDS) registered 70 series with `is_control: null`, though the
 - [ ] Say what is a gjesus3 job and what only reads from it, and leave other projects' internals to them.
 - **Before the port:** Phase 5 hands over the schedule (#26), so this list should exist by then.
 
+## 🔸 MODERATE — the web-app prototype's open items, before real use (2026-11-13)
+
+The prototype (Box A plan, step 2.2; [10_TOOLS §5.4](../mfb-rdm-docs/10_TOOLS.md)) runs on a test root. Before anyone uses it on
+production data:
+
+- [ ] **An IT-issued HTTPS certificate** for Box A's name, instead of the self-signed one (every browser warns once with that).
+- [ ] **The DPO on names in the action log.** L1 in the design options says writes are logged as counts without names until the
+  DPO agrees; the prototype logs names because Ryan asked the sign-in to document who did what.
+- [ ] **A production server process.** The prototype runs werkzeug's development server. Step 2.4: a WSGI server such as
+  `waitress` (one more requirement) under a WorkstationOps `web-app` service op with a health page, restarted with Box A.
+- [ ] **Ryan to confirm** that researcher and MRI operator start as the signed-in person (editable). The B2 choice said they keep
+  today's rules.
+- [ ] **One flow in all three tools.** Each tool still has its own way to say "check first, then do it": the ingest pages use a
+  dry-run tick box at the bottom; the Project Manager uses Preview, then a button. One pattern everywhere (a "Check" step
+  that unlocks "Add to gjesus3") would make them easier still. The wording "RDM System" also remains inside the tools.
+- [ ] **MRI from a folder in the app.** The MRI page only pulls from the scanner. A study already copied into a source folder
+  (for example from the platform's archive, by the Data Office) can only be ingested with the CLI.
+- [ ] **Which shares are source folders** on Box A (`--source-root`): each instrument's export share that Box A can read,
+  checked at step 2.5.
+- [ ] Not yet tried in a browser: an MRI pull and ingest end to end in the app (Box A's to test), and a phone-sized screen.
+
 ## Ingest from one place — one web app on Box A, NI pulled through the tunnel (Ryan, 2026-10-01)
 
 **The goal behind the NI live-sync work.** NI researchers operate the Molecubes scanner

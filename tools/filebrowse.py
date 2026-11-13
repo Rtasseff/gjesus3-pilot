@@ -48,7 +48,9 @@ def set_allowed_roots(roots):
 
 
 def _within(path, root):
-    p, r = os.path.normcase(path), os.path.normcase(root)
+    """At or below `root`, comparing real paths (a junction cannot lead out)."""
+    p = os.path.normcase(os.path.realpath(path))
+    r = os.path.normcase(os.path.realpath(root))
     try:
         return os.path.commonpath([p, r]) == r
     except ValueError:
