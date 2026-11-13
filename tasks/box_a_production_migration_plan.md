@@ -259,8 +259,8 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   - Tests: the suite passes 68/68.
   - **Registry checks** (`--no-enrichment`) match dev's same-day run exactly: 43,397 rows, 0 errors, 0 warnings, 23,126
     `pending-claim`, 31,662 age pairs, 682 tombstones. **Enrichment checks:** dev's full run (11:28) gives the 284 known
-    warnings: 146 "sidecar missing subject: block" and 138 "missing condition: block", all on 2025 CELL rows. The full run on
-    Box A is pending.
+    warnings: 146 "sidecar missing subject: block" and 138 "missing condition: block", all on 2025 CELL rows. **Box A's full
+    run matches** (13:29–13:56, 27 min): 43,397 rows, 0 errors, 284 warnings (146 + 138), the same coverage lines.
   - Jobs: the relink dry run has 0 pending. The Finder preview is identical to the published index, all 62 project pages too.
   - Box A reaches dev's OA data forward (HTTP 200).
   - **Dev restarted 2026-11-12 16:36 and its jobs only run while Ryan is signed in**, so the 11-13 relink, Finder and memory-sync
