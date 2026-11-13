@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Sign in · gjesus3{% endblock %}
+{% block body_class %} class="gj-signin"{% endblock %}
+{% block content %}
+<div class="gj-signin-card">
+  <div class="gj-brand gj-brand-lg"><span class="gj-logo" aria-hidden="true">g3</span>gjesus3</div>
+  <h1>Sign in</h1>
+  {%- if not production %}
+  <p class="gj-note">This is a <strong>test copy</strong>. Nothing done here touches the real data.</p>
+  {%- endif %}
+  {%- if error %}<p class="errbox" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="{{ base }}/account/login" autocomplete="on">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Username
+      <input type="text" name="username" value="{{ username }}" autocomplete="username"
+             autocapitalize="none" spellcheck="false" required autofocus>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+  <p class="muted gj-small">No account, or forgot your password? Ask the Data Office.</p>
+</div>
+{% endblock %}

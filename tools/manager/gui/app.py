@@ -124,6 +124,16 @@ def _server_context():
             "home_url": app.config.get(SERVER_HOME_URL)}
 
 
+def _creator(data):
+    """Who is adding data, for the project's provenance. In the web app it is
+    the signed-in person (tools/webapp/auth.py puts them in the request) and a
+    posted name is ignored; on its own, the name typed on the page."""
+    user = request.environ.get("gj3.user")
+    if user and user.get("name"):
+        return user["name"]
+    return (data.get("creator") or "").strip()
+
+
 # ------------------------------------------------------------ saved NAS root
 
 def _state_dir(name=STATE_DIR_NAME):
@@ -448,7 +458,7 @@ def api_import_raw():
     nas_root, project, rows, err = _raw_target(data)
     if err:
         return err
-    creator = (data.get("creator") or "").strip()
+    creator = _creator(data)
     if not creator:
         return jsonify({"error": "Say who is adding this data — it is recorded "
                                  "in the project's provenance."}), 400
@@ -513,7 +523,7 @@ def api_import_local():
     nas_root, project, sources, subfolder, overwrite, err = _local_target(data)
     if err:
         return err
-    creator = (data.get("creator") or "").strip()
+    creator = _creator(data)
     if not creator:
         return jsonify({"error": "Say who is adding these files — it is "
                                  "recorded in the project's provenance."}), 400

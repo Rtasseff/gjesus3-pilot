@@ -5,9 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Microscopy Ingest — gjesus3</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {%- if shell %}<link rel="stylesheet" href="{{ shell.css }}">{% endif %}
 </head>
 <body>
-  <header>
+  {#- In the web app, the shared header (tools/webapp/shell.py) replaces this
+      page's own; that one stays in the page, hidden, because app.js reads it. #}
+  {%- if shell %}{% include "_shell_header.html" %}{% endif %}
+  <header{% if shell %} hidden{% endif %}>
     <h1>Microscopy Ingest
       {% if home_url %}<a href="{{ home_url }}" class="muted" style="font-size:.55em;font-weight:normal">← all tools</a>{% endif %}
       <a href="{{ url_for('static', filename='help/microscopy_guide.html') }}" target="_blank" class="muted" style="font-size:.55em;font-weight:normal">? Help</a>
@@ -67,7 +71,7 @@
     <div class="row">
       <label class="grow">Source folder <span class="muted">— the instrument day/batch folder to upload files from</span>
         <input id="r-staging" type="text"
-               placeholder="S:\goptical\GOpticalUsers data\AxioScan\20260522">
+               placeholder="{{ 'Press Browse… to pick the batch folder' if shell else 'S:\\goptical\\GOpticalUsers data\\AxioScan\\20260522' }}">
       </label>
       <button id="r-browse" type="button" class="browse">Browse…</button>
       <button id="r-read-folder" type="button" title="Re-read this folder's metadata labels">Read folder</button>
@@ -343,7 +347,11 @@
   {# The mount point ("" standalone, "/ingest" in the combined web app): every
      request the scripts make goes through apiUrl(), which prefixes it. #}
   <script>window.GJ3_BASE = {{ request.script_root|tojson }};</script>
+  {#- The signed-in person in the web app (null on its own): app.js fills the
+      researcher with their name, which they can still change. #}
+  <script>window.GJ3_USER = {{ (shell.user if shell else none)|tojson }};</script>
   <script>window.SAMPLE_TYPES = {{ sample_types|tojson }};</script>
+  {%- if shell %}<script src="{{ shell.js }}"></script>{% endif %}
   <script src="{{ url_for('static', filename='tokenfield.js') }}"></script>
   <script src="{{ url_for('static', filename='completion_modal.js') }}"></script>
   <script src="{{ url_for('static', filename='folder_browser.js') }}"></script>

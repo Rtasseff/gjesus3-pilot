@@ -239,6 +239,11 @@ async function loadGaps() {
         onChange: updateGapExamples,
         spacesToHyphens: f.key === PROJECT_NAME_KEY,
       });
+      // In the web app the signed-in person is the likely researcher: start
+      // with their name; they can still type someone else's.
+      if (f.key === "registry.researcher" && window.GJ3_USER && window.GJ3_USER.name) {
+        runnerGapFields[f.key].setValue(window.GJ3_USER.name);
+      }
     }
     row.append(lab, val); grid.appendChild(row);
   });

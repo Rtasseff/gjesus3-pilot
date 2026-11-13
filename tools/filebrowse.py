@@ -20,6 +20,12 @@ would silently show the wrong end.
 These are LOCAL apps listing the machine's own filesystem, which is the point —
 that is how a researcher points at a folder on their D: drive or a mounted
 share.
+
+On the SERVER it is not: the web app (tools/webapp) runs as one account for
+everyone who signs in, so it confines the browser to its source folders with
+`set_allowed_roots`. Then only those folders and what is below them are listed,
+the jump bar offers them instead of the drives, and anything else is answered
+with the first of them and an error. Standalone (the exes) nothing is confined.
 """
 
 import os
@@ -31,9 +37,29 @@ HIDE_NAMES = {"system volume information", "$recycle.bin"}
 # Cap the entries returned for one folder (a huge data dir would bloat the page).
 BROWSE_LIMIT = 3000
 
+# The web app's source folders, or None (standalone: the whole machine).
+_ALLOWED_ROOTS = None
+
+
+def set_allowed_roots(roots):
+    """Confine listing to these folders (the web app), or None to lift it."""
+    global _ALLOWED_ROOTS
+    _ALLOWED_ROOTS = [os.path.abspath(r) for r in roots] if roots else None
+
+
+def _within(path, root):
+    p, r = os.path.normcase(path), os.path.normcase(root)
+    try:
+        return os.path.commonpath([p, r]) == r
+    except ValueError:
+        return False
+
 
 def list_drives():
-    """Available drive roots (Windows) or "/" (POSIX), for the jump bar."""
+    """Available drive roots (Windows) or "/" (POSIX), for the jump bar; the
+    allowed folders instead when the web app confines the browser."""
+    if _ALLOWED_ROOTS:
+        return list(_ALLOWED_ROOTS)
     if os.name == "nt":
         return [f"{c}:\\" for c in string.ascii_uppercase if os.path.exists(f"{c}:\\")]
     return ["/"]
@@ -52,19 +78,28 @@ def list_folder(raw_path, desc=False, with_size=False):
     someone choosing what to copy onto the share can see what it costs.
     """
     raw = (raw_path or "").strip()
-    path = os.path.abspath(raw) if raw else os.path.expanduser("~")
+    home = _ALLOWED_ROOTS[0] if _ALLOWED_ROOTS else os.path.expanduser("~")
+    path = os.path.abspath(raw) if raw else home
 
     out = {"path": path, "parent": None, "entries": [], "desc": bool(desc),
            "drives": list_drives(), "error": None, "truncated": False}
 
+    if _ALLOWED_ROOTS and not any(_within(path, r) for r in _ALLOWED_ROOTS):
+        out["error"] = ("This app can only open these folders: "
+                        + "; ".join(_ALLOWED_ROOTS))
+        path = home
+        out["path"] = path
     if not os.path.isdir(path):
         out["error"] = f"Not a folder: {path}"
-        path = os.path.expanduser("~")
+        path = home
         out["path"] = path
 
     parent = os.path.dirname(path)
     out["parent"] = (parent if parent
                      and os.path.normpath(parent) != os.path.normpath(path)
+                     and not (_ALLOWED_ROOTS and any(
+                         os.path.normcase(path) == os.path.normcase(r)
+                         for r in _ALLOWED_ROOTS))
                      else None)
 
     try:

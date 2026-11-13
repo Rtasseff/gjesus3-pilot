@@ -23,15 +23,27 @@ production root, the one whose `registries\` holds the `.production` marker
 (decision 16), is refused unless production is asked for: `--production`, or
 `"production": true` in the config file. The same rule as `ingest_raw.py
 --production`, and the same marker test (`ingest_raw.is_production_root`).
+
+Two more settings since sign-in (2.2):
+
+  * the STATE FOLDER: the accounts, the session key and the action log. It
+    stays on the server's own disk, never under the NAS root, so password hashes
+    never reach the share. `--state-dir`, else `GJESUS3_WEBAPP_STATE_DIR`, else
+    `"state_dir"` in the config file, else `%LOCALAPPDATA%\gjesus3-webapp`.
+  * the SOURCE FOLDERS: where a signed-in person may browse and pick files to
+    ingest or copy. Always `<root>\staging`, plus each `--source-root` (or
+    `"source_roots"` in the config file), e.g. an instrument's export share.
+    Nothing outside them can be listed or read through the app.
 """
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 ENV_NAS_ROOT = "GJESUS3_WEBAPP_NAS_ROOT"
 ENV_CONFIG = "GJESUS3_WEBAPP_CONFIG"
-CONFIG_KEYS = ("nas_root", "production")
+ENV_STATE_DIR = "GJESUS3_WEBAPP_STATE_DIR"
+CONFIG_KEYS = ("nas_root", "production", "state_dir", "source_roots")
 
 
 class SettingsError(ValueError):
@@ -43,6 +55,26 @@ class Settings:
     nas_root: str       # absolute; a folder holding registries/
     source: str         # where the root came from, for the start-up banner
     production: bool    # the root carries registries/.production
+    state_dir: str = ""                       # accounts, session key, action log
+    source_roots: tuple = field(default=())   # where people may pick files from
+
+
+def default_state_dir(environ=None):
+    """%LOCALAPPDATA%\\gjesus3-webapp on Windows; ~/.local/state elsewhere."""
+    environ = os.environ if environ is None else environ
+    base = environ.get("LOCALAPPDATA") or environ.get("XDG_STATE_HOME") \
+        or os.path.join(os.path.expanduser("~"), ".local", "state")
+    return os.path.join(base, "gjesus3-webapp")
+
+
+def _inside(path, root):
+    """True when `path` is `root` or below it (case-insensitive on Windows)."""
+    p = os.path.normcase(os.path.abspath(path))
+    r = os.path.normcase(os.path.abspath(root))
+    try:
+        return os.path.commonpath([p, r]) == r
+    except ValueError:      # different drives
+        return False
 
 
 def _read_config(path):
@@ -64,11 +96,13 @@ def _read_config(path):
     return data
 
 
-def load_settings(nas_root=None, config_path=None, production=False, environ=None):
+def load_settings(nas_root=None, config_path=None, production=False, environ=None,
+                  state_dir=None, source_roots=None):
     """Resolve, validate and return the server's Settings, or raise SettingsError.
 
-    `nas_root`, `config_path` and `production` are the command-line values;
-    `environ` defaults to os.environ (a test passes its own).
+    `nas_root`, `config_path`, `production`, `state_dir` and `source_roots` are
+    the command-line values; `environ` defaults to os.environ (a test passes its
+    own).
     """
     environ = os.environ if environ is None else environ
     config_path = config_path or environ.get(ENV_CONFIG) or None
@@ -103,4 +137,23 @@ def load_settings(nas_root=None, config_path=None, production=False, environ=Non
             f"{root!r} is the PRODUCTION root (registries/{PRODUCTION_MARKER} is "
             "present). Refusing without --production (or \"production\": true in "
             "the config file). Use a scratch root for testing.")
-    return Settings(nas_root=root, source=source, production=is_prod)
+
+    state = (state_dir or "").strip() or (environ.get(ENV_STATE_DIR) or "").strip() \
+        or str(config.get("state_dir") or "").strip() or default_state_dir(environ)
+    state = os.path.abspath(os.path.expanduser(state))
+    if _inside(state, root):
+        raise SettingsError(
+            f"the state folder {state!r} is inside the NAS root. It holds the "
+            "accounts' password hashes, so it must stay on the server's own disk.")
+
+    extra = list(source_roots or []) or list(config.get("source_roots") or [])
+    roots = [os.path.join(root, "staging")]
+    for r in extra:
+        r = str(r).strip()
+        if not r:
+            continue
+        if not os.path.isabs(r):
+            raise SettingsError(f"source root {r!r} must be an absolute path")
+        roots.append(os.path.abspath(r))
+    return Settings(nas_root=root, source=source, production=is_prod,
+                    state_dir=state, source_roots=tuple(roots))

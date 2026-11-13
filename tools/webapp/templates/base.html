@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}gjesus3{% endblock %}</title>
+  <!-- The tools' stylesheet, then the shell's: every page looks the same. -->
+  <link rel="stylesheet" href="{{ base }}/ingest/static/style.css">
+  <link rel="stylesheet" href="{{ base }}/static/shell.css">
+</head>
+<body{% block body_class %}{% endblock %}>
+  {%- if shell %}{% include "_shell_header.html" %}{% endif %}
+  <main class="wrap gj-page">
+    {%- block content %}{% endblock %}
+  </main>
+  {%- if shell %}<script src="{{ shell.js }}"></script>{% endif %}
+</body>
+</html>

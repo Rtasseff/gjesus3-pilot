@@ -1,0 +1,199 @@
+/* The web app's shell: one header, one page head, one set of cards and panels,
+   on top of the tools' own stylesheet (tools/operator/gui/static/style.css,
+   loaded first). Only used when the tools run inside the web app; the exes
+   never load it. Colours reuse style.css's tokens. */
+
+:root {
+  --gj-top: #0f2742;
+  --gj-top-ink: #e8eef6;
+  --gj-top-muted: #9fb3c8;
+  --gj-test: #fff4d6;
+  --gj-test-ink: #7a4a00;
+  --gj-radius: 10px;
+  --gj-shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+}
+
+/* ------------------------------------------------------------- top bar */
+.gj-top {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: .9rem;
+  padding: .5rem 1rem; min-height: 52px;
+  background: var(--gj-top); color: var(--gj-top-ink);
+}
+.gj-brand {
+  display: inline-flex; align-items: center; gap: .5rem;
+  color: inherit; text-decoration: none; font-weight: 700; font-size: 1.05rem;
+  letter-spacing: .01em; white-space: nowrap;
+}
+.gj-logo {
+  display: inline-grid; place-items: center; width: 28px; height: 28px;
+  border-radius: 7px; background: var(--accent); color: #fff;
+  font-size: .78rem; font-weight: 800; letter-spacing: -.02em;
+}
+.gj-nav { display: flex; gap: .2rem; flex-wrap: wrap; }
+.gj-nav a {
+  color: var(--gj-top-muted); text-decoration: none; font-weight: 600;
+  padding: .38rem .7rem; border-radius: 7px; font-size: .92rem;
+}
+.gj-nav a:hover, .gj-nav a:focus-visible { color: #fff; background: rgba(255,255,255,.08); }
+.gj-nav a.on { color: #fff; background: rgba(255,255,255,.14); }
+.gj-spacer { flex: 1; }
+.gj-env {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  padding: .22rem .55rem; border-radius: 999px; white-space: nowrap;
+}
+.gj-env.test { background: #fbbf24; color: #3b2600; }
+.gj-env.live { background: rgba(255,255,255,.12); color: var(--gj-top-ink); }
+
+/* The person's menu */
+.gj-user { position: relative; }
+.gj-user summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: .45rem;
+  padding: .2rem .45rem .2rem .2rem; border-radius: 999px; color: var(--gj-top-ink);
+}
+.gj-user summary::-webkit-details-marker { display: none; }
+.gj-user summary:hover, .gj-user[open] summary { background: rgba(255,255,255,.1); }
+.gj-avatar {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+  background: #e0e7ff; color: #1e3a8a; font-size: .78rem; font-weight: 800;
+}
+.gj-uname { font-weight: 600; font-size: .9rem; max-width: 14rem; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.gj-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); width: 17rem;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--border);
+  border-radius: var(--gj-radius); box-shadow: 0 10px 30px rgba(15, 23, 42, .18);
+  padding: .4rem; display: flex; flex-direction: column;
+}
+.gj-menu-who { margin: .3rem .5rem .5rem; font-size: .85rem; color: var(--muted); }
+.gj-menu a, .gj-menu button {
+  display: block; width: 100%; text-align: left; padding: .5rem .6rem; border-radius: 7px;
+  color: var(--ink); text-decoration: none; font: inherit; font-size: .92rem;
+  background: none; border: 0; cursor: pointer;
+}
+.gj-menu a:hover, .gj-menu button:hover { background: #f1f4f8; }
+.gj-menu form { margin: 0; border-top: 1px solid var(--border); margin-top: .3rem; padding-top: .3rem; }
+
+/* -------------------------------------------------- test bar, page head */
+.gj-testbar {
+  background: var(--gj-test); color: var(--gj-test-ink); text-align: center;
+  font-size: .86rem; font-weight: 600; padding: .35rem 1rem;
+  border-bottom: 1px solid #f3dca0;
+}
+.gj-pagehead {
+  max-width: 1080px; margin: 0 auto; padding: 1.1rem 1rem .4rem;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem;
+}
+.gj-pagehead h1 { margin: 0; font-size: 1.45rem; letter-spacing: -.01em; }
+.gj-pagehead p { margin: .3rem 0 0; color: var(--muted); max-width: 46rem; }
+.gj-help {
+  white-space: nowrap; font-weight: 600; text-decoration: none; color: var(--accent);
+  border: 1px solid var(--border); background: var(--panel); border-radius: 999px;
+  padding: .35rem .8rem; font-size: .88rem;
+}
+.gj-help:hover { border-color: var(--accent); }
+
+/* The tools' own tab rows sit right under the page head. */
+.gj-top ~ main.wrap > .tabs, .gj-pagehead + main.wrap > .tabs { padding-top: .6rem; }
+
+/* ----------------------------------------------------- web-app pages */
+.gj-page { padding: 0 1rem 2.5rem; }
+.gj-hello { padding: 1.6rem 0 .6rem; }
+.gj-hello h1 { margin: 0; font-size: 1.7rem; letter-spacing: -.015em; }
+.gj-hello p { margin: .25rem 0 0; color: var(--muted); font-size: 1.05rem; }
+
+.gj-cards {
+  display: grid; gap: 1rem; margin: 1rem 0 1.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+.gj-card {
+  display: flex; flex-direction: column; gap: .35rem; padding: 1.1rem 1.15rem 1rem;
+  background: var(--panel); color: var(--ink); text-decoration: none;
+  border: 1px solid var(--border); border-radius: var(--gj-radius); box-shadow: var(--gj-shadow);
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+.gj-card:hover, .gj-card:focus-visible {
+  border-color: var(--accent); box-shadow: 0 6px 20px rgba(37, 99, 235, .12);
+  transform: translateY(-1px);
+}
+.gj-card-icon {
+  display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 10px;
+  background: var(--chip); color: var(--accent); margin-bottom: .2rem;
+}
+.gj-card-title { font-weight: 700; font-size: 1.08rem; }
+.gj-card-text { color: var(--muted); font-size: .92rem; flex: 1; }
+.gj-card-go { margin-top: .4rem; font-weight: 700; color: var(--accent); }
+.gj-card-go::after { content: " \2192"; }
+
+.gj-split { display: grid; gap: 1rem; grid-template-columns: 3fr 2fr; margin-bottom: 1rem; }
+.gj-panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--gj-radius);
+  padding: 1rem 1.15rem; box-shadow: var(--gj-shadow); margin-bottom: 1rem; min-width: 0;
+}
+.gj-panel h2 { margin: 0 0 .7rem; font-size: 1.02rem; }
+.gj-narrow { max-width: 34rem; }
+.gj-know { margin: 0; padding-left: 1.1rem; }
+.gj-know > li { margin: 0 0 .6rem; }
+.gj-know ul { margin: .3rem 0; padding-left: 1rem; }
+.gj-know code { font-size: .8rem; overflow-wrap: anywhere; }
+
+.gj-activity { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.gj-activity td { padding: .45rem .4rem; border-top: 1px solid var(--border); vertical-align: top; }
+.gj-activity tr:first-child td { border-top: 0; }
+.gj-when { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gj-status { text-align: right; }
+.gj-status.done { color: var(--go); }
+.gj-status.error, .gj-status.refused, .gj-status.stopped { color: var(--bad); }
+
+/* forms on the web app's own pages */
+.gj-page form label { margin: 0 0 .8rem; }
+.gj-page input[type=password], .gj-page input[type=text] {
+  font: inherit; padding: .5rem .6rem; border: 1px solid var(--border); border-radius: 7px;
+  background: #fff; width: 100%;
+}
+.gj-page input:focus-visible, .gj-page button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.gj-page button.primary { padding: .55rem 1rem; font-weight: 700; }
+.gj-ok { background: #ecfdf3; border: 1px solid #b7ebc6; color: var(--go);
+  padding: .55rem .75rem; border-radius: 8px; }
+.gj-page .errbox { margin: 0 0 .8rem; }
+.gj-small { font-size: .85rem; margin-top: 1rem; }
+
+/* sign-in */
+body.gj-signin { min-height: 100vh; display: grid; place-items: center;
+  background: linear-gradient(180deg, var(--gj-top) 0 38vh, var(--bg) 38vh); }
+body.gj-signin .gj-page { padding: 1rem; width: 100%; max-width: 27rem; }
+.gj-signin-card {
+  background: var(--panel); border-radius: 14px; padding: 1.6rem 1.6rem 1.2rem;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, .22);
+}
+.gj-brand-lg { color: var(--ink); font-size: 1.25rem; margin-bottom: .9rem; }
+.gj-signin-card h1 { margin: 0 0 .9rem; font-size: 1.35rem; }
+.gj-signin-card button.primary { width: 100%; margin-top: .3rem; }
+.gj-note { background: var(--gj-test); color: var(--gj-test-ink); padding: .5rem .7rem;
+  border-radius: 8px; font-size: .88rem; }
+
+/* people */
+.gj-people { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.gj-people th, .gj-people td { padding: .5rem .5rem; border-top: 1px solid var(--border);
+  text-align: left; vertical-align: middle; }
+.gj-people th { border-top: 0; font-size: .8rem; color: var(--muted); font-weight: 600; }
+.gj-people tr.gj-off td { color: var(--muted); }
+.gj-people-wrap { max-height: none; }
+.gj-actions form { display: flex; gap: .3rem; flex-wrap: wrap; margin: 0; }
+.gj-actions button { font-size: .82rem; padding: .3rem .55rem; }
+.gj-handover { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: var(--gj-radius);
+  padding: .8rem 1rem; margin: 1rem 0; }
+.gj-handover p { margin: .4rem 0 0; font-size: .88rem; color: var(--muted); }
+.gj-temp { font-size: 1.1rem; font-weight: 700; margin-left: .4rem; padding: .1rem .45rem;
+  background: #fff; border: 1px solid #c7d2fe; border-radius: 6px; user-select: all; }
+
+/* ------------------------------------------------------- small screens */
+@media (max-width: 760px) {
+  .gj-top { flex-wrap: wrap; gap: .5rem; }
+  .gj-nav { order: 5; width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .gj-uname { display: none; }
+  .gj-split { grid-template-columns: 1fr; }
+  .gj-pagehead { flex-direction: column; align-items: flex-start; }
+}

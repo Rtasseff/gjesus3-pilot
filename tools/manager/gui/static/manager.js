@@ -276,6 +276,8 @@ $("c-create").addEventListener("click", async () => {
       + `<code>projects/${esc(d.name)}</code> with `
       + `<code>${(d.subfolders || []).join("/</code>, <code>")}/</code>.`;
     ["c-name", "c-description", "c-owner", "c-notes"].forEach((i) => { $(i).value = ""; });
+    // In the web app the owner starts as the signed-in person again.
+    if (window.GJ3_USER && window.GJ3_USER.name) $("c-owner").value = window.GJ3_USER.name;
     $("c-name-msg").textContent = "";
     await loadProjects();
     showError("");

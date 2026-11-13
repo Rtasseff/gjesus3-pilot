@@ -1,0 +1,41 @@
+{#- The one header every page of the web app shows (see shell.py).
+    Included by the web app's own pages and, in server mode, by the three tools. -#}
+{%- set _parts = shell.user.name.split() -%}
+{%- set _initials = (_parts[0][0] ~ (_parts[-1][0] if _parts|length > 1 else ''))|upper -%}
+<div class="gj-top">
+  <a class="gj-brand" href="{{ shell.home }}"><span class="gj-logo" aria-hidden="true">g3</span>gjesus3</a>
+  <nav class="gj-nav" aria-label="Tools">
+    {%- for item in shell.nav %}
+    <a href="{{ item.url }}"{% if item.key == shell.active %} class="on" aria-current="page"{% endif %}>{{ item.label }}</a>
+    {%- endfor %}
+  </nav>
+  <span class="gj-spacer"></span>
+  <span class="gj-env {{ 'live' if shell.production else 'test' }}"
+        title="Storage: {{ shell.root }}">{{ 'Live data' if shell.production else 'Test copy' }}</span>
+  <details class="gj-user">
+    <summary title="{{ shell.user.name }}"><span class="gj-avatar" aria-hidden="true">{{ _initials }}</span><span class="gj-uname">{{ shell.user.name }}</span></summary>
+    <div class="gj-menu">
+      <p class="gj-menu-who">Signed in as <strong>{{ shell.user.username }}</strong>.
+        Your work is recorded as <strong>{{ shell.user.name }}</strong>.</p>
+      <a href="{{ shell.account_url }}">Change password</a>
+      {%- if shell.is_admin %}
+      <a href="{{ shell.people_url }}">People</a>
+      {%- endif %}
+      <form method="post" action="{{ shell.logout_url }}"><button type="submit">Sign out</button></form>
+    </div>
+  </details>
+</div>
+{%- if not shell.production %}
+<div class="gj-testbar">Test copy: nothing you do here touches the real gjesus3 data.</div>
+{%- endif %}
+{%- if shell.active != 'home' %}
+<div class="gj-pagehead">
+  <div>
+    <h1>{{ shell.page.title }}</h1>
+    {%- if shell.page.lede %}<p>{{ shell.page.lede }}</p>{% endif %}
+  </div>
+  {%- if shell.page.help %}
+  <a class="gj-help" href="{{ shell.page.help }}" target="_blank" rel="noopener">How this works</a>
+  {%- endif %}
+</div>
+{%- endif %}

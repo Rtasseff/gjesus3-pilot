@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}People · gjesus3{% endblock %}
+{% block content %}
+{%- if error %}<p class="errbox" role="alert">{{ error }}</p>{% endif %}
+{%- if handover %}
+<div class="gj-handover" role="status">
+  <strong>Temporary password for {{ handover.name }} ({{ handover.username }}):</strong>
+  <code class="gj-temp">{{ handover.password }}</code>
+  <p>Give it to them in person or by phone. It is shown only now; they choose their own at
+    first sign-in.</p>
+</div>
+{%- endif %}
+{%- if notice %}<p class="gj-ok" role="status">{{ notice }}</p>{% endif %}
+
+<section class="gj-panel">
+  <h2>Who can sign in</h2>
+  <div class="table-wrap gj-people-wrap">
+  <table class="gj-people">
+    <thead><tr><th>Username</th><th>Recorded as</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
+    <tbody>
+    {%- for u in users %}
+      <tr{% if not u.active %} class="gj-off"{% endif %}>
+        <td><code>{{ u.username }}</code></td>
+        <td>{{ u.name }}</td>
+        <td>{{ 'Administrator' if u.role == 'admin' else 'User' }}</td>
+        <td>{% if not u.active %}Disabled{% elif u.must_change %}Waiting for first sign-in{% else %}Active{% endif %}</td>
+        <td>{{ (u.last_login or 'never')|replace('T', ' ') }}</td>
+        <td class="gj-actions">
+          <form method="post" action="{{ base }}/account/people">
+            <input type="hidden" name="username" value="{{ u.username }}">
+            <button name="op" value="reset" type="submit">New temporary password</button>
+            {%- if u.username != me %}
+            {%- if u.active %}
+            <button name="op" value="disable" type="submit">Disable</button>
+            {%- else %}
+            <button name="op" value="enable" type="submit">Enable</button>
+            {%- endif %}
+            {%- endif %}
+          </form>
+        </td>
+      </tr>
+    {%- endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="gj-panel gj-narrow">
+  <h2>Add a person</h2>
+  <form method="post" action="{{ base }}/account/people" class="gj-form">
+    <input type="hidden" name="op" value="add">
+    <label>Username <span class="muted">— what they type to sign in, e.g. <code>irene</code></span>
+      <input type="text" name="username" autocapitalize="none" spellcheck="false" required></label>
+    <label>Full name <span class="muted">— exactly as it should appear in the metadata</span>
+      <input type="text" name="name" required></label>
+    <label class="check"><input type="checkbox" name="admin" value="1"> Administrator (can add people and reset passwords)</label>
+    <button type="submit" class="primary">Add, and make a temporary password</button>
+  </form>
+</section>
+{% endblock %}
