@@ -252,6 +252,18 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-13: the recheck list passes on Box A, though the move has not happened** (Box A last booted 2026-10-21, still at
+  10.10.3.195).
+  - Code: rdm `25483e1`, WorkstationOps `cc772c9`, memory `40397f0`.
+  - Access: the NAS by UNC, the credentials and the dated animal lookup, WSL and Dicomifier 2.5.3.
+  - Tests: the suite passes 68/68.
+  - The validator matches dev's same-day run exactly: 43,397 rows, 0 errors, 0 warnings, 23,126 `pending-claim`, 31,662 age
+    pairs, 682 tombstones.
+  - Jobs: the relink dry run has 0 pending. The Finder preview is identical to the published index, all 62 project pages too.
+  - Box A reaches dev's OA data forward (HTTP 200).
+  - **Dev restarted 2026-11-12 16:36 and its jobs only run while Ryan is signed in**, so the 11-13 relink, Finder and memory-sync
+    did not run. Nothing was lost: 0 links pending, and no registry change since 11-07. Box A ran without a break meanwhile.
+    Phase 5 still waits for Ryan's go.
 - **2026-11-13: Ryan is no longer a local administrator on Box A** (found by the Box A session; nothing changed). The local
   Administrators group holds only Box A's own Administrator, `bmg`, and the domain admins. Effects:
   - Key SSH from dev is refused, because sshd reads `administrators_authorized_keys` only for admins.
