@@ -252,6 +252,14 @@ pre-2.1 build, which is fine. **The combined app listens on loopback only until 
   so both apps see one `REMOTE_USER`. `creator`, `owner` and the MRI `operator` are still typed by hand. The folder browser and
   the MRI staging folder are open to anyone who can reach the server, so a non-loopback host is refused until sign-in exists.
   Behind a proxy, the redirect needs `ProxyFix`. The exes need an in-frozen smoke test at their next rebuild.
+- **2026-11-13: Ryan is no longer a local administrator on Box A** (found by the Box A session; nothing changed). The local
+  Administrators group holds only Box A's own Administrator, `bmg`, and the domain admins. Effects:
+  - Key SSH from dev is refused, because sshd reads `administrators_authorized_keys` only for admins.
+  - A firewall rule (the web app's port, Phase 6's landing pad) and Autologon now need IT or restored rights.
+  - Per-user scheduled tasks (Phase 5) should still work.
+
+  Ryan asks IT whether this was deliberate, perhaps for the move. Until then the prototype runs on Box A at `127.0.0.1`, and
+  is tried over Remote Desktop.
 - **2026-11-13: the 2.2 prototype is built** on `feat/webapp-prototype` (Ryan's ask above), on the dev workstation, against
   a test root. The ingest and project engines are untouched; the two GUIs stay mounted as in 2.1.
   - **Sign-in in front of everything:** the app's own accounts (hashed, in a state folder on the server's disk, never on the
